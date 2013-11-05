@@ -1,0 +1,3 @@
+graft src/rotorse/sphinx_build/html
+recursive-include src/rotorse/test *.py
+
