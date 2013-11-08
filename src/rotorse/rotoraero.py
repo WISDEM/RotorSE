@@ -461,8 +461,11 @@ class AeroPowerCurve(Component):
             tsr = mt.Omega*RPM2RS*R/V
 
         # evalaute nondimensional power curve using a spline
-        spline = interpolate.interp1d(self.tsr_array, self.cp_array, kind='cubic')
-        cp = spline(tsr)
+        if len(self.tsr_array) == 1:
+            cp = self.cp_array[0]
+        else:
+            spline = interpolate.interp1d(self.tsr_array, self.cp_array, kind='cubic')
+            cp = spline(tsr)
 
         # convert to dimensional form
         self.V = V
