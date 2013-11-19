@@ -53,11 +53,24 @@ class FixedSpeedMachine(VariableTree):
     pitch = Float(units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
 
+class RatedConditions(VariableTree):
+
+    V = Float(iotype='in')
+    Omega = Float(iotype='in')
+    pitch = Float(iotype='in')
+    T = Float(iotype='in')
+    Q = Float(iotype='in')
+
+
 
 class AeroBase(Component):
     """A base component for a rotor aerodynamics code."""
 
-    run_case = Enum('power', ('power', 'power_coeff', 'loads'), iotype='in')
+    run_case = Enum('power', ('power', 'power_coeff', 'loads',
+        'power_and_loads', 'power_coeff_and_loads'), iotype='in')
+
+
+    # TODO: should just be power and loads.  coeff I can compute in a component.
 
     # input set 1
     Uhub = Array(iotype='in', units='m/s', desc='hub height wind speed')
@@ -149,8 +162,9 @@ class CCBlade(AeroBase):
 
         run_case = self.run_case
 
-        if run_case == 'power':
+        if run_case == 'power' or run_case == 'power_and_loads':
 
+            print self.Uhub, self.Omega, self.pitch
             # power, thrust, torque
             P, T, Q, dP_ds, dT_ds, dQ_ds, dP_dv, dT_dv, dQ_dv \
                 = ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
@@ -160,7 +174,7 @@ class CCBlade(AeroBase):
             self.Q = Q
 
 
-        elif run_case == 'power_coeff':
+        if run_case == 'power_coeff' or run_case == 'power_coeff_and_loads':
 
             # power, thrust, torque
             CP, CT, CQ, dCP_ds, dCT_ds, dCQ_ds, dCP_dv, dCT_dv, dCQ_dv \
@@ -171,11 +185,15 @@ class CCBlade(AeroBase):
             self.CQ = CQ
 
 
-        elif run_case == 'loads':
+        if run_case == 'loads' or run_case == 'power_and_loads' or run_case == 'power_coeff_and_loads':
 
             # distributed loads
-            Np, Tp, dNp_dX, dTp_dX, dNp_dprecurve, dTp_dprecurve \
-                = ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+
+            if self.Omega_load == 0.0:  # TODO: implement derivatives for this case
+                Np, Tp = ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+            else:
+                Np, Tp, dNp_dX, dTp_dX, dNp_dprecurve, dTp_dprecurve \
+                    = ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
             self.Np = Np
             self.Tp = Tp
@@ -459,6 +477,45 @@ class AEP(Component):
 
 
 
+class SetupRatedConditionsVarSpeed(Component):
+
+    ratedSpeed = Float(iotype='in', units='m/s', desc='rated speed (if regulated) otherwise speed for max power')
+    control = VarTree(VarSpeedMachine(), iotype='in')
+    R = Float(iotype='in', units='m', desc='rotor radius')
+
+    V_rated = Array(iotype='out')
+    Omega_rated = Array(iotype='out')
+    pitch_rated = Array(iotype='out')
+
+    def execute(self):
+
+        ctrl = self.control
+
+        self.V_rated = np.array([self.ratedSpeed])
+        self.Omega_rated = np.array([min(ctrl.maxOmega, self.ratedSpeed*ctrl.tsr/self.R*RS2RPM)])
+        self.pitch_rated = np.array([ctrl.pitch])
+
+
+class SaveRatedConditions(Component):
+
+    V_rated = Array(iotype='in')
+    Omega_rated = Array(iotype='in')
+    pitch_rated = Array(iotype='in')
+    T_rated = Array(iotype='in')
+    Q_rated = Array(iotype='in')
+
+    rated = VarTree(RatedConditions(), iotype='out')
+
+    def execute(self):
+
+        self.rated.V = self.V_rated[0]
+        self.rated.Omega = self.Omega_rated[0]
+        self.rated.pitch = self.pitch_rated[0]
+        self.rated.T = self.T_rated[0]
+        self.rated.Q = self.Q_rated[0]
+
+
+
 class SetupPitchSearchVS(Component):
 
     control = VarTree(VarSpeedMachine(), iotype='in')
@@ -534,7 +591,7 @@ class Brent(Driver):
 
 
 
-class RotorAeroVarSpeedBase(Assembly):
+class RotorAeroVS(Assembly):
 
     # coefficient normalization
     R = Float(iotype='in', units='m', desc='rotor radius')
@@ -544,10 +601,21 @@ class RotorAeroVarSpeedBase(Assembly):
     control = VarTree(VarSpeedMachine(), iotype='in')
 
     # options
-    include_region_25 = Bool(True, iotype='in', desc='applies only to var speed machines')
     tsr_sweep_step_size = Float(0.25, iotype='in', desc='step size in tip-speed ratio for sweep (if necessary)')
     npts_power_curve = Int(200, iotype='in', desc='number of points to generate power curve at (nondimensional power curve is sampled with a sample so a large number is not expensive)')
     AEP_loss_factor = Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)')
+
+    # load conditions
+    azimuth_rated = Float(iotype='in')
+
+    V_extreme = Float(iotype='in')  # TODO: can combine with Ubar based on machine class
+    pitch_extreme = Float(iotype='in')
+    azimuth_extreme = Float(iotype='in')
+
+    Np_rated = Array(iotype='out')
+    Tp_rated = Array(iotype='out')
+    Np_extreme = Array(iotype='out')
+    Tp_extreme = Array(iotype='out')
 
     # TODO: replace is broken for custom drivers.  remove these later
 
@@ -585,8 +653,13 @@ class RotorAeroVarSpeedBase(Assembly):
         # self.add('cdf', CDFBase())
         self.add('cdf', RayleighCDF())
         self.add('aep', AEP())
+        self.add('rated_pre', SetupRatedConditionsVarSpeed())
+        self.add('analysis2', CCBlade())  # TODO
+        self.add('rated_post', SaveRatedConditions())
+        self.add('analysis3', CCBlade())  # TODO
 
-        self.driver.workflow.add(['setuptsr', 'sweep', 'analysis', 'aeroPC', 'dt', 'powercurve', 'cdf', 'aep'])
+        self.driver.workflow.add(['setuptsr', 'sweep', 'analysis', 'aeroPC', 'dt', 'powercurve',
+            'cdf', 'aep', 'rated_pre', 'analysis2', 'rated_post', 'analysis3'])
 
         # connections to setuptsr
         self.connect('control', 'setuptsr.control')
@@ -631,12 +704,50 @@ class RotorAeroVarSpeedBase(Assembly):
         self.connect('powercurve.P', 'aep.P')
         self.connect('AEP_loss_factor', 'aep.lossFactor')
 
+        # connections to rated_pre
+        self.connect('powercurve.ratedSpeed', 'rated_pre.ratedSpeed')
+        self.connect('control', 'rated_pre.control')
+        self.connect('R', 'rated_pre.R')
 
-        # --- passthroughs ---
+        # connections to analysis2
+        self.rated_pre.Omega_rated = np.zeros(1)
+        self.rated_pre.pitch_rated = np.zeros(1)
+        self.connect('rated_pre.V_rated', 'analysis2.Uhub')
+        self.connect('rated_pre.Omega_rated', 'analysis2.Omega')
+        self.connect('rated_pre.pitch_rated', 'analysis2.pitch')
+        self.connect('powercurve.ratedSpeed', 'analysis2.V_load')
+        self.connect('rated_pre.Omega_rated[0]', 'analysis2.Omega_load')
+        self.connect('rated_pre.pitch_rated[0]', 'analysis2.pitch_load')
+        self.connect('azimuth_rated', 'analysis2.azimuth_load')
+        self.analysis2.run_case = 'power_and_loads'
+
+        # connections to rated_post
+        self.connect('rated_pre.V_rated', 'rated_post.V_rated')
+        self.connect('rated_pre.Omega_rated', 'rated_post.Omega_rated')
+        self.connect('rated_pre.pitch_rated', 'rated_post.pitch_rated')
+        self.connect('analysis2.T', 'rated_post.T_rated')
+        self.connect('analysis2.Q', 'rated_post.Q_rated')
+
+        # connections to analysis3
+        self.connect('V_extreme', 'analysis3.V_load')
+        self.connect('pitch_extreme', 'analysis3.pitch_load')
+        self.connect('azimuth_extreme', 'analysis3.azimuth_load')
+        self.analysis3.Omega_load = 0.0  # not rotating
+        self.analysis3.run_case = 'loads'
+
+
+        # connect to output
+        self.connect('analysis2.Np', 'Np_rated')
+        self.connect('analysis2.Tp', 'Tp_rated')
+        self.connect('analysis3.Np', 'Np_extreme')
+        self.connect('analysis3.Tp', 'Tp_extreme')
+
+
+        # passthroughs
         self.create_passthrough('aeroPC.V')
         self.create_passthrough('powercurve.P')
-        self.create_passthrough('powercurve.ratedSpeed')
         self.create_passthrough('aep.AEP')
+        self.create_passthrough('rated_post.rated')
 
 
 
@@ -658,74 +769,6 @@ class RotorAeroVarSpeedBase(Assembly):
         self.connect('nSector', 'analysis.nSector')
         self.connect('drivetrainType', 'dt.drivetrainType')
         self.connect('Ubar', 'cdf.Ubar')
-
-
-
-
-class RotorAeroVSVP(RotorAeroVarSpeedBase):
-
-    V_load = Float(iotype='in')
-    azimuth_load = Float(iotype='in')
-
-    def configure(self):
-        super(RotorAeroVSVP, self).configure()
-
-        # --- residual workflow ---
-
-        self.add('setuppitch', SetupPitchSearchVS())
-        # self.add('analysis2', AeroBase())  # TODO: replace back later
-        # self.add('dt2', DrivetrainLossesBase())
-        self.add('analysis2', CCBlade())
-        self.add('dt2', CSMDrivetrain())
-        self.add('brent', Brent())
-
-        # connections to setuppitch
-        self.connect('control', 'setuppitch.control')
-        self.connect('R', 'setuppitch.R')
-        self.connect('powercurve.ratedSpeed', 'setuppitch.ratedSpeed')
-
-        # connections to analysis2
-        self.analysis2.Uhub = np.zeros(1)
-        self.analysis2.Omega = np.zeros(1)
-        self.analysis2.pitch = np.zeros(1)
-        self.analysis2.run_case = 'power'
-        self.connect('V_load', 'analysis2.Uhub[0]')
-        self.connect('setuppitch.Omega', 'analysis2.Omega[0]')
-        self.brent.add_parameter('analysis2.pitch[0]', name='x', low=0.0, high=40.0)
-
-        # connections to drivetrain
-        self.connect('analysis2.P', 'dt2.aeroPower')
-        self.connect('control.ratedPower', 'dt2.ratedPower')
-
-        # brent setup
-        self.brent.workflow.add(['setuppitch', 'analysis2', 'dt2'])
-        self.brent.add_objective('dt2.power[0]', name='f')
-        self.connect('control.ratedPower', 'brent.fstar')
-        self.connect('setuppitch.pitch_min', 'brent.xlow')
-        self.connect('setuppitch.pitch_max', 'brent.xhigh')
-
-
-        # --- functional workflow ---
-
-        # self.add('analysis3', AeroBase())  TODO
-        self.add('analysis3', CCBlade())
-
-        self.driver.workflow.add(['brent', 'analysis3'])
-
-        # connections to analysis3
-        self.analysis3.run_case = 'loads'
-        self.connect('V_load', 'analysis3.V_load')
-        self.connect('setuppitch.Omega', 'analysis3.Omega_load')
-        self.connect('brent.xstar', 'analysis3.pitch_load')
-        self.connect('azimuth_load', 'analysis3.azimuth_load')
-
-        self.create_passthrough('analysis3.Np')
-        self.create_passthrough('analysis3.Tp')
-
-
-
-
-        # TODO: remove later
         self.connect('r', 'analysis2.r')
         self.connect('chord', 'analysis2.chord')
         self.connect('theta', 'analysis2.theta')
@@ -741,7 +784,6 @@ class RotorAeroVSVP(RotorAeroVarSpeedBase):
         self.connect('mu', 'analysis2.mu')
         self.connect('shearExp', 'analysis2.shearExp')
         self.connect('nSector', 'analysis2.nSector')
-        self.connect('drivetrainType', 'dt2.drivetrainType')
         self.connect('r', 'analysis3.r')
         self.connect('chord', 'analysis3.chord')
         self.connect('theta', 'analysis3.theta')
@@ -757,6 +799,108 @@ class RotorAeroVSVP(RotorAeroVarSpeedBase):
         self.connect('mu', 'analysis3.mu')
         self.connect('shearExp', 'analysis3.shearExp')
         self.connect('nSector', 'analysis3.nSector')
+
+
+
+
+
+
+
+class RotorAeroVSVP(RotorAeroVS):
+
+    V_load = Float(iotype='in')
+    azimuth_load = Float(iotype='in')
+
+    def configure(self):
+        super(RotorAeroVSVP, self).configure()
+
+        # --- residual workflow ---
+
+        self.add('setuppitch', SetupPitchSearchVS())
+        # self.add('analysis3', AeroBase())  # TODO: replace back later
+        # self.add('dt2', DrivetrainLossesBase())
+        self.add('analysis3', CCBlade())
+        self.add('dt2', CSMDrivetrain())
+        self.add('brent', Brent())
+
+        # connections to setuppitch
+        self.connect('control', 'setuppitch.control')
+        self.connect('R', 'setuppitch.R')
+        self.connect('powercurve.ratedSpeed', 'setuppitch.ratedSpeed')
+
+        # connections to analysis3
+        self.analysis3.Uhub = np.zeros(1)
+        self.analysis3.Omega = np.zeros(1)
+        self.analysis3.pitch = np.zeros(1)
+        self.analysis3.run_case = 'power'
+        self.connect('V_load', 'analysis3.Uhub[0]')
+        self.connect('setuppitch.Omega', 'analysis3.Omega[0]')
+        self.brent.add_parameter('analysis3.pitch[0]', name='x', low=0.0, high=40.0)
+
+        # connections to drivetrain
+        self.connect('analysis3.P', 'dt2.aeroPower')
+        self.connect('control.ratedPower', 'dt2.ratedPower')
+
+        # brent setup
+        self.brent.workflow.add(['setuppitch', 'analysis3', 'dt2'])
+        self.brent.add_objective('dt2.power[0]', name='f')
+        self.connect('control.ratedPower', 'brent.fstar')
+        self.connect('setuppitch.pitch_min', 'brent.xlow')
+        self.connect('setuppitch.pitch_max', 'brent.xhigh')
+
+
+        # --- functional workflow ---
+
+        # self.add('analysis4', AeroBase())  TODO
+        self.add('analysis4', CCBlade())
+
+        self.driver.workflow.add(['brent', 'analysis4'])
+
+        # connections to analysis4
+        self.analysis4.run_case = 'loads'
+        self.connect('V_load', 'analysis4.V_load')
+        self.connect('setuppitch.Omega', 'analysis4.Omega_load')
+        self.connect('brent.xstar', 'analysis4.pitch_load')
+        self.connect('azimuth_load', 'analysis4.azimuth_load')
+
+        self.create_passthrough('analysis4.Np')
+        self.create_passthrough('analysis4.Tp')
+
+
+
+
+        # TODO: remove later
+        self.connect('r', 'analysis3.r')
+        self.connect('chord', 'analysis3.chord')
+        self.connect('theta', 'analysis3.theta')
+        self.connect('Rhub', 'analysis3.Rhub')
+        self.connect('Rtip', 'analysis3.Rtip')
+        self.connect('hubheight', 'analysis3.hubheight')
+        self.connect('airfoil_files', 'analysis3.airfoil_files')
+        self.connect('precone', 'analysis3.precone')
+        self.connect('tilt', 'analysis3.tilt')
+        self.connect('yaw', 'analysis3.yaw')
+        self.connect('B', 'analysis3.B')
+        self.connect('rho', 'analysis3.rho')
+        self.connect('mu', 'analysis3.mu')
+        self.connect('shearExp', 'analysis3.shearExp')
+        self.connect('nSector', 'analysis3.nSector')
+        self.connect('drivetrainType', 'dt2.drivetrainType')
+        self.connect('r', 'analysis4.r')
+        self.connect('chord', 'analysis4.chord')
+        self.connect('theta', 'analysis4.theta')
+        self.connect('Rhub', 'analysis4.Rhub')
+        self.connect('Rtip', 'analysis4.Rtip')
+        self.connect('hubheight', 'analysis4.hubheight')
+        self.connect('airfoil_files', 'analysis4.airfoil_files')
+        self.connect('precone', 'analysis4.precone')
+        self.connect('tilt', 'analysis4.tilt')
+        self.connect('yaw', 'analysis4.yaw')
+        self.connect('B', 'analysis4.B')
+        self.connect('rho', 'analysis4.rho')
+        self.connect('mu', 'analysis4.mu')
+        self.connect('shearExp', 'analysis4.shearExp')
+        self.connect('nSector', 'analysis4.nSector')
 
 
 
@@ -823,7 +967,6 @@ if __name__ == '__main__':
 
     # options
     nSectors_power_integration = 4
-    include_region_25 = True
     tsr_sweep_step_size = 0.25
     npts_power_curve = 200
     drivetrainType = 'geared'
@@ -835,7 +978,7 @@ if __name__ == '__main__':
     # ------ OpenMDAO setup -------------------
     R = Rtip*np.cos(precone*pi/180.0)
 
-    rotor = RotorAeroVSVP()
+    rotor = RotorAeroVS()
 
     rotor.R = R
     rotor.rho = rho
@@ -885,28 +1028,40 @@ if __name__ == '__main__':
     rotor.control.pitch = pitch_opt
 
     # options
-    rotor.include_region_25 = include_region_25
     rotor.tsr_sweep_step_size = tsr_sweep_step_size
     rotor.npts_power_curve = npts_power_curve
     rotor.drivetrainType = drivetrainType
     rotor.AEP_loss_factor = AEP_loss_factor
 
     # load case
-    rotor.V_load = 13.0
-    rotor.azimuth_load = 0.0
+    rotor.azimuth_rated = 0.0
+
+    rotor.V_extreme = 70.0
+    rotor.pitch_extreme = 0.0
+    rotor.azimuth_extreme = 0.0
 
     rotor.run()
 
     print rotor.AEP
-    print rotor.brent.xstar
+    # print rotor.brent.xstar
+
+    print rotor.rated.V
+    print rotor.rated.Omega
+    print rotor.rated.pitch
+    print rotor.rated.T
+    print rotor.rated.Q
 
     import matplotlib.pyplot as plt
     plt.plot(rotor.V, rotor.P/1e6)
 
 
     plt.figure()
-    plt.plot(r, rotor.Np)
-    plt.plot(r, rotor.Tp)
+    plt.plot(r, rotor.Np_rated)
+    plt.plot(r, rotor.Tp_rated)
+
+    plt.figure()
+    plt.plot(r, rotor.Np_extreme)
+    plt.plot(r, rotor.Tp_extreme)
     plt.show()
 
 
