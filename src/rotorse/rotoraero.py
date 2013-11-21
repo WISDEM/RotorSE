@@ -22,7 +22,7 @@ from scipy.optimize import brentq
 # from scipy.integrate import quad
 from math import pi
 from openmdao.main.api import VariableTree, Component, Assembly, Driver
-from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Str, List, Slot, Enum, Bool
+from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Str, List, Slot, Enum
 from openmdao.util.decorators import add_delegate
 from openmdao.main.hasparameters import HasParameters
 from openmdao.main.hasobjective import HasObjective
@@ -601,24 +601,6 @@ class SetupRatedConditionsVarSpeed(Component):
         self.pitch_rated = np.array([ctrl.pitch])
 
 
-# class SaveRatedConditions(Component):
-
-#     V_rated = Array(iotype='in')
-#     Omega_rated = Array(iotype='in')
-#     pitch_rated = Array(iotype='in')
-#     T_rated = Array(iotype='in')
-#     Q_rated = Array(iotype='in')
-
-#     rated = VarTree(RatedConditions(), iotype='out')
-
-#     def execute(self):
-
-#         self.rated.V = self.V_rated[0]
-#         self.rated.Omega = self.Omega_rated[0]
-#         self.rated.pitch = self.pitch_rated[0]
-#         self.rated.T = self.T_rated[0]
-#         self.rated.Q = self.Q_rated[0]
-
 
 
 # ---------------------
@@ -643,7 +625,7 @@ class RotorAeroVS(Assembly):
     # --- slots (must replace) ---
     geom = Slot(GeomtrySetupBase)
     analysis = Slot(AeroBase)
-    analysis2 = Slot(AeroBase)  # figure out how to replace both at same time
+    analysis2 = Slot(AeroBase)  # TODO: figure out how to replace both at same time
     dt = Slot(DrivetrainLossesBase)
     cdf = Slot(CDFBase)
 
@@ -654,28 +636,6 @@ class RotorAeroVS(Assembly):
     rated = VarTree(RatedConditions(), iotype='out')
 
 
-    # # TODO: replace is broken for custom drivers.  remove these later
-
-    # # analysis variables
-    # r = Array(iotype='in', units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
-    # chord = Array(iotype='in', units='m', desc='chord length at each section')
-    # theta = Array(iotype='in', units='deg', desc='twist angle at each section (positive decreases angle of attack)')
-    # Rhub = Float(iotype='in', units='m', desc='hub radius')
-    # Rtip = Float(iotype='in', units='m', desc='tip radius')
-    # hubheight = Float(iotype='in', units='m')
-    # airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
-    # precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
-    # tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
-    # yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
-    # B = Int(3, iotype='in', desc='number of blades')
-    # rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
-    # mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air')
-    # shearExp = Float(0.2, iotype='in', desc='shear exponent')
-    # nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
-
-    # drivetrainType = Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in')
-    # Ubar = Float(iotype='in', desc='mean wind speed of distribution')
-
 
     def replace(self, name, obj):
 
@@ -684,6 +644,7 @@ class RotorAeroVS(Assembly):
             obj.Q = np.zeros(1)
 
         super(RotorAeroVS, self).replace(name, obj)
+
 
     def configure(self):
 
@@ -782,41 +743,6 @@ class RotorAeroVS(Assembly):
 
 
 
-
-
-        # # TODO: remove later
-        # self.connect('r', 'analysis.r')
-        # self.connect('chord', 'analysis.chord')
-        # self.connect('theta', 'analysis.theta')
-        # self.connect('Rhub', 'analysis.Rhub')
-        # self.connect('Rtip', 'analysis.Rtip')
-        # self.connect('hubheight', 'analysis.hubheight')
-        # self.connect('airfoil_files', 'analysis.airfoil_files')
-        # self.connect('precone', 'analysis.precone')
-        # self.connect('tilt', 'analysis.tilt')
-        # self.connect('yaw', 'analysis.yaw')
-        # self.connect('B', 'analysis.B')
-        # self.connect('rho', 'analysis.rho')
-        # self.connect('mu', 'analysis.mu')
-        # self.connect('shearExp', 'analysis.shearExp')
-        # self.connect('nSector', 'analysis.nSector')
-        # self.connect('drivetrainType', 'dt.drivetrainType')
-        # self.connect('Ubar', 'cdf.Ubar')
-        # self.connect('r', 'analysis2.r')
-        # self.connect('chord', 'analysis2.chord')
-        # self.connect('theta', 'analysis2.theta')
-        # self.connect('Rhub', 'analysis2.Rhub')
-        # self.connect('Rtip', 'analysis2.Rtip')
-        # self.connect('hubheight', 'analysis2.hubheight')
-        # self.connect('airfoil_files', 'analysis2.airfoil_files')
-        # self.connect('precone', 'analysis2.precone')
-        # self.connect('tilt', 'analysis2.tilt')
-        # self.connect('yaw', 'analysis2.yaw')
-        # self.connect('B', 'analysis2.B')
-        # self.connect('rho', 'analysis2.rho')
-        # self.connect('mu', 'analysis2.mu')
-        # self.connect('shearExp', 'analysis2.shearExp')
-        # self.connect('nSector', 'analysis2.nSector')
 
 
 
@@ -1076,74 +1002,64 @@ if __name__ == '__main__':
     # ------ OpenMDAO setup -------------------
 
     rotor = RotorAeroVS()
+    rotor.replace('geom', CCBladeGeometry())
+    rotor.replace('analysis', CCBlade())
+    rotor.replace('analysis2', CCBlade())
+    rotor.replace('dt', CSMDrivetrain())
+    rotor.replace('cdf', RayleighCDF())
+
+    # geometry
+    rotor.geom.Rtip = Rtip
+    rotor.geom.precone = precone
 
     # aero analysis
-    geom = CCBladeGeometry()
-    geom.Rtip = Rtip
-    geom.precone = precone
 
-    rotor.replace('geom', geom)
-
-
-    analysis = CCBlade()
-
-    analysis.r = r
-    analysis.chord = chord
-    analysis.theta = theta
-    analysis.Rhub = Rhub
-    analysis.Rtip = Rtip
-    analysis.hubheight = hubheight
-    analysis.airfoil_files = af
-    analysis.precone = precone
-    analysis.tilt = tilt
-    analysis.yaw = yaw
-    analysis.B = B
-    analysis.rho = rho
-    analysis.mu = mu
-    analysis.shearExp = shearExp
-    analysis.nSector = nSectors_power_integration
-
-    rotor.replace('analysis', analysis)
+    rotor.analysis.r = r
+    rotor.analysis.chord = chord
+    rotor.analysis.theta = theta
+    rotor.analysis.Rhub = Rhub
+    rotor.analysis.Rtip = Rtip
+    rotor.analysis.hubheight = hubheight
+    rotor.analysis.airfoil_files = af
+    rotor.analysis.precone = precone
+    rotor.analysis.tilt = tilt
+    rotor.analysis.yaw = yaw
+    rotor.analysis.B = B
+    rotor.analysis.rho = rho
+    rotor.analysis.mu = mu
+    rotor.analysis.shearExp = shearExp
+    rotor.analysis.nSector = nSectors_power_integration
 
 
+    rotor.analysis2.r = r
+    rotor.analysis2.chord = chord
+    rotor.analysis2.theta = theta
+    rotor.analysis2.Rhub = Rhub
+    rotor.analysis2.Rtip = Rtip
+    rotor.analysis2.hubheight = hubheight
+    rotor.analysis2.airfoil_files = af
+    rotor.analysis2.precone = precone
+    rotor.analysis2.tilt = tilt
+    rotor.analysis2.yaw = yaw
+    rotor.analysis2.B = B
+    rotor.analysis2.rho = rho
+    rotor.analysis2.mu = mu
+    rotor.analysis2.shearExp = shearExp
+    rotor.analysis2.nSector = nSectors_power_integration
 
-    analysis2 = CCBlade()
-
-    analysis2.r = r
-    analysis2.chord = chord
-    analysis2.theta = theta
-    analysis2.Rhub = Rhub
-    analysis2.Rtip = Rtip
-    analysis2.hubheight = hubheight
-    analysis2.airfoil_files = af
-    analysis2.precone = precone
-    analysis2.tilt = tilt
-    analysis2.yaw = yaw
-    analysis2.B = B
-    analysis2.rho = rho
-    analysis2.mu = mu
-    analysis2.shearExp = shearExp
-    analysis2.nSector = nSectors_power_integration
-
-    rotor.replace('analysis2', analysis2)
 
 
     # drivetrain efficiency
-    dt = CSMDrivetrain()
-    dt.drivetrainType = drivetrainType
+    rotor.dt.drivetrainType = drivetrainType
 
-    rotor.replace('dt', dt)
 
     # CDF
-    cdf = RayleighCDF()
-    cdf.xbar = Ubar
-
-    rotor.replace('cdf', cdf)
+    rotor.cdf.xbar = Ubar
 
 
+    # other parameters
     rotor.rho = rho
 
-    # operational conditions
     rotor.control.Vin = Vin
     rotor.control.Vout = Vout
     rotor.control.ratedPower = ratedPower
