@@ -1,15 +1,6 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-untitled.py
-
-Created by Andrew Ning on 2013-11-21.
-Copyright (c) NREL. All rights reserved.
-"""
-
-#!/usr/bin/env python
-# encoding: utf-8
-"""
 rotoraero.py
 
 Created by Andrew Ning on 2013-10-07.
@@ -121,6 +112,7 @@ class AeroBase(Component):
     azimuth_load = Float(iotype='in', units='deg', desc='blade azimuthal location')
 
     # outputs
+    r_loads = Array(iotype='out', units='m', desc='radial locations where loads are defined')
     Px = Array(iotype='out', units='N/m',
         desc='distributed loads in x-direction of blade-aligned coordinate system')
     Py = Array(iotype='out', units='N/m',
@@ -234,8 +226,15 @@ class CCBlade(AeroBase):
                 Np, Tp, dNp_dX, dTp_dX, dNp_dprecurve, dTp_dprecurve \
                     = ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
-            self.Np = Np
-            self.Tp = Tp
+            # concatenate loads at root/tip
+            self.r_loads = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
+            Np = np.concatenate([[0.0], Np, [0.0]])
+            Tp = np.concatenate([[0.0], Tp, [0.0]])
+
+            # conform to blade-aligned coordinate system
+            self.Px = Np
+            self.Py = -Tp
+            self.Pz = 0*Np
 
 
 
