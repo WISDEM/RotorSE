@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-defaults.py
+aerodefaults.py
 
 Created by Andrew Ning on 2013-10-07.
 Copyright (c) NREL. All rights reserved.

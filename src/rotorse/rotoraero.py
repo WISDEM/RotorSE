@@ -81,6 +81,9 @@ class AeroLoads(VariableTree):
     azimuth = Float()
     tilt = Float()
 
+    def update_outputs(one, two):  # TODO: remove this once vartree bug is fixed.
+        pass
+
 
 # ---------------------
 # Base Components
