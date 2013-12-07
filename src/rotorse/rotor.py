@@ -36,16 +36,6 @@ class BeamProperties(VariableTree):
     y_ec_str = Array(units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
 
 
-class BeamPrincipalProperties(VariableTree):
-
-    z = Array(units='m', desc='locations of properties along beam')
-    EA = Array(units='N', desc='axial stiffness')
-    EI11 = Array(units='N*m**2', desc='stiffness in first principal direction')
-    EI22 = Array(units='N*m**2', desc='stiffness in second principal direction')
-    GJ = Array(units='N*m**2', desc='torsional stiffness (about axial z-direction of airfoil aligned coordinate system)')
-    rhoA = Array(units='kg/m', desc='mass per unit length')
-    rhoJ = Array(units='kg*m', desc='polar mass moment of inertia per unit length')
-
 
 
 
@@ -177,30 +167,30 @@ class PreComp(BeamPropertiesBase):
 
 class StrucBase(Component):
 
-    # all inputs/outputs in principal coordinate system
+    # all inputs/outputs in airfoil coordinate system
 
-    beam = VarTree(BeamPrincipalProperties(), iotype='in')
+    beam = VarTree(BeamProperties(), iotype='in')
 
     nF = Int(iotype='in', desc='number of natural frequencies to return')
 
-    P1_defl = Array(iotype='in')
-    P2_defl = Array(iotype='in')
-    P3_defl = Array(iotype='in')
+    Px_defl = Array(iotype='in')
+    Py_defl = Array(iotype='in')
+    Pz_defl = Array(iotype='in')
 
-    P1_strain = Array(iotype='in')
-    P2_strain = Array(iotype='in')
-    P3_strain = Array(iotype='in')
+    Px_strain = Array(iotype='in')
+    Py_strain = Array(iotype='in')
+    Pz_strain = Array(iotype='in')
 
-    r1_strain = Array(iotype='in')
-    r2_strain = Array(iotype='in')
-    r3_strain = Array(iotype='in')
+    x_strain = Array(iotype='in')
+    y_strain = Array(iotype='in')
+    z_strain = Array(iotype='in')
 
     # outputs
     freq = Array(iotype='out')
 
-    dr1_defl = Array(iotype='out')
-    dr2_defl = Array(iotype='out')
-    dr3_defl = Array(iotype='out')
+    dx_defl = Array(iotype='out')
+    dy_defl = Array(iotype='out')
+    dz_defl = Array(iotype='out')
 
     strain = Array(iotype='out')
 
@@ -214,9 +204,62 @@ class pBEAM(StrucBase):
         beam = self.beam
         nsec = len(beam.z)
 
+
+        # translate to elastic center and rotate to principal axes
+        EI11 = np.zeros(nsec)
+        EI22 = np.zeros(nsec)
+        ca = np.zeros(nsec)
+        sa = np.zeros(nsec)
+
+        EA = beam.EA
+        EIxx = beam.EIxx
+        EIyy = beam.EIyy
+        EIxy = beam.EIxy
+        x_ec_str = beam.x_ec_str
+        y_ec_str = beam.y_ec_str
+
+
+        for i in range(nsec):
+
+            # translate to elastic center
+            EItemp = np.array([EIxx[i], EIyy[i], EIxy[i]]) + \
+                np.array([-y_ec_str[i]**2, -x_ec_str[i]**2, -x_ec_str[i]*y_ec_str[i]])*EA[i]
+
+            # use profile c.s. for conveneince in using Hansen's notation
+            EI = DirectionVector.fromArray(EItemp).airfoilToProfile()
+
+            # let alpha = 1/2 beta and use half-angle identity (avoid arctan issues)
+            cb = (EI.y - EI.x) / math.sqrt((2*EI.z)**2 + (EI.y - EI.x)**2)  # EI.z is EIxy
+            sa[i] = math.sqrt((1-cb)/2)
+            ca[i] = math.sqrt((1+cb)/2)
+            ta = sa[i]/ca[i]
+            EI11[i] = EI.x - EI.z*ta
+            EI22[i] = EI.y + EI.z*ta
+
+
+        def a2p(x, y, z):  # rotate from airfoil c.s. to principal c.s.
+
+            v = DirectionVector(x, y, 0.0).airfoilToProfile()
+
+            r1 = v.x*ca + v.y*sa
+            r2 = -v.x*sa + v.y*ca
+
+            return r1, r2, z
+
+
+        def p2a(r1, r2, r3):  # rotate from principal c.s. to airfoil c.s.
+
+            x = r1*ca - r2*sa
+            y = r1*sa + r2*ca
+
+            v = DirectionVector(x, y, 0.0).profileToAirfoil()
+
+            return v.x, v.y, r3
+
+
         # create finite element objects
-        p_section = _pBEAM.SectionData(nsec, beam.z, beam.EA, beam.EI11,
-            beam.EI22, beam.GJ, beam.rhoA, beam.rhoJ)
+        p_section = _pBEAM.SectionData(nsec, beam.z, EA, EI11,
+            EI22, beam.GJ, beam.rhoA, beam.rhoJ)
         # p_loads = _pBEAM.Loads(nsec)  # no loads
         p_tip = _pBEAM.TipData()  # no tip mass
         k = np.array([float('inf'), float('inf'), float('inf'), float('inf'), float('inf'), float('inf')])
@@ -224,9 +267,18 @@ class pBEAM(StrucBase):
 
 
         # ----- tip deflection -----
-        p_loads = _pBEAM.Loads(nsec, self.P1_defl, self.P2_defl, self.P3_defl)
+
+        # from airfoil to principal
+        P1_defl, P2_defl, P3_defl = a2p(self.Px_defl, self.Py_defl, self.Pz_defl)
+
+        # evaluate displacements
+        p_loads = _pBEAM.Loads(nsec, P1_defl, P2_defl, P3_defl)
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        self.dr1_defl, self.dr2_defl, self.dr3_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
+        dr1_defl, dr2_defl, dr3_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
+
+        # from principal to airfoil
+        self.dx_defl, self.dy_defl, self.dz_defl = p2a(dr1_defl, dr2_defl, dr3_defl)
+
 
         # ----- natural frequencies ----
         self.freq = blade.naturalFrequencies(self.nF)
@@ -236,8 +288,6 @@ class pBEAM(StrucBase):
         # p_loads = _pBEAM.Loads(nsec, self.P1_strain, self.P2_strain, self.P3_strain)
         # blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
         # self.strain = blade.axialStrain(len(self.r1_strain), self.r1_strain, self.r2_strain, self.r3_strain)
-
-
 
 
 
@@ -360,116 +410,6 @@ class TotalLoads(Component):
 
 
 
-class PrincipalStiffness(Component):
-    """translate to elastic center and rotate to principal axes"""
-
-    properties = VarTree(BeamProperties(), iotype='in')
-
-    principal = VarTree(BeamPrincipalProperties(), iotype='out')
-    cosrot = Array(iotype='out')
-    sinrot = Array(iotype='out')
-
-
-    def execute(self):
-
-        # rename
-        prop = self.properties
-        EA = prop.EA
-        EIxx = prop.EIxx
-        EIyy = prop.EIyy
-        EIxy = prop.EIxy
-        x_ec_str = prop.x_ec_str
-        y_ec_str = prop.y_ec_str
-
-        # initialize
-        nsec = len(EA)
-        self.principal.EI11 = np.zeros(nsec)
-        self.principal.EI22 = np.zeros(nsec)
-        self.cosrot = np.zeros(nsec)
-        self.sinrot = np.zeros(nsec)
-
-        # save values that do not change
-        self.principal.z = prop.z
-        self.principal.EA = prop.EA
-        self.principal.GJ = prop.GJ
-        self.principal.rhoA = prop.rhoA
-        self.principal.rhoJ = prop.rhoJ
-
-
-        for i in range(nsec):
-
-            # translate to elastic center
-            EItemp = np.array([EIxx[i], EIyy[i], EIxy[i]]) + \
-                np.array([-y_ec_str[i]**2, -x_ec_str[i]**2, -x_ec_str[i]*y_ec_str[i]])*EA[i]
-
-            # use profile c.s. for conveneince in using Hansen's notation
-            EI = DirectionVector.fromArray(EItemp).airfoilToProfile()
-
-            # let alpha = 1/2 beta and use half-angle identity (avoid arctan issues)
-            cb = (EI.y - EI.x) / math.sqrt((2*EI.z)**2 + (EI.y - EI.x)**2)  # EI.z is EIxy
-            sa = math.sqrt((1-cb)/2)
-            ca = math.sqrt((1+cb)/2)
-            ta = sa/ca
-            self.principal.EI11[i] = EI.x - EI.z*ta
-            self.principal.EI22[i] = EI.y + EI.z*ta
-
-            self.cosrot[i] = ca
-            self.sinrot[i] = sa
-
-
-
-class AirfoilToPrincipal(Component):
-
-    x = Array(iotype='in')
-    y = Array(iotype='in')
-
-    cosrot = Array(iotype='in')
-    sinrot = Array(iotype='in')
-
-    r1 = Array(iotype='out')
-    r2 = Array(iotype='out')
-
-    def execute(self):
-
-        ca = self.cosrot
-        sa = self.sinrot
-
-        v = DirectionVector(self.x, self.y, 0.0).airfoilToProfile()
-
-        self.r1 = v.x*ca + v.y*sa
-        self.r2 = -v.x*sa + v.y*ca
-
-
-
-class PrincipalToAirfoil(Component):
-
-    r1 = Array(iotype='in')
-    r2 = Array(iotype='in')
-
-    cosrot = Array(iotype='in')
-    sinrot = Array(iotype='in')
-
-    x = Array(iotype='out')
-    y = Array(iotype='out')
-
-    def execute(self):
-
-        ca = self.cosrot
-        sa = self.sinrot
-
-        x = self.r1*ca - self.r2*sa
-        y = self.r1*sa + self.r2*ca
-
-        v = DirectionVector(x, y, 0.0).profileToAirfoil()
-
-        self.x = v.x
-        self.y = v.y
-
-
-
-
-
-
 
 
 
@@ -505,8 +445,6 @@ class TipDeflection(Component):
 
 
 
-
-
 class RotorStruc(Assembly):
 
     # replace
@@ -529,19 +467,13 @@ class RotorStruc(Assembly):
     def configure(self):
 
         self.add('beam', BeamPropertiesBase())
-        self.add('principal', PrincipalStiffness())
         self.add('curve', BeamCurvature())
         self.add('loads_defl', TotalLoads())
-        self.add('a2p', AirfoilToPrincipal())
         self.add('struc', StrucBase())
-        self.add('p2a', PrincipalToAirfoil())
         self.add('tip', TipDeflection())
 
 
-        self.driver.workflow.add(['beam', 'principal', 'curve', 'loads_defl', 'a2p', 'struc', 'p2a', 'tip'])
-
-        # connections to principal
-        self.connect('beam.properties', 'principal.properties')
+        self.driver.workflow.add(['beam', 'curve', 'loads_defl', 'struc', 'tip'])
 
         # connections to curve
         self.connect('beam.properties.z', 'curve.r')
@@ -558,29 +490,18 @@ class RotorStruc(Assembly):
         self.connect('beam.properties.rhoA', 'loads_defl.rhoA')
         self.connect('g', 'loads_defl.g')
 
-        # connections to a2p
-        self.connect('loads_defl.Px_af', 'a2p.x')
-        self.connect('loads_defl.Py_af', 'a2p.y')
-        self.connect('principal.cosrot', 'a2p.cosrot')
-        self.connect('principal.sinrot', 'a2p.sinrot')
 
         # connections to struc
-        self.connect('principal.principal', 'struc.beam')
+        self.connect('beam.properties', 'struc.beam')
         self.connect('nF', 'struc.nF')
-        self.connect('a2p.r1', 'struc.P1_defl')
-        self.connect('a2p.r2', 'struc.P2_defl')
-        self.connect('loads_defl.Pz_af', 'struc.P3_defl')
-
-        # connections to p2a
-        self.connect('struc.dr1_defl', 'p2a.r1')
-        self.connect('struc.dr2_defl', 'p2a.r2')
-        self.connect('principal.cosrot', 'p2a.cosrot')
-        self.connect('principal.sinrot', 'p2a.sinrot')
+        self.connect('loads_defl.Px_af', 'struc.Px_defl')
+        self.connect('loads_defl.Py_af', 'struc.Py_defl')
+        self.connect('loads_defl.Pz_af', 'struc.Pz_defl')
 
         # connections to tip
-        self.connect('p2a.x', 'tip.dx')
-        self.connect('p2a.y', 'tip.dy')
-        self.connect('struc.dr3_defl', 'tip.dz')
+        self.connect('struc.dx_defl', 'tip.dx')
+        self.connect('struc.dy_defl', 'tip.dy')
+        self.connect('struc.dz_defl', 'tip.dz')
         self.connect('theta', 'tip.theta')
         self.connect('aero_loads_defl.pitch', 'tip.pitch')
         self.connect('aero_loads_defl.azimuth', 'tip.azimuth')
@@ -591,14 +512,6 @@ class RotorStruc(Assembly):
         # passthroughs
         self.create_passthrough('struc.freq')
         self.create_passthrough('tip.tip_deflection')
-
-
-
-
-
-
-
-
 
 
 
