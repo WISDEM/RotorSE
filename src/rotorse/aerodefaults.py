@@ -206,7 +206,7 @@ if __name__ == '__main__':
     B = 3
 
     # airfoils
-    basepath = '/Users/Andrew/Dropbox/NREL/5MW_files/5MW_AFFiles/'
+    basepath = '/Users/sning/Dropbox/NREL/5MW_files/5MW_AFFiles/'
 
     # load all airfoils
     airfoil_types = [0]*8
@@ -252,9 +252,10 @@ if __name__ == '__main__':
 
     # -------------------------
 
-    from rotoraero import NewAssembly
 
-    rotor = NewAssembly()
+    # OpenMDAO setup
+
+    rotor = RotorAeroVS()
     rotor.replace('geom', CCBladeGeometry())
     rotor.replace('analysis', CCBlade())
     rotor.replace('dt', CSMDrivetrain())
@@ -302,282 +303,19 @@ if __name__ == '__main__':
 
     rotor.run()
 
-    print rotor.aep.AEP
-
-    print len(rotor.powercurve.V)
-    import matplotlib.pyplot as plt
-    plt.plot(rotor.powercurve.V, rotor.powercurve.P)
-    plt.show()
-
-
-
-    exit()
-    # -----------------------
-
-
-
-    eta_Prated = 0.95
-    R = Rtip
-    RPM2RS = pi/30.0
-    RS2RPM = 30.0/pi
-    # maxOmega = 20.0
-    from scipy.optimize import brentq
-    from akima import Akima
-
-    aero = CCBlade()
-    aero.r = r
-    aero.chord = chord
-    aero.theta = theta
-    aero.Rhub = Rhub
-    aero.Rtip = Rtip
-    aero.hubheight = hubheight
-    aero.airfoil_files = af
-    aero.precone = precone
-    aero.tilt = tilt
-    aero.yaw = yaw
-    aero.B = B
-    aero.rho = rho
-    aero.mu = mu
-    aero.shearExp = shearExp
-    aero.nSector = nSectors_power_integration
-
-
-    # the blind but general way
-
-    from commonse.utilities import smooth_min
-
-    # quick guess for rated power
-    cpguess = 0.5
-    Vr0 = (ratedPower/(cpguess*0.5*rho*pi*R**2))**(1.0/3)
-    Vr0 *= 1.20
-    print Vr0
-
-    V1 = np.linspace(Vin, Vr0, 15)
-    V2 = np.linspace(Vr0, Vout, 6)
-    V = np.concatenate([V1, V2[1:]])
-
-    # V = np.linspace(Vin, Vout, 20)
-    aero.Uhub = V
-    # aero.Omega = np.minimum(tsr_opt*V/R*RS2RPM, maxOmega)  # replace with smooth_min
-    aero.Omega, dOmega_dOmegad = smooth_min(tsr_opt*V/R*RS2RPM, maxOmega, pct_offset=0.01)
-    aero.pitch = pitch_opt*np.ones_like(V)
-    aero.run_case = 'power'
-    aero.run()
-
-    P = aero.P*eta_Prated
-
-    spline = Akima(V, P)
-
-    VV = np.linspace(Vin, Vout, 200)
-    PP, _, _, _ = spline.interp(VV)
-
-    if True:  # replace with if var speed
-
-        def error(VVV):
-
-            PPP, _, _, _ = spline.interp(VVV)
-            return PPP - ratedPower
-
-        # Brent's method
-        Vrated = brentq(error, Vin, Vout)
-
-        print Vrated
-
-        # PP = np.minimum(PP, ratedPower)  # replace with smooth min
-        PP[VV >= Vrated] = ratedPower  # is this smooth?
-
-    sigma = 6.0
-    f = VV/sigma**2*np.exp(-VV**2/(2*sigma**2))
-    F = 1 - np.exp(-VV**2/(2*sigma**2))
-
-
-    print np.trapz(PP, F)
-
-    import matplotlib.pyplot as plt
-    plt.plot(VV, PP)
-    plt.plot(V, P, 'o')
-    plt.show()
-
-    # exit()
-
-
-
-
-    Vomega_max = maxOmega*RPM2RS*R/tsr_opt
-
-    aero.Uhub = np.array([Vomega_max])
-    aero.Omega = np.array([maxOmega])
-    aero.pitch = np.array([pitch_opt])
-    aero.run_case = 'power'
-    aero.run()
-    cp = aero.P / (0.5*rho*aero.Uhub**3 * pi*R**2)
-    cp = cp[0]
-
-    Vr0 = (ratedPower/(cp*0.5*rho*pi*R**2*eta_Prated))**(1.0/3)
-
-    # print Vomega_max
-    # print Vr0
-
-    if Vomega_max < Vr0:
-
-        def error(V):
-
-            aero.Uhub = np.array([V])
-            aero.run()
-            return aero.P*eta_Prated - ratedPower
-
-        # Brent's method
-        Vrated = brentq(error, Vomega_max, Vr0+1)
-
-        print Vrated
-
-        V25 = np.linspace(Vomega_max, Vrated, 7)
-        V25 = V25[1:-1]
-        aero.Uhub = V25
-        n = len(V25)
-        aero.Omega = maxOmega*np.ones(n)
-        aero.pitch = pitch_opt*np.ones(n)
-        aero.run()
-        P25 = aero.P*eta_Prated
-
-        V2 = np.linspace(Vin, Vomega_max, 100)
-        P2 = cp*0.5*rho*V2**3 * pi*R**2 * eta_Prated
-        V3 = np.linspace(Vrated, Vout, 100)
-        P3 = ratedPower*np.ones(100)
-        V = np.concatenate([V2, V25, V3])
-        P = np.concatenate([P2, P25, P3])
-
-
-        import matplotlib.pyplot as plt
-        plt.plot(V, P)
-        plt.plot(V2, P2)
-        plt.plot(V25, P25, 'o')
-        plt.plot(V3, P3)
-        plt.show()
-
-    else:
-
-        V2 = np.linspace(Vin, Vr0, 100)
-        P2 = cp*0.5*rho*V2**3 * pi*R**2 * eta_Prated
-        V3 = np.linspace(Vr0, Vout, 100)
-        P3 = ratedPower*np.ones(100)
-        V = np.concatenate([V2, V3[1:]])
-        P = np.concatenate([P2, P3[1:]])
-
-    sigma = 6.0
-    f = V/sigma**2*np.exp(-V**2/(2*sigma**2))
-    F = 1 - np.exp(-V**2/(2*sigma**2))
-
-    # import matplotlib.pyplot as plt
-    # plt.plot(V, f)
-    # plt.plot(V, F)
-    # plt.show()
-
-    print np.trapz(P, F)
-    # print np.trapz(P*f, V)
-
-    exit()
-
-
-
-    # ------ OpenMDAO setup -------------------
-
-    rotor = RotorAeroVS()
-    rotor.replace('geom', CCBladeGeometry())
-    rotor.replace('analysis', CCBlade())
-    rotor.replace('analysis2', CCBlade())
-    rotor.replace('dt', CSMDrivetrain())
-    rotor.replace('cdf', RayleighCDF())
-
-    # geometry
-    rotor.geom.Rtip = Rtip
-    rotor.geom.precone = precone
-
-    # aero analysis
-
-    rotor.analysis.r = r
-    rotor.analysis.chord = chord
-    rotor.analysis.theta = theta
-    rotor.analysis.Rhub = Rhub
-    rotor.analysis.Rtip = Rtip
-    rotor.analysis.hubheight = hubheight
-    rotor.analysis.airfoil_files = af
-    rotor.analysis.precone = precone
-    rotor.analysis.tilt = tilt
-    rotor.analysis.yaw = yaw
-    rotor.analysis.B = B
-    rotor.analysis.rho = rho
-    rotor.analysis.mu = mu
-    rotor.analysis.shearExp = shearExp
-    rotor.analysis.nSector = nSectors_power_integration
-
-
-    rotor.analysis2.r = r
-    rotor.analysis2.chord = chord
-    rotor.analysis2.theta = theta
-    rotor.analysis2.Rhub = Rhub
-    rotor.analysis2.Rtip = Rtip
-    rotor.analysis2.hubheight = hubheight
-    rotor.analysis2.airfoil_files = af
-    rotor.analysis2.precone = precone
-    rotor.analysis2.tilt = tilt
-    rotor.analysis2.yaw = yaw
-    rotor.analysis2.B = B
-    rotor.analysis2.rho = rho
-    rotor.analysis2.mu = mu
-    rotor.analysis2.shearExp = shearExp
-    rotor.analysis2.nSector = nSectors_power_integration
-
-
-
-    # drivetrain efficiency
-    rotor.dt.drivetrainType = drivetrainType
-
-
-    # CDF
-    rotor.cdf.xbar = Ubar
-
-
-    # other parameters
-    rotor.rho = rho
-
-    rotor.control.Vin = Vin
-    rotor.control.Vout = Vout
-    rotor.control.ratedPower = ratedPower
-    rotor.control.minOmega = minOmega
-    rotor.control.maxOmega = maxOmega
-    rotor.control.tsr = tsr_opt
-    rotor.control.pitch = pitch_opt
-
-    # options
-    rotor.tsr_sweep_step_size = tsr_sweep_step_size
-    rotor.npts_power_curve = npts_power_curve
-    rotor.AEP_loss_factor = AEP_loss_factor
-
-    rotor.run()
-
     print rotor.AEP
-    # print rotor.brent.xstar
 
-    print rotor.rated.V
-    print rotor.rated.Omega
-    print rotor.rated.pitch
-    print rotor.rated.T
-    print rotor.rated.Q
+    # print len(rotor.V)
+
+    rc = rotor.ratedConditions
+    print rc.V
+    print rc.Omega
+    print rc.pitch
+    print rc.T
+    print rc.Q
 
     import matplotlib.pyplot as plt
     plt.plot(rotor.V, rotor.P/1e6)
-
-
-    # plt.figure()
-    # plt.plot(r, rotor.Np_rated)
-    # plt.plot(r, rotor.Tp_rated)
-
-    # plt.figure()
-    # plt.plot(r, rotor.Np_extreme)
-    # plt.plot(r, rotor.Tp_extreme)
     plt.show()
-
-
 
 
