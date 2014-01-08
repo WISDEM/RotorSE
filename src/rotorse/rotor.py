@@ -37,6 +37,22 @@ class BeamProperties(VariableTree):
 
 
 
+class Orthotropic2DMaterial(VariableTree):
+
+    E1 = Float(units='N/m**2', desc='Young''s modulus in first principal direction')
+    E2 = Float(units='N/m**2', desc='Young''s modulus in second principal direction')
+    G12 = Float(units='N/m**2', desc='shear modulus')
+    nu12 = Float(desc='Poisson''s ratio (nu12*E22 = nu21*E11)')
+    rho = Float(units='kg/m**3', desc='density')
+
+
+# class Sector(VariableTree):
+
+#     num_plies = Array(dtype=np.int)
+#     thickness = Array(units='m')
+#     orientation = Array(units='deg')
+#     materials = List(Orthotropic2DMaterial)
+
 
 
 # ---------------------
@@ -70,6 +86,53 @@ class PreComp(BeamPropertiesBase):
         desc='list of CompositeSection objections defining the properties for lower surface')
     websCS = List(CompositeSection, iotype='in',
         desc='list of CompositeSection objections defining the properties for shear webs')
+
+    sector_idx_buckling = Array(iotype='in', dtype=np.int)
+
+
+    eps_crit = Array(iotype='out')
+
+
+    def panelBucklingStrain(self):
+        """
+        see chapter on Structural Component Design Techniques from Alastair Johnson
+        section 6.2: Design of composite panels
+
+        assumes: large aspect ratio, simply supported, uniaxial compression, flat rectangular plate
+
+        """
+
+        # rename
+        chord = self.chord
+        CS_list = self.upperCS  # TODO: assumes the upper surface is the compression one
+        sector_idx_list = self.sector_idx_buckling
+
+        # initialize
+        nsec = len(chord)
+        self.eps_crit = np.zeros(nsec)
+
+        for i in range(nsec):
+
+            cs = CS_list[i]
+            sector_idx = sector_idx_list[i]
+
+            # chord-wise length of sector
+            sector_length = chord[i] * (cs.loc[sector_idx+1] - cs.loc[sector_idx])
+
+            # get matrices
+            A, B, D, totalHeight = cs.compositeMatrices(sector_idx)
+            E = cs.effectiveEAxial(sector_idx)
+            D1 = D[0, 0]
+            D2 = D[1, 1]
+            D3 = D[0, 1] + 2*D[2, 2]
+
+            # use empirical formula
+            Nxx = 2 * (math.pi/sector_length)**2 * (math.sqrt(D1*D2) + D3)
+
+            self.eps_crit[i] = - Nxx / totalHeight / E
+
+
+
 
     def execute(self):
 
@@ -162,6 +225,149 @@ class PreComp(BeamPropertiesBase):
             x_ec_nose[i] = results[13] + self.leLoc[i]*self.chord[i]
             y_ec_nose[i] = results[12]  # switch b.c of coordinate system used
 
+        self.panelBucklingStrain()
+
+
+
+class SectorPanelBuckling(Component):
+
+    # from surface outward
+    num_plies = Array(iotype='in', dtype=np.int)
+    thickness = Array(iotype='in', units='m')
+    orientation = Array(iotype='in', units='deg')
+    materials = List(Orthotropic2DMaterial, iotype='in')
+    sector_length = Float(iotype='in', units='m')
+
+    eps_crit = Float(iotype='out')
+
+
+    def __Qbar(self, material, theta):
+        """Computes the lamina stiffness matrix
+
+        Returns
+        -------
+        Qbar : numpy matrix
+            the lamina stifness matrix
+
+        Notes
+        -----
+        Transforms a specially orthotropic lamina from principal axis to
+        an arbitrary axis defined by the ply orientation.
+        [sigma_x; sigma_y; tau_xy]^T = Qbar * [epsilon_x; epsilon_y, gamma_xy]^T
+        See [1]_ for further details.
+
+        References
+        ----------
+        .. [1] J. C. Halpin. Primer on Composite Materials Analysis. Technomic, 2nd edition, 1992.
+
+
+        """
+
+        E11 = material.E1
+        E22 = material.E2
+        nu12 = material.nu12
+        nu21 = nu12*E22/E11
+        G12 = material.G12
+        denom = (1 - nu12*nu21)
+
+        c = cosd(theta)
+        s = sind(theta)
+        c2 = c*c
+        s2 = s*s
+        cs = c*s
+
+        Q = np.mat([[E11/denom, nu12*E22/denom, 0],
+                    [nu12*E22/denom, E22/denom, 0],
+                    [0, 0, G12]])
+        T12 = np.mat([[c2, s2, cs],
+                      [s2, c2, -cs],
+                      [-cs, cs, 0.5*(c2-s2)]])
+        Tinv = np.mat([[c2, s2, -2*cs],
+                       [s2, c2, 2*cs],
+                       [cs, -cs, c2-s2]])
+
+        return Tinv*Q*T12
+
+
+
+    def execute(self):
+
+        t = self.thickness
+        n_plies = self.num_plies
+        theta = self.orientation
+        materials = self.materials
+        n = len(theta)
+
+
+        # ----- ABD matrices -----
+
+        # heights (z - absolute, h - relative to mid-plane)
+        z = np.zeros(n+1)
+        for i in range(n):
+            z[i+1] = z[i] + t[i]*n_plies[i]
+
+        z_mid = (z[-1] - z[0]) / 2.0
+        h = z - z_mid
+
+        # ABD matrices
+        A = np.zeros((3, 3))
+        B = np.zeros((3, 3))
+        D = np.zeros((3, 3))
+
+        for i in range(n):
+            Qbar = self.__Qbar(materials[i], theta[i])
+            A += Qbar*(h[i+1] - h[i])
+            B += 0.5*Qbar*(h[i+1]**2 - h[i]**2)
+            D += 1.0/3.0*Qbar*(h[i+1]**3 - h[i]**3)
+
+        totalHeight = z[-1] - z[0]
+
+
+        # ----- effective axial modulus -----
+
+        # Estimates the effective axial modulus of elasticity for the laminate
+        S = np.vstack((np.hstack((A, B)), np.hstack((B, D))))
+
+        # E_eff_x = N_x/h/eps_xx and eps_xx = S^{-1}(0,0)*N_x (approximately)
+        detS = np.linalg.det(S)
+        Eaxial = detS/np.linalg.det(S[1:, 1:])/totalHeight
+
+        # ----- panel buckling -----
+        # see chapter on Structural Component Design Techniques from Alastair Johnson
+        # section 6.2: Design of composite panels
+        # assumes: large aspect ratio, simply supported, uniaxial compression, flat rectangular plate
+
+        D1 = D[0, 0]
+        D2 = D[1, 1]
+        D3 = D[0, 1] + 2*D[2, 2]
+
+        # use empirical formula
+        Nxx = 2 * (math.pi/self.sector_length)**2 * (math.sqrt(D1*D2) + D3)
+
+        self.eps_crit = - Nxx / totalHeight / Eaxial
+
+
+
+
+
+# class CompositeSection(Component):
+
+#     break_loc = Array(iotype='in')
+
+#     sectors = List(Sector, iotype='in')
+
+
+# class PreCompCompositeSection(Component):
+
+#     file_in = Str(iotype='in')
+
+#     break_loc = Array(iotype='out')
+#     sectors = List(Sector, iotype='out')
+
+
+#     def execute(self):
+
+
 
 
 
@@ -169,6 +375,7 @@ class StrucBase(Component):
 
     # all inputs/outputs in airfoil coordinate system
 
+    # inputs
     beam = VarTree(BeamProperties(), iotype='in')
 
     nF = Int(iotype='in', desc='number of natural frequencies to return')
@@ -186,6 +393,7 @@ class StrucBase(Component):
     z_strain = Array(iotype='in')
 
     # outputs
+    blade_mass = Float(iotype='out')
     freq = Array(iotype='out')
 
     dx_defl = Array(iotype='out')
@@ -196,7 +404,7 @@ class StrucBase(Component):
 
 
 
-class pBEAM(StrucBase):
+class RotorWithpBEAM(StrucBase):
 
 
     def execute(self):
@@ -280,14 +488,22 @@ class pBEAM(StrucBase):
         self.dx_defl, self.dy_defl, self.dz_defl = p2a(dr1_defl, dr2_defl, dr3_defl)
 
 
+        # --- mass ---
+        self.blade_mass = blade.mass()
+
+
         # ----- natural frequencies ----
         self.freq = blade.naturalFrequencies(self.nF)
 
 
         # ----- strain -----
-        # p_loads = _pBEAM.Loads(nsec, self.P1_strain, self.P2_strain, self.P3_strain)
-        # blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        # self.strain = blade.axialStrain(len(self.r1_strain), self.r1_strain, self.r2_strain, self.r3_strain)
+        # from airfoil to principal
+        P1_strain, P2_strain, P3_strain = a2p(self.Px_strain, self.Py_strain, self.Pz_strain)
+        r1_strain, r2_strain, r3_strain = a2p(self.x_strain, self.y_strain, self.z_strain)
+
+        p_loads = _pBEAM.Loads(nsec, P1_strain, P2_strain, P3_strain)
+        blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
+        self.strain = blade.axialStrain(len(r1_strain), r1_strain, r2_strain, r3_strain)
 
 
 
@@ -461,6 +677,7 @@ class RotorStruc(Assembly):
 
     # connection input
     aero_loads_defl = VarTree(AeroLoads(), iotype='in')
+    aero_loads_strain = VarTree(AeroLoads(), iotype='in')
 
 
 
@@ -469,11 +686,12 @@ class RotorStruc(Assembly):
         self.add('beam', BeamPropertiesBase())
         self.add('curve', BeamCurvature())
         self.add('loads_defl', TotalLoads())
+        self.add('loads_strain', TotalLoads())
         self.add('struc', StrucBase())
         self.add('tip', TipDeflection())
 
 
-        self.driver.workflow.add(['beam', 'curve', 'loads_defl', 'struc', 'tip'])
+        self.driver.workflow.add(['beam', 'curve', 'loads_defl', 'loads_strain', 'struc', 'tip'])
 
         # connections to curve
         self.connect('beam.properties.z', 'curve.r')
@@ -490,6 +708,15 @@ class RotorStruc(Assembly):
         self.connect('beam.properties.rhoA', 'loads_defl.rhoA')
         self.connect('g', 'loads_defl.g')
 
+        # connections to loads_strain
+        self.connect('aero_loads_strain', 'loads_strain.aeroLoads')
+        self.connect('beam.properties.z', 'loads_strain.r')
+        self.connect('theta', 'loads_strain.theta')
+        self.connect('curve.totalCone', 'loads_strain.totalCone')
+        self.connect('curve.z_az', 'loads_strain.z_az')
+        self.connect('beam.properties.rhoA', 'loads_strain.rhoA')
+        self.connect('g', 'loads_strain.g')
+
 
         # connections to struc
         self.connect('beam.properties', 'struc.beam')
@@ -497,6 +724,9 @@ class RotorStruc(Assembly):
         self.connect('loads_defl.Px_af', 'struc.Px_defl')
         self.connect('loads_defl.Py_af', 'struc.Py_defl')
         self.connect('loads_defl.Pz_af', 'struc.Pz_defl')
+        self.connect('loads_strain.Px_af', 'struc.Px_strain')
+        self.connect('loads_strain.Py_af', 'struc.Py_strain')
+        self.connect('loads_strain.Pz_af', 'struc.Pz_strain')
 
         # connections to tip
         self.connect('struc.dx_defl', 'tip.dx')
@@ -509,9 +739,16 @@ class RotorStruc(Assembly):
         self.connect('curve.totalCone', 'tip.totalCone')
 
 
-        # passthroughs
+        # input passthroughs
+        self.create_passthrough('struc.x_strain')
+        self.create_passthrough('struc.y_strain')
+        self.create_passthrough('struc.z_strain')
+
+        # output passthroughs
+        self.create_passthrough('struc.blade_mass')
         self.create_passthrough('struc.freq')
         self.create_passthrough('tip.tip_deflection')
+        self.create_passthrough('struc.strain')
 
 
 
@@ -641,7 +878,7 @@ if __name__ == '__main__':
 
     rs = RotorStruc()
     rs.replace('beam', PreComp())
-    rs.replace('struc', pBEAM())
+    rs.replace('struc', RotorWithpBEAM())
 
     rs.theta = theta_str
     rs.precone = 2.5
@@ -649,19 +886,28 @@ if __name__ == '__main__':
     rs.presweep = presweep_str
 
     rs.aero_loads_defl.r = np.array([1.50142903976, 2.86943081405, 5.60533525332, 8.341239077, 11.7611942659, 15.8650998639, 19.9690060774, 24.072912291, 28.176817889, 32.2807241025, 36.3846303161, 40.4885359141, 44.5924421276, 48.6963483412, 52.8002539392, 56.220209128, 58.9561129517, 61.692017391, 63.0600191653])
-    # rs.aero_loads_defl.Px = np.array([0.0, 362.717315806, 432.878711022, 343.886166976, 3275.81485657, 3456.43667589, 4242.59562119, 4749.50035228, 5309.5875825, 6035.57521562, 6669.19579799, 7424.70403767, 8941.98862633, 9267.87964887, 9331.20585201, 9106.8484583, 8666.7592041, 7690.76832788, 0.0])
-    # rs.aero_loads_defl.Py = np.array([0.0, 156.136893551, 274.90740751, 296.2744799, -333.390794485, -358.109519877, -554.162555218, -775.587982234, -932.769137476, -1020.60741376, -1234.91878985, -1343.27953794, -1512.39437654, -1547.11901902, -1533.25617135, -1466.89347598, -1352.54429509, -1039.07885246, 0.0])
-    # rs.aero_loads_defl.Pz = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-
     rs.aero_loads_defl.Px = np.array([0.0, 388.882106126, 484.447148982, 402.741351277, 3111.66541958, 3310.69291134, 4074.26486938, 4570.38064794, 5137.53869383, 5883.16246763, 6527.30546598, 7306.30332887, 8843.37366039, 9198.35713086, 9287.96756701, 9082.53707622, 8655.15257055, 7689.09458231, 0.0])
     rs.aero_loads_defl.Py = np.array([-0, 68.6533921102, 168.133937689, 209.369690377, -1076.87079678, -1055.70325825, -1306.55253118, -1506.95422869, -1633.24056079, -1690.6232744, -1843.22553237, -1883.76262587, -2010.28347412, -1917.6539151, -1776.49531767, -1610.58547474, -1424.92987638, -1051.3928091, -0])
     rs.aero_loads_defl.Pz = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-
     rs.aero_loads_defl.V = 11.649611668
     rs.aero_loads_defl.Omega = 12.1260909022
     rs.aero_loads_defl.pitch = 0.0
     rs.aero_loads_defl.azimuth = 180.0
     rs.aero_loads_defl.tilt = 5.0
+
+    rs.aero_loads_strain.r = np.array([1.50142903976, 2.86943081405, 5.60533525332, 8.341239077, 11.7611942659, 15.8650998639, 19.9690060774, 24.072912291, 28.176817889, 32.2807241025, 36.3846303161, 40.4885359141, 44.5924421276, 48.6963483412, 52.8002539392, 56.220209128, 58.9561129517, 61.692017391, 63.0600191653])
+    rs.aero_loads_strain.Px = np.array([0.0, 5275.91170102, 5954.97469367, 4581.21401614, 24317.5727315, 22887.0177512, 22273.0504313, 20337.8397148, 19170.3580565, 18331.9830106, 17757.7609212, 16526.853061, 15093.9066831, 13734.7900621, 12267.4308679, 10937.1620954, 9787.29281101, 8548.74476641, 0.0])
+    rs.aero_loads_strain.Py = np.array([-0, -0, -0, -0, -8022.116732, -6577.57671572, -5839.69768021, -4922.9453766, -3742.72420205, -3141.49794777, -2329.22809287, -1842.52873914, -1357.22122192, -1019.59483393, -741.427649635, -550.033426097, -420.751366997, -310.90053355, -0])
+    rs.aero_loads_strain.Pz = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    rs.aero_loads_strain.V = 70.0
+    rs.aero_loads_strain.Omega = 0.0
+    rs.aero_loads_strain.pitch = 0.0
+    rs.aero_loads_strain.azimuth = 0.0
+    rs.aero_loads_strain.tilt = 5.0
+
+    rs.x_strain = np.array([1.62953277093, 1.65378760431, 1.6848244664, 1.69280026956, 1.70125331952, 1.70918845043, 1.71710285872, 1.7379700867, 1.77191347081, 1.77769022081, 1.66549686777, 1.46236108547, 1.24412860472, 0.946027322623, 0.855159937668, 0.793030786156, 0.741219389531, 0.678388044164, 0.656104367978, 0.626195492951, 0.594991331198, 0.535300387358, 0.49436378615, 0.466270531861, 0.437964716508, 0.374175959337, 0.35504758904, 0.343037547915, 0.30479534701, 0.285300267572, 0.270977493752, 0.256272902802, 0.243171569781, 0.215017502212, 0.190697407308, 0.170514014614, 0.149901126795, 0.13789004202])
+    rs.y_strain = np.array([-0.00113112893698, -0.00114796526232, -0.0172978765403, -0.0173797630875, -0.0174665494665, -0.0175480184371, -0.0176292746511, -0.0015645000705, -0.02731068479, -0.0305932407033, -0.109340525932, -0.125949563315, -0.12117411121, -0.128218415335, -0.149327182633, -0.14656631794, -0.140266481404, -0.135652296602, -0.132851488119, -0.1287750113, -0.124992337883, -0.118409965897, -0.110552832125, -0.0979009471516, -0.0937777322172, -0.084620004667, -0.0782777410193, -0.0716491412175, -0.0584114110202, -0.0591831317106, -0.0558251490105, -0.0488944452438, -0.050399265575, -0.0549454662041, -0.0623708745921, -0.0713825225821, -0.0823128686813, -0.0695992262681])
+    rs.z_strain = np.array([1.50142903976, 1.80306613137, 1.90155987557, 2.00005361977, 2.10470322299, 2.20319696719, 2.30169071139, 2.86802974054, 3.00345863882, 3.10195238302, 5.60738700113, 7.00476699698, 8.3405884027, 10.5074507751, 11.7632460137, 13.5115099732, 15.863048116, 18.5162233505, 19.9690060774, 22.0189071286, 24.0749640388, 26.12486509, 28.1747661411, 32.2807241025, 33.5303634821, 36.3866820639, 38.5350768593, 40.4864841663, 42.5425410764, 43.5397902365, 44.5924421276, 46.5438494346, 48.698400089, 52.7982021914, 56.2208598023, 58.9540612039, 61.6934184645, 63.0600191653])
 
 
     rs.beam.r = r_str
@@ -675,78 +921,36 @@ if __name__ == '__main__':
     rs.beam.lowerCS = lower
     rs.beam.websCS = webs
 
+    rs.beam.sector_idx_buckling = [2]*ncomp
+
     rs.run()
 
+    print rs.blade_mass
     print rs.freq
     print rs.tip_deflection
+    print rs.strain
+    print rs.beam.eps_crit
 
+    # 17161.8168946
+    # ???
+    # 4.67929859612
+    # [ -2.28358243e-04  -2.17393854e-04  -1.15914419e-04  -1.13759869e-04
+    #   -1.11517615e-04  -1.09447311e-04  -1.12797115e-04  -1.14157204e-04
+    #   -1.18455855e-04  -1.13027900e-04  -2.51873686e-04  -3.50517728e-04
+    #   -4.65866370e-04  -1.05325851e-03  -3.21593957e-03  -3.28704328e-03
+    #   -3.01119063e-03  -2.79448215e-03  -2.63896740e-03  -2.43410855e-03
+    #   -2.25519422e-03  -2.28464035e-03  -2.25379703e-03  -1.88422309e-03
+    #   -1.88487026e-03  -1.90956585e-03  -1.75147195e-03  -1.56748835e-03
+    #   -1.53817853e-03  -1.56631711e-03  -1.56011825e-03  -1.43961146e-03
+    #   -1.29415855e-03  -9.84150717e-04  -6.70424233e-04  -3.50877768e-04
+    #   -3.74835571e-05  -3.89995434e-23]
 
-    # rotor.theta = theta_str
-    # rotor.precone = 5.0  # TODO
-    # rotor.precurve = precurve_str
-    # rotor.precurveCone = np.zeros_like(r_str)  # TODO
+ #    [-0.01987173 -0.01929312 -0.01911046 -0.0189308  -0.01874314 -0.01856951
+ # -0.01663386 -0.00789359 -0.00751241 -0.00765203 -0.00725968 -0.00677502
+ # -0.00653707 -0.00390532 -0.00414116 -0.00368076 -0.00329441 -0.00303573
+ # -0.00292038 -0.0027829  -0.00267326 -0.0024449  -0.00225016 -0.00198843
+ # -0.00190416 -0.00176648 -0.00168421 -0.00165569 -0.00159949 -0.001516
+ # -0.00143407 -0.00127599 -0.00109732 -0.00080051 -0.00057373 -0.00043451
+ # -0.00015101 -0.00010445]
 
-    # rotor.run()
-
-    # print rotor.tip_deflection
-
-
-
-    # p.run()
-
-
-    # import matplotlib.pyplot as plt
-    # r_str = np.array(r_str)
-    # rstar = (r_str - r_str[0])/(r_str[-1] - r_str[0])
-
-    # plt.figure(1)
-    # plt.semilogy(rstar, p.properties.EIxx)
-    # plt.xlabel('blade fraction')
-    # plt.ylabel('flapwise stifness ($N m^2$)')
-
-    # plt.figure(2)
-    # plt.semilogy(rstar, p.properties.EIyy)
-    # plt.xlabel('blade fraction')
-    # plt.ylabel('edgewise stifness ($N m^2$)')
-
-    # plt.figure(3)
-    # plt.semilogy(rstar, p.properties.EA)
-    # plt.figure(4)
-    # plt.semilogy(rstar, p.properties.EIxy)
-    # plt.figure(5)
-    # plt.semilogy(rstar, p.properties.GJ)
-    # plt.figure(6)
-    # plt.semilogy(rstar, p.properties.rhoA)
-    # plt.figure(7)
-    # plt.semilogy(rstar, p.properties.rhoJ)
-    # plt.figure(8)
-    # plt.plot(rstar, p.properties.x_ec_str)
-    # plt.figure(9)
-    # plt.plot(rstar, p.properties.y_ec_str)
-    # # plt.figure(10)
-    # # plt.plot(rstar, precomp.x_ec_nose)
-    # # plt.figure(11)
-    # # plt.plot(rstar, precomp.y_ec_nose)
-
-
-    # # plt.show()
-
-    # # -----
-
-    # rotor = Rotor()
-
-    # rotor.replace('beam', p)
-
-    # rotor.run()
-
-
-    # plt.figure()
-    # plt.semilogy(rstar, rotor.EI11)
-    # plt.semilogy(rstar, p.properties.EIyy)
-
-    # plt.figure()
-    # plt.semilogy(rstar, rotor.EI22)
-    # plt.semilogy(rstar, p.properties.EIxx)
-
-    # plt.show()
 
