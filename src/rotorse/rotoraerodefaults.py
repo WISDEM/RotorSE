@@ -12,7 +12,7 @@ from math import pi
 from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
-from commonse import cosd
+from commonse import sind, cosd
 from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase
 
 
@@ -29,6 +29,18 @@ class CCBladeGeometry(GeomtrySetupBase):
     def execute(self):
 
         self.R = self.Rtip*cosd(self.precone)
+
+    def linearize(self):
+        pass
+
+    def provideJ(self):
+
+        inputs = ('Rtip', 'precone')
+        outputs = ('R',)
+
+        J = np.array([[cosd(self.precone), -self.Rtip*sind(self.precone)*pi/180.0]])
+
+        return inputs, outputs, J
 
 
 
@@ -171,6 +183,22 @@ class WeibullCDF(CDFBase):
 
         self.F = 1.0 - np.exp(-(self.x/self.A)**self.k)
 
+    def linearize(self):
+        pass
+
+    def provideJ(self):
+
+        inputs = ('x',)
+        outputs = ('F',)
+
+        x = self.x
+        A = self.A
+        k = self.k
+        J = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
+
+        return inputs, outputs, J
+
+
 
 class RayleighCDF(CDFBase):
     """Rayleigh cumulative distribution function"""
@@ -181,6 +209,19 @@ class RayleighCDF(CDFBase):
 
         self.F = 1.0 - np.exp(-pi/4.0*(self.x/self.xbar)**2)
 
+    def linearize(self):
+        pass
+
+    def provideJ(self):
+
+        inputs = ('x',)
+        outputs = ('F',)
+
+        x = self.x
+        xbar = self.xbar
+        J = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2*xbar**2))
+
+        return inputs, outputs, J
 
 
 if __name__ == '__main__':
