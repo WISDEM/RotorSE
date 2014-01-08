@@ -12,7 +12,7 @@ from math import pi
 from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
-from commonse import sind, cosd
+from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack
 from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase
 
 
@@ -132,6 +132,9 @@ class CSMDrivetrain(DrivetrainLossesBase):
     def execute(self):
 
         drivetrainType = self.drivetrainType
+        aeroPower = self.aeroPower
+        ratedPower = self.ratedPower
+
 
         if drivetrainType == 'geared':
             constant = 0.01289
@@ -153,23 +156,43 @@ class CSMDrivetrain(DrivetrainLossesBase):
             linear = 0.02000
             quadratic = 0.06899
 
-        Pbar = self.aeroPower / self.ratedPower
 
-        # TODO: think about these gradients.  may not be able to use abs and minimum
+        Pbar0 = aeroPower / ratedPower
 
-        # handle negative power case
-        Pbar = np.abs(Pbar)
+        # handle negative power case (with absolute value)
+        Pbar1, dPbar1_dPbar0 = smooth_abs(Pbar0, dx=0.01)
 
         # truncate idealized power curve for purposes of efficiency calculation
-        Pbar = np.minimum(Pbar, 1.0)
+        Pbar, dPbar_dPbar1 = smooth_min(Pbar1, 1.0, pct_offset=0.01)
 
         # compute efficiency
-        eff = np.zeros_like(Pbar)
-        idx = Pbar != 0
+        eff = 1.0 - (constant/Pbar + linear + quadratic*Pbar)
 
-        eff[idx] = 1.0 - (constant/Pbar[idx] + linear + quadratic*Pbar[idx])
+        self.power = aeroPower * eff
 
-        self.power = self.aeroPower * eff
+
+        # gradients
+        dPbar_dPa = dPbar_dPbar1*dPbar1_dPbar0/ratedPower
+        dPbar_dPr = -dPbar_dPbar1*dPbar1_dPbar0*aeroPower/ratedPower**2
+
+        deff_dPa = dPbar_dPa*(constant/Pbar**2 - quadratic)
+        deff_dPr = dPbar_dPr*(constant/Pbar**2 - quadratic)
+
+        dP_dPa = eff + aeroPower*deff_dPa
+        dP_dPr = aeroPower*deff_dPr
+
+        self.J = hstack([np.diag(dP_dPa), dP_dPr])
+
+
+    def linearize(self):
+        pass
+
+    def provideJ(self):
+
+        inputs = ('aeroPower', 'ratedPower')
+        outputs = ('power',)
+
+        return inputs, outputs, self.J
 
 
 
@@ -222,6 +245,7 @@ class RayleighCDF(CDFBase):
         J = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2*xbar**2))
 
         return inputs, outputs, J
+
 
 
 if __name__ == '__main__':

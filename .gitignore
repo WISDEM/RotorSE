@@ -3,6 +3,10 @@
 # OpenMDAO
 openmdao_log.txt
 
+# ST
+*.sublime-project
+*.sublime-workspace
+
 # Sphinx
 _build
 generated

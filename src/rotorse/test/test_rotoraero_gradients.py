@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from commonse.utilities import check_gradient_unit_test
 from rotorse.rotoraero import Coefficients, SetupRun, RegulatedPowerCurve, AEP
-from rotorse.rotoraerodefaults import CCBladeGeometry, WeibullCDF, RayleighCDF
+from rotorse.rotoraerodefaults import CCBladeGeometry, CSMDrivetrain, WeibullCDF, RayleighCDF
 
 
 class TestCoefficients(unittest.TestCase):
@@ -90,6 +90,45 @@ class TestCCBladeGeometry(unittest.TestCase):
         geom.precone = 5.0
 
         check_gradient_unit_test(self, geom)
+
+
+class TestCSMDrivetrain(unittest.TestCase):
+
+    def test1(self):
+
+        dt = CSMDrivetrain()
+        dt.aeroPower = np.array([94518.9621316, 251637.667571, 525845.9078, 949750.895039, 1555959.84151, 2377079.95943, 3445718.46102, 4767739.26659, 6246980.6699, 7776655.12685, 9138828.60234, 10145691.7573, 10870259.0229, 11496057.2782, 12090978.6194, 12642721.8686, 13122354.9713, 13502608.5891, 13772424.3097, 13929508.977])
+        dt.ratedPower = 5000000.0
+
+        check_gradient_unit_test(self, dt)
+
+
+    def test2(self):
+
+        dt = CSMDrivetrain()
+        dt.aeroPower = np.linspace(0.0, 10.0, 50)
+        dt.ratedPower = 5.0
+
+        check_gradient_unit_test(self, dt)
+
+
+    def test3(self):
+
+        dt = CSMDrivetrain()
+        dt.aeroPower = np.linspace(-10.0, 10.0, 50)
+        dt.ratedPower = 5.0
+
+        check_gradient_unit_test(self, dt)
+
+
+    def test4(self):
+
+        dt = CSMDrivetrain()
+        dt.aeroPower = np.linspace(-10.0, 30.0, 50)
+        dt.ratedPower = 5.0
+
+        check_gradient_unit_test(self, dt)
+
 
 
 
