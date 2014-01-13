@@ -12,7 +12,7 @@ from math import pi
 from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
-from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack
+from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack
 from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase
 
 
@@ -47,19 +47,19 @@ class CCBladeGeometry(GeomtrySetupBase):
 class CCBlade(AeroBase):
     """blade element momentum code"""
 
-    # variables
+    # (potential) variables
     r = Array(iotype='in', units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
     chord = Array(iotype='in', units='m', desc='chord length at each section')
     theta = Array(iotype='in', units='deg', desc='twist angle at each section (positive decreases angle of attack)')
     Rhub = Float(iotype='in', units='m', desc='hub radius')
     Rtip = Float(iotype='in', units='m', desc='tip radius')
-    hubheight = Float(iotype='in', units='m')
-
-    # parameters
-    airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
+    hubHt = Float(iotype='in', units='m')
     precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
     tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
     yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
+
+    # parameters
+    airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
     B = Int(3, iotype='in', desc='number of blades')
     rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
     mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air')
@@ -76,8 +76,8 @@ class CCBlade(AeroBase):
         for i in range(n):
             af[i] = afinit(self.airfoil_files[i])
 
-        ccblade = CCBlade_PY(self.r, self.chord, self.theta, af, self.Rhub, self.Rtip, self.B,
-            self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubheight,
+        self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, af, self.Rhub, self.Rtip, self.B,
+            self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
             self.nSector, derivatives=True)
 
         run_case = self.run_case
@@ -85,23 +85,30 @@ class CCBlade(AeroBase):
         if run_case == 'power':
 
             # power, thrust, torque
-            P, T, Q, dP_ds, dT_ds, dQ_ds, dP_dv, dT_dv, dQ_dv \
-                = ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+            P, T, Q, dP, dT, dQ \
+                = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
 
             self.P = P
             self.T = T
             self.Q = Q
 
 
+            jP = hstack([dP['dprecone'], dP['dtilt'], dP['dhubHt'], dP['dRhub'], dP['dRtip'],
+                dP['dyaw'], dP['dUinf'], dP['dOmega'], dP['dpitch'], dP['dr'], dP['dchord'], dP['dtheta']])
+            jT = hstack([dT['dprecone'], dT['dtilt'], dT['dhubHt'], dT['dRhub'], dT['dRtip'],
+                dT['dyaw'], dT['dUinf'], dT['dOmega'], dT['dpitch'], dT['dr'], dT['dchord'], dT['dtheta']])
+            jQ = hstack([dQ['dprecone'], dQ['dtilt'], dQ['dhubHt'], dQ['dRhub'], dQ['dRtip'],
+                dQ['dyaw'], dQ['dUinf'], dQ['dOmega'], dQ['dpitch'], dQ['dr'], dQ['dchord'], dQ['dtheta']])
+
+
+            self.J = vstack([jP, jT, jQ])
+
+
         if run_case == 'loads':
 
             # distributed loads
-
-            if self.Omega_load == 0.0:  # TODO: implement derivatives for this case
-                Np, Tp = ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
-            else:
-                Np, Tp, dNp_dX, dTp_dX, dNp_dprecurve, dTp_dprecurve \
-                    = ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+            Np, Tp, dNp_dX, dTp_dX, dNp_dprecurve, dTp_dprecurve \
+                = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
             # concatenate loads at root/tip
             self.loads.r = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
@@ -121,6 +128,15 @@ class CCBlade(AeroBase):
             self.loads.tilt = self.tilt
 
 
+    def linearize(self):
+        pass
+
+    def provideJ(self):
+
+        inputs = ('precone', 'tilt', 'hubHt', 'Rhub', 'Rtip', 'yaw', 'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta')
+        outputs = ('P', 'T', 'Q')
+
+        return inputs, outputs, self.J
 
 
 class CSMDrivetrain(DrivetrainLossesBase):

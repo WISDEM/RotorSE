@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from commonse.utilities import check_gradient_unit_test
 from rotorse.rotoraero import Coefficients, SetupRun, RegulatedPowerCurve, AEP
-from rotorse.rotoraerodefaults import CCBladeGeometry, CSMDrivetrain, WeibullCDF, RayleighCDF
+from rotorse.rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, WeibullCDF, RayleighCDF
 
 
 class TestCoefficients(unittest.TestCase):
@@ -92,6 +92,64 @@ class TestCCBladeGeometry(unittest.TestCase):
         check_gradient_unit_test(self, geom)
 
 
+@unittest.skip("CCBlade test takes a long time")
+class TestCCBlade(unittest.TestCase):
+
+    def test1(self):
+
+        ccblade = CCBlade()
+        ccblade.r = np.array([2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500,
+                  28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500,
+                  56.1667, 58.9000, 61.6333])
+        ccblade.chord = np.array([3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249, 4.007, 3.748,
+                      3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419])
+        ccblade.theta = np.array([13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
+                      6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106])
+        ccblade.Rhub = 1.5
+        ccblade.Rtip = 63.0
+        ccblade.hubHt = 80.0
+        ccblade.precone = 2.5
+        ccblade.tilt = -5.0
+        ccblade.yaw = 0.0
+        ccblade.B = 3
+        ccblade.rho = 1.225
+        ccblade.mu = 1.81206e-5
+        ccblade.shearExp = 0.2
+        ccblade.nSector = 4
+
+        ccblade.Uhub = np.array([3.0, 4.15789473684, 5.31578947368, 6.47368421053, 7.63157894737, 8.78947368421, 9.94736842105, 11.1052631579, 12.2631578947, 13.4210526316, 14.5789473684, 15.7368421053, 16.8947368421, 18.0526315789, 19.2105263158, 20.3684210526, 21.5263157895, 22.6842105263, 23.8421052632, 25.0])
+        ccblade.Omega = np.array([3.43647024491, 4.76282718154, 6.08918411817, 7.41554105481, 8.74189799144, 10.0682549281, 11.3946118647, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0])
+        ccblade.pitch = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+        # airfoils
+        basepath = '/Users/sning/Dropbox/NREL/5MW_files/5MW_AFFiles/'
+
+        # load all airfoils
+        airfoil_types = [0]*8
+        airfoil_types[0] = basepath + 'Cylinder1.dat'
+        airfoil_types[1] = basepath + 'Cylinder2.dat'
+        airfoil_types[2] = basepath + 'DU40_A17.dat'
+        airfoil_types[3] = basepath + 'DU35_A17.dat'
+        airfoil_types[4] = basepath + 'DU30_A17.dat'
+        airfoil_types[5] = basepath + 'DU25_A17.dat'
+        airfoil_types[6] = basepath + 'DU21_A17.dat'
+        airfoil_types[7] = basepath + 'NACA64_A17.dat'
+
+        # place at appropriate radial stations
+        af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+
+        n = len(ccblade.r)
+        af = [0]*n
+        for i in range(n):
+            af[i] = airfoil_types[af_idx[i]]
+
+        ccblade.airfoil_files = af
+
+        check_gradient_unit_test(self, ccblade, display=True)
+
+
+
 class TestCSMDrivetrain(unittest.TestCase):
 
     def test1(self):
@@ -159,3 +217,9 @@ class TestRayleighCDF(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+    # from unittest import TestSuite
+    # blah = TestSuite()
+    # blah.addTest(TestCCBlade('test1'))
+    # # blah.addTest(TestRayleighCDF('test1'))
+    # unittest.TextTestRunner().run(blah)
