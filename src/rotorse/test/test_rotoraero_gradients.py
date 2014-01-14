@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from commonse.utilities import check_gradient_unit_test
 from rotorse.rotoraero import Coefficients, SetupRun, RegulatedPowerCurve, AEP
-from rotorse.rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, WeibullCDF, RayleighCDF
+from rotorse.rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, WeibullCDF, RayleighCDF
 
 
 class TestCoefficients(unittest.TestCase):
@@ -78,6 +78,24 @@ class TestAEP(unittest.TestCase):
         aep.lossFactor = 0.95
 
         check_gradient_unit_test(self, aep, step_size=1)  # larger step size b.c. AEP is big value
+
+
+
+class TestGeometrySpline(unittest.TestCase):
+
+    def test1(self):
+
+        geom = GeometrySpline()
+
+        geom.r_af = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667, 0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
+        geom.idx_cylinder = 3
+        geom.r_max_chord = 0.22
+        geom.Rhub = 1.5
+        geom.Rtip = 63.0
+        geom.chord_sub = [3.2612, 4.5709, 3.3178, 1.4621]
+        geom.theta_sub = [13.2783, 7.46036, 2.89317, -0.0878099]
+
+        check_gradient_unit_test(self, geom, tol=5e-5)
 
 
 
@@ -220,6 +238,5 @@ if __name__ == '__main__':
 
     # from unittest import TestSuite
     # blah = TestSuite()
-    # blah.addTest(TestCCBlade('test1'))
-    # # blah.addTest(TestRayleighCDF('test1'))
+    # blah.addTest(TestGeometrySpline('test1'))
     # unittest.TextTestRunner().run(blah)

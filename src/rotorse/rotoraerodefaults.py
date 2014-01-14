@@ -12,8 +12,115 @@ from math import pi
 from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
-from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack
+from openmdao.main.api import Component
+from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase
+from akima import Akima
+
+
+# ---------------------
+# Map Design Variables to Discretization
+# ---------------------
+
+
+
+class GeometrySpline(Component):
+
+    r_af = Array(iotype='in', units='m', desc='locations where airfoils are defined on unit radius')
+
+    idx_cylinder = Int(iotype='in', desc='location where cylinder section ends on unit radius')
+    r_max_chord = Float(iotype='in')
+
+    Rhub = Float(iotype='in', units='m', desc='blade hub radius')
+    Rtip = Float(iotype='in', units='m', desc='blade tip radius')
+
+    chord_sub = Array(iotype='in', units='m', desc='chord at control points')
+    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')
+
+    r = Array(iotype='out', units='m', desc='chord at airfoil locations')
+    chord = Array(iotype='out', units='m', desc='chord at airfoil locations')
+    theta = Array(iotype='out', units='deg', desc='twist at airfoil locations')
+
+
+    def execute(self):
+
+        nc = len(self.chord_sub)
+        nt = len(self.theta_sub)
+        Rhub = self.Rhub
+        Rtip = self.Rtip
+        idxc = self.idx_cylinder
+        r_max_chord = Rhub + (Rtip-Rhub)*self.r_max_chord
+        r_cylinder = Rhub + (Rtip-Rhub)*self.r_af[idxc]
+
+        # chord parameterization
+        rc_outer, drc_drcmax, drc_drtip = linspace_with_deriv(r_max_chord, Rtip, nc-1)
+        r_chord = np.concatenate([[Rhub], rc_outer])
+        drc_drcmax = np.concatenate([[0.0], drc_drcmax])
+        drc_drtip = np.concatenate([[0.0], drc_drtip])
+        drc_drhub = np.concatenate([[1.0], np.zeros(nc-1)])
+
+        # theta parameterization
+        r_theta, drt_drcyl, drt_drtip = linspace_with_deriv(r_cylinder, Rtip, nt)
+
+        # spline
+        chord_spline = Akima(r_chord, self.chord_sub)
+        theta_spline = Akima(r_theta, self.theta_sub)
+
+        self.r = Rhub + (Rtip-Rhub)*self.r_af
+        self.chord, dchord_dr, dchord_drchord, dchord_dchordsub = chord_spline.interp(self.r)
+        theta_outer, dthetaouter_dr, dthetaouter_drtheta, dthetaouter_dthetasub = theta_spline.interp(self.r[idxc:])
+
+        theta_inner = theta_outer[0] * np.ones(idxc)
+        self.theta = np.concatenate([theta_inner, theta_outer])
+
+        # gradients (TODO: rethink these a bit or use Tapenade.)
+        n = len(self.r_af)
+        dr_draf = (Rtip-Rhub)*np.ones(n)
+        dr_dRhub = 1.0 - self.r_af
+        dr_dRtip = self.r_af
+        dr = hstack([np.diag(dr_draf), np.zeros((n, 1)), dr_dRhub, dr_dRtip, np.zeros((n, nc+nt))])
+
+        dchord_draf = dchord_dr * dr_draf
+        dchord_drmaxchord0 = np.dot(dchord_drchord, drc_drcmax)
+        dchord_drmaxchord = dchord_drmaxchord0 * (Rtip-Rhub)
+        dchord_drhub = np.dot(dchord_drchord, drc_drhub) + dchord_drmaxchord0*(1.0 - self.r_max_chord) + dchord_dr*dr_dRhub
+        dchord_drtip = np.dot(dchord_drchord, drc_drtip) + dchord_drmaxchord0*(self.r_max_chord) + dchord_dr*dr_dRtip
+        dchord = hstack([np.diag(dchord_draf), dchord_drmaxchord, dchord_drhub, dchord_drtip, dchord_dchordsub, np.zeros((n, nt))])
+
+        dthetaouter_dcyl = np.dot(dthetaouter_drtheta, drt_drcyl)
+        dthetaouter_draf = dthetaouter_dr*dr_draf[idxc:]
+        dthetaouter_drhub = dthetaouter_dr*dr_dRhub[idxc:]
+        dthetaouter_drtip = dthetaouter_dr*dr_dRtip[idxc:] + np.dot(dthetaouter_drtheta, drt_drtip)
+
+        dtheta_draf = np.concatenate([np.zeros(idxc), dthetaouter_draf])
+        dtheta_drhub = np.concatenate([dthetaouter_drhub[0]*np.ones(idxc), dthetaouter_drhub])
+        dtheta_drtip = np.concatenate([dthetaouter_drtip[0]*np.ones(idxc), dthetaouter_drtip])
+        sub = dthetaouter_dthetasub[0, :]
+        dtheta_dthetasub = vstack([np.dot(np.ones((idxc, 1)), sub[np.newaxis, :]), dthetaouter_dthetasub])
+
+        dtheta_draf = np.diag(dtheta_draf)
+        dtheta_dcyl = np.concatenate([dthetaouter_dcyl[0]*np.ones(idxc), dthetaouter_dcyl])
+        dtheta_draf[idxc:, idxc] += dthetaouter_dcyl*(Rtip-Rhub)
+        dtheta_drhub += dtheta_dcyl*(1.0 - self.r_af[idxc])
+        dtheta_drtip += dtheta_dcyl*self.r_af[idxc]
+
+        dtheta = hstack([dtheta_draf, np.zeros((n, 1)), dtheta_drhub, dtheta_drtip, np.zeros((n, nc)), dtheta_dthetasub])
+
+        self.J = vstack([dr, dchord, dtheta])
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('r_af', 'r_max_chord', 'Rhub', 'Rtip', 'chord_sub', 'theta_sub')
+        outputs = ('r', 'chord', 'theta')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        return self.J
+
 
 
 # ---------------------
@@ -30,17 +137,18 @@ class CCBladeGeometry(GeomtrySetupBase):
 
         self.R = self.Rtip*cosd(self.precone)
 
-    def linearize(self):
-        pass
-
-    def provideJ(self):
+    def list_deriv_vars(self):
 
         inputs = ('Rtip', 'precone')
         outputs = ('R',)
 
+        return inputs, outputs
+
+    def provideJ(self):
+
         J = np.array([[cosd(self.precone), -self.Rtip*sind(self.precone)*pi/180.0]])
 
-        return inputs, outputs, J
+        return J
 
 
 
@@ -128,15 +236,18 @@ class CCBlade(AeroBase):
             self.loads.tilt = self.tilt
 
 
-    def linearize(self):
-        pass
-
-    def provideJ(self):
+    def list_deriv_vars(self):
 
         inputs = ('precone', 'tilt', 'hubHt', 'Rhub', 'Rtip', 'yaw', 'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta')
         outputs = ('P', 'T', 'Q')
 
-        return inputs, outputs, self.J
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        return self.J
+
 
 
 class CSMDrivetrain(DrivetrainLossesBase):
@@ -200,15 +311,17 @@ class CSMDrivetrain(DrivetrainLossesBase):
         self.J = hstack([np.diag(dP_dPa), dP_dPr])
 
 
-    def linearize(self):
-        pass
-
-    def provideJ(self):
+    def list_deriv_vars(self):
 
         inputs = ('aeroPower', 'ratedPower')
         outputs = ('power',)
 
-        return inputs, outputs, self.J
+        return inputs, outputs
+
+    def provideJ(self):
+
+        return self.J
+
 
 
 
@@ -222,20 +335,20 @@ class WeibullCDF(CDFBase):
 
         self.F = 1.0 - np.exp(-(self.x/self.A)**self.k)
 
-    def linearize(self):
-        pass
-
-    def provideJ(self):
-
+    def list_deriv_vars(self):
         inputs = ('x',)
         outputs = ('F',)
+
+        return inputs, outputs
+
+    def provideJ(self):
 
         x = self.x
         A = self.A
         k = self.k
         J = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
 
-        return inputs, outputs, J
+        return J
 
 
 
@@ -248,23 +361,38 @@ class RayleighCDF(CDFBase):
 
         self.F = 1.0 - np.exp(-pi/4.0*(self.x/self.xbar)**2)
 
-    def linearize(self):
-        pass
-
-    def provideJ(self):
+    def list_deriv_vars(self):
 
         inputs = ('x',)
         outputs = ('F',)
+
+        return inputs, outputs
+
+    def provideJ(self):
 
         x = self.x
         xbar = self.xbar
         J = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2*xbar**2))
 
-        return inputs, outputs, J
+        return J
 
 
 
 if __name__ == '__main__':
+
+    geom = GeometrySpline()
+
+    geom.r_af = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667, 0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
+    geom.idx_cylinder = 3
+    geom.r_max_chord = 0.22
+    geom.Rhub = 1.5
+    geom.Rtip = 63.0
+    geom.chord_sub = [3.2612, 4.5709, 3.3178, 1.4621]
+    geom.theta_sub = [13.2783, 7.46036, 2.89317, -0.0878099]
+
+    geom.run()
+
+    exit()
 
     from rotoraero import RotorAeroVS
 
@@ -353,7 +481,7 @@ if __name__ == '__main__':
     rotor.analysis.theta = theta
     rotor.analysis.Rhub = Rhub
     rotor.analysis.Rtip = Rtip
-    rotor.analysis.hubheight = hubheight
+    rotor.analysis.hubHt = hubheight
     rotor.analysis.airfoil_files = af
     rotor.analysis.precone = precone
     rotor.analysis.tilt = tilt

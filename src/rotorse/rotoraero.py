@@ -185,14 +185,15 @@ class Coefficients(Component):
         self.CQ = self.Q / (q * self.R * A)
 
 
-    def linearize(self):
-        # TODO: remove this after openmdao updates to cache J
-        pass
-
-    def provideJ(self):
+    def list_deriv_vars(self):
 
         inputs = ('V', 'T', 'Q', 'P', 'R')
         outputs = ('CT', 'CQ', 'CP')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
 
         V = self.V
         R = self.R
@@ -221,7 +222,7 @@ class Coefficients(Component):
 
         J = vstack((dCT, dCQ, dCP))
 
-        return inputs, outputs, J
+        return J
 
 
 
@@ -275,15 +276,17 @@ class SetupRun(Component):
         self.J = vstack([dV, dOmega, dpitch])
 
 
-    def linearize(self):
-        pass
-
-    def provideJ(self):
+    def list_deriv_vars(self):
 
         inputs = ('control.tsr', 'R')
         outputs = ('Uhub', 'Omega', 'pitch')
 
-        return inputs, outputs, self.J
+        return inputs, outputs
+
+    def provideJ(self):
+
+        return self.J
+
 
 
 
@@ -388,17 +391,19 @@ class RegulatedPowerCurve(ImplicitComponent):
         self.J = vstack([dres, dV, dP, drV, drOmega, drpitch, drT, drQ])
 
 
-    def linearize(self):
-        pass
-
-    def provideJ(self):
+    def list_deriv_vars(self):
 
         inputs = ('control.tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R')
         outputs = ('residual', 'V', 'P', 'ratedConditions.V', 'ratedConditions.Omega',
             'ratedConditions.pitch', 'ratedConditions.T', 'ratedConditions.Q')
 
+        return inputs, outputs
 
-        return inputs, outputs, self.J
+    def provideJ(self):
+
+        return self.J
+
+
 
 
 
@@ -420,13 +425,15 @@ class AEP(Component):
         self.AEP = self.lossFactor*np.trapz(self.P, self.CDF_V)/1e3*365.0*24.0  # in kWh
 
 
-    def linearize(self):
-        # TODO: remove this after openmdao updates to cache J
-        pass
+    def list_deriv_vars(self):
 
-    def provideJ(self):
         inputs = ('CDF_V', 'P', 'lossFactor')
         outputs = ('AEP',)
+
+        return inputs, outputs
+
+
+    def provideJ(self):
 
         P = self.P
         CDF = self.CDF_V
@@ -450,7 +457,7 @@ class AEP(Component):
         J[0, n:2*n] = dAEP_dP
         J[0, 2*n] = dAEP_dlossFactor
 
-        return inputs, outputs, J
+        return J
 
 
 
