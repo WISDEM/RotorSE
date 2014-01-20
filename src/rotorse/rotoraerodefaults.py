@@ -12,7 +12,7 @@ from math import pi
 from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
-from openmdao.main.api import Component
+from openmdao.main.api import Component, Assembly
 from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase
 from akima import Akima
@@ -123,6 +123,70 @@ class GeometrySpline(Component):
 
 
 
+class CCBladeWithSplineParameterization(AeroBase, Assembly):
+
+    # inputs
+    r_max_chord = Float(iotype='in')
+    chord_sub = Array(iotype='in', units='m', desc='chord at control points')
+    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')
+    Rhub = Float(iotype='in', units='m', desc='hub radius')
+    Rtip = Float(iotype='in', units='m', desc='tip radius')
+    hubHt = Float(iotype='in', units='m')
+    precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
+    tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
+    yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
+    r_af = Array(iotype='in', units='m', desc='locations where airfoils are defined on unit radius')
+    airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
+    idx_cylinder = Int(iotype='in', desc='location where cylinder section ends on unit radius')
+    B = Int(3, iotype='in', desc='number of blades')
+    rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
+    mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air')
+    shearExp = Float(0.2, iotype='in', desc='shear exponent')
+    nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
+
+
+
+    def configure(self):
+
+        self.add('spline', GeometrySpline())
+        self.add('ccblade', CCBlade())
+
+        self.driver.workflow.add(['spline', 'ccblade'])
+
+        # connections to spline
+        self.connect('r_af', 'spline.r_af')
+        self.connect('idx_cylinder', 'spline.idx_cylinder')
+        self.connect('Rhub', 'spline.Rhub')
+        self.connect('Rtip', 'spline.Rtip')
+        self.connect('r_max_chord', 'spline.r_max_chord')
+        self.connect('chord_sub', 'spline.chord_sub')
+        self.connect('theta_sub', 'spline.theta_sub')
+
+        # connections to CCBlade
+        self.connect('spline.r', 'ccblade.r')
+        self.connect('spline.chord', 'ccblade.chord')
+        self.connect('spline.theta', 'ccblade.theta')
+        self.connect('Rhub', 'ccblade.Rhub')
+        self.connect('Rtip', 'ccblade.Rtip')
+        self.connect('hubHt', 'ccblade.hubHt')
+        self.connect('precone', 'ccblade.precone')
+        self.connect('tilt', 'ccblade.tilt')
+        self.connect('yaw', 'ccblade.yaw')
+        self.connect('airfoil_files', 'ccblade.airfoil_files')
+        self.connect('B', 'ccblade.B')
+        self.connect('rho', 'ccblade.rho')
+        self.connect('mu', 'ccblade.mu')
+        self.connect('shearExp', 'ccblade.shearExp')
+        self.connect('nSector', 'ccblade.nSector')
+
+        self.connect('Uhub', 'ccblade.Uhub')
+        self.connect('Omega', 'ccblade.Omega')
+        self.connect('pitch', 'ccblade.pitch')
+        self.connect('ccblade.T', 'T')
+        self.connect('ccblade.Q', 'Q')
+        self.connect('ccblade.P', 'P')
+
+
 # ---------------------
 # Default Implementations of Base Classes
 # ---------------------
@@ -215,7 +279,7 @@ class CCBlade(AeroBase):
         if run_case == 'loads':
 
             # distributed loads
-            Np, Tp, dNp_dX, dTp_dX, dNp_dprecurve, dTp_dprecurve \
+            Np, Tp, dNp, dTp \
                 = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
             # concatenate loads at root/tip
@@ -233,7 +297,9 @@ class CCBlade(AeroBase):
             self.loads.Omega = self.Omega_load
             self.loads.pitch = self.pitch_load
             self.loads.azimuth = self.azimuth_load
-            self.loads.tilt = self.tilt
+            # self.loads.tilt = self.tilt
+
+            # TODO: add Jacobian for this case
 
 
     def list_deriv_vars(self):
@@ -255,6 +321,7 @@ class CSMDrivetrain(DrivetrainLossesBase):
 
     drivetrainType = Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in')
 
+    missing_deriv_policy = 'assume_zero'
 
     def execute(self):
 
@@ -380,20 +447,6 @@ class RayleighCDF(CDFBase):
 
 if __name__ == '__main__':
 
-    geom = GeometrySpline()
-
-    geom.r_af = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667, 0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
-    geom.idx_cylinder = 3
-    geom.r_max_chord = 0.22
-    geom.Rhub = 1.5
-    geom.Rtip = 63.0
-    geom.chord_sub = [3.2612, 4.5709, 3.3178, 1.4621]
-    geom.theta_sub = [13.2783, 7.46036, 2.89317, -0.0878099]
-
-    geom.run()
-
-    exit()
-
     from rotoraero import RotorAeroVS
 
     # ---------- inputs ---------------
@@ -415,7 +468,7 @@ if __name__ == '__main__':
     B = 3
 
     # airfoils
-    basepath = '/Users/sning/Dropbox/NREL/5MW_files/5MW_AFFiles/'
+    basepath = '/Users/Andrew/Dropbox/NREL/5MW_files/5MW_AFFiles/'
 
     # load all airfoils
     airfoil_types = [0]*8
@@ -522,6 +575,8 @@ if __name__ == '__main__':
     print rc.pitch
     print rc.T
     print rc.Q
+
+    print rotor.diameter
 
     import matplotlib.pyplot as plt
     plt.plot(rotor.V, rotor.P/1e6)

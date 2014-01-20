@@ -9,13 +9,17 @@ Copyright (c)  NREL. All rights reserved.
 
 import numpy as np
 import math
-from openmdao.main.api import VariableTree, Component, Assembly, Driver
-from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Str, List, Slot, Enum, Bool
+from openmdao.main.api import VariableTree, Component, Assembly
+from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Enum, Str, List
 
-import _pBEAM
+from rotoraero import SetupRun, RegulatedPowerCurve, AEP, VarSpeedMachine, RatedConditions, RotorAeroVS, AeroBase, AeroLoads, RPM2RS
+from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF
+from openmdao.lib.drivers.api import Brent
+from commonse import DirectionVector, cosd, sind
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
-from rotoraero import RotorAeroVS, AeroBase, AeroLoads, RPM2RS
-from commonse import DirectionVector, cosd, sind, _akima
+from akima import Akima, akima_interp
+import _pBEAM
+
 
 
 # ---------------------
@@ -37,13 +41,13 @@ class BeamProperties(VariableTree):
 
 
 
-class Orthotropic2DMaterial(VariableTree):
+# class Orthotropic2DMaterial(VariableTree):
 
-    E1 = Float(units='N/m**2', desc='Young''s modulus in first principal direction')
-    E2 = Float(units='N/m**2', desc='Young''s modulus in second principal direction')
-    G12 = Float(units='N/m**2', desc='shear modulus')
-    nu12 = Float(desc='Poisson''s ratio (nu12*E22 = nu21*E11)')
-    rho = Float(units='kg/m**3', desc='density')
+#     E1 = Float(units='N/m**2', desc='Young''s modulus in first principal direction')
+#     E2 = Float(units='N/m**2', desc='Young''s modulus in second principal direction')
+#     G12 = Float(units='N/m**2', desc='shear modulus')
+#     nu12 = Float(desc='Poisson''s ratio (nu12*E22 = nu21*E11)')
+#     rho = Float(units='kg/m**3', desc='density')
 
 
 # class Sector(VariableTree):
@@ -65,7 +69,50 @@ class BeamPropertiesBase(Component):
 
 
 
-class PreComp(BeamPropertiesBase):
+class StrucBase(Component):
+
+    # all inputs/outputs in airfoil coordinate system
+
+    # inputs
+    beam = VarTree(BeamProperties(), iotype='in')
+
+    nF = Int(iotype='in', desc='number of natural frequencies to return')
+
+    Px_defl = Array(iotype='in')
+    Py_defl = Array(iotype='in')
+    Pz_defl = Array(iotype='in')
+
+    Px_strain = Array(iotype='in')
+    Py_strain = Array(iotype='in')
+    Pz_strain = Array(iotype='in')
+
+    xu_strain = Array(iotype='in')
+    xl_strain = Array(iotype='in')
+    yu_strain = Array(iotype='in')
+    yl_strain = Array(iotype='in')
+
+    # outputs
+    blade_mass = Float(iotype='out', desc='mass of one blades')
+    blade_moment_of_inertia = Float(iotype='out', desc='out of plane moment of inertia of a blade')
+    freq = Array(iotype='out')
+    dx_defl = Array(iotype='out')
+    dy_defl = Array(iotype='out')
+    dz_defl = Array(iotype='out')
+    strainU = Array(iotype='out')
+    strainL = Array(iotype='out')
+
+
+
+
+
+# ---------------------
+# Components
+# ---------------------
+
+
+
+
+class PreCompSections(BeamPropertiesBase):
 
     r = Array(iotype='in', units='m', desc='radial positions. r[0] should be the hub location \
         while r[-1] should be the blade tip. Any number \
@@ -87,10 +134,49 @@ class PreComp(BeamPropertiesBase):
     websCS = List(CompositeSection, iotype='in',
         desc='list of CompositeSection objections defining the properties for shear webs')
 
-    sector_idx_buckling = Array(iotype='in', dtype=np.int)
+    sector_idx_strain = Array(iotype='in', dtype=np.int)
 
 
     eps_crit = Array(iotype='out')
+    xu_strain = Array(iotype='out')
+    xl_strain = Array(iotype='out')
+    yu_strain = Array(iotype='out')
+    yl_strain = Array(iotype='out')
+
+
+    def criticalStrainLocations(self, x_ec_nose, y_ec_nose):
+
+        n = len(self.sector_idx_strain)
+
+        # find corresponding locations on airfoil at midpoint of sector
+        xun = np.zeros(n)
+        xln = np.zeros(n)
+        yun = np.zeros(n)
+        yln = np.zeros(n)
+
+        for i in range(n):
+            csU = self.upperCS[i]
+            csL = self.lowerCS[i]
+            pf = self.profile[i]
+            idx = self.sector_idx_strain[i]
+
+            xun[i] = 0.5*(csU.loc[idx] + csU.loc[idx+1])
+            xln[i] = 0.5*(csL.loc[idx] + csL.loc[idx+1])
+            yun[i] = np.interp(xun[i], pf.x, pf.yu)
+            yln[i] = np.interp(xln[i], pf.x, pf.yl)
+
+        # make dimensional and define relative to elastic center
+        xu = xun*self.chord - x_ec_nose
+        xl = xln*self.chord - x_ec_nose
+        yu = yun*self.chord - y_ec_nose
+        yl = yln*self.chord - y_ec_nose
+
+
+        # switch to airfoil coordinate system
+        self.xu_strain = yu
+        self.xl_strain = yl
+        self.yu_strain = xu
+        self.yl_strain = xl
 
 
     def panelBucklingStrain(self):
@@ -105,7 +191,7 @@ class PreComp(BeamPropertiesBase):
         # rename
         chord = self.chord
         CS_list = self.upperCS  # TODO: assumes the upper surface is the compression one
-        sector_idx_list = self.sector_idx_buckling
+        sector_idx_strain = self.sector_idx_strain
 
         # initialize
         nsec = len(chord)
@@ -114,7 +200,7 @@ class PreComp(BeamPropertiesBase):
         for i in range(nsec):
 
             cs = CS_list[i]
-            sector_idx = sector_idx_list[i]
+            sector_idx = sector_idx_strain[i]
 
             # chord-wise length of sector
             sector_length = chord[i] * (cs.loc[sector_idx+1] - cs.loc[sector_idx])
@@ -226,181 +312,8 @@ class PreComp(BeamPropertiesBase):
             y_ec_nose[i] = results[12]  # switch b.c of coordinate system used
 
         self.panelBucklingStrain()
+        self.criticalStrainLocations(x_ec_nose, y_ec_nose)
 
-
-
-class SectorPanelBuckling(Component):
-
-    # from surface outward
-    num_plies = Array(iotype='in', dtype=np.int)
-    thickness = Array(iotype='in', units='m')
-    orientation = Array(iotype='in', units='deg')
-    materials = List(Orthotropic2DMaterial, iotype='in')
-    sector_length = Float(iotype='in', units='m')
-
-    eps_crit = Float(iotype='out')
-
-
-    def __Qbar(self, material, theta):
-        """Computes the lamina stiffness matrix
-
-        Returns
-        -------
-        Qbar : numpy matrix
-            the lamina stifness matrix
-
-        Notes
-        -----
-        Transforms a specially orthotropic lamina from principal axis to
-        an arbitrary axis defined by the ply orientation.
-        [sigma_x; sigma_y; tau_xy]^T = Qbar * [epsilon_x; epsilon_y, gamma_xy]^T
-        See [1]_ for further details.
-
-        References
-        ----------
-        .. [1] J. C. Halpin. Primer on Composite Materials Analysis. Technomic, 2nd edition, 1992.
-
-
-        """
-
-        E11 = material.E1
-        E22 = material.E2
-        nu12 = material.nu12
-        nu21 = nu12*E22/E11
-        G12 = material.G12
-        denom = (1 - nu12*nu21)
-
-        c = cosd(theta)
-        s = sind(theta)
-        c2 = c*c
-        s2 = s*s
-        cs = c*s
-
-        Q = np.mat([[E11/denom, nu12*E22/denom, 0],
-                    [nu12*E22/denom, E22/denom, 0],
-                    [0, 0, G12]])
-        T12 = np.mat([[c2, s2, cs],
-                      [s2, c2, -cs],
-                      [-cs, cs, 0.5*(c2-s2)]])
-        Tinv = np.mat([[c2, s2, -2*cs],
-                       [s2, c2, 2*cs],
-                       [cs, -cs, c2-s2]])
-
-        return Tinv*Q*T12
-
-
-
-    def execute(self):
-
-        t = self.thickness
-        n_plies = self.num_plies
-        theta = self.orientation
-        materials = self.materials
-        n = len(theta)
-
-
-        # ----- ABD matrices -----
-
-        # heights (z - absolute, h - relative to mid-plane)
-        z = np.zeros(n+1)
-        for i in range(n):
-            z[i+1] = z[i] + t[i]*n_plies[i]
-
-        z_mid = (z[-1] - z[0]) / 2.0
-        h = z - z_mid
-
-        # ABD matrices
-        A = np.zeros((3, 3))
-        B = np.zeros((3, 3))
-        D = np.zeros((3, 3))
-
-        for i in range(n):
-            Qbar = self.__Qbar(materials[i], theta[i])
-            A += Qbar*(h[i+1] - h[i])
-            B += 0.5*Qbar*(h[i+1]**2 - h[i]**2)
-            D += 1.0/3.0*Qbar*(h[i+1]**3 - h[i]**3)
-
-        totalHeight = z[-1] - z[0]
-
-
-        # ----- effective axial modulus -----
-
-        # Estimates the effective axial modulus of elasticity for the laminate
-        S = np.vstack((np.hstack((A, B)), np.hstack((B, D))))
-
-        # E_eff_x = N_x/h/eps_xx and eps_xx = S^{-1}(0,0)*N_x (approximately)
-        detS = np.linalg.det(S)
-        Eaxial = detS/np.linalg.det(S[1:, 1:])/totalHeight
-
-        # ----- panel buckling -----
-        # see chapter on Structural Component Design Techniques from Alastair Johnson
-        # section 6.2: Design of composite panels
-        # assumes: large aspect ratio, simply supported, uniaxial compression, flat rectangular plate
-
-        D1 = D[0, 0]
-        D2 = D[1, 1]
-        D3 = D[0, 1] + 2*D[2, 2]
-
-        # use empirical formula
-        Nxx = 2 * (math.pi/self.sector_length)**2 * (math.sqrt(D1*D2) + D3)
-
-        self.eps_crit = - Nxx / totalHeight / Eaxial
-
-
-
-
-
-# class CompositeSection(Component):
-
-#     break_loc = Array(iotype='in')
-
-#     sectors = List(Sector, iotype='in')
-
-
-# class PreCompCompositeSection(Component):
-
-#     file_in = Str(iotype='in')
-
-#     break_loc = Array(iotype='out')
-#     sectors = List(Sector, iotype='out')
-
-
-#     def execute(self):
-
-
-
-
-
-class StrucBase(Component):
-
-    # all inputs/outputs in airfoil coordinate system
-
-    # inputs
-    beam = VarTree(BeamProperties(), iotype='in')
-
-    nF = Int(iotype='in', desc='number of natural frequencies to return')
-
-    Px_defl = Array(iotype='in')
-    Py_defl = Array(iotype='in')
-    Pz_defl = Array(iotype='in')
-
-    Px_strain = Array(iotype='in')
-    Py_strain = Array(iotype='in')
-    Pz_strain = Array(iotype='in')
-
-    x_strain = Array(iotype='in')
-    y_strain = Array(iotype='in')
-    z_strain = Array(iotype='in')
-
-    # outputs
-    blade_mass = Float(iotype='out')
-    freq = Array(iotype='out')
-
-    dx_defl = Array(iotype='out')
-    dy_defl = Array(iotype='out')
-    dz_defl = Array(iotype='out')
-
-    strain = Array(iotype='out')
 
 
 
@@ -413,61 +326,61 @@ class RotorWithpBEAM(StrucBase):
         nsec = len(beam.z)
 
 
-        # translate to elastic center and rotate to principal axes
-        EI11 = np.zeros(nsec)
-        EI22 = np.zeros(nsec)
-        ca = np.zeros(nsec)
-        sa = np.zeros(nsec)
+        # # translate to elastic center and rotate to principal axes
+        # EI11 = np.zeros(nsec)
+        # EI22 = np.zeros(nsec)
+        # ca = np.zeros(nsec)
+        # sa = np.zeros(nsec)
 
-        EA = beam.EA
-        EIxx = beam.EIxx
-        EIyy = beam.EIyy
-        EIxy = beam.EIxy
-        x_ec_str = beam.x_ec_str
-        y_ec_str = beam.y_ec_str
-
-
-        for i in range(nsec):
-
-            # translate to elastic center
-            EItemp = np.array([EIxx[i], EIyy[i], EIxy[i]]) + \
-                np.array([-y_ec_str[i]**2, -x_ec_str[i]**2, -x_ec_str[i]*y_ec_str[i]])*EA[i]
-
-            # use profile c.s. for conveneince in using Hansen's notation
-            EI = DirectionVector.fromArray(EItemp).airfoilToProfile()
-
-            # let alpha = 1/2 beta and use half-angle identity (avoid arctan issues)
-            cb = (EI.y - EI.x) / math.sqrt((2*EI.z)**2 + (EI.y - EI.x)**2)  # EI.z is EIxy
-            sa[i] = math.sqrt((1-cb)/2)
-            ca[i] = math.sqrt((1+cb)/2)
-            ta = sa[i]/ca[i]
-            EI11[i] = EI.x - EI.z*ta
-            EI22[i] = EI.y + EI.z*ta
+        # EA = beam.EA
+        # EIxx = beam.EIxx
+        # EIyy = beam.EIyy
+        # EIxy = beam.EIxy
+        # x_ec_str = beam.x_ec_str
+        # y_ec_str = beam.y_ec_str
 
 
-        def a2p(x, y, z):  # rotate from airfoil c.s. to principal c.s.
+        # for i in range(nsec):
 
-            v = DirectionVector(x, y, 0.0).airfoilToProfile()
+        #     # translate to elastic center
+        #     EItemp = np.array([EIxx[i], EIyy[i], EIxy[i]]) + \
+        #         np.array([-y_ec_str[i]**2, -x_ec_str[i]**2, -x_ec_str[i]*y_ec_str[i]])*EA[i]
 
-            r1 = v.x*ca + v.y*sa
-            r2 = -v.x*sa + v.y*ca
+        #     # use profile c.s. for conveneince in using Hansen's notation
+        #     EI = DirectionVector.fromArray(EItemp).airfoilToProfile()
 
-            return r1, r2, z
+        #     # let alpha = 1/2 beta and use half-angle identity (avoid arctan issues)
+        #     cb = (EI.y - EI.x) / math.sqrt((2*EI.z)**2 + (EI.y - EI.x)**2)  # EI.z is EIxy
+        #     sa[i] = math.sqrt((1-cb)/2)
+        #     ca[i] = math.sqrt((1+cb)/2)
+        #     ta = sa[i]/ca[i]
+        #     EI11[i] = EI.x - EI.z*ta
+        #     EI22[i] = EI.y + EI.z*ta
 
 
-        def p2a(r1, r2, r3):  # rotate from principal c.s. to airfoil c.s.
+        # def a2p(x, y, z):  # rotate from airfoil c.s. to principal c.s.
 
-            x = r1*ca - r2*sa
-            y = r1*sa + r2*ca
+        #     v = DirectionVector(x, y, 0.0).airfoilToProfile()
 
-            v = DirectionVector(x, y, 0.0).profileToAirfoil()
+        #     r1 = v.x*ca + v.y*sa
+        #     r2 = -v.x*sa + v.y*ca
 
-            return v.x, v.y, r3
+        #     return r1, r2, z
+
+
+        # def p2a(r1, r2, r3):  # rotate from principal c.s. to airfoil c.s.
+
+        #     x = r1*ca - r2*sa
+        #     y = r1*sa + r2*ca
+
+        #     v = DirectionVector(x, y, 0.0).profileToAirfoil()
+
+        #     return v.x, v.y, r3
 
 
         # create finite element objects
-        p_section = _pBEAM.SectionData(nsec, beam.z, EA, EI11,
-            EI22, beam.GJ, beam.rhoA, beam.rhoJ)
+        p_section = _pBEAM.SectionData(nsec, beam.z, beam.EA, beam.EIxx,
+            beam.EIyy, beam.GJ, beam.rhoA, beam.rhoJ)
         # p_loads = _pBEAM.Loads(nsec)  # no loads
         p_tip = _pBEAM.TipData()  # no tip mass
         k = np.array([float('inf'), float('inf'), float('inf'), float('inf'), float('inf'), float('inf')])
@@ -477,20 +390,22 @@ class RotorWithpBEAM(StrucBase):
         # ----- tip deflection -----
 
         # from airfoil to principal
-        P1_defl, P2_defl, P3_defl = a2p(self.Px_defl, self.Py_defl, self.Pz_defl)
+        # P1_defl, P2_defl, P3_defl = a2p(self.Px_defl, self.Py_defl, self.Pz_defl)
 
         # evaluate displacements
-        p_loads = _pBEAM.Loads(nsec, P1_defl, P2_defl, P3_defl)
+        p_loads = _pBEAM.Loads(nsec, self.Px_defl, self.Py_defl, self.Pz_defl)
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        dr1_defl, dr2_defl, dr3_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
+        self.dx_defl, self.dy_defl, self.dz_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
 
         # from principal to airfoil
-        self.dx_defl, self.dy_defl, self.dz_defl = p2a(dr1_defl, dr2_defl, dr3_defl)
+        # self.dx_defl, self.dy_defl, self.dz_defl = p2a(dr1_defl, dr2_defl, dr3_defl)
 
 
         # --- mass ---
         self.blade_mass = blade.mass()
 
+        # --- moments of inertia
+        self.blade_moment_of_inertia = blade.outOfPlaneMomentOfInertia()
 
         # ----- natural frequencies ----
         self.freq = blade.naturalFrequencies(self.nF)
@@ -498,66 +413,230 @@ class RotorWithpBEAM(StrucBase):
 
         # ----- strain -----
         # from airfoil to principal
-        P1_strain, P2_strain, P3_strain = a2p(self.Px_strain, self.Py_strain, self.Pz_strain)
-        r1_strain, r2_strain, r3_strain = a2p(self.x_strain, self.y_strain, self.z_strain)
+        # P1_strain, P2_strain, P3_strain = a2p(self.Px_strain, self.Py_strain, self.Pz_strain)
+        # r1_strain, r2_strain, r3_strain = a2p(self.x_strain, self.y_strain, self.z_strain)
 
-        p_loads = _pBEAM.Loads(nsec, P1_strain, P2_strain, P3_strain)
+        p_loads = _pBEAM.Loads(nsec, self.Px_strain, self.Py_strain, self.Pz_strain)
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        self.strain = blade.axialStrain(len(r1_strain), r1_strain, r2_strain, r3_strain)
+        # self.strain = blade.axialStrain(len(self.x_strain), self.x_strain, self.y_strain, self.z_strain)
+
+        Vx, Vy, Fz, Mx, My, Tz = blade.shearAndBending()
+
+
+        # use profile c.s. to use Hansen's notation
+        Vx, Vy = Vy, Vx
+        Mx, My = My, Mx
+        xu = self.yu_strain
+        yu = self.xu_strain
+        xl = self.yl_strain
+        yl = self.xl_strain
+        EIxx = beam.EIyy
+        EIyy = beam.EIxx
+        x_ec_str = beam.y_ec_str
+        y_ec_str = beam.x_ec_str
+
+        # translate to elastic center
+        EA = beam.EA
+        EIxy = beam.EIxy
+        EIxx -= y_ec_str**2*EA
+        EIyy -= x_ec_str**2*EA
+        EIxy -= x_ec_str*y_ec_str*EA
+
+        # get rotation angle
+        alpha = 0.5*np.arctan2(2*EIxy, EIyy-EIxx)
+
+        EI11 = EIxx - EIxy*np.tan(alpha)
+        EI22 = EIyy + EIxy*np.tan(alpha)
+
+        # get moments and positions in principal axes
+        ca = np.cos(alpha)
+        sa = np.sin(alpha)
+
+        M1 = Mx*ca + My*sa
+        M2 = -Mx*sa + My*ca
+
+        x = xu*ca + yu*sa
+        y = -xu*sa + yu*ca
+
+        # compute strain
+        self.strainU = M1/EI11*y - M2/EI22*x + Fz/EA
+
+        x = xl*ca + yl*sa
+        y = -xl*sa + yl*ca
+
+        self.strainL = M1/EI11*y - M2/EI22*x + Fz/EA
 
 
 
+class GridSetup(Component):
 
-# ---------------------
-# Components
-# ---------------------
+    # should be constant
+    initial_aero_grid = Array(iotype='in')
+    initial_str_grid = Array(iotype='in')
 
-class BeamCurvature(Component):
-
-    r = Array(iotype='in')
-    precurve = Array(iotype='in')
-    presweep = Array(iotype='in')
-    precone = Float(iotype='in')
-
-    totalCone = Array(iotype='out')
-    z_az = Array(iotype='out')
-    s = Array(iotype='out')
+    # outputs are also constant during optimization
+    fraction = Array(iotype='out')
+    idxj = Array(iotype='out', dtype=np.int)
 
     def execute(self):
 
-        n = len(self.r)
-        precone = self.precone
+        r_aero = self.initial_aero_grid
+        r_str = self.initial_str_grid
+        r_aug = np.concatenate([[0.0], r_aero, [1.0]])
+
+        nstr = len(r_str)
+        naug = len(r_aug)
+
+        # find idx in augmented aero array that brackets the structural index
+        # then find the fraction the structural value is between the two bounding indices
+        self.fraction = np.zeros(nstr)
+        self.idxj = np.zeros(nstr, dtype=np.int)
+
+        for i in range(nstr):
+            for j in range(1, naug):
+                if r_aug[j] >= r_str[i]:
+                    j -= 1
+                    break
+            self.idxj[i] = j
+            self.fraction[i] = (r_str[i] - r_aug[j]) / (r_aug[j+1] - r_aug[j])
 
 
-        # azimuthal position
-        # x_az = -self.r*sind(precone) + self.precurve*cosd(precone)
-        z_az = self.r*cosd(precone) + self.precurve*sind(precone)
-        # y_az = self.presweep
+
+class RGrid(Component):
+
+    # variables
+    r_aero = Array(iotype='in')
+
+    # parameters
+    fraction = Array(iotype='in')
+    idxj = Array(iotype='in', dtype=np.int)
+
+    # outputs
+    r_str = Array(iotype='in')
 
 
-        # total precone angle
-        x = self.precurve  # compute without precone and add in rotation after
-        z = self.r
-        y = self.presweep
+    def execute(self):
 
-        totalCone = np.zeros(n)
-        totalCone[0] = math.atan2(-(x[1] - x[0]), z[1] - z[0])
-        totalCone[1:n-1] = 0.5*(np.arctan2(-(x[1:n-1] - x[:n-2]), z[1:n-1] - z[:n-2])
-            + np.arctan2(-(x[2:] - x[1:n-1]), z[2:] - z[1:n-1]))
-        totalCone[n-1] = math.atan2(-(x[n-1] - x[n-2]), z[n-1] - z[n-2])
+        r_aug = np.concatenate([[0.0], self.r_aero, [1.0]])
 
-
-        # total path length of blade  (TODO: need to do something with this.  This should be a geometry preprocessing step just like rotoraero)
-        s = np.zeros(n)
-        s[0] = self.r[0]
-        for i in range(1, n):
-            s[i] = s[i-1] + math.sqrt((x[i] - x[i-1])**2 + (y[i] - y[i-1])**2 + (z[i] - z[i-1])**2)
+        nstr = len(self.fraction)
+        self.r_str = np.zeros(nstr)
+        for i in range(nstr):
+            j = self.idxj[i]
+            self.r_str[i] = r_aug[j] + self.fraction[i]*(r_aug[j+1] - r_aug[j])
 
 
-        # save variables of interest
-        self.totalCone = precone + np.degrees(totalCone)  # change to degrees
-        self.z_az = z_az
-        self.s = s
+
+class GeometrySpline(Component):
+
+    # variables
+    r_aero_unit = Array(iotype='in', desc='locations where airfoils are defined on unit radius')
+    r_str_unit = Array(np.array([0]), iotype='in', desc='locations where airfoils are defined on unit radius')
+    r_max_chord = Float(iotype='in')
+    chord_sub = Array(iotype='in', units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
+    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
+    bladeLength = Float(iotype='in', units='m')
+
+    # parameters
+    idx_cylinder_aero = Int(iotype='in', desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
+    idx_cylinder_str = Int(iotype='in', desc='first idx in r_str_unit of non-cylindrical section')
+    hubFraction = Float(iotype='in')
+
+    # out
+    Rhub = Float(iotype='out', units='m')
+    Rtip = Float(iotype='out', units='m')
+    r_aero = Array(iotype='out', units='m')
+    r_str = Array(iotype='out', units='m')
+    chord_aero = Array(iotype='out', units='m', desc='chord at airfoil locations')
+    chord_str = Array(iotype='out', units='m', desc='chord at airfoil locations')
+    theta_aero = Array(iotype='out', units='deg', desc='twist at airfoil locations')
+    theta_str = Array(iotype='out', units='deg', desc='twist at airfoil locations')
+
+
+    def execute(self):
+
+        Rtip = self.bladeLength
+        Rhub = self.hubFraction * Rtip
+
+        # setup chord parmeterization
+        nc = len(self.chord_sub)
+        r_max_chord = Rhub + (Rtip-Rhub)*self.r_max_chord
+        rc = np.linspace(r_max_chord, Rtip, nc-1)
+        rc = np.concatenate([[Rhub], rc])
+        chord_spline = Akima(rc, self.chord_sub)
+
+        # setup theta parmeterization
+        nt = len(self.theta_sub)
+        idxc_aero = self.idx_cylinder_aero
+        idxc_str = self.idx_cylinder_str
+        r_cylinder = Rhub + (Rtip-Rhub)*self.r_aero_unit[idxc_aero]
+        rt = np.linspace(r_cylinder, Rtip, nt)
+        theta_spline = Akima(rt, self.theta_sub)
+
+        # make dimensional and evaluate splines
+        self.Rhub = Rhub
+        self.Rtip = self.bladeLength
+        self.r_aero = Rhub + (Rtip-Rhub)*self.r_aero_unit
+        self.r_str = Rhub + (Rtip-Rhub)*self.r_str_unit
+        self.chord_aero, _, _, _ = chord_spline.interp(self.r_aero)
+        self.chord_str, _, _, _ = chord_spline.interp(self.r_str)
+        theta_outer_aero, _, _, _ = theta_spline.interp(self.r_aero[idxc_aero:])
+        theta_outer_str, _, _, _ = theta_spline.interp(self.r_str[idxc_str:])
+        self.theta_aero = np.concatenate([theta_outer_aero[0]*np.ones(idxc_aero), theta_outer_aero])
+        self.theta_str = np.concatenate([theta_outer_str[0]*np.ones(idxc_str), theta_outer_str])
+
+
+
+
+
+# # TODO: move to rotoraero
+# # also why not use bem.f90
+# class BladeCurvature(Component):
+
+#     r = Array(iotype='in')
+#     precurve = Array(iotype='in')
+#     presweep = Array(iotype='in')
+#     precone = Float(iotype='in')
+
+#     totalCone = Array(iotype='out')
+#     x_az = Array(iotype='out')
+#     y_az = Array(iotype='out')
+#     z_az = Array(iotype='out')
+#     s = Array(iotype='out')
+
+#     def execute(self):
+
+#         n = len(self.r)
+#         precone = self.precone
+
+
+#         # azimuthal position
+#         self.x_az = -self.r*sind(precone) + self.precurve*cosd(precone)
+#         self.z_az = self.r*cosd(precone) + self.precurve*sind(precone)
+#         self.y_az = self.presweep
+
+
+#         # total precone angle
+#         x = self.precurve  # compute without precone and add in rotation after
+#         z = self.r
+#         y = self.presweep
+
+#         totalCone = np.zeros(n)
+#         totalCone[0] = math.atan2(-(x[1] - x[0]), z[1] - z[0])
+#         totalCone[1:n-1] = 0.5*(np.arctan2(-(x[1:n-1] - x[:n-2]), z[1:n-1] - z[:n-2])
+#             + np.arctan2(-(x[2:] - x[1:n-1]), z[2:] - z[1:n-1]))
+#         totalCone[n-1] = math.atan2(-(x[n-1] - x[n-2]), z[n-1] - z[n-2])
+
+#         self.totalCone = precone + np.degrees(totalCone)
+
+
+#         # total path length of blade  (TODO: need to do something with this.  This should be a geometry preprocessing step just like rotoraero)
+#         s = np.zeros(n)
+#         s[0] = self.r[0]
+#         for i in range(1, n):
+#             s[i] = s[i-1] + math.sqrt((x[i] - x[i-1])**2 + (y[i] - y[i-1])**2 + (z[i] - z[i-1])**2)
+
+#         self.s = s
 
 
 
@@ -567,8 +646,10 @@ class TotalLoads(Component):
 
     r = Array(iotype='in')
     theta = Array(iotype='in')
-    totalCone = Array(iotype='in')
-    z_az = Array(iotype='in')
+    tilt = Float(iotype='in')
+    precone = Float(iotype='in')
+    # totalCone = Array(iotype='in')
+    # z_az = Array(iotype='in')
     rhoA = Array(iotype='in')
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity')
 
@@ -580,6 +661,9 @@ class TotalLoads(Component):
 
     def execute(self):
 
+        totalCone = self.precone
+        z_az = self.r*cosd(self.precone)
+
         # keep all in blade c.s. then rotate all at end
 
         # rename
@@ -589,9 +673,9 @@ class TotalLoads(Component):
 
         # interpolate aerodynamic loads onto structural grid
         P_a = DirectionVector(0, 0, 0)
-        P_a.x = _akima.interpolate(aero.r, aero.Px, self.r)
-        P_a.y = _akima.interpolate(aero.r, aero.Py, self.r)
-        P_a.z = _akima.interpolate(aero.r, aero.Pz, self.r)
+        P_a.x = akima_interp(aero.r, aero.Px, self.r)
+        P_a.y = akima_interp(aero.r, aero.Py, self.r)
+        P_a.z = akima_interp(aero.r, aero.Pz, self.r)
 
 
         # --- weight loads ---
@@ -599,17 +683,17 @@ class TotalLoads(Component):
         # yaw c.s.
         weight = DirectionVector(0.0, 0.0, -self.rhoA*self.g)
 
-        P_w = weight.yawToHub(aero.tilt).hubToAzimuth(aero.azimuth)\
-            .azimuthToBlade(self.totalCone)
+        P_w = weight.yawToHub(self.tilt).hubToAzimuth(aero.azimuth)\
+            .azimuthToBlade(totalCone)
 
 
         # --- centrifugal loads ---
 
         # azimuthal c.s.
         Omega = aero.Omega*RPM2RS
-        load = DirectionVector(0.0, 0.0, self.rhoA*Omega**2*self.z_az)
+        load = DirectionVector(0.0, 0.0, self.rhoA*Omega**2*z_az)
 
-        P_c = load.azimuthToBlade(self.totalCone)
+        P_c = load.azimuthToBlade(totalCone)
 
 
         # --- total loads ---
@@ -641,7 +725,8 @@ class TipDeflection(Component):
     pitch = Float(iotype='in')
     azimuth = Float(iotype='in')
     tilt = Float(iotype='in')
-    totalCone = Array(iotype='in')
+    precone = Float(iotype='in')
+    # totalCone = Array(iotype='in')
 
     tip_deflection = Float(iotype='out')
 
@@ -651,7 +736,7 @@ class TipDeflection(Component):
         theta = np.array(self.theta) + self.pitch
 
         dr = DirectionVector(self.dx, self.dy, self.dz)
-        delta = dr.airfoilToBlade(theta).bladeToAzimuth(self.totalCone) \
+        delta = dr.airfoilToBlade(theta).bladeToAzimuth(self.precone) \
             .azimuthToHub(self.azimuth).hubToYaw(self.tilt)
 
         self.tip_deflection = delta.x[-1]
@@ -659,39 +744,159 @@ class TipDeflection(Component):
 
 
 
+class RootMoment(Component):
+    """docstring for RootMoment"""
+
+    r_str = Array(iotype='in')
+    aeroLoads = VarTree(AeroLoads(), iotype='in')  # aerodynamic loads in blade c.s.
+    precone = Float(iotype='in')
+    # totalCone = Array(iotype='in')
+    # x_az = Array(iotype='in')
+    # y_az = Array(iotype='in')
+    # z_az = Array(iotype='in')
+    # s = Array(iotype='in')
+
+    root_bending_moment = Float(iotype='out')
+
+    def execute(self):
+
+        r = self.r_str
+        x_az = -r*sind(self.precone)
+        z_az = r*cosd(self.precone)
+        y_az = np.zeros_like(r)
 
 
-class RotorStruc(Assembly):
+        aL = self.aeroLoads
+        Px = np.interp(r, aL.r, aL.Px)
+        Py = np.interp(r, aL.r, aL.Py)
+        Pz = np.interp(r, aL.r, aL.Pz)
+
+        # loads in azimuthal c.s.
+        P = DirectionVector(Px, Py, Pz).bladeToAzimuth(self.precone)
+
+        # distributed bending load in azimuth coordinate ysstem
+        az = DirectionVector(x_az, y_az, z_az)
+        Mp = az.cross(P)
+
+        # integrate
+        Mx = np.trapz(Mp.x, r)
+        My = np.trapz(Mp.y, r)
+        Mz = np.trapz(Mp.z, r)
+
+        # get total magnitude
+        self.root_bending_moment = math.sqrt(Mx**2 + My**2 + Mz**2)
+
+
+
+class MassProperties(Component):
+
+    blade_mass = Float(iotype='in')
+    blade_moment_of_inertia = Float(iotype='in')
+    nBlades = Int(iotype='in')
+    tilt = Float(iotype='in')
+
+    mass_all_blades = Float(iotype='out')
+    I_all_blades = Array(iotype='out')
+
+    def execute(self):
+
+        self.mass_all_blades = self.nBlades * self.blade_mass
+
+        Ibeam = self.nBlades * self.blade_moment_of_inertia
+
+        Ixx = Ibeam
+        Iyy = Ibeam/2.0  # azimuthal average for 2 blades, exact for 3+
+        Izz = Ibeam/2.0
+        Ixy = 0
+        Ixz = 0
+        Iyz = 0  # azimuthal average for 2 blades, exact for 3+
+
+        # rotate to yaw c.s.
+        I = DirectionVector(Ixx, Iyy, Izz).hubToYaw(self.tilt)  # because off-diagonal components are all zero
+
+        self.I_all_blades = np.array([I.x, I.y, I.z, Ixy, Ixz, Iyz])
+
+
+class TurbineClass(Component):
+
+    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
+
+    V_mean = Float(iotype='out', units='m/s')
+    V_extreme = Float(iotype='out', units='m/s')
+
+    def execute(self):
+        if self.turbine_class == 'I':
+            Vref = 50.0
+        elif self.turbine_class == 'II':
+            Vref = 42.5
+        elif self.turbine_class == 'III':
+            Vref = 37.5
+
+        self.V_mean = 0.2*Vref
+        self.V_extreme = 1.4*Vref
+
+
+class RotorVS(RotorAeroVS):
 
     # replace
     beam = Slot(BeamPropertiesBase)
     struc = Slot(StrucBase)
 
     # inputs
+    nBlades = Int(iotype='in')
     theta = Array(iotype='in')
+    tilt = Float(iotype='in')
     precone = Float(iotype='in')
     precurve = Array(iotype='in')
     presweep = Array(iotype='in')
     g = Float(9.81, iotype='in', units='m/s**2')
     nF = Int(5, iotype='in')
 
-    # connection input
-    aero_loads_defl = VarTree(AeroLoads(), iotype='in')
-    aero_loads_strain = VarTree(AeroLoads(), iotype='in')
+    V_extreme = Float(iotype='in')  # TODO: can combine with Ubar based on machine class
+    pitch_extreme = Float(iotype='in')
+    azimuth_extreme = Float(iotype='in')
 
-
+    # outputs
+    mass_one_blade = Float(iotype='out', units='kg', desc='mass of one blade')
+    mass_all_blades = Float(iotype='out', units='kg', desc='mass of all blade')
+    I_all_blades = Array(iotype='out', desc='out of plane moments of inertia in yaw-aligned c.s.')
+    freq = Array(iotype='out', units='Hz', desc='1st nF natural frequencies')
+    tip_deflection = Float(iotype='out', units='m', desc='blade tip deflection in +x_y direction')
+    strain = Array(iotype='out', desc='axial strain and specified locations')
+    strain = Array(iotype='out', desc='axial strain and specified locations')
+    root_bending_moment = Float(iotype='out', units='N*m')
 
     def configure(self):
+        super(RotorVS, self).configure()
 
+        self.add('aero_rated', AeroBase())
+        self.add('aero_extrm', AeroBase())
         self.add('beam', BeamPropertiesBase())
-        self.add('curve', BeamCurvature())
+        self.add('curve', BladeCurvature())
         self.add('loads_defl', TotalLoads())
         self.add('loads_strain', TotalLoads())
         self.add('struc', StrucBase())
         self.add('tip', TipDeflection())
+        self.add('root_moment', RootMoment())
+        self.add('mass', MassProperties())
 
 
-        self.driver.workflow.add(['beam', 'curve', 'loads_defl', 'loads_strain', 'struc', 'tip'])
+        self.driver.workflow.add(['aero_rated', 'aero_extrm', 'beam', 'curve',
+            'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass'])
+
+        # connections to aero_rated (for max deflection)
+        self.connect('powercurve.ratedConditions.V', 'aero_rated.V_load')  # add turbulent fluctuation (3*sigma)
+        self.connect('powercurve.ratedConditions.Omega', 'aero_rated.Omega_load')
+        self.connect('powercurve.ratedConditions.pitch', 'aero_rated.pitch_load')
+        self.aero_rated.azimuth_load = 180.0  # closest to tower
+        self.aero_rated.run_case = 'loads'
+
+        # connections to aero_extrm (for max strain)
+        self.connect('V_extreme', 'aero_extrm.V_load')
+        self.connect('pitch_extreme', 'aero_extrm.pitch_load')
+        self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
+        self.aero_extrm.Omega_load = 0.0  # parked case
+        self.aero_extrm.run_case = 'loads'
 
         # connections to curve
         self.connect('beam.properties.z', 'curve.r')
@@ -700,18 +905,20 @@ class RotorStruc(Assembly):
         self.connect('precone', 'curve.precone')
 
         # connections to loads_defl
-        self.connect('aero_loads_defl', 'loads_defl.aeroLoads')
+        self.connect('aero_rated.loads', 'loads_defl.aeroLoads')
         self.connect('beam.properties.z', 'loads_defl.r')
         self.connect('theta', 'loads_defl.theta')
+        self.connect('tilt', 'loads_defl.tilt')
         self.connect('curve.totalCone', 'loads_defl.totalCone')
         self.connect('curve.z_az', 'loads_defl.z_az')
         self.connect('beam.properties.rhoA', 'loads_defl.rhoA')
         self.connect('g', 'loads_defl.g')
 
         # connections to loads_strain
-        self.connect('aero_loads_strain', 'loads_strain.aeroLoads')
+        self.connect('aero_extrm.loads', 'loads_strain.aeroLoads')
         self.connect('beam.properties.z', 'loads_strain.r')
         self.connect('theta', 'loads_strain.theta')
+        self.connect('tilt', 'loads_strain.tilt')
         self.connect('curve.totalCone', 'loads_strain.totalCone')
         self.connect('curve.z_az', 'loads_strain.z_az')
         self.connect('beam.properties.rhoA', 'loads_strain.rhoA')
@@ -733,10 +940,25 @@ class RotorStruc(Assembly):
         self.connect('struc.dy_defl', 'tip.dy')
         self.connect('struc.dz_defl', 'tip.dz')
         self.connect('theta', 'tip.theta')
-        self.connect('aero_loads_defl.pitch', 'tip.pitch')
-        self.connect('aero_loads_defl.azimuth', 'tip.azimuth')
-        self.connect('aero_loads_defl.tilt', 'tip.tilt')
+        self.connect('aero_rated.loads.pitch', 'tip.pitch')
+        self.connect('aero_rated.loads.azimuth', 'tip.azimuth')
+        self.connect('tilt', 'tip.tilt')
         self.connect('curve.totalCone', 'tip.totalCone')
+
+        # connections to root moment
+        self.connect('beam.properties.z', 'root_moment.r_str')
+        self.connect('aero_rated.loads', 'root_moment.aeroLoads')
+        self.connect('curve.totalCone', 'root_moment.totalCone')
+        self.connect('curve.x_az', 'root_moment.x_az')
+        self.connect('curve.y_az', 'root_moment.y_az')
+        self.connect('curve.z_az', 'root_moment.z_az')
+        self.connect('curve.s', 'root_moment.s')
+
+        # connections to mass
+        self.connect('struc.blade_mass', 'mass.blade_mass')
+        self.connect('struc.blade_moment_of_inertia', 'mass.blade_moment_of_inertia')
+        self.connect('nBlades', 'mass.nBlades')
+        self.connect('tilt', 'mass.tilt')
 
 
         # input passthroughs
@@ -744,11 +966,14 @@ class RotorStruc(Assembly):
         self.create_passthrough('struc.y_strain')
         self.create_passthrough('struc.z_strain')
 
-        # output passthroughs
-        self.create_passthrough('struc.blade_mass')
-        self.create_passthrough('struc.freq')
-        self.create_passthrough('tip.tip_deflection')
-        self.create_passthrough('struc.strain')
+        # connect to outputs
+        self.connect('struc.blade_mass', 'mass_one_blade')
+        self.connect('mass.mass_all_blades', 'mass_all_blades')
+        self.connect('mass.I_all_blades', 'I_all_blades')
+        self.connect('struc.freq', 'freq')
+        self.connect('tip.tip_deflection', 'tip_deflection')
+        self.connect('struc.strain', 'strain')
+        self.connect('root_moment.root_bending_moment', 'root_bending_moment')
 
 
 
@@ -759,90 +984,429 @@ class RotorStruc(Assembly):
 
 
 
-class RotorVSVP(RotorAeroVS):
 
-    # load conditions
-    azimuth_rated = Float(iotype='in')
+class RotorTS(Assembly):
+    """rotor for tip-speed study"""
 
-    V_extreme = Float(iotype='in')  # TODO: can combine with Ubar based on machine class
+    # --- inputs ---
+    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
+    control = VarTree(VarSpeedMachine(), iotype='in')
+    initial_aero_grid = Array(iotype='in')
+    initial_str_grid = Array(iotype='in')
+    idx_cylinder_aero = Int(iotype='in', desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
+    idx_cylinder_str = Int(iotype='in', desc='first idx in r_str_unit of non-cylindrical section')
+    hubFraction = Float(iotype='in')
+    hubHt = Float(iotype='in', units='m')
+    tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
+    yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
+    g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity')
+    airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
+    nBlades = Int(3, iotype='in', desc='number of blades')
+    rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
+    mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air')
+    shearExp = Float(0.2, iotype='in', desc='shear exponent')
+    nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
+    drivetrainType = Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in')
+
+    leLoc = Array(iotype='in', desc='array of leading-edge positions from a reference blade axis \
+        (usually blade pitch axis). locations are normalized by the local chord length.  \
+        e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
+        positive in -x direction for airfoil-aligned coordinate system')
+    profile = List(Profile, iotype='in', desc='airfoil shape at each radial position')
+    materials = List(Orthotropic2DMaterial, iotype='in',
+        desc='list of all Orthotropic2DMaterial objects used in defining the geometry')
+    upperCS = List(CompositeSection, iotype='in',
+        desc='list of CompositeSection objections defining the properties for upper surface')
+    lowerCS = List(CompositeSection, iotype='in',
+        desc='list of CompositeSection objections defining the properties for lower surface')
+    websCS = List(CompositeSection, iotype='in',
+        desc='list of CompositeSection objections defining the properties for shear webs')
+    sector_idx_strain = Array(iotype='in', dtype=np.int)
+
+    nF = Int(5, iotype='in')
     pitch_extreme = Float(iotype='in')
     azimuth_extreme = Float(iotype='in')
 
+    # (potential) design variables
+    r_aero = Array(iotype='in')
+    r_max_chord = Float(iotype='in')
+    chord_sub = Array(iotype='in', units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
+    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
+    bladeLength = Float(iotype='in', units='m')
+    precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
+
+    # options
+    npts_coarse_power_curve = Int(20, iotype='in', desc='number of points to evaluate aero analysis at')
+    npts_spline_power_curve = Int(200, iotype='in', desc='number of points to use in fitting spline to power curve')
+    AEP_loss_factor = Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)')
+
+
+    # --- outputs ---
+    AEP = Float(iotype='out', units='kW*h', desc='annual energy production')
+    V = Array(iotype='out', units='m/s', desc='wind speeds (power curve)')
+    P = Array(iotype='out', units='W', desc='power (power curve)')
+    ratedConditions = VarTree(RatedConditions(), iotype='out')
+    hub_diameter = Float(iotype='out', units='m')
+    diameter = Float(iotype='out', units='m')
+
+    # outputs
+    mass_one_blade = Float(iotype='out', units='kg', desc='mass of one blade')
+    mass_all_blades = Float(iotype='out', units='kg', desc='mass of all blade')
+    I_all_blades = Array(iotype='out', desc='out of plane moments of inertia in yaw-aligned c.s.')
+    freq = Array(iotype='out', units='Hz', desc='1st nF natural frequencies')
+    tip_deflection = Float(iotype='out', units='m', desc='blade tip deflection in +x_y direction')
+    strainU = Array(iotype='out', desc='axial strain and specified locations')
+    strainL = Array(iotype='out', desc='axial strain and specified locations')
+    eps_crit = Array(iotype='out')
+    root_bending_moment = Float(iotype='out', units='N*m')
 
 
     def configure(self):
 
-        self.add('analysis3', AeroBase())
-        self.add('beam', BeamPropertiesBase())
-        self.add('pBEAM', RotorStruc())
+        self.add('turbineclass', TurbineClass())
+        self.add('gridsetup', GridSetup())
+        self.add('grid', RGrid())
+        self.add('spline', GeometrySpline())
+        self.add('geom', CCBladeGeometry())
+        self.add('setup', SetupRun())
+        self.add('analysis', CCBlade())
+        self.add('dt', CSMDrivetrain())
+        self.add('powercurve', RegulatedPowerCurve())
+        self.add('brent', Brent())
+        self.add('cdf', RayleighCDF())
+        self.add('aep', AEP())
 
-        self.driver.workflow.add(['analysis3', 'beam', 'pBEAM'])
+        self.brent.workflow.add(['powercurve'])
 
-        # connections to analysis3
-        self.connect('rated.V', 'analysis3.V_load')
-        self.connect('rated.Omega', 'analysis3.Omega_load')
-        self.connect('rated.pitch', 'analysis3.pitch_load')
-        self.connect('azimuth_rated', 'analysis3.azimuth_load')
-        self.analysis3.run_case = 'loads'
+        self.driver.workflow.add(['turbineclass', 'gridsetup', 'grid', 'spline', 'geom',
+            'setup', 'analysis', 'dt', 'brent', 'cdf', 'aep'])
 
-        # connections to pBEAM
-        self.connect('beam.properties', 'pBEAM.properties')
-        self.connect('analysis3.loads', 'pBEAM.ratedLoads')
+        # connections to turbineclass
+        self.connect('turbine_class', 'turbineclass.turbine_class')
+
+        # connections to gridsetup
+        self.connect('initial_aero_grid', 'gridsetup.initial_aero_grid')
+        self.connect('initial_str_grid', 'gridsetup.initial_str_grid')
+
+        # connections to grid
+        self.connect('r_aero', 'grid.r_aero')
+        self.connect('gridsetup.fraction', 'grid.fraction')
+        self.connect('gridsetup.idxj', 'grid.idxj')
+
+        # connections to spline
+        self.connect('r_aero', 'spline.r_aero_unit')
+        self.connect('grid.r_str', 'spline.r_str_unit')
+        self.connect('r_max_chord', 'spline.r_max_chord')
+        self.connect('chord_sub', 'spline.chord_sub')
+        self.connect('theta_sub', 'spline.theta_sub')
+        self.connect('bladeLength', 'spline.bladeLength')
+        self.connect('idx_cylinder_aero', 'spline.idx_cylinder_aero')
+        self.connect('idx_cylinder_str', 'spline.idx_cylinder_str')
+        self.connect('hubFraction', 'spline.hubFraction')
+
+        # connections to geom
+        self.connect('spline.Rtip', 'geom.Rtip')
+        self.connect('precone', 'geom.precone')
+
+        # connections to setup
+        self.connect('control', 'setup.control')
+        self.connect('geom.R', 'setup.R')
+        self.connect('npts_coarse_power_curve', 'setup.npts')
+
+        # connections to analysis
+        self.connect('spline.r_aero', 'analysis.r')
+        self.connect('spline.chord_aero', 'analysis.chord')
+        self.connect('spline.theta_aero', 'analysis.theta')
+        self.connect('spline.Rhub', 'analysis.Rhub')
+        self.connect('spline.Rtip', 'analysis.Rtip')
+        self.connect('hubHt', 'analysis.hubHt')
+        self.connect('precone', 'analysis.precone')
+        self.connect('tilt', 'analysis.tilt')
+        self.connect('yaw', 'analysis.yaw')
+        self.connect('airfoil_files', 'analysis.airfoil_files')
+        self.connect('nBlades', 'analysis.B')
+        self.connect('rho', 'analysis.rho')
+        self.connect('mu', 'analysis.mu')
+        self.connect('shearExp', 'analysis.shearExp')
+        self.connect('nSector', 'analysis.nSector')
+        self.connect('setup.Uhub', 'analysis.Uhub')
+        self.connect('setup.Omega', 'analysis.Omega')
+        self.connect('setup.pitch', 'analysis.pitch')
+        self.analysis.run_case = 'power'
+
+        # connections to drivetrain
+        self.connect('analysis.P', 'dt.aeroPower')
+        self.connect('analysis.Q', 'dt.aeroTorque')
+        self.connect('analysis.T', 'dt.aeroThrust')
+        self.connect('control.ratedPower', 'dt.ratedPower')
+        self.connect('drivetrainType', 'dt.drivetrainType')
+
+        # connections to powercurve
+        self.connect('control', 'powercurve.control')
+        self.connect('setup.Uhub', 'powercurve.Vcoarse')
+        self.connect('dt.power', 'powercurve.Pcoarse')
+        self.connect('analysis.T', 'powercurve.Tcoarse')
+        self.connect('geom.R', 'powercurve.R')
+        self.connect('npts_spline_power_curve', 'powercurve.npts')
+
+        # setup Brent method to find rated speed
+        self.connect('control.Vin', 'brent.lower_bound')
+        self.connect('control.Vout', 'brent.upper_bound')
+        self.brent.add_parameter('powercurve.Vrated', low=-1e-15, high=1e15)
+        self.brent.add_constraint('powercurve.residual = 0')
+
+        # connections to cdf
+        self.connect('powercurve.V', 'cdf.x')
+        self.connect('turbineclass.V_mean', 'cdf.xbar')
+
+        # connections to aep
+        self.connect('cdf.F', 'aep.CDF_V')
+        self.connect('powercurve.P', 'aep.P')
+        self.connect('AEP_loss_factor', 'aep.lossFactor')
+
+        # connections to outputs
+        self.connect('powercurve.V', 'V')
+        self.connect('powercurve.P', 'P')
+        self.connect('aep.AEP', 'AEP')
+        self.connect('powercurve.ratedConditions', 'ratedConditions')
+        self.connect('2*spline.Rhub', 'hub_diameter')
+        self.connect('2*geom.R', 'diameter')
 
 
-        # passthrough
-        self.create_passthrough('pBEAM.tip_deflection')
+        # --- add structures ---
+        self.add('aero_rated', CCBlade())
+        self.add('aero_extrm', CCBlade())
+        self.add('beam', PreCompSections())
+        self.add('loads_defl', TotalLoads())
+        self.add('loads_strain', TotalLoads())
+        self.add('struc', RotorWithpBEAM())
+        self.add('tip', TipDeflection())
+        self.add('root_moment', RootMoment())
+        self.add('mass', MassProperties())
 
-        # # connections to analysis4
-        # self.connect('V_extreme', 'analysis4.V_load')
-        # self.connect('pitch_extreme', 'analysis4.pitch_load')
-        # self.connect('azimuth_extreme', 'analysis4.azimuth_load')
-        # self.analysis4.Omega_load = 0.0  # not rotating
-        # self.analysis4.run_case = 'loads'
+
+        self.driver.workflow.add(['aero_rated', 'aero_extrm', 'beam',
+            'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass'])
+
+        # connections to aero_rated (for max deflection)
+        self.connect('spline.r_aero', 'aero_rated.r')
+        self.connect('spline.chord_aero', 'aero_rated.chord')
+        self.connect('spline.theta_aero', 'aero_rated.theta')
+        self.connect('spline.Rhub', 'aero_rated.Rhub')
+        self.connect('spline.Rtip', 'aero_rated.Rtip')
+        self.connect('hubHt', 'aero_rated.hubHt')
+        self.connect('precone', 'aero_rated.precone')
+        self.connect('tilt', 'aero_rated.tilt')
+        self.connect('yaw', 'aero_rated.yaw')
+        self.connect('airfoil_files', 'aero_rated.airfoil_files')
+        self.connect('nBlades', 'aero_rated.B')
+        self.connect('rho', 'aero_rated.rho')
+        self.connect('mu', 'aero_rated.mu')
+        self.connect('shearExp', 'aero_rated.shearExp')
+        self.connect('nSector', 'aero_rated.nSector')
+        self.connect('powercurve.ratedConditions.V', 'aero_rated.V_load')  # add turbulent fluctuation (3*sigma)
+        self.connect('powercurve.ratedConditions.Omega', 'aero_rated.Omega_load')
+        self.connect('powercurve.ratedConditions.pitch', 'aero_rated.pitch_load')
+        self.aero_rated.azimuth_load = 180.0  # closest to tower
+        self.aero_rated.run_case = 'loads'
+
+        # connections to aero_extrm (for max strain)
+        self.connect('spline.r_aero', 'aero_extrm.r')
+        self.connect('spline.chord_aero', 'aero_extrm.chord')
+        self.connect('spline.theta_aero', 'aero_extrm.theta')
+        self.connect('spline.Rhub', 'aero_extrm.Rhub')
+        self.connect('spline.Rtip', 'aero_extrm.Rtip')
+        self.connect('hubHt', 'aero_extrm.hubHt')
+        self.connect('precone', 'aero_extrm.precone')
+        self.connect('tilt', 'aero_extrm.tilt')
+        self.connect('yaw', 'aero_extrm.yaw')
+        self.connect('airfoil_files', 'aero_extrm.airfoil_files')
+        self.connect('nBlades', 'aero_extrm.B')
+        self.connect('rho', 'aero_extrm.rho')
+        self.connect('mu', 'aero_extrm.mu')
+        self.connect('shearExp', 'aero_extrm.shearExp')
+        self.connect('nSector', 'aero_extrm.nSector')
+        self.connect('turbineclass.V_extreme', 'aero_extrm.V_load')
+        self.connect('pitch_extreme', 'aero_extrm.pitch_load')
+        self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
+        self.aero_extrm.Omega_load = 0.0  # parked case
+        self.aero_extrm.run_case = 'loads'
+
+        # connections to beam
+        self.connect('spline.r_str', 'beam.r')
+        self.connect('spline.chord_str', 'beam.chord')
+        self.connect('spline.theta_str', 'beam.theta')
+        self.connect('leLoc', 'beam.leLoc')
+        self.connect('profile', 'beam.profile')
+        self.connect('materials', 'beam.materials')
+        self.connect('upperCS', 'beam.upperCS')
+        self.connect('lowerCS', 'beam.lowerCS')
+        self.connect('websCS', 'beam.websCS')
+        self.connect('sector_idx_strain', 'beam.sector_idx_strain')
 
 
-        # connect to output
-        # self.connect('analysis3.Np', 'Np_rated')
-        # self.connect('analysis3.Tp', 'Tp_rated')
-        # self.connect('analysis4.Np', 'Np_extreme')
-        # self.connect('analysis4.Tp', 'Tp_extreme')
+        # connections to loads_defl
+        self.connect('aero_rated.loads', 'loads_defl.aeroLoads')
+        self.connect('beam.properties.z', 'loads_defl.r')
+        self.connect('spline.theta_str', 'loads_defl.theta')
+        self.connect('tilt', 'loads_defl.tilt')
+        self.connect('precone', 'loads_defl.precone')
+        self.connect('beam.properties.rhoA', 'loads_defl.rhoA')
+        self.connect('g', 'loads_defl.g')
+
+
+        # connections to loads_strain
+        self.connect('aero_extrm.loads', 'loads_strain.aeroLoads')
+        self.connect('beam.properties.z', 'loads_strain.r')
+        self.connect('spline.theta_str', 'loads_strain.theta')
+        self.connect('tilt', 'loads_strain.tilt')
+        self.connect('precone', 'loads_strain.precone')
+        self.connect('beam.properties.rhoA', 'loads_strain.rhoA')
+        self.connect('g', 'loads_strain.g')
+
+
+        # connections to struc
+        self.connect('beam.properties', 'struc.beam')
+        self.connect('nF', 'struc.nF')
+        self.connect('loads_defl.Px_af', 'struc.Px_defl')
+        self.connect('loads_defl.Py_af', 'struc.Py_defl')
+        self.connect('loads_defl.Pz_af', 'struc.Pz_defl')
+        self.connect('loads_strain.Px_af', 'struc.Px_strain')
+        self.connect('loads_strain.Py_af', 'struc.Py_strain')
+        self.connect('loads_strain.Pz_af', 'struc.Pz_strain')
+        self.connect('beam.xu_strain', 'struc.xu_strain')
+        self.connect('beam.xl_strain', 'struc.xl_strain')
+        self.connect('beam.yu_strain', 'struc.yu_strain')
+        self.connect('beam.yl_strain', 'struc.yl_strain')
+
+        # connections to tip
+        self.connect('struc.dx_defl', 'tip.dx')
+        self.connect('struc.dy_defl', 'tip.dy')
+        self.connect('struc.dz_defl', 'tip.dz')
+        self.connect('spline.theta_str', 'tip.theta')
+        self.connect('aero_rated.loads.pitch', 'tip.pitch')
+        self.connect('aero_rated.loads.azimuth', 'tip.azimuth')
+        self.connect('tilt', 'tip.tilt')
+        self.connect('precone', 'tip.precone')
+
+
+        # connections to root moment
+        self.connect('spline.r_str', 'root_moment.r_str')
+        self.connect('aero_rated.loads', 'root_moment.aeroLoads')
+        self.connect('precone', 'root_moment.precone')
+
+
+        # connections to mass
+        self.connect('struc.blade_mass', 'mass.blade_mass')
+        self.connect('struc.blade_moment_of_inertia', 'mass.blade_moment_of_inertia')
+        self.connect('nBlades', 'mass.nBlades')
+        self.connect('tilt', 'mass.tilt')
+
+
+        # connect to outputs
+        self.connect('struc.blade_mass', 'mass_one_blade')
+        self.connect('mass.mass_all_blades', 'mass_all_blades')
+        self.connect('mass.I_all_blades', 'I_all_blades')
+        self.connect('struc.freq', 'freq')
+        self.connect('tip.tip_deflection', 'tip_deflection')
+        self.connect('struc.strainU', 'strainU')
+        self.connect('struc.strainL', 'strainL')
+        self.connect('root_moment.root_bending_moment', 'root_bending_moment')
+        self.connect('beam.eps_crit', 'eps_crit')
 
 
 
 
 if __name__ == '__main__':
 
-
     import os
 
-    # geometry
-    # r_str = [1.5, 1.80135, 1.89975, 1.99815, 2.1027, 2.2011, 2.2995, 2.87145, 3.0006, 3.099, 5.60205, 6.9981, 8.33265, 10.49745, 11.75205, 13.49865, 15.84795, 18.4986, 19.95, 21.99795, 24.05205, 26.1, 28.14795, 32.25, 33.49845, 36.35205, 38.4984, 40.44795, 42.50205, 43.49835, 44.55, 46.49955, 48.65205, 52.74795, 56.16735, 58.89795, 61.62855, 63.]
-    # chord_str = [3.386, 3.386, 3.386, 3.386, 3.386, 3.386, 3.386, 3.386, 3.387, 3.39, 3.741, 4.035, 4.25, 4.478, 4.557, 4.616, 4.652, 4.543, 4.458, 4.356, 4.249, 4.131, 4.007, 3.748, 3.672, 3.502, 3.373, 3.256, 3.133, 3.073, 3.01, 2.893, 2.764, 2.518, 2.313, 2.086, 1.419, 1.085]
-    # theta_str = [13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 13.31, 12.53, 11.48, 10.63, 10.16, 9.59, 9.01, 8.4, 7.79, 6.54, 6.18, 5.36, 4.75, 4.19, 3.66, 3.4, 3.13, 2.74, 2.32, 1.53, 0.86, 0.37, 0.11, 0.0]
-    # le_str = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.498, 0.497, 0.465, 0.447, 0.43, 0.411, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]
+    rotor = RotorTS()
 
-    r_str = np.array([1.50142903976, 1.80306613137, 1.90155987557, 2.00005361977, 2.10470322299, 2.20319696719, 2.30169071139, 2.86802974054, 3.00345863882, 3.10195238302, 5.60738700113, 7.00476699698, 8.3405884027, 10.5074507751, 11.7632460137, 13.5115099732, 15.863048116, 18.5162233505, 19.9690060774, 22.0189071286, 24.0749640388, 26.12486509, 28.1747661411, 32.2807241025, 33.5303634821, 36.3866820639, 38.5350768593, 40.4864841663, 42.5425410764, 43.5397902365, 44.5924421276, 46.5438494346, 48.698400089, 52.7982021914, 56.2208598023, 58.9540612039, 61.6934184645, 63.0600191653])
-    chord_str = np.array([3.2612, 3.30974143717, 3.32552109037, 3.34126379956, 3.35794850262, 3.37361093258, 3.38923246006, 3.47819767927, 3.49923810816, 3.51447938721, 3.88091952034, 4.06260542204, 4.21678354504, 4.41794897837, 4.50221292399, 4.57390637252, 4.57496258253, 4.49355793249, 4.44296484557, 4.36449116824, 4.27745048448, 4.18236399597, 4.07898355526, 3.84696806115, 3.7697498699, 3.58167705636, 3.42960605033, 3.28382135203, 3.12880081291, 3.05388779827, 2.97485038083, 2.82801258654, 2.66459194226, 2.34610078292, 2.06819798348, 1.83533535858, 1.58981373477, 1.4621])
-    theta_str = np.array([13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 13.27752682, 12.626010184, 11.7718976268, 10.8375080565, 10.3384548031, 9.64877664692, 8.97337520037, 8.31552847131, 7.67242584923, 6.43503027652, 6.07433096971, 5.27792502023, 4.70461990261, 4.20301591557, 3.69421857347, 3.45471911559, 3.20707500727, 2.76233633354, 2.29860497622, 1.49730367007, 0.905122107237, 0.479162306686, 0.09155965266, -0.0878099])
-    le_str = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.498, 0.497, 0.465, 0.447, 0.43, 0.411, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
+    # --- blade grid ---
+    rotor.initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667, 0.43333333,
+        0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
+    rotor.initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154, 0.0114340970275,
+        0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455, 0.11111057,
+        0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319, 0.36666667,
+        0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333, 0.667358391486,
+        0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724, 1.0])
+    rotor.idx_cylinder_aero = 3
+    rotor.idx_cylinder_str = 14
+    rotor.hubFraction = 0.025
 
-    web1 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 0.4114, 0.4102, 0.4094, 0.3876, 0.3755, 0.3639, 0.345, 0.3342, 0.3313, 0.3274, 0.323, 0.3206, 0.3172, 0.3138, 0.3104, 0.307, 0.3003, 0.2982, 0.2935, 0.2899, 0.2867, 0.2833, 0.2817, 0.2799, 0.2767, 0.2731, 0.2664, 0.2607, 0.2562, 0.1886, -1.0])
-    web2 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 0.5886, 0.5868, 0.5854, 0.5508, 0.5315, 0.5131, 0.4831, 0.4658, 0.4687, 0.4726, 0.477, 0.4794, 0.4828, 0.4862, 0.4896, 0.493, 0.4997, 0.5018, 0.5065, 0.5101, 0.5133, 0.5167, 0.5183, 0.5201, 0.5233, 0.5269, 0.5336, 0.5393, 0.5438, 0.6114, -1.0])
-    web3 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0])
-    precurve_str = np.zeros_like(r_str)
-    presweep_str = np.zeros_like(r_str)
+    # --- geometry -----
+    rotor.hubHt = 80.0
+    rotor.precone = 2.5
+    rotor.tilt = -5.0
+    rotor.yaw = 0.0
+    rotor.nBlades = 3
+    rotor.turbine_class = 'I'
+
+    # --- atmosphere ---
+    rotor.rho = 1.225
+    rotor.mu = 1.81206e-5
+    rotor.shearExp = 0.2
+
+    # --- operational conditions ---
+    rotor.control.Vin = 3.0
+    rotor.control.Vout = 25.0
+    rotor.control.ratedPower = 5e6
+    rotor.control.minOmega = 0.0
+    rotor.control.maxOmega = 12.0
+    rotor.control.tsr = 7.55
+    rotor.control.pitch = 0.0
+
+    rotor.pitch_extreme = 0.0
+    rotor.azimuth_extreme = 0.0
 
 
-    # -------- materials and composite layup  -----------------
+    # --- airfoil files ---
+    basepath = os.path.join(os.path.expanduser('~'), 'Dropbox', 'NREL', '5MW_files', '5MW_AFFiles')
+
+    # load all airfoils
+    airfoil_types = [0]*8
+    airfoil_types[0] = os.path.join(basepath, 'Cylinder1.dat')
+    airfoil_types[1] = os.path.join(basepath, 'Cylinder2.dat')
+    airfoil_types[2] = os.path.join(basepath, 'DU40_A17.dat')
+    airfoil_types[3] = os.path.join(basepath, 'DU35_A17.dat')
+    airfoil_types[4] = os.path.join(basepath, 'DU30_A17.dat')
+    airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
+    airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
+    airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
+
+    # place at appropriate radial stations
+    af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+
+    n = len(af_idx)
+    af = [0]*n
+    for i in range(n):
+        af[i] = airfoil_types[af_idx[i]]
+    rotor.airfoil_files = af
+
+    # --- aero analysis options ---
+    rotor.npts_coarse_power_curve = 20
+    rotor.npts_spline_power_curve = 200
+    rotor.AEP_loss_factor = 1.0
+    rotor.nSector = 4
+    rotor.drivetrainType = 'geared'
+
+    # --- materials and composite layup  ---
     basepath = os.path.join(os.path.expanduser('~'), 'Dropbox', 'NREL', '5MW_files', '5MW_PrecompFiles')
 
     materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
 
-    ncomp = len(r_str)
+    ncomp = len(rotor.initial_str_grid)
     upper = [0]*ncomp
     lower = [0]*ncomp
     webs = [0]*ncomp
     profile = [0]*ncomp
+
+    rotor.leLoc = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.498, 0.497, 0.465, 0.447, 0.43, 0.411, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
+    rotor.sector_idx_strain = [2]*ncomp
+    web1 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 0.4114, 0.4102, 0.4094, 0.3876, 0.3755, 0.3639, 0.345, 0.3342, 0.3313, 0.3274, 0.323, 0.3206, 0.3172, 0.3138, 0.3104, 0.307, 0.3003, 0.2982, 0.2935, 0.2899, 0.2867, 0.2833, 0.2817, 0.2799, 0.2767, 0.2731, 0.2664, 0.2607, 0.2562, 0.1886, -1.0])
+    web2 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 0.5886, 0.5868, 0.5854, 0.5508, 0.5315, 0.5131, 0.4831, 0.4658, 0.4687, 0.4726, 0.477, 0.4794, 0.4828, 0.4862, 0.4896, 0.493, 0.4997, 0.5018, 0.5065, 0.5101, 0.5133, 0.5167, 0.5183, 0.5201, 0.5233, 0.5269, 0.5336, 0.5393, 0.5438, 0.6114, -1.0])
+    web3 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0])
 
     # # web 1
     # ib_idx = 7
@@ -873,84 +1437,58 @@ if __name__ == '__main__':
 
         upper[i], lower[i], webs[i] = CompositeSection.initFromPreCompLayupFile(os.path.join(basepath, 'layup_' + str(i+1) + '.inp'), webLoc, materials)
         profile[i] = Profile.initFromPreCompFile(os.path.join(basepath, 'shape_' + str(i+1) + '.inp'))
+
+    rotor.materials = materials
+    rotor.upperCS = upper
+    rotor.lowerCS = lower
+    rotor.websCS = webs
+    rotor.profile = profile
     # --------------------------------------
 
 
-    rs = RotorStruc()
-    rs.replace('beam', PreComp())
-    rs.replace('struc', RotorWithpBEAM())
+    # --- structural options ---
+    rotor.g = 9.81
+    rotor.nF = 5
 
-    rs.theta = theta_str
-    rs.precone = 2.5
-    rs.precurve = precurve_str
-    rs.presweep = presweep_str
+    # --- design variables ---
+    rotor.r_aero = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333, 0.5,
+        0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
+    rotor.r_max_chord = 0.23577
+    rotor.chord_sub = [3.2612, 4.5709, 3.3178, 1.4621]
+    rotor.theta_sub = [13.2783, 7.46036, 2.89317, -0.0878099]
+    rotor.bladeLength = 63.0
 
-    rs.aero_loads_defl.r = np.array([1.50142903976, 2.86943081405, 5.60533525332, 8.341239077, 11.7611942659, 15.8650998639, 19.9690060774, 24.072912291, 28.176817889, 32.2807241025, 36.3846303161, 40.4885359141, 44.5924421276, 48.6963483412, 52.8002539392, 56.220209128, 58.9561129517, 61.692017391, 63.0600191653])
-    rs.aero_loads_defl.Px = np.array([0.0, 388.882106126, 484.447148982, 402.741351277, 3111.66541958, 3310.69291134, 4074.26486938, 4570.38064794, 5137.53869383, 5883.16246763, 6527.30546598, 7306.30332887, 8843.37366039, 9198.35713086, 9287.96756701, 9082.53707622, 8655.15257055, 7689.09458231, 0.0])
-    rs.aero_loads_defl.Py = np.array([-0, 68.6533921102, 168.133937689, 209.369690377, -1076.87079678, -1055.70325825, -1306.55253118, -1506.95422869, -1633.24056079, -1690.6232744, -1843.22553237, -1883.76262587, -2010.28347412, -1917.6539151, -1776.49531767, -1610.58547474, -1424.92987638, -1051.3928091, -0])
-    rs.aero_loads_defl.Pz = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    rs.aero_loads_defl.V = 11.649611668
-    rs.aero_loads_defl.Omega = 12.1260909022
-    rs.aero_loads_defl.pitch = 0.0
-    rs.aero_loads_defl.azimuth = 180.0
-    rs.aero_loads_defl.tilt = 5.0
-
-    rs.aero_loads_strain.r = np.array([1.50142903976, 2.86943081405, 5.60533525332, 8.341239077, 11.7611942659, 15.8650998639, 19.9690060774, 24.072912291, 28.176817889, 32.2807241025, 36.3846303161, 40.4885359141, 44.5924421276, 48.6963483412, 52.8002539392, 56.220209128, 58.9561129517, 61.692017391, 63.0600191653])
-    rs.aero_loads_strain.Px = np.array([0.0, 5275.91170102, 5954.97469367, 4581.21401614, 24317.5727315, 22887.0177512, 22273.0504313, 20337.8397148, 19170.3580565, 18331.9830106, 17757.7609212, 16526.853061, 15093.9066831, 13734.7900621, 12267.4308679, 10937.1620954, 9787.29281101, 8548.74476641, 0.0])
-    rs.aero_loads_strain.Py = np.array([-0, -0, -0, -0, -8022.116732, -6577.57671572, -5839.69768021, -4922.9453766, -3742.72420205, -3141.49794777, -2329.22809287, -1842.52873914, -1357.22122192, -1019.59483393, -741.427649635, -550.033426097, -420.751366997, -310.90053355, -0])
-    rs.aero_loads_strain.Pz = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    rs.aero_loads_strain.V = 70.0
-    rs.aero_loads_strain.Omega = 0.0
-    rs.aero_loads_strain.pitch = 0.0
-    rs.aero_loads_strain.azimuth = 0.0
-    rs.aero_loads_strain.tilt = 5.0
-
-    rs.x_strain = np.array([1.62953277093, 1.65378760431, 1.6848244664, 1.69280026956, 1.70125331952, 1.70918845043, 1.71710285872, 1.7379700867, 1.77191347081, 1.77769022081, 1.66549686777, 1.46236108547, 1.24412860472, 0.946027322623, 0.855159937668, 0.793030786156, 0.741219389531, 0.678388044164, 0.656104367978, 0.626195492951, 0.594991331198, 0.535300387358, 0.49436378615, 0.466270531861, 0.437964716508, 0.374175959337, 0.35504758904, 0.343037547915, 0.30479534701, 0.285300267572, 0.270977493752, 0.256272902802, 0.243171569781, 0.215017502212, 0.190697407308, 0.170514014614, 0.149901126795, 0.13789004202])
-    rs.y_strain = np.array([-0.00113112893698, -0.00114796526232, -0.0172978765403, -0.0173797630875, -0.0174665494665, -0.0175480184371, -0.0176292746511, -0.0015645000705, -0.02731068479, -0.0305932407033, -0.109340525932, -0.125949563315, -0.12117411121, -0.128218415335, -0.149327182633, -0.14656631794, -0.140266481404, -0.135652296602, -0.132851488119, -0.1287750113, -0.124992337883, -0.118409965897, -0.110552832125, -0.0979009471516, -0.0937777322172, -0.084620004667, -0.0782777410193, -0.0716491412175, -0.0584114110202, -0.0591831317106, -0.0558251490105, -0.0488944452438, -0.050399265575, -0.0549454662041, -0.0623708745921, -0.0713825225821, -0.0823128686813, -0.0695992262681])
-    rs.z_strain = np.array([1.50142903976, 1.80306613137, 1.90155987557, 2.00005361977, 2.10470322299, 2.20319696719, 2.30169071139, 2.86802974054, 3.00345863882, 3.10195238302, 5.60738700113, 7.00476699698, 8.3405884027, 10.5074507751, 11.7632460137, 13.5115099732, 15.863048116, 18.5162233505, 19.9690060774, 22.0189071286, 24.0749640388, 26.12486509, 28.1747661411, 32.2807241025, 33.5303634821, 36.3866820639, 38.5350768593, 40.4864841663, 42.5425410764, 43.5397902365, 44.5924421276, 46.5438494346, 48.698400089, 52.7982021914, 56.2208598023, 58.9540612039, 61.6934184645, 63.0600191653])
+    # TODO: calculate these
+    rotor.x_strain = np.array([1.62953277093, 1.65378760431, 1.6848244664, 1.69280026956, 1.70125331952, 1.70918845043, 1.71710285872, 1.7379700867, 1.77191347081, 1.77769022081, 1.66549686777, 1.46236108547, 1.24412860472, 0.946027322623, 0.855159937668, 0.793030786156, 0.741219389531, 0.678388044164, 0.656104367978, 0.626195492951, 0.594991331198, 0.535300387358, 0.49436378615, 0.466270531861, 0.437964716508, 0.374175959337, 0.35504758904, 0.343037547915, 0.30479534701, 0.285300267572, 0.270977493752, 0.256272902802, 0.243171569781, 0.215017502212, 0.190697407308, 0.170514014614, 0.149901126795, 0.13789004202])
+    rotor.y_strain = np.array([-0.00113112893698, -0.00114796526232, -0.0172978765403, -0.0173797630875, -0.0174665494665, -0.0175480184371, -0.0176292746511, -0.0015645000705, -0.02731068479, -0.0305932407033, -0.109340525932, -0.125949563315, -0.12117411121, -0.128218415335, -0.149327182633, -0.14656631794, -0.140266481404, -0.135652296602, -0.132851488119, -0.1287750113, -0.124992337883, -0.118409965897, -0.110552832125, -0.0979009471516, -0.0937777322172, -0.084620004667, -0.0782777410193, -0.0716491412175, -0.0584114110202, -0.0591831317106, -0.0558251490105, -0.0488944452438, -0.050399265575, -0.0549454662041, -0.0623708745921, -0.0713825225821, -0.0823128686813, -0.0695992262681])
+    rotor.z_strain = np.array([1.50142903976, 1.80306613137, 1.90155987557, 2.00005361977, 2.10470322299, 2.20319696719, 2.30169071139, 2.86802974054, 3.00345863882, 3.10195238302, 5.60738700113, 7.00476699698, 8.3405884027, 10.5074507751, 11.7632460137, 13.5115099732, 15.863048116, 18.5162233505, 19.9690060774, 22.0189071286, 24.0749640388, 26.12486509, 28.1747661411, 32.2807241025, 33.5303634821, 36.3866820639, 38.5350768593, 40.4864841663, 42.5425410764, 43.5397902365, 44.5924421276, 46.5438494346, 48.698400089, 52.7982021914, 56.2208598023, 58.9540612039, 61.6934184645, 63.0600191653])
 
 
-    rs.beam.r = r_str
-    rs.beam.chord = chord_str
-    rs.beam.theta = theta_str
-    rs.beam.leLoc = le_str
-    rs.beam.theta = theta_str
-    rs.beam.profile = profile
-    rs.beam.materials = materials
-    rs.beam.upperCS = upper
-    rs.beam.lowerCS = lower
-    rs.beam.websCS = webs
+    rotor.run()
 
-    rs.beam.sector_idx_buckling = [2]*ncomp
+    # outputs
+    print 'AEP =', rotor.AEP
+    print 'diameter =', rotor.diameter
+    print 'ratedConditions.V =', rotor.ratedConditions.V
+    print 'ratedConditions.Omega =', rotor.ratedConditions.Omega
+    print 'ratedConditions.pitch =', rotor.ratedConditions.pitch
+    print 'ratedConditions.T =', rotor.ratedConditions.T
+    print 'ratedConditions.Q =', rotor.ratedConditions.Q
+    print 'mass_one_blade =', rotor.mass_one_blade
+    print 'mass_all_blades =', rotor.mass_all_blades
+    print 'I_all_blades =', rotor.I_all_blades
+    print 'freq =', rotor.freq
+    print 'tip_deflection =', rotor.tip_deflection
+    print 'root_bending_moment =', rotor.root_bending_moment
 
-    rs.run()
+    import matplotlib.pyplot as plt
+    plt.plot(rotor.V, rotor.P)
+    plt.figure()
+    plt.plot(rotor.spline.r_str, rotor.strainU)
+    plt.plot(rotor.spline.r_str, rotor.strainL)
+    plt.plot(rotor.spline.r_str, rotor.eps_crit)
+    plt.ylim([-5e-3, 5e-3])
+    plt.show()
 
-    print rs.blade_mass
-    print rs.freq
-    print rs.tip_deflection
-    print rs.strain
-    print rs.beam.eps_crit
-
-    # 17161.8168946
-    # ???
-    # 4.67929859612
-    # [ -2.28358243e-04  -2.17393854e-04  -1.15914419e-04  -1.13759869e-04
-    #   -1.11517615e-04  -1.09447311e-04  -1.12797115e-04  -1.14157204e-04
-    #   -1.18455855e-04  -1.13027900e-04  -2.51873686e-04  -3.50517728e-04
-    #   -4.65866370e-04  -1.05325851e-03  -3.21593957e-03  -3.28704328e-03
-    #   -3.01119063e-03  -2.79448215e-03  -2.63896740e-03  -2.43410855e-03
-    #   -2.25519422e-03  -2.28464035e-03  -2.25379703e-03  -1.88422309e-03
-    #   -1.88487026e-03  -1.90956585e-03  -1.75147195e-03  -1.56748835e-03
-    #   -1.53817853e-03  -1.56631711e-03  -1.56011825e-03  -1.43961146e-03
-    #   -1.29415855e-03  -9.84150717e-04  -6.70424233e-04  -3.50877768e-04
-    #   -3.74835571e-05  -3.89995434e-23]
-
- #    [-0.01987173 -0.01929312 -0.01911046 -0.0189308  -0.01874314 -0.01856951
- # -0.01663386 -0.00789359 -0.00751241 -0.00765203 -0.00725968 -0.00677502
- # -0.00653707 -0.00390532 -0.00414116 -0.00368076 -0.00329441 -0.00303573
- # -0.00292038 -0.0027829  -0.00267326 -0.0024449  -0.00225016 -0.00198843
- # -0.00190416 -0.00176648 -0.00168421 -0.00165569 -0.00159949 -0.001516
- # -0.00143407 -0.00127599 -0.00109732 -0.00080051 -0.00057373 -0.00043451
- # -0.00015101 -0.00010445]
-
-
+    # TODO: the strain is not right
+    # TODO: more variable trees?

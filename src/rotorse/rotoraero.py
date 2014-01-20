@@ -73,7 +73,7 @@ class AeroLoads(VariableTree):
     Omega = Float(units='rpm', desc='rotor rotation speed')
     pitch = Float(units='deg', desc='pitch angle')
     azimuth = Float(units='deg', desc='azimuthal angle')
-    tilt = Float(units='deg', desc='tilt angle')
+    # tilt = Float(units='deg', desc='tilt angle')
 
 
 
@@ -132,6 +132,9 @@ class DrivetrainLossesBase(Component):
     ratedPower = Float(iotype='in', units='W', desc='rated power')
 
     power = Array(iotype='out', units='W', desc='total power after drivetrain losses')
+
+    # TODO: remove when OpenMDAO fixes this
+    missing_deriv_policy = 'assume_zero'
 
 
 class PDFBase(Component):
@@ -481,12 +484,14 @@ class RotorAeroVS(Assembly):
     geom = Slot(GeomtrySetupBase)
     analysis = Slot(AeroBase)
     dt = Slot(DrivetrainLossesBase)
+    cdf = Slot(CDFBase)
 
     # --- outputs ---
     AEP = Float(iotype='out', units='kW*h', desc='annual energy production')
     V = Array(iotype='out', units='m/s', desc='wind speeds (power curve)')
     P = Array(iotype='out', units='W', desc='power (power curve)')
     ratedConditions = VarTree(RatedConditions(), iotype='out')
+    diameter = Float(iotype='out', units='m')
 
 
     def configure(self):
@@ -549,6 +554,7 @@ class RotorAeroVS(Assembly):
         self.connect('powercurve.P', 'P')
         self.connect('aep.AEP', 'AEP')
         self.connect('powercurve.ratedConditions', 'ratedConditions')
+        self.connect('2*geom.R', 'diameter')
 
 
 
