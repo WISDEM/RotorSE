@@ -836,6 +836,21 @@ class TurbineClass(Component):
         self.V_extreme = 1.4*Vref
 
 
+class ExtremeLoads(Component):
+
+    T = Array(np.zeros(2), iotype='in', units='N', shape=((2,)), desc='index 0 is at worst-case, index 1 feathered')
+    Q = Array(np.zeros(2), iotype='in', units='N*m', shape=((2,)), desc='index 0 is at worst-case, index 1 feathered')
+    nBlades = Int(iotype='in')
+
+    T_extreme = Float(iotype='out', units='N')
+    Q_extreme = Float(iotype='out', units='N*m')
+
+    def execute(self):
+        n = float(self.nBlades)
+        self.T_extreme = (self.T[0] + self.T[1]*(n-1)) / n
+        self.Q_extreme = (self.Q[0] + self.Q[1]*(n-1)) / n
+
+
 class RotorVS(RotorAeroVS):
 
     # replace
@@ -1048,6 +1063,9 @@ class RotorTS(Assembly):
     ratedConditions = VarTree(RatedConditions(), iotype='out')
     hub_diameter = Float(iotype='out', units='m')
     diameter = Float(iotype='out', units='m')
+    V_extreme = Float(iotype='out', units='m/s')
+    T_extreme = Float(iotype='out', units='N')
+    Q_extreme = Float(iotype='out', units='N*m')
 
     # outputs
     mass_one_blade = Float(iotype='out', units='kg', desc='mass of one blade')
@@ -1176,6 +1194,7 @@ class RotorTS(Assembly):
         # --- add structures ---
         self.add('aero_rated', CCBlade())
         self.add('aero_extrm', CCBlade())
+        self.add('aero_extrm_forces', CCBlade())
         self.add('beam', PreCompSections())
         self.add('loads_defl', TotalLoads())
         self.add('loads_strain', TotalLoads())
@@ -1183,10 +1202,11 @@ class RotorTS(Assembly):
         self.add('tip', TipDeflection())
         self.add('root_moment', RootMoment())
         self.add('mass', MassProperties())
+        self.add('extreme', ExtremeLoads())
 
 
-        self.driver.workflow.add(['aero_rated', 'aero_extrm', 'beam',
-            'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass'])
+        self.driver.workflow.add(['aero_rated', 'aero_extrm', 'aero_extrm_forces', 'beam',
+            'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass', 'extreme'])
 
         # connections to aero_rated (for max deflection)
         self.connect('spline.r_aero', 'aero_rated.r')
@@ -1231,6 +1251,33 @@ class RotorTS(Assembly):
         self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
         self.aero_extrm.Omega_load = 0.0  # parked case
         self.aero_extrm.run_case = 'loads'
+
+        # connections to aero_extrm (for tower thrust)
+        self.connect('spline.r_aero', 'aero_extrm_forces.r')
+        self.connect('spline.chord_aero', 'aero_extrm_forces.chord')
+        self.connect('spline.theta_aero', 'aero_extrm_forces.theta')
+        self.connect('spline.Rhub', 'aero_extrm_forces.Rhub')
+        self.connect('spline.Rtip', 'aero_extrm_forces.Rtip')
+        self.connect('hubHt', 'aero_extrm_forces.hubHt')
+        self.connect('precone', 'aero_extrm_forces.precone')
+        self.connect('tilt', 'aero_extrm_forces.tilt')
+        self.connect('yaw', 'aero_extrm_forces.yaw')
+        self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
+        self.connect('nBlades', 'aero_extrm_forces.B')
+        self.connect('rho', 'aero_extrm_forces.rho')
+        self.connect('mu', 'aero_extrm_forces.mu')
+        self.connect('shearExp', 'aero_extrm_forces.shearExp')
+        self.connect('nSector', 'aero_extrm_forces.nSector')
+        self.aero_extrm_forces.Uhub = np.zeros(2)
+        self.aero_extrm_forces.Omega = np.zeros(2)  # parked case
+        self.aero_extrm_forces.pitch = np.zeros(2)
+        self.connect('turbineclass.V_extreme', 'aero_extrm_forces.Uhub[0]')
+        self.connect('turbineclass.V_extreme', 'aero_extrm_forces.Uhub[1]')
+        self.connect('pitch_extreme', 'aero_extrm_forces.pitch[0]')
+        self.aero_extrm_forces.pitch[1] = 90  # feathered
+        self.aero_extrm_forces.run_case = 'power'
+        self.aero_extrm_forces.T = np.zeros(2)
+        self.aero_extrm_forces.Q = np.zeros(2)
 
         # connections to beam
         self.connect('spline.r_str', 'beam.r')
@@ -1302,8 +1349,15 @@ class RotorTS(Assembly):
         self.connect('nBlades', 'mass.nBlades')
         self.connect('tilt', 'mass.tilt')
 
+        # connectsion to extreme
+        self.connect('aero_extrm_forces.T', 'extreme.T')
+        self.connect('aero_extrm_forces.Q', 'extreme.Q')
+        self.connect('nBlades', 'extreme.nBlades')
 
         # connect to outputs
+        self.connect('turbineclass.V_extreme', 'V_extreme')
+        self.connect('extreme.T_extreme', 'T_extreme')
+        self.connect('extreme.Q_extreme', 'Q_extreme')
         self.connect('struc.blade_mass', 'mass_one_blade')
         self.connect('mass.mass_all_blades', 'mass_all_blades')
         self.connect('mass.I_all_blades', 'I_all_blades')
