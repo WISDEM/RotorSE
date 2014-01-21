@@ -86,10 +86,14 @@ class StrucBase(Component):
     Py_strain = Array(iotype='in')
     Pz_strain = Array(iotype='in')
 
-    xu_strain = Array(iotype='in')
-    xl_strain = Array(iotype='in')
-    yu_strain = Array(iotype='in')
-    yl_strain = Array(iotype='in')
+    xu_strain_spar = Array(iotype='in')
+    xl_strain_spar = Array(iotype='in')
+    yu_strain_spar = Array(iotype='in')
+    yl_strain_spar = Array(iotype='in')
+    xu_strain_te = Array(iotype='in')
+    xl_strain_te = Array(iotype='in')
+    yu_strain_te = Array(iotype='in')
+    yl_strain_te = Array(iotype='in')
 
     # outputs
     blade_mass = Float(iotype='out', desc='mass of one blades')
@@ -98,8 +102,10 @@ class StrucBase(Component):
     dx_defl = Array(iotype='out')
     dy_defl = Array(iotype='out')
     dz_defl = Array(iotype='out')
-    strainU = Array(iotype='out')
-    strainL = Array(iotype='out')
+    strainU_spar = Array(iotype='out')
+    strainL_spar = Array(iotype='out')
+    strainU_te = Array(iotype='out')
+    strainL_te = Array(iotype='out')
 
 
 
@@ -134,19 +140,26 @@ class PreCompSections(BeamPropertiesBase):
     websCS = List(CompositeSection, iotype='in',
         desc='list of CompositeSection objections defining the properties for shear webs')
 
-    sector_idx_strain = Array(iotype='in', dtype=np.int)
+    sector_idx_strain_spar = Array(iotype='in', dtype=np.int)
+    sector_idx_strain_te = Array(iotype='in', dtype=np.int)
 
 
-    eps_crit = Array(iotype='out')
-    xu_strain = Array(iotype='out')
-    xl_strain = Array(iotype='out')
-    yu_strain = Array(iotype='out')
-    yl_strain = Array(iotype='out')
+    eps_crit_spar = Array(iotype='out')
+    eps_crit_te = Array(iotype='out')
+
+    xu_strain_spar = Array(iotype='out')
+    xl_strain_spar = Array(iotype='out')
+    yu_strain_spar = Array(iotype='out')
+    yl_strain_spar = Array(iotype='out')
+    xu_strain_te = Array(iotype='out')
+    xl_strain_te = Array(iotype='out')
+    yu_strain_te = Array(iotype='out')
+    yl_strain_te = Array(iotype='out')
 
 
-    def criticalStrainLocations(self, x_ec_nose, y_ec_nose):
+    def criticalStrainLocations(self, sector_idx_strain, x_ec_nose, y_ec_nose):
 
-        n = len(self.sector_idx_strain)
+        n = len(sector_idx_strain)
 
         # find corresponding locations on airfoil at midpoint of sector
         xun = np.zeros(n)
@@ -158,7 +171,7 @@ class PreCompSections(BeamPropertiesBase):
             csU = self.upperCS[i]
             csL = self.lowerCS[i]
             pf = self.profile[i]
-            idx = self.sector_idx_strain[i]
+            idx = sector_idx_strain[i]
 
             xun[i] = 0.5*(csU.loc[idx] + csU.loc[idx+1])
             xln[i] = 0.5*(csL.loc[idx] + csL.loc[idx+1])
@@ -173,13 +186,13 @@ class PreCompSections(BeamPropertiesBase):
 
 
         # switch to airfoil coordinate system
-        self.xu_strain = yu
-        self.xl_strain = yl
-        self.yu_strain = xu
-        self.yl_strain = xl
+        xu, yu = yu, xu
+        xl, yl = yl, xl
+
+        return xu, xl, yu, yl
 
 
-    def panelBucklingStrain(self):
+    def panelBucklingStrain(self, sector_idx_strain):
         """
         see chapter on Structural Component Design Techniques from Alastair Johnson
         section 6.2: Design of composite panels
@@ -191,11 +204,10 @@ class PreCompSections(BeamPropertiesBase):
         # rename
         chord = self.chord
         CS_list = self.upperCS  # TODO: assumes the upper surface is the compression one
-        sector_idx_strain = self.sector_idx_strain
 
         # initialize
         nsec = len(chord)
-        self.eps_crit = np.zeros(nsec)
+        eps_crit = np.zeros(nsec)
 
         for i in range(nsec):
 
@@ -215,7 +227,9 @@ class PreCompSections(BeamPropertiesBase):
             # use empirical formula
             Nxx = 2 * (math.pi/sector_length)**2 * (math.sqrt(D1*D2) + D3)
 
-            self.eps_crit[i] = - Nxx / totalHeight / E
+            eps_crit[i] = - Nxx / totalHeight / E
+
+        return eps_crit
 
 
 
@@ -311,13 +325,77 @@ class PreCompSections(BeamPropertiesBase):
             x_ec_nose[i] = results[13] + self.leLoc[i]*self.chord[i]
             y_ec_nose[i] = results[12]  # switch b.c of coordinate system used
 
-        self.panelBucklingStrain()
-        self.criticalStrainLocations(x_ec_nose, y_ec_nose)
+        self.eps_crit_spar = self.panelBucklingStrain(self.sector_idx_strain_spar)
+        self.eps_crit_te = self.panelBucklingStrain(self.sector_idx_strain_te)
+
+        self.xu_strain_spar, self.xl_strain_spar, self.yu_strain_spar, \
+            self.yl_strain_spar = self.criticalStrainLocations(self.sector_idx_strain_spar, x_ec_nose, y_ec_nose)
+        self.xu_strain_te, self.xl_strain_te, self.yu_strain_te, \
+            self.yl_strain_te = self.criticalStrainLocations(self.sector_idx_strain_te, x_ec_nose, y_ec_nose)
 
 
 
 
 class RotorWithpBEAM(StrucBase):
+
+
+    def principalCS(self, beam):
+
+        # rename (with swap of x, y for profile c.s.)
+        EIxx = beam.EIyy
+        EIyy = beam.EIxx
+        x_ec_str = beam.y_ec_str
+        y_ec_str = beam.x_ec_str
+        EA = beam.EA
+        EIxy = beam.EIxy
+
+        # translate to elastic center
+        EIxx -= y_ec_str**2*EA
+        EIyy -= x_ec_str**2*EA
+        EIxy -= x_ec_str*y_ec_str*EA
+
+        # get rotation angle
+        alpha = 0.5*np.arctan2(2*EIxy, EIyy-EIxx)
+
+        EI11 = EIxx - EIxy*np.tan(alpha)
+        EI22 = EIyy + EIxy*np.tan(alpha)
+
+        # get moments and positions in principal axes
+        ca = np.cos(alpha)
+        sa = np.sin(alpha)
+
+        return EI11, EI22, EA, ca, sa
+
+
+
+    def strain(self, blade, xu, yu, xl, yl, EI11, EI22, EA, ca, sa):
+
+
+        Vx, Vy, Fz, Mx, My, Tz = blade.shearAndBending()
+
+
+        # use profile c.s. to use Hansen's notation
+        Vx, Vy = Vy, Vx
+        Mx, My = My, Mx
+        xu, yu = yu, xu
+        xl, yl = yl, xl
+
+        # convert to principal xes
+        M1 = Mx*ca + My*sa
+        M2 = -Mx*sa + My*ca
+
+        x = xu*ca + yu*sa
+        y = -xu*sa + yu*ca
+
+        # compute strain
+        strainU = M1/EI11*y - M2/EI22*x + Fz/EA
+
+        x = xl*ca + yl*sa
+        y = -xl*sa + yl*ca
+
+        strainL = M1/EI11*y - M2/EI22*x + Fz/EA
+
+        return strainU, strainL
 
 
     def execute(self):
@@ -412,59 +490,16 @@ class RotorWithpBEAM(StrucBase):
 
 
         # ----- strain -----
-        # from airfoil to principal
-        # P1_strain, P2_strain, P3_strain = a2p(self.Px_strain, self.Py_strain, self.Pz_strain)
-        # r1_strain, r2_strain, r3_strain = a2p(self.x_strain, self.y_strain, self.z_strain)
+        EI11, EI22, EA, ca, sa = self.principalCS(beam)
 
         p_loads = _pBEAM.Loads(nsec, self.Px_strain, self.Py_strain, self.Pz_strain)
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        # self.strain = blade.axialStrain(len(self.x_strain), self.x_strain, self.y_strain, self.z_strain)
+        self.strainU_spar, self.strainL_spar = self.strain(blade, self.xu_strain_spar, self.yu_strain_spar,
+            self.xl_strain_spar, self.yl_strain_spar, EI11, EI22, EA, ca, sa)
+        self.strainU_te, self.strainL_te = self.strain(blade, self.xu_strain_te, self.yu_strain_te,
+            self.xl_strain_te, self.yl_strain_te, EI11, EI22, EA, ca, sa)
 
-        Vx, Vy, Fz, Mx, My, Tz = blade.shearAndBending()
 
-
-        # use profile c.s. to use Hansen's notation
-        Vx, Vy = Vy, Vx
-        Mx, My = My, Mx
-        xu = self.yu_strain
-        yu = self.xu_strain
-        xl = self.yl_strain
-        yl = self.xl_strain
-        EIxx = beam.EIyy
-        EIyy = beam.EIxx
-        x_ec_str = beam.y_ec_str
-        y_ec_str = beam.x_ec_str
-
-        # translate to elastic center
-        EA = beam.EA
-        EIxy = beam.EIxy
-        EIxx -= y_ec_str**2*EA
-        EIyy -= x_ec_str**2*EA
-        EIxy -= x_ec_str*y_ec_str*EA
-
-        # get rotation angle
-        alpha = 0.5*np.arctan2(2*EIxy, EIyy-EIxx)
-
-        EI11 = EIxx - EIxy*np.tan(alpha)
-        EI22 = EIyy + EIxy*np.tan(alpha)
-
-        # get moments and positions in principal axes
-        ca = np.cos(alpha)
-        sa = np.sin(alpha)
-
-        M1 = Mx*ca + My*sa
-        M2 = -Mx*sa + My*ca
-
-        x = xu*ca + yu*sa
-        y = -xu*sa + yu*ca
-
-        # compute strain
-        self.strainU = M1/EI11*y - M2/EI22*x + Fz/EA
-
-        x = xl*ca + yl*sa
-        y = -xl*sa + yl*ca
-
-        self.strainL = M1/EI11*y - M2/EI22*x + Fz/EA
 
 
 
@@ -1036,7 +1071,8 @@ class RotorTS(Assembly):
         desc='list of CompositeSection objections defining the properties for lower surface')
     websCS = List(CompositeSection, iotype='in',
         desc='list of CompositeSection objections defining the properties for shear webs')
-    sector_idx_strain = Array(iotype='in', dtype=np.int)
+    sector_idx_strain_spar = Array(iotype='in', dtype=np.int)
+    sector_idx_strain_te = Array(iotype='in', dtype=np.int)
 
     nF = Int(5, iotype='in')
     pitch_extreme = Float(iotype='in')
@@ -1073,9 +1109,12 @@ class RotorTS(Assembly):
     I_all_blades = Array(iotype='out', desc='out of plane moments of inertia in yaw-aligned c.s.')
     freq = Array(iotype='out', units='Hz', desc='1st nF natural frequencies')
     tip_deflection = Float(iotype='out', units='m', desc='blade tip deflection in +x_y direction')
-    strainU = Array(iotype='out', desc='axial strain and specified locations')
-    strainL = Array(iotype='out', desc='axial strain and specified locations')
-    eps_crit = Array(iotype='out')
+    strainU_spar = Array(iotype='out', desc='axial strain and specified locations')
+    strainL_spar = Array(iotype='out', desc='axial strain and specified locations')
+    strainU_te = Array(iotype='out', desc='axial strain and specified locations')
+    strainL_te = Array(iotype='out', desc='axial strain and specified locations')
+    eps_crit_spar = Array(iotype='out')
+    eps_crit_te = Array(iotype='out')
     root_bending_moment = Float(iotype='out', units='N*m')
 
 
@@ -1289,7 +1328,8 @@ class RotorTS(Assembly):
         self.connect('upperCS', 'beam.upperCS')
         self.connect('lowerCS', 'beam.lowerCS')
         self.connect('websCS', 'beam.websCS')
-        self.connect('sector_idx_strain', 'beam.sector_idx_strain')
+        self.connect('sector_idx_strain_spar', 'beam.sector_idx_strain_spar')
+        self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
 
 
         # connections to loads_defl
@@ -1321,10 +1361,14 @@ class RotorTS(Assembly):
         self.connect('loads_strain.Px_af', 'struc.Px_strain')
         self.connect('loads_strain.Py_af', 'struc.Py_strain')
         self.connect('loads_strain.Pz_af', 'struc.Pz_strain')
-        self.connect('beam.xu_strain', 'struc.xu_strain')
-        self.connect('beam.xl_strain', 'struc.xl_strain')
-        self.connect('beam.yu_strain', 'struc.yu_strain')
-        self.connect('beam.yl_strain', 'struc.yl_strain')
+        self.connect('beam.xu_strain_spar', 'struc.xu_strain_spar')
+        self.connect('beam.xl_strain_spar', 'struc.xl_strain_spar')
+        self.connect('beam.yu_strain_spar', 'struc.yu_strain_spar')
+        self.connect('beam.yl_strain_spar', 'struc.yl_strain_spar')
+        self.connect('beam.xu_strain_te', 'struc.xu_strain_te')
+        self.connect('beam.xl_strain_te', 'struc.xl_strain_te')
+        self.connect('beam.yu_strain_te', 'struc.yu_strain_te')
+        self.connect('beam.yl_strain_te', 'struc.yl_strain_te')
 
         # connections to tip
         self.connect('struc.dx_defl', 'tip.dx')
@@ -1363,10 +1407,13 @@ class RotorTS(Assembly):
         self.connect('mass.I_all_blades', 'I_all_blades')
         self.connect('struc.freq', 'freq')
         self.connect('tip.tip_deflection', 'tip_deflection')
-        self.connect('struc.strainU', 'strainU')
-        self.connect('struc.strainL', 'strainL')
+        self.connect('struc.strainU_spar', 'strainU_spar')
+        self.connect('struc.strainL_spar', 'strainL_spar')
+        self.connect('struc.strainU_te', 'strainU_te')
+        self.connect('struc.strainL_te', 'strainL_te')
         self.connect('root_moment.root_bending_moment', 'root_bending_moment')
-        self.connect('beam.eps_crit', 'eps_crit')
+        self.connect('beam.eps_crit_spar', 'eps_crit_spar')
+        self.connect('beam.eps_crit_te', 'eps_crit_te')
 
 
 
