@@ -886,6 +886,31 @@ class ExtremeLoads(Component):
         self.Q_extreme = (self.Q[0] + self.Q[1]*(n-1)) / n
 
 
+class GustETM(Component):
+
+    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
+    V_mean = Float(iotype='in', units='m/s')
+    V_hub = Float(iotype='in', units='m/s')
+
+    # sigma = Float(iotype='out', units='m/s')
+    V_gust = Float(iotype='out', units='m/s')
+
+
+    def execute(self):
+
+        if self.turbulence_class == 'A':
+            Iref = 0.16
+        elif self.turbulence_class == 'B':
+            Iref = 0.14
+        elif self.turbulence_class == 'C':
+            Iref = 0.12
+
+        c = 2.0
+        self.sigma = c * Iref * (0.072*(self.V_mean/c + 3)*(self.V_hub/c - 4) + 10)
+        self.V_gust = self.V_hub + 3*self.sigma
+
+
+
 class RotorVS(RotorAeroVS):
 
     # replace
@@ -1040,6 +1065,7 @@ class RotorTS(Assembly):
 
     # --- inputs ---
     turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
+    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
     control = VarTree(VarSpeedMachine(), iotype='in')
     initial_aero_grid = Array(iotype='in')
     initial_str_grid = Array(iotype='in')
@@ -1231,6 +1257,7 @@ class RotorTS(Assembly):
 
 
         # --- add structures ---
+        self.add('gust', GustETM())
         self.add('aero_rated', CCBlade())
         self.add('aero_extrm', CCBlade())
         self.add('aero_extrm_forces', CCBlade())
@@ -1244,8 +1271,13 @@ class RotorTS(Assembly):
         self.add('extreme', ExtremeLoads())
 
 
-        self.driver.workflow.add(['aero_rated', 'aero_extrm', 'aero_extrm_forces', 'beam',
+        self.driver.workflow.add(['gust', 'aero_rated', 'aero_extrm', 'aero_extrm_forces', 'beam',
             'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass', 'extreme'])
+
+        # connections to gust
+        self.connect('turbulence_class', 'gust.turbulence_class')
+        self.connect('turbineclass.V_mean', 'gust.V_mean')
+        self.connect('powercurve.ratedConditions.V', 'gust.V_hub')
 
         # connections to aero_rated (for max deflection)
         self.connect('spline.r_aero', 'aero_rated.r')
@@ -1263,7 +1295,8 @@ class RotorTS(Assembly):
         self.connect('mu', 'aero_rated.mu')
         self.connect('shearExp', 'aero_rated.shearExp')
         self.connect('nSector', 'aero_rated.nSector')
-        self.connect('powercurve.ratedConditions.V', 'aero_rated.V_load')  # add turbulent fluctuation (3*sigma)
+        # self.connect('powercurve.ratedConditions.V + 3*gust.sigma', 'aero_rated.V_load')  # OpenMDAO bug
+        self.connect('gust.V_gust', 'aero_rated.V_load')
         self.connect('powercurve.ratedConditions.Omega', 'aero_rated.Omega_load')
         self.connect('powercurve.ratedConditions.pitch', 'aero_rated.pitch_load')
         self.aero_rated.azimuth_load = 180.0  # closest to tower
