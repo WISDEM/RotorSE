@@ -308,6 +308,9 @@ class CompositeSection:
         self.materials = materials
 
 
+    def copy(self):
+        return CompositeSection(self.loc, self.n_plies, self.t, self.theta, self.mat_idx, self.materials)
+
 
     @classmethod
     def initFromPreCompLayupFile(cls, fname, locW, materials):

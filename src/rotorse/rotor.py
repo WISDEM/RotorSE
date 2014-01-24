@@ -116,6 +116,83 @@ class StrucBase(Component):
 # ---------------------
 
 
+class ResizeCompositeSection(Component):
+
+    upperCSIn = List(CompositeSection, iotype='in',
+        desc='list of CompositeSection objections defining the properties for upper surface')
+    lowerCSIn = List(CompositeSection, iotype='in',
+        desc='list of CompositeSection objections defining the properties for lower surface')
+    websCSIn = List(CompositeSection, iotype='in',
+        desc='list of CompositeSection objections defining the properties for shear webs')
+
+    chord_str_ref = Array(iotype='in', units='m')
+
+    sector_idx_strain_spar = Array(iotype='in', dtype=np.int)
+    sector_idx_strain_te = Array(iotype='in', dtype=np.int)
+
+    chord_str = Array(iotype='in', units='m')
+    sparT_str = Array(iotype='in', units='m')
+    teT_str = Array(iotype='in', units='m')
+
+    upperCSOut = List(CompositeSection, iotype='out',
+        desc='list of CompositeSection objections defining the properties for upper surface')
+    lowerCSOut = List(CompositeSection, iotype='out',
+        desc='list of CompositeSection objections defining the properties for lower surface')
+    websCSOut = List(CompositeSection, iotype='out',
+        desc='list of CompositeSection objections defining the properties for shear webs')
+
+
+    def execute(self):
+
+        nstr = len(self.chord_str_ref)
+
+        # copy data acrosss
+        self.upperCSOut = []
+        self.lowerCSOut = []
+        self.websCSOut = []
+        for i in range(nstr):
+            self.upperCSOut.append(self.upperCSIn[i].copy())
+            self.lowerCSOut.append(self.lowerCSIn[i].copy())
+            self.websCSOut.append(self.websCSIn[i].copy())
+
+
+        # scale all thicknesses with airfoil thickness
+        for i in range(nstr):
+
+            upper = self.upperCSOut[i]
+            lower = self.lowerCSOut[i]
+            webs = self.websCSOut[i]
+
+            # factor = t_str[i]/tref[i]
+            factor = self.chord_str[i]/self.chord_str_ref[i]  # same as thickness ratio for constant t/c
+
+            for j in range(len(upper.t)):
+                upper.t[j] *= factor
+
+            for j in range(len(lower.t)):
+                lower.t[j] *= factor
+
+            for j in range(len(webs.t)):
+                webs.t[j] *= factor
+
+
+        # change spar and trailing edge thickness to specified values
+        for i in range(nstr):
+
+            idx_spar = self.sector_idx_strain_spar[i]
+            idx_te = self.sector_idx_strain_te[i]
+            upper = self.upperCSOut[i]
+            lower = self.lowerCSOut[i]
+
+            # upper and lower have same thickness for this design
+            tspar = np.sum(upper.t[idx_spar])
+            tte = np.sum(upper.t[idx_te])
+
+            upper.t[idx_spar] *= self.sparT_str[i]/tspar
+            lower.t[idx_spar] *= self.sparT_str[i]/tspar
+
+            upper.t[idx_te] *= self.teT_str[i]/tte
+            lower.t[idx_te] *= self.teT_str[i]/tte
 
 
 class PreCompSections(BeamPropertiesBase):
@@ -388,12 +465,12 @@ class RotorWithpBEAM(StrucBase):
         y = -xu*sa + yu*ca
 
         # compute strain
-        strainU = M1/EI11*y - M2/EI22*x + Fz/EA
+        strainU = -(M1/EI11*y - M2/EI22*x + Fz/EA)  # negative sign because 3 is opposite of z
 
         x = xl*ca + yl*sa
         y = -xl*sa + yl*ca
 
-        strainL = M1/EI11*y - M2/EI22*x + Fz/EA
+        strainL = -(M1/EI11*y - M2/EI22*x + Fz/EA)
 
         return strainU, strainL
 
@@ -571,6 +648,8 @@ class GeometrySpline(Component):
     chord_sub = Array(iotype='in', units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
     theta_sub = Array(iotype='in', units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
     bladeLength = Float(iotype='in', units='m')
+    sparT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
+    teT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
 
     # parameters
     idx_cylinder_aero = Int(iotype='in', desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
@@ -586,6 +665,8 @@ class GeometrySpline(Component):
     chord_str = Array(iotype='out', units='m', desc='chord at airfoil locations')
     theta_aero = Array(iotype='out', units='deg', desc='twist at airfoil locations')
     theta_str = Array(iotype='out', units='deg', desc='twist at airfoil locations')
+    sparT_str = Array(iotype='out', units='m')
+    teT_str = Array(iotype='out', units='m')
 
 
     def execute(self):
@@ -619,6 +700,23 @@ class GeometrySpline(Component):
         theta_outer_str, _, _, _ = theta_spline.interp(self.r_str[idxc_str:])
         self.theta_aero = np.concatenate([theta_outer_aero[0]*np.ones(idxc_aero), theta_outer_aero])
         self.theta_str = np.concatenate([theta_outer_str[0]*np.ones(idxc_str), theta_outer_str])
+
+        # ----- TODO: the below is not generalized at all... -----------
+        # setup sparT parameterization
+        nt = len(self.sparT) - 1
+        rt = np.linspace(r_cylinder, Rtip, nt)
+        sparT_spline = Akima(rt, self.sparT[1:])
+
+        self.sparT_cylinder = np.array([0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05457, 0.03859, 0.03812, 0.03906, 0.04799, 0.05363, 0.05833])
+        self.teT_cylinder = np.array([0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05457, 0.03859, 0.05765, 0.05765, 0.04731, 0.04167])
+
+        sparT_str_in = self.sparT[0]*self.sparT_cylinder
+        sparT_str_out, _, _, _ = sparT_spline.interp(self.r_str[idxc_str:])
+        self.sparT_str = np.concatenate([sparT_str_in, [sparT_str_out[0]], sparT_str_out])
+
+        # trailing edge thickness
+        teT_str_in = self.teT[0]*self.teT_cylinder
+        self.teT_str = np.concatenate((teT_str_in, self.teT[1]*np.ones(9), self.teT[2]*np.ones(7), self.teT[3]*np.ones(8), self.teT[4]*np.ones(2)))
 
 
 
@@ -763,6 +861,8 @@ class TipDeflection(Component):
     precone = Float(iotype='in')
     # totalCone = Array(iotype='in')
 
+    dynamicFactor = Float(1.2, iotype='in')
+
     tip_deflection = Float(iotype='out')
 
 
@@ -774,7 +874,7 @@ class TipDeflection(Component):
         delta = dr.airfoilToBlade(theta).bladeToAzimuth(self.precone) \
             .azimuthToHub(self.azimuth).hubToYaw(self.tilt)
 
-        self.tip_deflection = delta.x[-1]
+        self.tip_deflection = self.dynamicFactor * delta.x[-1]
 
 
 
@@ -1099,6 +1199,7 @@ class RotorTS(Assembly):
         desc='list of CompositeSection objections defining the properties for shear webs')
     sector_idx_strain_spar = Array(iotype='in', dtype=np.int)
     sector_idx_strain_te = Array(iotype='in', dtype=np.int)
+    chord_str_ref = Array(iotype='in', units='m')
 
     nF = Int(5, iotype='in')
     pitch_extreme = Float(iotype='in')
@@ -1111,12 +1212,14 @@ class RotorTS(Assembly):
     theta_sub = Array(iotype='in', units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
     bladeLength = Float(iotype='in', units='m')
     precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
+    sparT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
+    teT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
 
     # options
     npts_coarse_power_curve = Int(20, iotype='in', desc='number of points to evaluate aero analysis at')
     npts_spline_power_curve = Int(200, iotype='in', desc='number of points to use in fitting spline to power curve')
     AEP_loss_factor = Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)')
-
+    dynamic_amplication_tip_deflection = Float(1.2, iotype='in')
 
     # --- outputs ---
     AEP = Float(iotype='out', units='kW*h', desc='annual energy production')
@@ -1186,6 +1289,8 @@ class RotorTS(Assembly):
         self.connect('idx_cylinder_aero', 'spline.idx_cylinder_aero')
         self.connect('idx_cylinder_str', 'spline.idx_cylinder_str')
         self.connect('hubFraction', 'spline.hubFraction')
+        self.connect('sparT', 'spline.sparT')
+        self.connect('teT', 'spline.teT')
 
         # connections to geom
         self.connect('spline.Rtip', 'geom.Rtip')
@@ -1257,6 +1362,7 @@ class RotorTS(Assembly):
 
 
         # --- add structures ---
+        self.add('resize', ResizeCompositeSection())
         self.add('gust', GustETM())
         self.add('aero_rated', CCBlade())
         self.add('aero_extrm', CCBlade())
@@ -1271,8 +1377,20 @@ class RotorTS(Assembly):
         self.add('extreme', ExtremeLoads())
 
 
-        self.driver.workflow.add(['gust', 'aero_rated', 'aero_extrm', 'aero_extrm_forces', 'beam',
-            'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass', 'extreme'])
+        self.driver.workflow.add(['resize', 'gust', 'aero_rated', 'aero_extrm', 'aero_extrm_forces',
+            'beam', 'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass', 'extreme'])
+
+
+        # connections to resize
+        self.connect('upperCS', 'resize.upperCSIn')
+        self.connect('lowerCS', 'resize.lowerCSIn')
+        self.connect('websCS', 'resize.websCSIn')
+        self.connect('chord_str_ref', 'resize.chord_str_ref')
+        self.connect('sector_idx_strain_spar', 'resize.sector_idx_strain_spar')
+        self.connect('sector_idx_strain_te', 'resize.sector_idx_strain_te')
+        self.connect('spline.chord_str', 'resize.chord_str')
+        self.connect('spline.sparT_str', 'resize.sparT_str')
+        self.connect('spline.teT_str', 'resize.teT_str')
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')
@@ -1358,9 +1476,9 @@ class RotorTS(Assembly):
         self.connect('leLoc', 'beam.leLoc')
         self.connect('profile', 'beam.profile')
         self.connect('materials', 'beam.materials')
-        self.connect('upperCS', 'beam.upperCS')
-        self.connect('lowerCS', 'beam.lowerCS')
-        self.connect('websCS', 'beam.websCS')
+        self.connect('resize.upperCSOut', 'beam.upperCS')
+        self.connect('resize.lowerCSOut', 'beam.lowerCS')
+        self.connect('resize.websCSOut', 'beam.websCS')
         self.connect('sector_idx_strain_spar', 'beam.sector_idx_strain_spar')
         self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
 
@@ -1412,6 +1530,7 @@ class RotorTS(Assembly):
         self.connect('aero_rated.loads.azimuth', 'tip.azimuth')
         self.connect('tilt', 'tip.tilt')
         self.connect('precone', 'tip.precone')
+        self.connect('dynamic_amplication_tip_deflection', 'tip.dynamicFactor')
 
 
         # connections to root moment
