@@ -123,69 +123,6 @@ class GeometrySpline(Component):
 
 
 
-class CCBladeWithSplineParameterization(AeroBase, Assembly):
-
-    # inputs
-    r_max_chord = Float(iotype='in')
-    chord_sub = Array(iotype='in', units='m', desc='chord at control points')
-    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')
-    Rhub = Float(iotype='in', units='m', desc='hub radius')
-    Rtip = Float(iotype='in', units='m', desc='tip radius')
-    hubHt = Float(iotype='in', units='m')
-    precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
-    tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
-    yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
-    r_af = Array(iotype='in', units='m', desc='locations where airfoils are defined on unit radius')
-    airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
-    idx_cylinder = Int(iotype='in', desc='location where cylinder section ends on unit radius')
-    B = Int(3, iotype='in', desc='number of blades')
-    rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
-    mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air')
-    shearExp = Float(0.2, iotype='in', desc='shear exponent')
-    nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
-
-
-
-    def configure(self):
-
-        self.add('spline', GeometrySpline())
-        self.add('ccblade', CCBlade())
-
-        self.driver.workflow.add(['spline', 'ccblade'])
-
-        # connections to spline
-        self.connect('r_af', 'spline.r_af')
-        self.connect('idx_cylinder', 'spline.idx_cylinder')
-        self.connect('Rhub', 'spline.Rhub')
-        self.connect('Rtip', 'spline.Rtip')
-        self.connect('r_max_chord', 'spline.r_max_chord')
-        self.connect('chord_sub', 'spline.chord_sub')
-        self.connect('theta_sub', 'spline.theta_sub')
-
-        # connections to CCBlade
-        self.connect('spline.r', 'ccblade.r')
-        self.connect('spline.chord', 'ccblade.chord')
-        self.connect('spline.theta', 'ccblade.theta')
-        self.connect('Rhub', 'ccblade.Rhub')
-        self.connect('Rtip', 'ccblade.Rtip')
-        self.connect('hubHt', 'ccblade.hubHt')
-        self.connect('precone', 'ccblade.precone')
-        self.connect('tilt', 'ccblade.tilt')
-        self.connect('yaw', 'ccblade.yaw')
-        self.connect('airfoil_files', 'ccblade.airfoil_files')
-        self.connect('B', 'ccblade.B')
-        self.connect('rho', 'ccblade.rho')
-        self.connect('mu', 'ccblade.mu')
-        self.connect('shearExp', 'ccblade.shearExp')
-        self.connect('nSector', 'ccblade.nSector')
-
-        self.connect('Uhub', 'ccblade.Uhub')
-        self.connect('Omega', 'ccblade.Omega')
-        self.connect('pitch', 'ccblade.pitch')
-        self.connect('ccblade.T', 'T')
-        self.connect('ccblade.Q', 'Q')
-        self.connect('ccblade.P', 'P')
-
 
 # ---------------------
 # Default Implementations of Base Classes
@@ -252,34 +189,18 @@ class CCBlade(AeroBase):
             self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
             self.nSector, derivatives=True)
 
-        run_case = self.run_case
 
-        if run_case == 'power':
+        if self.run_case == 'power':
 
             # power, thrust, torque
-            P, T, Q, dP, dT, dQ \
+            self.P, self.T, self.Q, self.dP, self.dT, self.dQ \
                 = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
 
-            self.P = P
-            self.T = T
-            self.Q = Q
 
-
-            jP = hstack([dP['dprecone'], dP['dtilt'], dP['dhubHt'], dP['dRhub'], dP['dRtip'],
-                dP['dyaw'], dP['dUinf'], dP['dOmega'], dP['dpitch'], dP['dr'], dP['dchord'], dP['dtheta']])
-            jT = hstack([dT['dprecone'], dT['dtilt'], dT['dhubHt'], dT['dRhub'], dT['dRtip'],
-                dT['dyaw'], dT['dUinf'], dT['dOmega'], dT['dpitch'], dT['dr'], dT['dchord'], dT['dtheta']])
-            jQ = hstack([dQ['dprecone'], dQ['dtilt'], dQ['dhubHt'], dQ['dRhub'], dQ['dRtip'],
-                dQ['dyaw'], dQ['dUinf'], dQ['dOmega'], dQ['dpitch'], dQ['dr'], dQ['dchord'], dQ['dtheta']])
-
-
-            self.J = vstack([jP, jT, jQ])
-
-
-        if run_case == 'loads':
+        elif self.run_case == 'loads':
 
             # distributed loads
-            Np, Tp, dNp, dTp \
+            Np, Tp, self.dNp, self.dTp \
                 = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
             # concatenate loads at root/tip
@@ -297,22 +218,79 @@ class CCBlade(AeroBase):
             self.loads.Omega = self.Omega_load
             self.loads.pitch = self.pitch_load
             self.loads.azimuth = self.azimuth_load
-            # self.loads.tilt = self.tilt
-
-            # TODO: add Jacobian for this case
 
 
     def list_deriv_vars(self):
 
-        inputs = ('precone', 'tilt', 'hubHt', 'Rhub', 'Rtip', 'yaw', 'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta')
-        outputs = ('P', 'T', 'Q')
+        if self.run_case == 'power':
+            inputs = ('precone', 'tilt', 'hubHt', 'Rhub', 'Rtip', 'yaw',
+                'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta')
+            outputs = ('P', 'T', 'Q')
+
+        elif self.run_case == 'loads':
+
+            inputs = ('r', 'chord', 'theta', 'Rhub', 'Rtip', 'hubHt', 'precone',
+                'tilt', 'yaw', 'V_load', 'Omega_load', 'pitch_load', 'azimuth_load')
+            outputs = ('loads.r', 'loads.Px', 'loads.Py', 'loads.Pz', 'loads.V',
+                'loads.Omega', 'loads.pitch', 'loads.azimuth')
 
         return inputs, outputs
 
 
     def provideJ(self):
 
-        return self.J
+        if self.run_case == 'power':
+
+            dP = self.dP
+            dT = self.dT
+            dQ = self.dQ
+
+            jP = hstack([dP['dprecone'], dP['dtilt'], dP['dhubHt'], dP['dRhub'], dP['dRtip'],
+                dP['dyaw'], dP['dUinf'], dP['dOmega'], dP['dpitch'], dP['dr'], dP['dchord'], dP['dtheta']])
+            jT = hstack([dT['dprecone'], dT['dtilt'], dT['dhubHt'], dT['dRhub'], dT['dRtip'],
+                dT['dyaw'], dT['dUinf'], dT['dOmega'], dT['dpitch'], dT['dr'], dT['dchord'], dT['dtheta']])
+            jQ = hstack([dQ['dprecone'], dQ['dtilt'], dQ['dhubHt'], dQ['dRhub'], dQ['dRtip'],
+                dQ['dyaw'], dQ['dUinf'], dQ['dOmega'], dQ['dpitch'], dQ['dr'], dQ['dchord'], dQ['dtheta']])
+
+            J = vstack([jP, jT, jQ])
+
+
+        elif self.run_case == 'loads':
+
+            dNp = self.dNp
+            dTp = self.dTp
+            n = len(self.r)
+
+            dr_dr = vstack([np.zeros(n), np.eye(n), np.zeros(n)])
+            dr_dRhub = np.zeros(n+2)
+            dr_dRtip = np.zeros(n+2)
+            dr_dRhub[0] = 1.0
+            dr_dRtip[-1] = 1.0
+            dr = hstack([dr_dr, np.zeros((n+2, 2*n)), dr_dRhub, dr_dRtip, np.zeros((n+2, 8))])
+
+            jNp = hstack([dNp['dr'], dNp['dchord'], dNp['dtheta'], dNp['dRhub'], dNp['dRtip'],
+                dNp['dhubHt'], dNp['dprecone'], dNp['dtilt'], dNp['dyaw'], dNp['dUinf'],
+                dNp['dOmega'], dNp['dpitch'], dNp['dazimuth']])
+            jTp = hstack([dTp['dr'], dTp['dchord'], dTp['dtheta'], dTp['dRhub'], dTp['dRtip'],
+                dTp['dhubHt'], dTp['dprecone'], dTp['dtilt'], dTp['dyaw'], dTp['dUinf'],
+                dTp['dOmega'], dTp['dpitch'], dTp['dazimuth']])
+            dPx = vstack([np.zeros(3*n+10), jNp, np.zeros(3*n+10)])
+            dPy = vstack([np.zeros(3*n+10), -jTp, np.zeros(3*n+10)])
+            dPz = np.zeros((n+2, 3*n+10))
+
+            dV = np.zeros(3*n+10)
+            dV[3*n+6] = 1.0
+            dOmega = np.zeros(3*n+10)
+            dOmega[3*n+7] = 1.0
+            dpitch = np.zeros(3*n+10)
+            dpitch[3*n+8] = 1.0
+            dazimuth = np.zeros(3*n+10)
+            dazimuth[3*n+9] = 1.0
+
+            J = vstack([dr, dPx, dPy, dPz, dV, dOmega, dpitch, dazimuth])
+
+
+        return J
 
 
 

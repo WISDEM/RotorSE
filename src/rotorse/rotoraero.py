@@ -73,7 +73,6 @@ class AeroLoads(VariableTree):
     Omega = Float(units='rpm', desc='rotor rotation speed')
     pitch = Float(units='deg', desc='pitch angle')
     azimuth = Float(units='deg', desc='azimuthal angle')
-    # tilt = Float(units='deg', desc='tilt angle')
 
 
 
