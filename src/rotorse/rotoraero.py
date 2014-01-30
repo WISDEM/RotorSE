@@ -13,7 +13,7 @@ from openmdao.main.api import VariableTree, Component, Assembly, ImplicitCompone
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Enum
 from openmdao.lib.drivers.api import Brent
 
-from commonse.utilities import hstack, vstack, linspace_with_deriv, smooth_min
+from commonse.utilities import hstack, vstack, linspace_with_deriv, smooth_min, trapz_deriv
 from akima import Akima
 
 
@@ -437,23 +437,15 @@ class AEP(Component):
 
     def provideJ(self):
 
-        P = self.P
-        CDF = self.CDF_V
         factor = self.lossFactor/1e3*365.0*24.0
 
-        n = len(P)
-        dAEP_dP = np.gradient(CDF)
-        dAEP_dP[0] /= 2
-        dAEP_dP[-1] /= 2
+        dAEP_dP, dAEP_dCDF = trapz_deriv(self.P, self.CDF_V)
         dAEP_dP *= factor
-
-        dAEP_dCDF = -np.gradient(P)
-        dAEP_dCDF[0] = -0.5*(P[0] + P[1])
-        dAEP_dCDF[-1] = 0.5*(P[-1] + P[-2])
         dAEP_dCDF *= factor
 
         dAEP_dlossFactor = np.array([self.AEP/self.lossFactor])
 
+        n = len(self.P)
         J = np.zeros((1, 2*n+1))
         J[0, 0:n] = dAEP_dCDF
         J[0, n:2*n] = dAEP_dP

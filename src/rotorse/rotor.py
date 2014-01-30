@@ -15,10 +15,12 @@ from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Enum, 
 from rotoraero import SetupRun, RegulatedPowerCurve, AEP, VarSpeedMachine, RatedConditions, RotorAeroVS, AeroBase, AeroLoads, RPM2RS
 from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF
 from openmdao.lib.drivers.api import Brent
-from commonse import DirectionVector, cosd, sind
+from commonse.csystem import DirectionVector
+from commonse.utilities import cosd, sind, hstack, vstack, trapz_deriv, interp_with_deriv
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
-from akima import Akima, akima_interp
+from akima import Akima, akima_interp_with_derivs
 import _pBEAM
+# from _rotor import rotor_dv as _rotor
 
 
 
@@ -134,6 +136,7 @@ class ResizeCompositeSection(Component):
     sparT_str = Array(iotype='in', units='m')
     teT_str = Array(iotype='in', units='m')
 
+    # out
     upperCSOut = List(CompositeSection, iotype='out',
         desc='list of CompositeSection objections defining the properties for upper surface')
     lowerCSOut = List(CompositeSection, iotype='out',
@@ -481,58 +484,6 @@ class RotorWithpBEAM(StrucBase):
         nsec = len(beam.z)
 
 
-        # # translate to elastic center and rotate to principal axes
-        # EI11 = np.zeros(nsec)
-        # EI22 = np.zeros(nsec)
-        # ca = np.zeros(nsec)
-        # sa = np.zeros(nsec)
-
-        # EA = beam.EA
-        # EIxx = beam.EIxx
-        # EIyy = beam.EIyy
-        # EIxy = beam.EIxy
-        # x_ec_str = beam.x_ec_str
-        # y_ec_str = beam.y_ec_str
-
-
-        # for i in range(nsec):
-
-        #     # translate to elastic center
-        #     EItemp = np.array([EIxx[i], EIyy[i], EIxy[i]]) + \
-        #         np.array([-y_ec_str[i]**2, -x_ec_str[i]**2, -x_ec_str[i]*y_ec_str[i]])*EA[i]
-
-        #     # use profile c.s. for conveneince in using Hansen's notation
-        #     EI = DirectionVector.fromArray(EItemp).airfoilToProfile()
-
-        #     # let alpha = 1/2 beta and use half-angle identity (avoid arctan issues)
-        #     cb = (EI.y - EI.x) / math.sqrt((2*EI.z)**2 + (EI.y - EI.x)**2)  # EI.z is EIxy
-        #     sa[i] = math.sqrt((1-cb)/2)
-        #     ca[i] = math.sqrt((1+cb)/2)
-        #     ta = sa[i]/ca[i]
-        #     EI11[i] = EI.x - EI.z*ta
-        #     EI22[i] = EI.y + EI.z*ta
-
-
-        # def a2p(x, y, z):  # rotate from airfoil c.s. to principal c.s.
-
-        #     v = DirectionVector(x, y, 0.0).airfoilToProfile()
-
-        #     r1 = v.x*ca + v.y*sa
-        #     r2 = -v.x*sa + v.y*ca
-
-        #     return r1, r2, z
-
-
-        # def p2a(r1, r2, r3):  # rotate from principal c.s. to airfoil c.s.
-
-        #     x = r1*ca - r2*sa
-        #     y = r1*sa + r2*ca
-
-        #     v = DirectionVector(x, y, 0.0).profileToAirfoil()
-
-        #     return v.x, v.y, r3
-
-
         # create finite element objects
         p_section = _pBEAM.SectionData(nsec, beam.z, beam.EA, beam.EIxx,
             beam.EIyy, beam.GJ, beam.rhoA, beam.rhoJ)
@@ -544,16 +495,10 @@ class RotorWithpBEAM(StrucBase):
 
         # ----- tip deflection -----
 
-        # from airfoil to principal
-        # P1_defl, P2_defl, P3_defl = a2p(self.Px_defl, self.Py_defl, self.Pz_defl)
-
         # evaluate displacements
         p_loads = _pBEAM.Loads(nsec, self.Px_defl, self.Py_defl, self.Pz_defl)
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
         self.dx_defl, self.dy_defl, self.dz_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
-
-        # from principal to airfoil
-        # self.dx_defl, self.dy_defl, self.dz_defl = p2a(dr1_defl, dr2_defl, dr3_defl)
 
 
         # --- mass ---
@@ -581,6 +526,7 @@ class RotorWithpBEAM(StrucBase):
 
 
 class GridSetup(Component):
+    """preprocessing step.  inputs and outputs should not change during optimization"""
 
     # should be constant
     initial_aero_grid = Array(iotype='in')
@@ -627,6 +573,9 @@ class RGrid(Component):
     r_str = Array(iotype='in')
 
 
+    missing_deriv_policy = 'assume_zero'
+
+
     def execute(self):
 
         r_aug = np.concatenate([[0.0], self.r_aero, [1.0]])
@@ -636,6 +585,30 @@ class RGrid(Component):
         for i in range(nstr):
             j = self.idxj[i]
             self.r_str[i] = r_aug[j] + self.fraction[i]*(r_aug[j+1] - r_aug[j])
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('r_aero',)
+        outputs = ('r_str', )
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        nstr = len(self.fraction)
+        naero = len(self.r_aero)
+        J = np.zeros((nstr, naero))
+
+        for i in range(nstr):
+            j = self.idxj[i]
+            if j > 0 and j < naero+1:
+                J[i, j-1] = 1 - self.fraction[i]
+            if j > -1 and j < naero:
+                J[i, j] = self.fraction[i]
+
+        return J
 
 
 
@@ -719,6 +692,48 @@ class GeometrySpline(Component):
         self.teT_str = np.concatenate((teT_str_in, self.teT[1]*np.ones(9), self.teT[2]*np.ones(7), self.teT[3]*np.ones(8), self.teT[4]*np.ones(2)))
 
 
+    def list_deriv_vars(self):
+        pass
+        # naero = len(self.r_aero_unit)
+        # nstr = len(self.r_str_unit)
+        # ncs = len(self.chord_sub)
+        # nts = len(self.theta_sub)
+        # nst = len(self.sparT)
+        # ntt = len(self.teT)
+
+        # n = naero + nstr + ncs + nts + nst + ntt + 2
+
+        # dRtip = np.zeros(n)
+        # dRhub = np.zeros(n)
+        # dRtip[naero + nstr + 1 + ncs + nts] = 1.0
+        # dRhub[naero + nstr + 1 + ncs + nts] = self.hubFraction
+
+        # draero = np.zeros((naero, n))
+        # draero[:, naero + nstr + 1 + ncs + nts] = (1.0 - self.r_aero_unit)*self.hubFraction + self.r_aero_unit
+        # draero[:, :naero] = Rtip-Rhub
+
+        # drstr = np.zeros((nstr, n))
+        # drstr[:, naero + nstr + 1 + ncs + nts] = (1.0 - self.r_str_unit)*self.hubFraction + self.r_str_unit
+        # drstr[:, naero:nstr] = Rtip-Rhub
+
+        # TODO: do with Tapenade
+
+
+
+
+        # inputs = ('r_aero_unit', 'r_str_unit', 'r_max_chord', 'chord_sub', 'theta_sub', 'bladeLength', 'sparT', 'teT')
+        # outputs = ('Rhub', 'Rtip', 'r_aero', 'r_str', 'chord_aero', 'chord_str',
+        #     'theta_aero', 'theta_str', 'sparT_str', 'teT_str')
+
+        # return inputs, outputs
+
+    def provideJ(self):
+        pass
+
+
+        # J =
+
+        # return J
 
 
 
@@ -775,8 +790,8 @@ class GeometrySpline(Component):
 
 class TotalLoads(Component):
 
+    # variables
     aeroLoads = VarTree(AeroLoads(), iotype='in')  # aerodynamic loads in blade c.s.
-
     r = Array(iotype='in')
     theta = Array(iotype='in')
     tilt = Float(iotype='in')
@@ -784,9 +799,11 @@ class TotalLoads(Component):
     # totalCone = Array(iotype='in')
     # z_az = Array(iotype='in')
     rhoA = Array(iotype='in')
+
+    # parameters
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity')
 
-
+    # outputs
     Px_af = Array(iotype='out')  # total loads in af c.s.
     Py_af = Array(iotype='out')
     Pz_af = Array(iotype='out')
@@ -806,9 +823,9 @@ class TotalLoads(Component):
 
         # interpolate aerodynamic loads onto structural grid
         P_a = DirectionVector(0, 0, 0)
-        P_a.x = akima_interp(aero.r, aero.Px, self.r)
-        P_a.y = akima_interp(aero.r, aero.Py, self.r)
-        P_a.z = akima_interp(aero.r, aero.Pz, self.r)
+        P_a.x, self.dPax_dr, self.dPax_daeror, self.dPax_daeroPx = akima_interp_with_derivs(aero.r, aero.Px, self.r)
+        P_a.y, self.dPay_dr, self.dPay_daeror, self.dPay_daeroPy = akima_interp_with_derivs(aero.r, aero.Py, self.r)
+        P_a.z, self.dPaz_dr, self.dPaz_daeror, self.dPaz_daeroPz = akima_interp_with_derivs(aero.r, aero.Pz, self.r)
 
 
         # --- weight loads ---
@@ -816,7 +833,7 @@ class TotalLoads(Component):
         # yaw c.s.
         weight = DirectionVector(0.0, 0.0, -self.rhoA*self.g)
 
-        P_w = weight.yawToHub(self.tilt).hubToAzimuth(aero.azimuth)\
+        self.P_w = weight.yawToHub(self.tilt).hubToAzimuth(aero.azimuth)\
             .azimuthToBlade(totalCone)
 
 
@@ -826,23 +843,114 @@ class TotalLoads(Component):
         Omega = aero.Omega*RPM2RS
         load = DirectionVector(0.0, 0.0, self.rhoA*Omega**2*z_az)
 
-        P_c = load.azimuthToBlade(totalCone)
+        self.P_c = load.azimuthToBlade(totalCone)
 
 
         # --- total loads ---
-        P = P_a + P_w + P_c
+        P = P_a + self.P_w + self.P_c
 
         # rotate to airfoil c.s.
         theta = np.array(self.theta) + aero.pitch
-        P = P.bladeToAirfoil(theta)
+        self.P = P.bladeToAirfoil(theta)
 
-        self.Px_af = P.x
-        self.Py_af = P.y
-        self.Pz_af = P.z
-
-
+        self.Px_af = self.P.x
+        self.Py_af = self.P.y
+        self.Pz_af = self.P.z
 
 
+
+    def list_deriv_vars(self):
+
+        inputs = ('aeroLoads.r', 'aeroLoads.Px', 'aeroLoads.Py', 'aeroLoads.Pz', 'aeroLoads.Omega',
+            'aeroLoads.pitch', 'aeroLoads.azimuth', 'r', 'theta', 'tilt', 'precone', 'rhoA')
+        outputs = ('Px_af', 'Py_af', 'Pz_af')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        dPwx, dPwy, dPwz = self.P_w.dx, self.P_w.dy, self.P_w.dz
+        dPcx, dPcy, dPcz = self.P_c.dx, self.P_c.dy, self.P_c.dz
+        dPx, dPy, dPz = self.P.dx, self.P.dy, self.P.dz
+        Omega = self.aeroLoads.Omega*RPM2RS
+        z_az = self.r*cosd(self.precone)
+
+
+        dPx_dOmega = dPcx['dz']*self.rhoA*z_az*2*Omega*RPM2RS
+        dPy_dOmega = dPcy['dz']*self.rhoA*z_az*2*Omega*RPM2RS
+        dPz_dOmega = dPcz['dz']*self.rhoA*z_az*2*Omega*RPM2RS
+
+        dPx_dr = np.diag(self.dPax_dr + dPcx['dz']*self.rhoA*Omega**2*cosd(self.precone))
+        dPy_dr = np.diag(self.dPay_dr + dPcy['dz']*self.rhoA*Omega**2*cosd(self.precone))
+        dPz_dr = np.diag(self.dPaz_dr + dPcz['dz']*self.rhoA*Omega**2*cosd(self.precone))
+
+        dPx_dprecone = dPwx['dprecone'] + dPcx['dprecone'] - dPcx['dz']*self.rhoA*Omega**2*self.r*sind(self.precone)*math.pi/180.0
+        dPy_dprecone = dPwy['dprecone'] + dPcy['dprecone'] - dPcy['dz']*self.rhoA*Omega**2*self.r*sind(self.precone)*math.pi/180.0
+        dPz_dprecone = dPwz['dprecone'] + dPcz['dprecone'] - dPcz['dz']*self.rhoA*Omega**2*self.r*sind(self.precone)*math.pi/180.0
+
+        dPx_drhoA = np.diag(-dPwx['dz']*self.g + dPcx['dz']*Omega**2*z_az)
+        dPy_drhoA = np.diag(-dPwy['dz']*self.g + dPcy['dz']*Omega**2*z_az)
+        dPz_drhoA = np.diag(-dPwz['dz']*self.g + dPcz['dz']*Omega**2*z_az)
+
+        dPxaf_daeror = (dPx['dx']*self.dPax_daeror.T + dPx['dy']*self.dPay_daeror.T + dPx['dz']*self.dPaz_daeror.T).T
+        dPyaf_daeror = (dPy['dx']*self.dPax_daeror.T + dPy['dy']*self.dPay_daeror.T + dPy['dz']*self.dPaz_daeror.T).T
+        dPzaf_daeror = (dPz['dx']*self.dPax_daeror.T + dPz['dy']*self.dPay_daeror.T + dPz['dz']*self.dPaz_daeror.T).T
+
+        dPxaf_dPxaero = (dPx['dx']*self.dPax_daeroPx.T).T
+        dPxaf_dPyaero = (dPx['dy']*self.dPay_daeroPy.T).T
+        dPxaf_dPzaero = (dPx['dz']*self.dPaz_daeroPz.T).T
+
+        dPyaf_dPxaero = (dPy['dx']*self.dPax_daeroPx.T).T
+        dPyaf_dPyaero = (dPy['dy']*self.dPay_daeroPy.T).T
+        dPyaf_dPzaero = (dPy['dz']*self.dPaz_daeroPz.T).T
+
+        dPzaf_dPxaero = (dPz['dx']*self.dPax_daeroPx.T).T
+        dPzaf_dPyaero = (dPz['dy']*self.dPay_daeroPy.T).T
+        dPzaf_dPzaero = (dPz['dz']*self.dPaz_daeroPz.T).T
+
+        dPxaf_dOmega = dPx['dx']*dPx_dOmega + dPx['dy']*dPy_dOmega + dPx['dz']*dPz_dOmega
+        dPyaf_dOmega = dPy['dx']*dPx_dOmega + dPy['dy']*dPy_dOmega + dPy['dz']*dPz_dOmega
+        dPzaf_dOmega = dPz['dx']*dPx_dOmega + dPz['dy']*dPy_dOmega + dPz['dz']*dPz_dOmega
+
+        dPxaf_dpitch = dPx['dtheta']
+        dPyaf_dpitch = dPy['dtheta']
+        dPzaf_dpitch = dPz['dtheta']
+
+        dPxaf_dazimuth = dPx['dx']*dPwx['dazimuth'] + dPx['dy']*dPwy['dazimuth'] + dPx['dz']*dPwz['dazimuth']
+        dPyaf_dazimuth = dPy['dx']*dPwx['dazimuth'] + dPy['dy']*dPwy['dazimuth'] + dPy['dz']*dPwz['dazimuth']
+        dPzaf_dazimuth = dPz['dx']*dPwx['dazimuth'] + dPz['dy']*dPwy['dazimuth'] + dPz['dz']*dPwz['dazimuth']
+
+        dPxaf_dr = dPx['dx']*dPx_dr + dPx['dy']*dPy_dr + dPx['dz']*dPz_dr
+        dPyaf_dr = dPy['dx']*dPx_dr + dPy['dy']*dPy_dr + dPy['dz']*dPz_dr
+        dPzaf_dr = dPz['dx']*dPx_dr + dPz['dy']*dPy_dr + dPz['dz']*dPz_dr
+
+        dPxaf_dtheta = np.diag(dPx['dtheta'])
+        dPyaf_dtheta = np.diag(dPy['dtheta'])
+        dPzaf_dtheta = np.diag(dPz['dtheta'])
+
+        dPxaf_dtilt = dPx['dx']*dPwx['dtilt'] + dPx['dy']*dPwy['dtilt'] + dPx['dz']*dPwz['dtilt']
+        dPyaf_dtilt = dPy['dx']*dPwx['dtilt'] + dPy['dy']*dPwy['dtilt'] + dPy['dz']*dPwz['dtilt']
+        dPzaf_dtilt = dPz['dx']*dPwx['dtilt'] + dPz['dy']*dPwy['dtilt'] + dPz['dz']*dPwz['dtilt']
+
+        dPxaf_dprecone = dPx['dx']*dPx_dprecone + dPx['dy']*dPy_dprecone + dPx['dz']*dPz_dprecone
+        dPyaf_dprecone = dPy['dx']*dPx_dprecone + dPy['dy']*dPy_dprecone + dPy['dz']*dPz_dprecone
+        dPzaf_dprecone = dPz['dx']*dPx_dprecone + dPz['dy']*dPy_dprecone + dPz['dz']*dPz_dprecone
+
+        dPxaf_drhoA = dPx['dx']*dPx_drhoA + dPx['dy']*dPy_drhoA + dPx['dz']*dPz_drhoA
+        dPyaf_drhoA = dPy['dx']*dPx_drhoA + dPy['dy']*dPy_drhoA + dPy['dz']*dPz_drhoA
+        dPzaf_drhoA = dPz['dx']*dPx_drhoA + dPz['dy']*dPy_drhoA + dPz['dz']*dPz_drhoA
+
+        dPx = hstack([dPxaf_daeror, dPxaf_dPxaero, dPxaf_dPyaero, dPxaf_dPzaero, dPxaf_dOmega, dPxaf_dpitch, dPxaf_dazimuth,
+            dPxaf_dr, dPxaf_dtheta, dPxaf_dtilt, dPxaf_dprecone, dPxaf_drhoA])
+        dPy = hstack([dPyaf_daeror, dPyaf_dPxaero, dPyaf_dPyaero, dPyaf_dPzaero, dPyaf_dOmega, dPyaf_dpitch, dPyaf_dazimuth,
+            dPyaf_dr, dPyaf_dtheta, dPyaf_dtilt, dPyaf_dprecone, dPyaf_drhoA])
+        dPz = hstack([dPzaf_daeror, dPzaf_dPxaero, dPzaf_dPyaero, dPzaf_dPzaero, dPzaf_dOmega, dPzaf_dpitch, dPzaf_dazimuth,
+            dPzaf_dr, dPzaf_dtheta, dPzaf_dtilt, dPzaf_dprecone, dPzaf_drhoA])
+
+        J = vstack([dPx, dPy, dPz])
+
+        return J
 
 
 
@@ -850,31 +958,56 @@ class TotalLoads(Component):
 
 class TipDeflection(Component):
 
-    dx = Array(iotype='in')  # airfoil c.s.
-    dy = Array(iotype='in')
-    dz = Array(iotype='in')
-
-    theta = Array(iotype='in')
+    # variables
+    dx = Float(iotype='in')  # deflection at tip in airfoil c.s.
+    dy = Float(iotype='in')
+    dz = Float(iotype='in')
+    theta = Float(iotype='in')
     pitch = Float(iotype='in')
     azimuth = Float(iotype='in')
     tilt = Float(iotype='in')
     precone = Float(iotype='in')
-    # totalCone = Array(iotype='in')
 
+    # parameters
     dynamicFactor = Float(1.2, iotype='in')
 
+    # outputs
     tip_deflection = Float(iotype='out')
 
 
     def execute(self):
 
-        theta = np.array(self.theta) + self.pitch
+        theta = self.theta + self.pitch
 
         dr = DirectionVector(self.dx, self.dy, self.dz)
-        delta = dr.airfoilToBlade(theta).bladeToAzimuth(self.precone) \
+        self.delta = dr.airfoilToBlade(theta).bladeToAzimuth(self.precone) \
             .azimuthToHub(self.azimuth).hubToYaw(self.tilt)
 
-        self.tip_deflection = self.dynamicFactor * delta.x[-1]
+        self.tip_deflection = self.dynamicFactor * self.delta.x
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('dx', 'dy', 'dz', 'theta', 'pitch', 'azimuth', 'tilt', 'precone')
+        outputs = ('tip_deflection',)
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        dx = self.dynamicFactor * self.delta.dx['dx']
+        dy = self.dynamicFactor * self.delta.dx['dy']
+        dz = self.dynamicFactor * self.delta.dx['dz']
+        dtheta = self.dynamicFactor * self.delta.dx['dtheta']
+        dpitch = self.dynamicFactor * self.delta.dx['dtheta']
+        dazimuth = self.dynamicFactor * self.delta.dx['dazimuth']
+        dtilt = self.dynamicFactor * self.delta.dx['dtilt']
+        dprecone = self.dynamicFactor * self.delta.dx['dprecone']
+
+        J = np.array([[dx, dy, dz, dtheta, dpitch, dazimuth, dtilt, dprecone]])
+
+        return J
 
 
 
@@ -902,9 +1035,13 @@ class RootMoment(Component):
 
 
         aL = self.aeroLoads
-        Px = np.interp(r, aL.r, aL.Px)
-        Py = np.interp(r, aL.r, aL.Py)
-        Pz = np.interp(r, aL.r, aL.Pz)
+        # Px = np.interp(r, aL.r, aL.Px)
+        # Py = np.interp(r, aL.r, aL.Py)
+        # Pz = np.interp(r, aL.r, aL.Pz)
+        # TODO: linearly interpolation is not C1 continuous.  it should work OK for now, but is not ideal
+        Px, self.dPx_dr, self.dPx_dalr, self.dPx_dalPx = interp_with_deriv(r, aL.r, aL.Px)
+        Py, self.dPy_dr, self.dPy_dalr, self.dPy_dalPy = interp_with_deriv(r, aL.r, aL.Py)
+        Pz, self.dPz_dr, self.dPz_dalr, self.dPz_dalPz = interp_with_deriv(r, aL.r, aL.Pz)
 
         # loads in azimuthal c.s.
         P = DirectionVector(Px, Py, Pz).bladeToAzimuth(self.precone)
@@ -923,13 +1060,152 @@ class RootMoment(Component):
 
 
 
+        # self.root_bending_moment, self.J = _rotor.rootmoment_with_derivs(r, aL.r, aL.Px, aL.Py, aL.Pz, self.precone)
+
+
+
+
+        self.P = P
+        self.az = az
+        self.Mp = Mp
+        self.r = r
+        self.Mx = Mx
+        self.My = My
+        self.Mz = Mz
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('r_str', 'aeroLoads.r', 'aeroLoads.Px', 'aeroLoads.Py', 'aeroLoads.Pz', 'precone')
+        outputs = ('root_bending_moment',)
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        dx_dr = -sind(self.precone)
+        dz_dr = cosd(self.precone)
+
+        dx_dprecone = -self.r*cosd(self.precone)*math.pi/180.0
+        dz_dprecone = -self.r*sind(self.precone)*math.pi/180.0
+
+        dPx_dr = (self.P.dx['dx']*self.dPx_dr.T + self.P.dx['dy']*self.dPy_dr.T + self.P.dx['dz']*self.dPz_dr.T).T
+        dPy_dr = (self.P.dy['dx']*self.dPx_dr.T + self.P.dy['dy']*self.dPy_dr.T + self.P.dy['dz']*self.dPz_dr.T).T
+        dPz_dr = (self.P.dz['dx']*self.dPx_dr.T + self.P.dz['dy']*self.dPy_dr.T + self.P.dz['dz']*self.dPz_dr.T).T
+
+        dPx_dalr = (self.P.dx['dx']*self.dPx_dalr.T + self.P.dx['dy']*self.dPy_dalr.T + self.P.dx['dz']*self.dPz_dalr.T).T
+        dPy_dalr = (self.P.dy['dx']*self.dPx_dalr.T + self.P.dy['dy']*self.dPy_dalr.T + self.P.dy['dz']*self.dPz_dalr.T).T
+        dPz_dalr = (self.P.dz['dx']*self.dPx_dalr.T + self.P.dz['dy']*self.dPy_dalr.T + self.P.dz['dz']*self.dPz_dalr.T).T
+
+        dPx_dalPx = (self.P.dx['dx']*self.dPx_dalPx.T).T
+        dPx_dalPy = (self.P.dx['dy']*self.dPy_dalPy.T).T
+        dPx_dalPz = (self.P.dx['dz']*self.dPz_dalPz.T).T
+
+        dPy_dalPx = (self.P.dy['dx']*self.dPx_dalPx.T).T
+        dPy_dalPy = (self.P.dy['dy']*self.dPy_dalPy.T).T
+        dPy_dalPz = (self.P.dy['dz']*self.dPz_dalPz.T).T
+
+        dPz_dalPx = (self.P.dz['dx']*self.dPx_dalPx.T).T
+        dPz_dalPy = (self.P.dz['dy']*self.dPy_dalPy.T).T
+        dPz_dalPz = (self.P.dz['dz']*self.dPz_dalPz.T).T
+
+
+        dazx_dr = np.diag(self.az.dx['dx']*dx_dr + self.az.dx['dz']*dz_dr)
+        dazy_dr = np.diag(self.az.dy['dx']*dx_dr + self.az.dy['dz']*dz_dr)
+        dazz_dr = np.diag(self.az.dz['dx']*dx_dr + self.az.dz['dz']*dz_dr)
+
+        dazx_dprecone = (self.az.dx['dx']*dx_dprecone.T + self.az.dx['dz']*dz_dprecone.T).T
+        dazy_dprecone = (self.az.dy['dx']*dx_dprecone.T + self.az.dy['dz']*dz_dprecone.T).T
+        dazz_dprecone = (self.az.dz['dx']*dx_dprecone.T + self.az.dz['dz']*dz_dprecone.T).T
+
+        dMpx, dMpy, dMpz = self.az.cross_deriv_array(self.P, namea='az', nameb='P')
+
+        dMpx_dr = (dMpx['dPx']*dPx_dr.T + dMpx['dPy']*dPy_dr.T + dMpx['dPz']*dPz_dr.T
+            + dMpx['dazx']*dazx_dr.T + dMpx['dazy']*dazy_dr.T + dMpx['dazz']*dazz_dr.T).T
+        dMpy_dr = (dMpy['dPx']*dPx_dr.T + dMpy['dPy']*dPy_dr.T + dMpy['dPz']*dPz_dr.T
+            + dMpy['dazx']*dazx_dr.T + dMpy['dazy']*dazy_dr.T + dMpy['dazz']*dazz_dr.T).T
+        dMpz_dr = (dMpz['dPx']*dPx_dr.T + dMpz['dPy']*dPy_dr.T + dMpz['dPz']*dPz_dr.T
+            + dMpz['dazx']*dazx_dr.T + dMpz['dazy']*dazy_dr.T + dMpz['dazz']*dazz_dr.T).T
+
+        dMpx_dprecone = (dMpx['dPx']*self.P.dx['dprecone'].T + dMpx['dPy']*self.P.dy['dprecone'].T + dMpx['dPz']*self.P.dz['dprecone'].T
+            + dMpx['dazx']*dazx_dprecone.T + dMpx['dazy']*dazy_dprecone.T + dMpx['dazz']*dazz_dprecone.T).T
+        dMpy_dprecone = (dMpy['dPx']*self.P.dx['dprecone'].T + dMpy['dPy']*self.P.dy['dprecone'].T + dMpy['dPz']*self.P.dz['dprecone'].T
+            + dMpy['dazx']*dazx_dprecone.T + dMpy['dazy']*dazy_dprecone.T + dMpy['dazz']*dazz_dprecone.T).T
+        dMpz_dprecone = (dMpz['dPx']*self.P.dx['dprecone'].T + dMpz['dPy']*self.P.dy['dprecone'].T + dMpz['dPz']*self.P.dz['dprecone'].T
+            + dMpz['dazx']*dazx_dprecone.T + dMpz['dazy']*dazy_dprecone.T + dMpz['dazz']*dazz_dprecone.T).T
+
+        dMpx_dalr = (dMpx['dPx']*dPx_dalr.T + dMpx['dPy']*dPy_dalr.T + dMpx['dPz']*dPz_dalr.T).T
+        dMpy_dalr = (dMpy['dPx']*dPx_dalr.T + dMpy['dPy']*dPy_dalr.T + dMpy['dPz']*dPz_dalr.T).T
+        dMpz_dalr = (dMpz['dPx']*dPx_dalr.T + dMpz['dPy']*dPy_dalr.T + dMpz['dPz']*dPz_dalr.T).T
+
+        dMpx_dalPx = (dMpx['dPx']*dPx_dalPx.T + dMpx['dPy']*dPy_dalPx.T + dMpx['dPz']*dPz_dalPx.T).T
+        dMpy_dalPx = (dMpy['dPx']*dPx_dalPx.T + dMpy['dPy']*dPy_dalPx.T + dMpy['dPz']*dPz_dalPx.T).T
+        dMpz_dalPx = (dMpz['dPx']*dPx_dalPx.T + dMpz['dPy']*dPy_dalPx.T + dMpz['dPz']*dPz_dalPx.T).T
+
+        dMpx_dalPy = (dMpx['dPx']*dPx_dalPy.T + dMpx['dPy']*dPy_dalPy.T + dMpx['dPz']*dPz_dalPy.T).T
+        dMpy_dalPy = (dMpy['dPx']*dPx_dalPy.T + dMpy['dPy']*dPy_dalPy.T + dMpy['dPz']*dPz_dalPy.T).T
+        dMpz_dalPy = (dMpz['dPx']*dPx_dalPy.T + dMpz['dPy']*dPy_dalPy.T + dMpz['dPz']*dPz_dalPy.T).T
+
+        dMpx_dalPz = (dMpx['dPx']*dPx_dalPz.T + dMpx['dPy']*dPy_dalPz.T + dMpx['dPz']*dPz_dalPz.T).T
+        dMpy_dalPz = (dMpy['dPx']*dPx_dalPz.T + dMpy['dPy']*dPy_dalPz.T + dMpy['dPz']*dPz_dalPz.T).T
+        dMpz_dalPz = (dMpz['dPx']*dPx_dalPz.T + dMpz['dPy']*dPy_dalPz.T + dMpz['dPz']*dPz_dalPz.T).T
+
+        dMx_dMpx, dMx_dr = trapz_deriv(self.Mp.x, self.r)
+        dMy_dMpy, dMy_dr = trapz_deriv(self.Mp.y, self.r)
+        dMz_dMpz, dMz_dr = trapz_deriv(self.Mp.z, self.r)
+
+        dMx_dr = dMx_dr + np.dot(dMx_dMpx, dMpx_dr)
+        dMy_dr = dMy_dr + np.dot(dMy_dMpy, dMpy_dr)
+        dMz_dr = dMz_dr + np.dot(dMz_dMpz, dMpz_dr)
+
+        dMx_dprecone = np.dot(dMx_dMpx, dMpx_dprecone)
+        dMy_dprecone = np.dot(dMy_dMpy, dMpy_dprecone)
+        dMz_dprecone = np.dot(dMz_dMpz, dMpz_dprecone)
+
+        dMx_dalr = np.dot(dMx_dMpx, dMpx_dalr)
+        dMy_dalr = np.dot(dMy_dMpy, dMpy_dalr)
+        dMz_dalr = np.dot(dMz_dMpz, dMpz_dalr)
+
+        dMx_dalPx = np.dot(dMx_dMpx, dMpx_dalPx)
+        dMy_dalPx = np.dot(dMy_dMpy, dMpy_dalPx)
+        dMz_dalPx = np.dot(dMz_dMpz, dMpz_dalPx)
+
+        dMx_dalPy = np.dot(dMx_dMpx, dMpx_dalPy)
+        dMy_dalPy = np.dot(dMy_dMpy, dMpy_dalPy)
+        dMz_dalPy = np.dot(dMz_dMpz, dMpz_dalPy)
+
+        dMx_dalPz = np.dot(dMx_dMpx, dMpx_dalPz)
+        dMy_dalPz = np.dot(dMy_dMpy, dMpy_dalPz)
+        dMz_dalPz = np.dot(dMz_dMpz, dMpz_dalPz)
+
+        drbm_dr = (self.Mx*dMx_dr + self.My*dMy_dr + self.Mz*dMz_dr)/self.root_bending_moment
+        drbm_dprecone = (self.Mx*dMx_dprecone + self.My*dMy_dprecone + self.Mz*dMz_dprecone)/self.root_bending_moment
+        drbm_dalr = (self.Mx*dMx_dalr + self.My*dMy_dalr + self.Mz*dMz_dalr)/self.root_bending_moment
+        drbm_dalPx = (self.Mx*dMx_dalPx + self.My*dMy_dalPx + self.Mz*dMz_dalPx)/self.root_bending_moment
+        drbm_dalPy = (self.Mx*dMx_dalPy + self.My*dMy_dalPy + self.Mz*dMz_dalPy)/self.root_bending_moment
+        drbm_dalPz = (self.Mx*dMx_dalPz + self.My*dMy_dalPz + self.Mz*dMz_dalPz)/self.root_bending_moment
+
+        J = np.array([np.concatenate([drbm_dr, drbm_dalr, drbm_dalPx, drbm_dalPy, drbm_dalPz, [drbm_dprecone]])])
+
+        return J
+
+
+        # return self.J
+
+
+
 class MassProperties(Component):
 
+    # variables
     blade_mass = Float(iotype='in')
     blade_moment_of_inertia = Float(iotype='in')
-    nBlades = Int(iotype='in')
     tilt = Float(iotype='in')
 
+    # parameters
+    nBlades = Int(iotype='in')
+
+    # outputs
     mass_all_blades = Float(iotype='out')
     I_all_blades = Array(iotype='out')
 
@@ -950,12 +1226,39 @@ class MassProperties(Component):
         I = DirectionVector(Ixx, Iyy, Izz).hubToYaw(self.tilt)  # because off-diagonal components are all zero
 
         self.I_all_blades = np.array([I.x, I.y, I.z, Ixy, Ixz, Iyz])
+        self.Ivec = I
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('blade_mass', 'blade_moment_of_inertia', 'tilt')
+        outputs = ('mass_all_blades', 'I_all_blades')
+
+        return inputs, outputs
+
+    def provideJ(self):
+        I = self.Ivec
+
+        dIx_dmoi = self.nBlades*(I.dx['dx'] + I.dx['dy']/2.0 + I.dx['dz']/2.0)
+        dIy_dmoi = self.nBlades*(I.dy['dx'] + I.dy['dy']/2.0 + I.dy['dz']/2.0)
+        dIz_dmoi = self.nBlades*(I.dz['dx'] + I.dz['dy']/2.0 + I.dz['dz']/2.0)
+
+        dm = np.array([self.nBlades, 0.0, 0.0])
+        dIxx = np.array([0.0, dIx_dmoi, I.dx['dtilt']])
+        dIyy = np.array([0.0, dIy_dmoi, I.dy['dtilt']])
+        dIzz = np.array([0.0, dIz_dmoi, I.dz['dtilt']])
+
+        J = vstack([dm, dIxx, dIyy, dIzz, np.zeros((3, 3))])
+
+        return J
 
 
 class TurbineClass(Component):
 
+    # parameters
     turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
 
+    # outputs should be constant
     V_mean = Float(iotype='out', units='m/s')
     V_extreme = Float(iotype='out', units='m/s')
 
@@ -971,14 +1274,20 @@ class TurbineClass(Component):
         self.V_extreme = 1.4*Vref
 
 
+
 class ExtremeLoads(Component):
 
+    # variables
     T = Array(np.zeros(2), iotype='in', units='N', shape=((2,)), desc='index 0 is at worst-case, index 1 feathered')
     Q = Array(np.zeros(2), iotype='in', units='N*m', shape=((2,)), desc='index 0 is at worst-case, index 1 feathered')
+
+    # parameters
     nBlades = Int(iotype='in')
 
+    # outputs
     T_extreme = Float(iotype='out', units='N')
     Q_extreme = Float(iotype='out', units='N*m')
+
 
     def execute(self):
         n = float(self.nBlades)
@@ -986,13 +1295,36 @@ class ExtremeLoads(Component):
         self.Q_extreme = (self.Q[0] + self.Q[1]*(n-1)) / n
 
 
+    def list_deriv_vars(self):
+
+        inputs = ('T', 'Q')
+        outputs = ('T_extreme', 'Q_extreme')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+        n = float(self.nBlades)
+
+        J = np.array([[1.0/n, (n-1)/n, 0.0, 0.0],
+                      [0.0, 0.0, 1.0/n, (n-1)/n]])
+
+        return J
+
+
+
+
 class GustETM(Component):
 
-    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
+    # variables
     V_mean = Float(iotype='in', units='m/s')
     V_hub = Float(iotype='in', units='m/s')
 
-    # sigma = Float(iotype='out', units='m/s')
+    # parameters
+    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
+    std = Int(3, iotype='in')
+
+    # out
     V_gust = Float(iotype='out', units='m/s')
 
 
@@ -1006,149 +1338,170 @@ class GustETM(Component):
             Iref = 0.12
 
         c = 2.0
+
         self.sigma = c * Iref * (0.072*(self.V_mean/c + 3)*(self.V_hub/c - 4) + 10)
-        self.V_gust = self.V_hub + 3*self.sigma
+        self.V_gust = self.V_hub + self.std*self.sigma
+        self.Iref = Iref
+        self.c = c
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('V_mean', 'V_hub')
+        outputs = ('V_gust', )
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+        Iref = self.Iref
+        c = self.c
+
+        J = np.array([[self.std*(c*Iref*0.072/c*(self.V_hub/c - 4)),
+            1.0 + self.std*(c*Iref*0.072*(self.V_mean/c + 3)/c)]])
+
+        return J
 
 
 
-class RotorVS(RotorAeroVS):
+# class RotorVS(RotorAeroVS):
 
-    # replace
-    beam = Slot(BeamPropertiesBase)
-    struc = Slot(StrucBase)
+#     # replace
+#     beam = Slot(BeamPropertiesBase)
+#     struc = Slot(StrucBase)
 
-    # inputs
-    nBlades = Int(iotype='in')
-    theta = Array(iotype='in')
-    tilt = Float(iotype='in')
-    precone = Float(iotype='in')
-    precurve = Array(iotype='in')
-    presweep = Array(iotype='in')
-    g = Float(9.81, iotype='in', units='m/s**2')
-    nF = Int(5, iotype='in')
+#     # inputs
+#     nBlades = Int(iotype='in')
+#     theta = Array(iotype='in')
+#     tilt = Float(iotype='in')
+#     precone = Float(iotype='in')
+#     precurve = Array(iotype='in')
+#     presweep = Array(iotype='in')
+#     g = Float(9.81, iotype='in', units='m/s**2')
+#     nF = Int(5, iotype='in')
 
-    V_extreme = Float(iotype='in')  # TODO: can combine with Ubar based on machine class
-    pitch_extreme = Float(iotype='in')
-    azimuth_extreme = Float(iotype='in')
+#     V_extreme = Float(iotype='in')  # TODO: can combine with Ubar based on machine class
+#     pitch_extreme = Float(iotype='in')
+#     azimuth_extreme = Float(iotype='in')
 
-    # outputs
-    mass_one_blade = Float(iotype='out', units='kg', desc='mass of one blade')
-    mass_all_blades = Float(iotype='out', units='kg', desc='mass of all blade')
-    I_all_blades = Array(iotype='out', desc='out of plane moments of inertia in yaw-aligned c.s.')
-    freq = Array(iotype='out', units='Hz', desc='1st nF natural frequencies')
-    tip_deflection = Float(iotype='out', units='m', desc='blade tip deflection in +x_y direction')
-    strain = Array(iotype='out', desc='axial strain and specified locations')
-    strain = Array(iotype='out', desc='axial strain and specified locations')
-    root_bending_moment = Float(iotype='out', units='N*m')
+#     # outputs
+#     mass_one_blade = Float(iotype='out', units='kg', desc='mass of one blade')
+#     mass_all_blades = Float(iotype='out', units='kg', desc='mass of all blade')
+#     I_all_blades = Array(iotype='out', desc='out of plane moments of inertia in yaw-aligned c.s.')
+#     freq = Array(iotype='out', units='Hz', desc='1st nF natural frequencies')
+#     tip_deflection = Float(iotype='out', units='m', desc='blade tip deflection in +x_y direction')
+#     strain = Array(iotype='out', desc='axial strain and specified locations')
+#     strain = Array(iotype='out', desc='axial strain and specified locations')
+#     root_bending_moment = Float(iotype='out', units='N*m')
 
-    def configure(self):
-        super(RotorVS, self).configure()
+#     def configure(self):
+#         super(RotorVS, self).configure()
 
-        self.add('aero_rated', AeroBase())
-        self.add('aero_extrm', AeroBase())
-        self.add('beam', BeamPropertiesBase())
-        self.add('curve', BladeCurvature())
-        self.add('loads_defl', TotalLoads())
-        self.add('loads_strain', TotalLoads())
-        self.add('struc', StrucBase())
-        self.add('tip', TipDeflection())
-        self.add('root_moment', RootMoment())
-        self.add('mass', MassProperties())
-
-
-        self.driver.workflow.add(['aero_rated', 'aero_extrm', 'beam', 'curve',
-            'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass'])
-
-        # connections to aero_rated (for max deflection)
-        self.connect('powercurve.ratedConditions.V', 'aero_rated.V_load')  # add turbulent fluctuation (3*sigma)
-        self.connect('powercurve.ratedConditions.Omega', 'aero_rated.Omega_load')
-        self.connect('powercurve.ratedConditions.pitch', 'aero_rated.pitch_load')
-        self.aero_rated.azimuth_load = 180.0  # closest to tower
-        self.aero_rated.run_case = 'loads'
-
-        # connections to aero_extrm (for max strain)
-        self.connect('V_extreme', 'aero_extrm.V_load')
-        self.connect('pitch_extreme', 'aero_extrm.pitch_load')
-        self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
-        self.aero_extrm.Omega_load = 0.0  # parked case
-        self.aero_extrm.run_case = 'loads'
-
-        # connections to curve
-        self.connect('beam.properties.z', 'curve.r')
-        self.connect('precurve', 'curve.precurve')
-        self.connect('presweep', 'curve.presweep')
-        self.connect('precone', 'curve.precone')
-
-        # connections to loads_defl
-        self.connect('aero_rated.loads', 'loads_defl.aeroLoads')
-        self.connect('beam.properties.z', 'loads_defl.r')
-        self.connect('theta', 'loads_defl.theta')
-        self.connect('tilt', 'loads_defl.tilt')
-        self.connect('curve.totalCone', 'loads_defl.totalCone')
-        self.connect('curve.z_az', 'loads_defl.z_az')
-        self.connect('beam.properties.rhoA', 'loads_defl.rhoA')
-        self.connect('g', 'loads_defl.g')
-
-        # connections to loads_strain
-        self.connect('aero_extrm.loads', 'loads_strain.aeroLoads')
-        self.connect('beam.properties.z', 'loads_strain.r')
-        self.connect('theta', 'loads_strain.theta')
-        self.connect('tilt', 'loads_strain.tilt')
-        self.connect('curve.totalCone', 'loads_strain.totalCone')
-        self.connect('curve.z_az', 'loads_strain.z_az')
-        self.connect('beam.properties.rhoA', 'loads_strain.rhoA')
-        self.connect('g', 'loads_strain.g')
+#         self.add('aero_rated', AeroBase())
+#         self.add('aero_extrm', AeroBase())
+#         self.add('beam', BeamPropertiesBase())
+#         self.add('curve', BladeCurvature())
+#         self.add('loads_defl', TotalLoads())
+#         self.add('loads_strain', TotalLoads())
+#         self.add('struc', StrucBase())
+#         self.add('tip', TipDeflection())
+#         self.add('root_moment', RootMoment())
+#         self.add('mass', MassProperties())
 
 
-        # connections to struc
-        self.connect('beam.properties', 'struc.beam')
-        self.connect('nF', 'struc.nF')
-        self.connect('loads_defl.Px_af', 'struc.Px_defl')
-        self.connect('loads_defl.Py_af', 'struc.Py_defl')
-        self.connect('loads_defl.Pz_af', 'struc.Pz_defl')
-        self.connect('loads_strain.Px_af', 'struc.Px_strain')
-        self.connect('loads_strain.Py_af', 'struc.Py_strain')
-        self.connect('loads_strain.Pz_af', 'struc.Pz_strain')
+#         self.driver.workflow.add(['aero_rated', 'aero_extrm', 'beam', 'curve',
+#             'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass'])
 
-        # connections to tip
-        self.connect('struc.dx_defl', 'tip.dx')
-        self.connect('struc.dy_defl', 'tip.dy')
-        self.connect('struc.dz_defl', 'tip.dz')
-        self.connect('theta', 'tip.theta')
-        self.connect('aero_rated.loads.pitch', 'tip.pitch')
-        self.connect('aero_rated.loads.azimuth', 'tip.azimuth')
-        self.connect('tilt', 'tip.tilt')
-        self.connect('curve.totalCone', 'tip.totalCone')
+#         # connections to aero_rated (for max deflection)
+#         self.connect('powercurve.ratedConditions.V', 'aero_rated.V_load')  # add turbulent fluctuation (3*sigma)
+#         self.connect('powercurve.ratedConditions.Omega', 'aero_rated.Omega_load')
+#         self.connect('powercurve.ratedConditions.pitch', 'aero_rated.pitch_load')
+#         self.aero_rated.azimuth_load = 180.0  # closest to tower
+#         self.aero_rated.run_case = 'loads'
 
-        # connections to root moment
-        self.connect('beam.properties.z', 'root_moment.r_str')
-        self.connect('aero_rated.loads', 'root_moment.aeroLoads')
-        self.connect('curve.totalCone', 'root_moment.totalCone')
-        self.connect('curve.x_az', 'root_moment.x_az')
-        self.connect('curve.y_az', 'root_moment.y_az')
-        self.connect('curve.z_az', 'root_moment.z_az')
-        self.connect('curve.s', 'root_moment.s')
+#         # connections to aero_extrm (for max strain)
+#         self.connect('V_extreme', 'aero_extrm.V_load')
+#         self.connect('pitch_extreme', 'aero_extrm.pitch_load')
+#         self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
+#         self.aero_extrm.Omega_load = 0.0  # parked case
+#         self.aero_extrm.run_case = 'loads'
 
-        # connections to mass
-        self.connect('struc.blade_mass', 'mass.blade_mass')
-        self.connect('struc.blade_moment_of_inertia', 'mass.blade_moment_of_inertia')
-        self.connect('nBlades', 'mass.nBlades')
-        self.connect('tilt', 'mass.tilt')
+#         # connections to curve
+#         self.connect('beam.properties.z', 'curve.r')
+#         self.connect('precurve', 'curve.precurve')
+#         self.connect('presweep', 'curve.presweep')
+#         self.connect('precone', 'curve.precone')
+
+#         # connections to loads_defl
+#         self.connect('aero_rated.loads', 'loads_defl.aeroLoads')
+#         self.connect('beam.properties.z', 'loads_defl.r')
+#         self.connect('theta', 'loads_defl.theta')
+#         self.connect('tilt', 'loads_defl.tilt')
+#         self.connect('curve.totalCone', 'loads_defl.totalCone')
+#         self.connect('curve.z_az', 'loads_defl.z_az')
+#         self.connect('beam.properties.rhoA', 'loads_defl.rhoA')
+#         self.connect('g', 'loads_defl.g')
+
+#         # connections to loads_strain
+#         self.connect('aero_extrm.loads', 'loads_strain.aeroLoads')
+#         self.connect('beam.properties.z', 'loads_strain.r')
+#         self.connect('theta', 'loads_strain.theta')
+#         self.connect('tilt', 'loads_strain.tilt')
+#         self.connect('curve.totalCone', 'loads_strain.totalCone')
+#         self.connect('curve.z_az', 'loads_strain.z_az')
+#         self.connect('beam.properties.rhoA', 'loads_strain.rhoA')
+#         self.connect('g', 'loads_strain.g')
 
 
-        # input passthroughs
-        self.create_passthrough('struc.x_strain')
-        self.create_passthrough('struc.y_strain')
-        self.create_passthrough('struc.z_strain')
+#         # connections to struc
+#         self.connect('beam.properties', 'struc.beam')
+#         self.connect('nF', 'struc.nF')
+#         self.connect('loads_defl.Px_af', 'struc.Px_defl')
+#         self.connect('loads_defl.Py_af', 'struc.Py_defl')
+#         self.connect('loads_defl.Pz_af', 'struc.Pz_defl')
+#         self.connect('loads_strain.Px_af', 'struc.Px_strain')
+#         self.connect('loads_strain.Py_af', 'struc.Py_strain')
+#         self.connect('loads_strain.Pz_af', 'struc.Pz_strain')
 
-        # connect to outputs
-        self.connect('struc.blade_mass', 'mass_one_blade')
-        self.connect('mass.mass_all_blades', 'mass_all_blades')
-        self.connect('mass.I_all_blades', 'I_all_blades')
-        self.connect('struc.freq', 'freq')
-        self.connect('tip.tip_deflection', 'tip_deflection')
-        self.connect('struc.strain', 'strain')
-        self.connect('root_moment.root_bending_moment', 'root_bending_moment')
+#         # connections to tip
+#         self.connect('struc.dx_defl', 'tip.dx')
+#         self.connect('struc.dy_defl', 'tip.dy')
+#         self.connect('struc.dz_defl', 'tip.dz')
+#         self.connect('theta', 'tip.theta')
+#         self.connect('aero_rated.loads.pitch', 'tip.pitch')
+#         self.connect('aero_rated.loads.azimuth', 'tip.azimuth')
+#         self.connect('tilt', 'tip.tilt')
+#         self.connect('curve.totalCone', 'tip.totalCone')
+
+#         # connections to root moment
+#         self.connect('beam.properties.z', 'root_moment.r_str')
+#         self.connect('aero_rated.loads', 'root_moment.aeroLoads')
+#         self.connect('curve.totalCone', 'root_moment.totalCone')
+#         self.connect('curve.x_az', 'root_moment.x_az')
+#         self.connect('curve.y_az', 'root_moment.y_az')
+#         self.connect('curve.z_az', 'root_moment.z_az')
+#         self.connect('curve.s', 'root_moment.s')
+
+#         # connections to mass
+#         self.connect('struc.blade_mass', 'mass.blade_mass')
+#         self.connect('struc.blade_moment_of_inertia', 'mass.blade_moment_of_inertia')
+#         self.connect('nBlades', 'mass.nBlades')
+#         self.connect('tilt', 'mass.tilt')
+
+
+#         # input passthroughs
+#         self.create_passthrough('struc.x_strain')
+#         self.create_passthrough('struc.y_strain')
+#         self.create_passthrough('struc.z_strain')
+
+#         # connect to outputs
+#         self.connect('struc.blade_mass', 'mass_one_blade')
+#         self.connect('mass.mass_all_blades', 'mass_all_blades')
+#         self.connect('mass.I_all_blades', 'I_all_blades')
+#         self.connect('struc.freq', 'freq')
+#         self.connect('tip.tip_deflection', 'tip_deflection')
+#         self.connect('struc.strain', 'strain')
+#         self.connect('root_moment.root_bending_moment', 'root_bending_moment')
 
 
 
@@ -1522,10 +1875,14 @@ class RotorTS(Assembly):
         self.connect('beam.yl_strain_te', 'struc.yl_strain_te')
 
         # connections to tip
-        self.connect('struc.dx_defl', 'tip.dx')
-        self.connect('struc.dy_defl', 'tip.dy')
-        self.connect('struc.dz_defl', 'tip.dz')
-        self.connect('spline.theta_str', 'tip.theta')
+        self.struc.dx_defl = np.zeros(1)
+        self.struc.dy_defl = np.zeros(1)
+        self.struc.dz_defl = np.zeros(1)
+        self.spline.theta_str = np.zeros(1)
+        self.connect('struc.dx_defl[-1]', 'tip.dx')
+        self.connect('struc.dy_defl[-1]', 'tip.dy')
+        self.connect('struc.dz_defl[-1]', 'tip.dz')
+        self.connect('spline.theta_str[-1]', 'tip.theta')
         self.connect('aero_rated.loads.pitch', 'tip.pitch')
         self.connect('aero_rated.loads.azimuth', 'tip.azimuth')
         self.connect('tilt', 'tip.tilt')
