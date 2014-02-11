@@ -12,7 +12,7 @@ from math import pi
 from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
-from openmdao.main.api import Component, Assembly
+from openmdao.main.api import Component
 from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase
 from akima import Akima
@@ -40,6 +40,7 @@ class GeometrySpline(Component):
     r = Array(iotype='out', units='m', desc='chord at airfoil locations')
     chord = Array(iotype='out', units='m', desc='chord at airfoil locations')
     theta = Array(iotype='out', units='deg', desc='twist at airfoil locations')
+    r_af_spacing = Array(iotype='out')
 
 
     def execute(self):
@@ -72,6 +73,8 @@ class GeometrySpline(Component):
 
         theta_inner = theta_outer[0] * np.ones(idxc)
         self.theta = np.concatenate([theta_inner, theta_outer])
+
+        self.r_af_spacing = np.diff(self.r_af)
 
         # gradients (TODO: rethink these a bit or use Tapenade.)
         n = len(self.r_af)
@@ -106,13 +109,19 @@ class GeometrySpline(Component):
 
         dtheta = hstack([dtheta_draf, np.zeros((n, 1)), dtheta_drhub, dtheta_drtip, np.zeros((n, nc)), dtheta_dthetasub])
 
-        self.J = vstack([dr, dchord, dtheta])
+        drafs_dr = np.zeros((n-1, n))
+        for i in range(n-1):
+            drafs_dr[i, i] = -1.0
+            drafs_dr[i, i+1] = 1.0
+        drafs = hstack([drafs_dr, np.zeros((n-1, 3+nc+nt))])
+
+        self.J = vstack([dr, dchord, dtheta, drafs])
 
 
     def list_deriv_vars(self):
 
         inputs = ('r_af', 'r_max_chord', 'Rhub', 'Rtip', 'chord_sub', 'theta_sub')
-        outputs = ('r', 'chord', 'theta')
+        outputs = ('r', 'chord', 'theta', 'r_af_spacing')
 
         return inputs, outputs
 
@@ -174,6 +183,8 @@ class CCBlade(AeroBase):
     mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air')
     shearExp = Float(0.2, iotype='in', desc='shear exponent')
     nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
+
+    missing_deriv_policy = 'assume_zero'
 
 
     def execute(self):

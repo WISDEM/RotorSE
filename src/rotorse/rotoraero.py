@@ -132,10 +132,6 @@ class DrivetrainLossesBase(Component):
 
     power = Array(iotype='out', units='W', desc='total power after drivetrain losses')
 
-    # TODO: remove when OpenMDAO fixes this
-    missing_deriv_policy = 'assume_zero'
-
-
 class PDFBase(Component):
     """probability distribution function"""
 
@@ -241,6 +237,7 @@ class SetupRun(Component):
     Omega = Array(iotype='out', units='rpm', desc='rotation speeds to run')
     pitch = Array(iotype='out', units='deg', desc='pitch angles to run')
 
+    missing_deriv_policy = 'assume_zero'
 
     def execute(self):
 
@@ -317,7 +314,7 @@ class RegulatedPowerCurve(ImplicitComponent):
     P = Array(iotype='out', units='W', desc='power')
     ratedConditions = VarTree(RatedConditions(), iotype='out', desc='conditions at rated speed')
 
-
+    missing_deriv_policy = 'assume_zero'
 
     def __init__(self):
         super(RegulatedPowerCurve, self).__init__()
