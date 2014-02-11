@@ -97,6 +97,14 @@ class StrucBase(Component):
     yu_strain_te = Array(iotype='in')
     yl_strain_te = Array(iotype='in')
 
+    Mx_damage = Array(iotype='in')
+    My_damage = Array(iotype='in')
+    strain_ult_spar = Float(0.01, iotype='in')
+    strain_ult_te = Float(2500*1e-6, iotype='in')
+    eta_damage = Float(1.755, iotype='in')
+    m_damage = Float(10.0, iotype='in')
+    N_damage = Float(365*24*3600*20.0, iotype='in')
+
     # outputs
     blade_mass = Float(iotype='out', desc='mass of one blades')
     blade_moment_of_inertia = Float(iotype='out', desc='out of plane moment of inertia of a blade')
@@ -108,6 +116,10 @@ class StrucBase(Component):
     strainL_spar = Array(iotype='out')
     strainU_te = Array(iotype='out')
     strainL_te = Array(iotype='out')
+    damageU_spar = Array(iotype='out')
+    damageL_spar = Array(iotype='out')
+    damageU_te = Array(iotype='out')
+    damageL_te = Array(iotype='out')
 
 
 
@@ -154,9 +166,9 @@ class ResizeCompositeSection(Component):
         self.lowerCSOut = []
         self.websCSOut = []
         for i in range(nstr):
-            self.upperCSOut.append(self.upperCSIn[i].copy())
-            self.lowerCSOut.append(self.lowerCSIn[i].copy())
-            self.websCSOut.append(self.websCSIn[i].copy())
+            self.upperCSOut.append(self.upperCSIn[i].mycopy())
+            self.lowerCSOut.append(self.lowerCSIn[i].mycopy())
+            self.websCSOut.append(self.websCSIn[i].mycopy())
 
 
         # scale all thicknesses with airfoil thickness
@@ -478,6 +490,43 @@ class RotorWithpBEAM(StrucBase):
         return strainU, strainL
 
 
+    def damage(self, Mx, My, xu, yu, xl, yl, EI11, EI22, EA, ca, sa, emax=0.01, eta=1.755, m=10.0, N=365*24*3600*24):
+
+
+        # use profile c.s. to use Hansen's notation
+        Mx, My = My, Mx
+        Fz = 0.0
+        xu, yu = yu, xu
+        xl, yl = yl, xl
+
+        # convert to principal xes
+        M1 = Mx*ca + My*sa
+        M2 = -Mx*sa + My*ca
+
+        x = xu*ca + yu*sa
+        y = -xu*sa + yu*ca
+
+        # compute strain
+        strainU = -(M1/EI11*y - M2/EI22*x + Fz/EA)  # negative sign because 3 is opposite of z
+
+        x = xl*ca + yl*sa
+        y = -xl*sa + yl*ca
+
+        strainL = -(M1/EI11*y - M2/EI22*x + Fz/EA)
+
+        # number of cycles to failure
+        NfU = (emax/(eta*strainU))**m
+        NfL = (emax/(eta*strainL))**m
+
+        # damage
+        damageU = N/NfU
+        damageL = N/NfL
+
+        return damageU, damageL
+
+
+
+
     def execute(self):
 
         beam = self.beam
@@ -520,6 +569,13 @@ class RotorWithpBEAM(StrucBase):
             self.xl_strain_spar, self.yl_strain_spar, EI11, EI22, EA, ca, sa)
         self.strainU_te, self.strainL_te = self.strain(blade, self.xu_strain_te, self.yu_strain_te,
             self.xl_strain_te, self.yl_strain_te, EI11, EI22, EA, ca, sa)
+        self.damageU_spar, self.damageL_spar = self.damage(self.Mx_damage, self.My_damage, self.xu_strain_spar, self.yu_strain_spar,
+            self.xl_strain_spar, self.yl_strain_spar, EI11, EI22, EA, ca, sa,
+            emax=self.strain_ult_spar, eta=self.eta_damage, m=self.m_damage, N=self.N_damage)
+        self.damageU_te, self.damageL_te = self.damage(self.Mx_damage, self.My_damage, self.xu_strain_te, self.yu_strain_te,
+            self.xl_strain_te, self.yl_strain_te, EI11, EI22, EA, ca, sa,
+            emax=self.strain_ult_te, eta=self.eta_damage, m=self.m_damage, N=self.N_damage)
+
 
 
 
@@ -570,7 +626,7 @@ class RGrid(Component):
     idxj = Array(iotype='in', dtype=np.int)
 
     # outputs
-    r_str = Array(iotype='in')
+    r_str = Array(iotype='out')
 
 
     missing_deriv_policy = 'assume_zero'
@@ -692,48 +748,48 @@ class GeometrySpline(Component):
         self.teT_str = np.concatenate((teT_str_in, self.teT[1]*np.ones(9), self.teT[2]*np.ones(7), self.teT[3]*np.ones(8), self.teT[4]*np.ones(2)))
 
 
-    def list_deriv_vars(self):
-        pass
-        # naero = len(self.r_aero_unit)
-        # nstr = len(self.r_str_unit)
-        # ncs = len(self.chord_sub)
-        # nts = len(self.theta_sub)
-        # nst = len(self.sparT)
-        # ntt = len(self.teT)
+    # def list_deriv_vars(self):
+    #     pass
+    #     # naero = len(self.r_aero_unit)
+    #     # nstr = len(self.r_str_unit)
+    #     # ncs = len(self.chord_sub)
+    #     # nts = len(self.theta_sub)
+    #     # nst = len(self.sparT)
+    #     # ntt = len(self.teT)
 
-        # n = naero + nstr + ncs + nts + nst + ntt + 2
+    #     # n = naero + nstr + ncs + nts + nst + ntt + 2
 
-        # dRtip = np.zeros(n)
-        # dRhub = np.zeros(n)
-        # dRtip[naero + nstr + 1 + ncs + nts] = 1.0
-        # dRhub[naero + nstr + 1 + ncs + nts] = self.hubFraction
+    #     # dRtip = np.zeros(n)
+    #     # dRhub = np.zeros(n)
+    #     # dRtip[naero + nstr + 1 + ncs + nts] = 1.0
+    #     # dRhub[naero + nstr + 1 + ncs + nts] = self.hubFraction
 
-        # draero = np.zeros((naero, n))
-        # draero[:, naero + nstr + 1 + ncs + nts] = (1.0 - self.r_aero_unit)*self.hubFraction + self.r_aero_unit
-        # draero[:, :naero] = Rtip-Rhub
+    #     # draero = np.zeros((naero, n))
+    #     # draero[:, naero + nstr + 1 + ncs + nts] = (1.0 - self.r_aero_unit)*self.hubFraction + self.r_aero_unit
+    #     # draero[:, :naero] = Rtip-Rhub
 
-        # drstr = np.zeros((nstr, n))
-        # drstr[:, naero + nstr + 1 + ncs + nts] = (1.0 - self.r_str_unit)*self.hubFraction + self.r_str_unit
-        # drstr[:, naero:nstr] = Rtip-Rhub
+    #     # drstr = np.zeros((nstr, n))
+    #     # drstr[:, naero + nstr + 1 + ncs + nts] = (1.0 - self.r_str_unit)*self.hubFraction + self.r_str_unit
+    #     # drstr[:, naero:nstr] = Rtip-Rhub
 
-        # TODO: do with Tapenade
-
-
+    #     # TODO: do with Tapenade
 
 
-        # inputs = ('r_aero_unit', 'r_str_unit', 'r_max_chord', 'chord_sub', 'theta_sub', 'bladeLength', 'sparT', 'teT')
-        # outputs = ('Rhub', 'Rtip', 'r_aero', 'r_str', 'chord_aero', 'chord_str',
-        #     'theta_aero', 'theta_str', 'sparT_str', 'teT_str')
-
-        # return inputs, outputs
-
-    def provideJ(self):
-        pass
 
 
-        # J =
+    #     # inputs = ('r_aero_unit', 'r_str_unit', 'r_max_chord', 'chord_sub', 'theta_sub', 'bladeLength', 'sparT', 'teT')
+    #     # outputs = ('Rhub', 'Rtip', 'r_aero', 'r_str', 'chord_aero', 'chord_str',
+    #     #     'theta_aero', 'theta_str', 'sparT_str', 'teT_str')
 
-        # return J
+    #     # return inputs, outputs
+
+    # def provideJ(self):
+    #     pass
+
+
+    #     # J =
+
+    #     # return J
 
 
 
@@ -787,6 +843,29 @@ class GeometrySpline(Component):
 #         self.s = s
 
 
+class DamageLoads(Component):
+
+    rstar = Array(iotype='in')
+    Mxb = Array(iotype='in')
+    Myb = Array(iotype='in')
+    theta = Array(iotype='in')
+    r = Array(iotype='in')
+
+    Mxa = Array(iotype='out')
+    Mya = Array(iotype='out')
+
+    def execute(self):
+
+        rstar = (self.r-self.r[0])/(self.r[-1]-self.r[0])
+
+        Mxb = np.interp(rstar, self.rstar, self.Mxb)
+        Myb = np.interp(rstar, self.rstar, self.Myb)
+
+        Ma = DirectionVector(Mxb, Myb, 0.0).bladeToAirfoil(self.theta)
+        self.Mxa = Ma.x
+        self.Mya = Ma.y
+
+
 
 class TotalLoads(Component):
 
@@ -808,6 +887,7 @@ class TotalLoads(Component):
     Py_af = Array(iotype='out')
     Pz_af = Array(iotype='out')
 
+    missing_deriv_policy = 'assume_zero'
 
     def execute(self):
 
@@ -1025,6 +1105,8 @@ class RootMoment(Component):
     # s = Array(iotype='in')
 
     root_bending_moment = Float(iotype='out')
+
+    missing_deriv_policy = 'assume_zero'
 
     def execute(self):
 
@@ -1516,27 +1598,36 @@ class GustETM(Component):
 class RotorTS(Assembly):
     """rotor for tip-speed study"""
 
-    # --- inputs ---
-    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
-    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
-    control = VarTree(VarSpeedMachine(), iotype='in')
+    # --- geometry inputs ---
     initial_aero_grid = Array(iotype='in')
     initial_str_grid = Array(iotype='in')
     idx_cylinder_aero = Int(iotype='in', desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
     idx_cylinder_str = Int(iotype='in', desc='first idx in r_str_unit of non-cylindrical section')
     hubFraction = Float(iotype='in')
-    hubHt = Float(iotype='in', units='m')
-    tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
-    yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
-    g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity')
-    airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
-    nBlades = Int(3, iotype='in', desc='number of blades')
-    rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
-    mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air')
-    shearExp = Float(0.2, iotype='in', desc='shear exponent')
-    nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
-    drivetrainType = Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in')
+    r_aero = Array(iotype='in')
+    r_max_chord = Float(iotype='in')
+    chord_sub = Array(iotype='in', units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
+    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
+    bladeLength = Float(iotype='in', units='m', deriv_ignore=True)
+    precone = Float(0.0, iotype='in', desc='precone angle', units='deg', deriv_ignore=True)
+    tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg', deriv_ignore=True)
+    yaw = Float(0.0, iotype='in', desc='yaw error', units='deg', deriv_ignore=True)
+    nBlades = Int(3, iotype='in', desc='number of blades', deriv_ignore=True)
+    airfoil_files = List(Str, iotype='in', desc='names of airfoil file', deriv_ignore=True)
 
+    # --- atmosphere inputs ---
+    rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air', deriv_ignore=True)
+    mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air', deriv_ignore=True)
+    shearExp = Float(0.2, iotype='in', desc='shear exponent', deriv_ignore=True)
+    hubHt = Float(iotype='in', units='m')
+    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
+    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
+    g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity', deriv_ignore=True)
+
+    # --- composite sections ---
+    sparT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
+    teT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
+    chord_str_ref = Array(iotype='in', units='m')
     leLoc = Array(iotype='in', desc='array of leading-edge positions from a reference blade axis \
         (usually blade pitch axis). locations are normalized by the local chord length.  \
         e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
@@ -1552,27 +1643,33 @@ class RotorTS(Assembly):
         desc='list of CompositeSection objections defining the properties for shear webs')
     sector_idx_strain_spar = Array(iotype='in', dtype=np.int)
     sector_idx_strain_te = Array(iotype='in', dtype=np.int)
-    chord_str_ref = Array(iotype='in', units='m')
 
-    nF = Int(5, iotype='in')
+
+    # --- control ---
+    control = VarTree(VarSpeedMachine(), iotype='in')
     pitch_extreme = Float(iotype='in')
     azimuth_extreme = Float(iotype='in')
 
-    # (potential) design variables
-    r_aero = Array(iotype='in')
-    r_max_chord = Float(iotype='in')
-    chord_sub = Array(iotype='in', units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
-    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
-    bladeLength = Float(iotype='in', units='m')
-    precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
-    sparT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
-    teT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
+    # --- drivetrain efficiency ---
+    drivetrainType = Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in')
 
-    # options
+    # --- fatigue ---
+    rstar_damage = Array(iotype='in')
+    Mxb_damage = Array(iotype='in')
+    Myb_damage = Array(iotype='in')
+    strain_ult_spar = Float(0.01, iotype='in')
+    strain_ult_te = Float(2500*1e-6, iotype='in')
+    eta_damage = Float(1.755, iotype='in')
+    m_damage = Float(10.0, iotype='in')
+    N_damage = Float(365*24*3600*20.0, iotype='in')
+
+    # --- options ---
+    nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
     npts_coarse_power_curve = Int(20, iotype='in', desc='number of points to evaluate aero analysis at')
     npts_spline_power_curve = Int(200, iotype='in', desc='number of points to use in fitting spline to power curve')
     AEP_loss_factor = Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)')
     dynamic_amplication_tip_deflection = Float(1.2, iotype='in')
+    nF = Int(5, iotype='in', desc='number of natural frequencies to compute')
 
     # --- outputs ---
     AEP = Float(iotype='out', units='kW*h', desc='annual energy production')
@@ -1598,6 +1695,10 @@ class RotorTS(Assembly):
     eps_crit_spar = Array(iotype='out')
     eps_crit_te = Array(iotype='out')
     root_bending_moment = Float(iotype='out', units='N*m')
+    damageU_spar = Array(iotype='out')
+    damageL_spar = Array(iotype='out')
+    damageU_te = Array(iotype='out')
+    damageL_te = Array(iotype='out')
 
 
     def configure(self):
@@ -1723,6 +1824,7 @@ class RotorTS(Assembly):
         self.add('beam', PreCompSections())
         self.add('loads_defl', TotalLoads())
         self.add('loads_strain', TotalLoads())
+        self.add('damage', DamageLoads())
         self.add('struc', RotorWithpBEAM())
         self.add('tip', TipDeflection())
         self.add('root_moment', RootMoment())
@@ -1731,7 +1833,7 @@ class RotorTS(Assembly):
 
 
         self.driver.workflow.add(['resize', 'gust', 'aero_rated', 'aero_extrm', 'aero_extrm_forces',
-            'beam', 'loads_defl', 'loads_strain', 'struc', 'tip', 'root_moment', 'mass', 'extreme'])
+            'beam', 'loads_defl', 'loads_strain', 'damage', 'struc', 'tip', 'root_moment', 'mass', 'extreme'])
 
 
         # connections to resize
@@ -1856,6 +1958,14 @@ class RotorTS(Assembly):
         self.connect('g', 'loads_strain.g')
 
 
+        # connections to damage
+        self.connect('rstar_damage', 'damage.rstar')
+        self.connect('Mxb_damage', 'damage.Mxb')
+        self.connect('Myb_damage', 'damage.Myb')
+        self.connect('spline.theta_str', 'damage.theta')
+        self.connect('beam.properties.z', 'damage.r')
+
+
         # connections to struc
         self.connect('beam.properties', 'struc.beam')
         self.connect('nF', 'struc.nF')
@@ -1873,6 +1983,19 @@ class RotorTS(Assembly):
         self.connect('beam.xl_strain_te', 'struc.xl_strain_te')
         self.connect('beam.yu_strain_te', 'struc.yu_strain_te')
         self.connect('beam.yl_strain_te', 'struc.yl_strain_te')
+        self.connect('damage.Mxa', 'struc.Mx_damage')
+        self.connect('damage.Mya', 'struc.My_damage')
+        self.connect('strain_ult_spar', 'struc.strain_ult_spar')
+        self.connect('strain_ult_te', 'struc.strain_ult_te')
+        self.connect('eta_damage', 'struc.eta_damage')
+        self.connect('m_damage', 'struc.m_damage')
+        self.connect('N_damage', 'struc.N_damage')
+
+
+        # rstar = np.array([0.000, 0.022, 0.067, 0.111, 0.167, 0.233, 0.300, 0.367, 0.433, 0.500, 0.567, 0.633, 0.700, 0.767, 0.833, 0.889, 0.933, 0.978])
+        # Mxb = 1e3*np.array([2.3743E+003, 2.0834E+003, 1.8108E+003, 1.5705E+003, 1.3104E+003, 1.0488E+003, 8.2367E+002, 6.3407E+002, 4.7727E+002, 3.4804E+002, 2.4458E+002, 1.6339E+002, 1.0252E+002, 5.7842E+001, 2.7349E+001, 1.1262E+001, 3.8549E+000, 4.4738E-001])
+        # Myb = 1e3*np.array([2.7732E+003, 2.8155E+003, 2.6004E+003, 2.3933E+003, 2.1371E+003, 1.8459E+003, 1.5582E+003, 1.2896E+003, 1.0427E+003, 8.2015E+002, 6.2449E+002, 4.5229E+002, 3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])
+        # theta = np.array([13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 13.2783, 12.9342402117, 12.4835185594, 11.4807962375, 10.9555376235, 10.2141732458, 9.50474414552, 8.79808349002, 8.12523177814, 6.8138304713, 6.42067815056, 5.58414310075, 4.96394649167, 4.44089107951, 4.38490319227, 4.35830230526, 4.3314093512, 3.86273855446, 3.38640148153, 1.57771432025, 0.953398905137, 0.504982546655, 0.0995167038088, -0.0878099])
 
         # connections to tip
         self.struc.dx_defl = np.zeros(1)
@@ -1923,6 +2046,10 @@ class RotorTS(Assembly):
         self.connect('root_moment.root_bending_moment', 'root_bending_moment')
         self.connect('beam.eps_crit_spar', 'eps_crit_spar')
         self.connect('beam.eps_crit_te', 'eps_crit_te')
+        self.connect('struc.damageU_spar', 'damageU_spar')
+        self.connect('struc.damageL_spar', 'damageL_spar')
+        self.connect('struc.damageU_te', 'damageU_te')
+        self.connect('struc.damageL_te', 'damageL_te')
 
 
 
