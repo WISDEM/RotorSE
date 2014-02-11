@@ -10,6 +10,7 @@ Copyright (c)  NREL. All rights reserved.
 # from zope.interface import implements
 import numpy as np
 import math
+import copy
 
 # from rotorstruc import SectionStrucInterface
 # from wisdem.common import sind, cosd
@@ -308,8 +309,10 @@ class CompositeSection:
         self.materials = materials
 
 
-    def copy(self):
-        return CompositeSection(self.loc, self.n_plies, self.t, self.theta, self.mat_idx, self.materials)
+    def mycopy(self):
+        return CompositeSection(copy.deepcopy(self.loc), copy.deepcopy(self.n_plies),
+            copy.deepcopy(self.t), copy.deepcopy(self.theta), copy.deepcopy(self.mat_idx),
+            self.materials)  # TODO: copy materials (for now it never changes so I'm not looking at it)
 
 
     @classmethod
