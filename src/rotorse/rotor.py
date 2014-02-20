@@ -10,9 +10,9 @@ Copyright (c)  NREL. All rights reserved.
 import numpy as np
 import math
 from openmdao.main.api import VariableTree, Component, Assembly
-from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Enum, Str, List
+from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Enum, Str, List
 
-from rotoraero import SetupRun, RegulatedPowerCurve, AEP, VarSpeedMachine, RatedConditions, RotorAeroVS, AeroBase, AeroLoads, RPM2RS
+from rotoraero import SetupRun, RegulatedPowerCurve, AEP, VarSpeedMachine, RatedConditions, AeroLoads, RPM2RS
 from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF
 from openmdao.lib.drivers.api import Brent
 from commonse.csystem import DirectionVector
@@ -522,6 +522,9 @@ class RotorWithpBEAM(StrucBase):
         damageU = N/NfU
         damageL = N/NfL
 
+        damageU = math.log(N) - m*(math.log(emax) - math.log(eta) - np.log(np.abs(strainU)))
+        damageL = math.log(N) - m*(math.log(emax) - math.log(eta) - np.log(np.abs(strainL)))
+
         return damageU, damageL
 
 
@@ -700,8 +703,10 @@ class GeometrySpline(Component):
 
     def execute(self):
 
-        Rtip = self.bladeLength
-        Rhub = self.hubFraction * Rtip
+        # Rtip = self.bladeLength
+        # Rhub = self.hubFraction * Rtip
+        Rhub = self.hubFraction * self.bladeLength
+        Rtip = Rhub + self.bladeLength
 
         # setup chord parmeterization
         nc = len(self.chord_sub)
@@ -720,7 +725,7 @@ class GeometrySpline(Component):
 
         # make dimensional and evaluate splines
         self.Rhub = Rhub
-        self.Rtip = self.bladeLength
+        self.Rtip = Rtip
         self.r_aero = Rhub + (Rtip-Rhub)*self.r_aero_unit
         self.r_str = Rhub + (Rtip-Rhub)*self.r_str_unit
         self.chord_aero, _, _, _ = chord_spline.interp(self.r_aero)
@@ -1593,8 +1598,6 @@ class GustETM(Component):
 
 
 
-
-
 class RotorTS(Assembly):
     """rotor for tip-speed study"""
 
@@ -1647,6 +1650,7 @@ class RotorTS(Assembly):
 
     # --- control ---
     control = VarTree(VarSpeedMachine(), iotype='in')
+    # max_tip_speed = Float(iotype='in', units='m/s', desc='maximum tip speed')
     pitch_extreme = Float(iotype='in')
     azimuth_extreme = Float(iotype='in')
 
@@ -1708,6 +1712,7 @@ class RotorTS(Assembly):
         self.add('grid', RGrid())
         self.add('spline', GeometrySpline())
         self.add('geom', CCBladeGeometry())
+        # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRun())
         self.add('analysis', CCBlade())
         self.add('dt', CSMDrivetrain())
@@ -1749,6 +1754,11 @@ class RotorTS(Assembly):
         # connections to geom
         self.connect('spline.Rtip', 'geom.Rtip')
         self.connect('precone', 'geom.precone')
+
+        # # connectiosn to tipspeed
+        # self.connect('geom.R', 'tipspeed.R')
+        # self.connect('max_tip_speed', 'tipspeed.Vtip_max')
+        # self.connect('tipspeed.Omega_max', 'control.maxOmega')
 
         # connections to setup
         self.connect('control', 'setup.control')
