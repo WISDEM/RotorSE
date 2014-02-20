@@ -145,7 +145,7 @@ class CCBladeGeometry(GeomtrySetupBase):
 
     def execute(self):
 
-        self.R = self.Rtip*cosd(self.precone)
+        self.R = self.Rtip*cosd(self.precone)  # no precurvature
 
     def list_deriv_vars(self):
 
@@ -180,7 +180,7 @@ class CCBlade(AeroBase):
     airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
     B = Int(3, iotype='in', desc='number of blades')
     rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
-    mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air')
+    mu = Float(1.81206e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
     shearExp = Float(0.2, iotype='in', desc='shear exponent')
     nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
 
