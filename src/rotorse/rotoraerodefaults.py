@@ -8,7 +8,7 @@ Copyright (c) NREL. All rights reserved.
 """
 
 import numpy as np
-from math import pi
+from math import pi, gamma
 from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
@@ -405,6 +405,21 @@ class WeibullCDF(CDFBase):
         J = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
 
         return J
+
+
+class WeibullWithMeanCDF(CDFBase):
+    """Weibull cumulative distribution function"""
+
+    xbar = Float(iotype='in', desc='mean value of distribution')
+    k = Float(iotype='in', desc='shape or form factor')
+
+    def execute(self):
+
+        A = self.xbar / gamma(1.0 + 1.0/self.k)
+
+        self.F = 1.0 - np.exp(-(self.x/A)**self.k)
+
+        # TODO: add gradients
 
 
 

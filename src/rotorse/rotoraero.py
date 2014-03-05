@@ -132,6 +132,7 @@ class DrivetrainLossesBase(Component):
 
     power = Array(iotype='out', units='W', desc='total power after drivetrain losses')
 
+
 class PDFBase(Component):
     """probability distribution function"""
 
@@ -152,6 +153,33 @@ class CDFBase(Component):
 # ---------------------
 # Components
 # ---------------------
+
+# class MaxTipSpeed(Component):
+
+#     R = Float(iotype='in', units='m', desc='rotor radius')
+#     Vtip_max = Float(iotype='in', units='m/s', desc='maximum tip speed')
+
+#     Omega_max = Float(iotype='out', units='rpm', desc='maximum rotation speed')
+
+#     def execute(self):
+
+#         self.Omega_max = self.Vtip_max/self.R * RS2RPM
+
+
+#     def list_deriv_vars(self):
+
+#         inputs = ('R', 'Vtip_max')
+#         outputs = ('Omega_max',)
+
+#         return inputs, outputs
+
+
+#     def provideJ(self):
+
+#         J = np.array([[-self.Vtip_max/self.R**2*RS2RPM, RS2RPM/self.R]])
+
+#         return J
+
 
 # This Component is now no longer used, but I'll keep it around for now in case that changes.
 class Coefficients(Component):

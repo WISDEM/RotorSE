@@ -10,8 +10,20 @@ Copyright (c) NREL. All rights reserved.
 import unittest
 import numpy as np
 from commonse.utilities import check_gradient_unit_test
-from rotorse.rotoraero import Coefficients, SetupRun, RegulatedPowerCurve, AEP
+from rotorse.rotoraero import MaxTipSpeed, Coefficients, SetupRun, RegulatedPowerCurve, AEP
 from rotorse.rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, WeibullCDF, RayleighCDF
+
+
+class TestMaxTipSpeed(unittest.TestCase):
+
+    def test1(self):
+
+        ts = MaxTipSpeed()
+        ts.R = 63.0
+        ts.Vtip_max = 80.0
+
+        check_gradient_unit_test(self, ts)
+
 
 
 class TestCoefficients(unittest.TestCase):

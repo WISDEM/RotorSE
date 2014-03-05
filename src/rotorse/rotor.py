@@ -13,10 +13,11 @@ from openmdao.main.api import VariableTree, Component, Assembly
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Enum, Str, List
 
 from rotoraero import SetupRun, RegulatedPowerCurve, AEP, VarSpeedMachine, RatedConditions, AeroLoads, RPM2RS
-from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF
+from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF
 from openmdao.lib.drivers.api import Brent
 from commonse.csystem import DirectionVector
 from commonse.utilities import cosd, sind, hstack, vstack, trapz_deriv, interp_with_deriv
+from commonse.environment import PowerWind
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 from akima import Akima, akima_interp_with_derivs
 import _pBEAM
@@ -1626,6 +1627,10 @@ class RotorTS(Assembly):
     turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
     turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity', deriv_ignore=True)
+    # weibull_mean_wind_speed = Float(iotype='in')
+    cdf_reference_mean_wind_speed = Float(iotype='in')
+    cdf_reference_height_wind_speed = Float(iotype='in')
+    weibull_shape = Float(iotype='in')
 
     # --- composite sections ---
     sparT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
@@ -1718,13 +1723,14 @@ class RotorTS(Assembly):
         self.add('dt', CSMDrivetrain())
         self.add('powercurve', RegulatedPowerCurve())
         self.add('brent', Brent())
-        self.add('cdf', RayleighCDF())
+        self.add('wind', PowerWind())
+        self.add('cdf', WeibullWithMeanCDF())
         self.add('aep', AEP())
 
         self.brent.workflow.add(['powercurve'])
 
         self.driver.workflow.add(['turbineclass', 'gridsetup', 'grid', 'spline', 'geom',
-            'setup', 'analysis', 'dt', 'brent', 'cdf', 'aep'])
+            'setup', 'analysis', 'dt', 'brent', 'wind', 'cdf', 'aep'])
 
         # connections to turbineclass
         self.connect('turbine_class', 'turbineclass.turbine_class')
@@ -1807,9 +1813,20 @@ class RotorTS(Assembly):
         self.brent.add_parameter('powercurve.Vrated', low=-1e-15, high=1e15)
         self.brent.add_constraint('powercurve.residual = 0')
 
+        # connections to wind
+        self.wind.z = np.zeros(1)
+        self.wind.U = np.zeros(1)
+        self.connect('cdf_reference_mean_wind_speed', 'wind.Uref')
+        self.connect('cdf_reference_height_wind_speed', 'wind.zref')
+        self.connect('hubHt', 'wind.z[0]')
+        self.connect('shearExp', 'wind.shearExp')
+
         # connections to cdf
         self.connect('powercurve.V', 'cdf.x')
-        self.connect('turbineclass.V_mean', 'cdf.xbar')
+        # self.connect('turbineclass.V_mean', 'cdf.xbar')
+        # self.connect('weibull_mean_wind_speed', 'cdf.xbar')
+        self.connect('wind.U[0]', 'cdf.xbar')
+        self.connect('weibull_shape', 'cdf.k')
 
         # connections to aep
         self.connect('cdf.F', 'aep.CDF_V')
