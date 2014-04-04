@@ -1627,10 +1627,9 @@ class RotorTS(Assembly):
     turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
     turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity', deriv_ignore=True)
-    # weibull_mean_wind_speed = Float(iotype='in')
-    cdf_reference_mean_wind_speed = Float(iotype='in')
+    # cdf_reference_mean_wind_speed = Float(iotype='in')
     cdf_reference_height_wind_speed = Float(iotype='in')
-    weibull_shape = Float(iotype='in')
+    # weibull_shape = Float(iotype='in')
 
     # --- composite sections ---
     sparT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
@@ -1724,7 +1723,8 @@ class RotorTS(Assembly):
         self.add('powercurve', RegulatedPowerCurve())
         self.add('brent', Brent())
         self.add('wind', PowerWind())
-        self.add('cdf', WeibullWithMeanCDF())
+        # self.add('cdf', WeibullWithMeanCDF())
+        self.add('cdf', RayleighCDF())
         self.add('aep', AEP())
 
         self.brent.workflow.add(['powercurve'])
@@ -1816,17 +1816,16 @@ class RotorTS(Assembly):
         # connections to wind
         self.wind.z = np.zeros(1)
         self.wind.U = np.zeros(1)
-        self.connect('cdf_reference_mean_wind_speed', 'wind.Uref')
+        # self.connect('cdf_reference_mean_wind_speed', 'wind.Uref')
+        self.connect('turbineclass.V_mean', 'wind.Uref')
         self.connect('cdf_reference_height_wind_speed', 'wind.zref')
         self.connect('hubHt', 'wind.z[0]')
         self.connect('shearExp', 'wind.shearExp')
 
         # connections to cdf
         self.connect('powercurve.V', 'cdf.x')
-        # self.connect('turbineclass.V_mean', 'cdf.xbar')
-        # self.connect('weibull_mean_wind_speed', 'cdf.xbar')
         self.connect('wind.U[0]', 'cdf.xbar')
-        self.connect('weibull_shape', 'cdf.k')
+        # self.connect('weibull_shape', 'cdf.k')
 
         # connections to aep
         self.connect('cdf.F', 'aep.CDF_V')
