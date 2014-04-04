@@ -12,7 +12,7 @@ import math
 from openmdao.main.api import VariableTree, Component, Assembly
 from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Enum, Str, List
 
-from rotoraero import SetupRun, RegulatedPowerCurve, AEP, VarSpeedMachine, RatedConditions, AeroLoads, RPM2RS
+from rotoraero import SetupRunVarSpeed, RegulatedPowerCurve, AEP, VarSpeedMachine, RatedConditions, AeroLoads, RPM2RS
 from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF
 from openmdao.lib.drivers.api import Brent
 from commonse.csystem import DirectionVector
@@ -1718,7 +1718,7 @@ class RotorTS(Assembly):
         self.add('spline', GeometrySpline())
         self.add('geom', CCBladeGeometry())
         # self.add('tipspeed', MaxTipSpeed())
-        self.add('setup', SetupRun())
+        self.add('setup', SetupRunVarSpeed())
         self.add('analysis', CCBlade())
         self.add('dt', CSMDrivetrain())
         self.add('powercurve', RegulatedPowerCurve())

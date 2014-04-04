@@ -10,19 +10,19 @@ Copyright (c) NREL. All rights reserved.
 import unittest
 import numpy as np
 from commonse.utilities import check_gradient_unit_test
-from rotorse.rotoraero import MaxTipSpeed, Coefficients, SetupRun, RegulatedPowerCurve, AEP
+from rotorse.rotoraero import Coefficients, SetupRun, RegulatedPowerCurve, AEP
 from rotorse.rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, WeibullCDF, RayleighCDF
 
 
-class TestMaxTipSpeed(unittest.TestCase):
+# class TestMaxTipSpeed(unittest.TestCase):
 
-    def test1(self):
+#     def test1(self):
 
-        ts = MaxTipSpeed()
-        ts.R = 63.0
-        ts.Vtip_max = 80.0
+#         ts = MaxTipSpeed()
+#         ts.R = 63.0
+#         ts.Vtip_max = 80.0
 
-        check_gradient_unit_test(self, ts)
+#         check_gradient_unit_test(self, ts)
 
 
 
@@ -75,7 +75,12 @@ class TestRegulatedPowerCurve(unittest.TestCase):
         rpc.Vrated = 12.0
         rpc.R = 62.9400379597
 
-        check_gradient_unit_test(self, rpc, tol=1e-5)
+        rpc.Vcoarse = np.array([3.0, 4.15789473684, 5.31578947368, 6.47368421053, 7.63157894737, 8.78947368421, 9.94736842105, 11.1052631579, 12.2631578947, 13.4210526316, 14.5789473684, 15.7368421053, 16.8947368421, 18.0526315789, 19.2105263158, 20.3684210526, 21.5263157895, 22.6842105263, 23.8421052632, 25.0])
+        rpc.Tcoarse = np.ones_like(rpc.Vcoarse)
+        rpc.Pcoarse = np.array([22143.0308767, 166086.474653, 417300.856162, 805659.094773, 1361034.10985, 2113298.82078, 3092326.1469, 4286358.61399, 5591725.34132, 6937129.28979, 8125185.26458, 8984885.40408, 9593871.7193, 10123953.8042, 10633976.0967, 11108130.4757, 11519828.4787, 11844353.1304, 12071672.597, 12199492.6409])
+        rpc.Vrated = 11.7420119076
+
+        check_gradient_unit_test(self, rpc, tol=1e-6, display=True)
 
 
 
@@ -303,9 +308,9 @@ class TestRayleighCDF(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    # unittest.main()
 
-    # from unittest import TestSuite
-    # blah = TestSuite()
-    # blah.addTest(TestGeometrySpline('test1'))
-    # unittest.TextTestRunner().run(blah)
+    from unittest import TestSuite
+    blah = TestSuite()
+    blah.addTest(TestRegulatedPowerCurve('test1'))
+    unittest.TextTestRunner().run(blah)

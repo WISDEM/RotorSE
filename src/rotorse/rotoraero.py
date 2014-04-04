@@ -252,8 +252,48 @@ class Coefficients(Component):
 
 
 
+class SetupRunFixedSpeed(Component):
+    """determines approriate conditions to run AeroBase code across the power curve"""
 
-class SetupRun(Component):
+    control = VarTree(FixedSpeedMachine(), iotype='in')
+    npts = Int(20, iotype='in', desc='number of points to evalute aero code to generate power curve')
+
+    # outputs
+    Uhub = Array(iotype='out', units='m/s', desc='freestream velocities to run')
+    Omega = Array(iotype='out', units='rpm', desc='rotation speeds to run')
+    pitch = Array(iotype='out', units='deg', desc='pitch angles to run')
+
+    missing_deriv_policy = 'assume_zero'
+
+    def execute(self):
+
+        ctrl = self.control
+        n = self.npts
+
+        # velocity sweep
+        V = np.linspace(ctrl.Vin, ctrl.Vout, n)
+
+        # store values
+        self.Uhub = V
+        self.Omega = ctrl.Omega*np.ones_like(V)
+        self.pitch = ctrl.pitch*np.ones_like(V)
+
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('',)
+        outputs = ('',)
+
+        return inputs, outputs
+
+    def provideJ(self):
+
+        return []
+
+
+
+class SetupRunVarSpeed(Component):
     """determines approriate conditions to run AeroBase code across the power curve"""
 
     control = VarTree(VarSpeedMachine(), iotype='in')
@@ -316,6 +356,47 @@ class SetupRun(Component):
 
 
 
+
+
+class UnregulatedPowerCurve(Component):
+
+    # inputs
+    control = VarTree(FixedSpeedMachine(), iotype='in')
+    Vcoarse = Array(iotype='in', units='m/s', desc='wind speeds')
+    Pcoarse = Array(iotype='in', units='W', desc='unregulated power curve (but after drivetrain losses)')
+    Tcoarse = Array(iotype='in', units='N', desc='unregulated thrust curve')
+    npts = Int(200, iotype='in', desc='number of points for splined power curve')
+
+
+    # outputs
+    V = Array(iotype='out', units='m/s', desc='wind speeds')
+    P = Array(iotype='out', units='W', desc='power')
+
+    missing_deriv_policy = 'assume_zero'
+
+
+    def execute(self):
+
+        ctrl = self.control
+        n = self.npts
+
+        # finer power curve
+        self.V, _, _ = linspace_with_deriv(ctrl.Vin, ctrl.Vout, n)
+        spline = Akima(self.Vcoarse, self.Pcoarse)
+        self.P, dP_dV, dP_dVcoarse, dP_dPcoarse = spline.interp(self.V)
+
+        self.J = hstack([dP_dVcoarse, dP_dPcoarse])
+
+    def list_deriv_vars(self):
+
+        inputs = ('Vcoarse', 'Pcoarse')
+        outputs = ('P')
+
+        return inputs, outputs
+
+    def provideJ(self):
+
+        return self.J
 
 
 class RegulatedPowerCurve(ImplicitComponent):
@@ -485,93 +566,248 @@ class AEP(Component):
 # ---------------------
 
 
-class RotorAeroVS(Assembly):
+def common_io(assembly, varspeed, varpitch):
 
-    # --- inputs ---
-    # rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
-    control = VarTree(VarSpeedMachine(), iotype='in')
+    regulated = varspeed or varpitch
 
-    # options
-    npts_coarse_power_curve = Int(20, iotype='in', desc='number of points to evaluate aero analysis at')
-    npts_spline_power_curve = Int(200, iotype='in', desc='number of points to use in fitting spline to power curve')
-    AEP_loss_factor = Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)')
-
-    # slots (must replace)
-    geom = Slot(GeomtrySetupBase)
-    analysis = Slot(AeroBase)
-    dt = Slot(DrivetrainLossesBase)
-    cdf = Slot(CDFBase)
-
-    # --- outputs ---
-    AEP = Float(iotype='out', units='kW*h', desc='annual energy production')
-    V = Array(iotype='out', units='m/s', desc='wind speeds (power curve)')
-    P = Array(iotype='out', units='W', desc='power (power curve)')
-    ratedConditions = VarTree(RatedConditions(), iotype='out')
-    diameter = Float(iotype='out', units='m')
+    # add inputs
+    assembly.add('npts_coarse_power_curve', Int(20, iotype='in', desc='number of points to evaluate aero analysis at'))
+    assembly.add('npts_spline_power_curve', Int(200, iotype='in', desc='number of points to use in fitting spline to power curve'))
+    assembly.add('AEP_loss_factor', Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)'))
+    if varspeed:
+        assembly.add('control', VarTree(VarSpeedMachine(), iotype='in'))
+    else:
+        assembly.add('control', VarTree(FixedSpeedMachine(), iotype='in'))
 
 
-    def configure(self):
+    # add slots (must replace)
+    assembly.add('geom', Slot(GeomtrySetupBase))
+    assembly.add('analysis', Slot(AeroBase))
+    assembly.add('dt', Slot(DrivetrainLossesBase))
+    assembly.add('cdf', Slot(CDFBase))
 
-        self.add('geom', GeomtrySetupBase())
-        self.add('setup', SetupRun())
-        self.add('analysis', AeroBase())
-        self.add('dt', DrivetrainLossesBase())
-        self.add('powercurve', RegulatedPowerCurve())
-        self.add('brent', Brent())
-        self.add('cdf', CDFBase())
-        self.add('aep', AEP())
 
-        self.brent.workflow.add(['powercurve'])
+    # add outputs
+    assembly.add('AEP', Float(iotype='out', units='kW*h', desc='annual energy production'))
+    assembly.add('V', Array(iotype='out', units='m/s', desc='wind speeds (power curve)'))
+    assembly.add('P', Array(iotype='out', units='W', desc='power (power curve)'))
+    assembly.add('diameter', Float(iotype='out', units='m'))
+    if regulated:
+        assembly.add('ratedConditions', VarTree(RatedConditions(), iotype='out'))
 
-        self.driver.workflow.add(['geom', 'setup', 'analysis', 'dt', 'brent', 'cdf', 'aep'])
 
-        # connections to setup
-        self.connect('control', 'setup.control')
-        self.connect('geom.R', 'setup.R')
-        self.connect('npts_coarse_power_curve', 'setup.npts')
+def common_configure(assembly, varspeed, varpitch):
 
-        # connections to analysis
-        self.connect('setup.Uhub', 'analysis.Uhub')
-        self.connect('setup.Omega', 'analysis.Omega')
-        self.connect('setup.pitch', 'analysis.pitch')
-        self.analysis.run_case = 'power'
+    regulated = varspeed or varpitch
 
-        # connections to drivetrain
-        self.connect('analysis.P', 'dt.aeroPower')
-        self.connect('analysis.Q', 'dt.aeroTorque')
-        self.connect('analysis.T', 'dt.aeroThrust')
-        self.connect('control.ratedPower', 'dt.ratedPower')
+    # add components
+    assembly.add('geom', GeomtrySetupBase())
 
-        # connections to powercurve
-        self.connect('control', 'powercurve.control')
-        self.connect('setup.Uhub', 'powercurve.Vcoarse')
-        self.connect('dt.power', 'powercurve.Pcoarse')
-        self.connect('analysis.T', 'powercurve.Tcoarse')
-        self.connect('geom.R', 'powercurve.R')
-        self.connect('npts_spline_power_curve', 'powercurve.npts')
+    if varspeed:
+        assembly.add('setup', SetupRunVarSpeed())
+    else:
+        assembly.add('setup', SetupRunFixedSpeed())
+
+    assembly.add('analysis', AeroBase())
+    assembly.add('dt', DrivetrainLossesBase())
+
+    if varspeed or varpitch:
+        assembly.add('powercurve', RegulatedPowerCurve())
+        assembly.add('brent', Brent())
+        assembly.brent.workflow.add(['powercurve'])
+    else:
+        assembly.add('powercurve', UnregulatedPowerCurve())
+
+    assembly.add('cdf', CDFBase())
+    assembly.add('aep', AEP())
+
+    if regulated:
+        assembly.driver.workflow.add(['geom', 'setup', 'analysis', 'dt', 'brent', 'cdf', 'aep'])
+    else:
+        assembly.driver.workflow.add(['geom', 'setup', 'analysis', 'dt', 'powercurve', 'cdf', 'aep'])
+
+
+    # connections to setup
+    assembly.connect('control', 'setup.control')
+    assembly.connect('npts_coarse_power_curve', 'setup.npts')
+    if varspeed:
+        assembly.connect('geom.R', 'setup.R')
+
+
+    # connections to analysis
+    assembly.connect('setup.Uhub', 'analysis.Uhub')
+    assembly.connect('setup.Omega', 'analysis.Omega')
+    assembly.connect('setup.pitch', 'analysis.pitch')
+    assembly.analysis.run_case = 'power'
+
+
+    # connections to drivetrain
+    assembly.connect('analysis.P', 'dt.aeroPower')
+    assembly.connect('analysis.Q', 'dt.aeroTorque')
+    assembly.connect('analysis.T', 'dt.aeroThrust')
+    assembly.connect('control.ratedPower', 'dt.ratedPower')
+
+
+    # connections to powercurve
+    assembly.connect('control', 'powercurve.control')
+    assembly.connect('setup.Uhub', 'powercurve.Vcoarse')
+    assembly.connect('dt.power', 'powercurve.Pcoarse')
+    assembly.connect('analysis.T', 'powercurve.Tcoarse')
+    assembly.connect('npts_spline_power_curve', 'powercurve.npts')
+
+    if regulated:
+        assembly.connect('geom.R', 'powercurve.R')
 
         # setup Brent method to find rated speed
-        self.connect('control.Vin', 'brent.lower_bound')
-        self.connect('control.Vout', 'brent.upper_bound')
-        self.brent.add_parameter('powercurve.Vrated', low=-1e-15, high=1e15)
-        self.brent.add_constraint('powercurve.residual = 0')
-
-        # connections to cdf
-        self.connect('powercurve.V', 'cdf.x')
-
-        # connections to aep
-        self.connect('cdf.F', 'aep.CDF_V')
-        self.connect('powercurve.P', 'aep.P')
-        self.connect('AEP_loss_factor', 'aep.lossFactor')
+        assembly.connect('control.Vin', 'brent.lower_bound')
+        assembly.connect('control.Vout', 'brent.upper_bound')
+        assembly.brent.add_parameter('powercurve.Vrated', low=-1e-15, high=1e15)
+        assembly.brent.add_constraint('powercurve.residual = 0')
 
 
-        # connections to outputs
-        self.connect('powercurve.V', 'V')
-        self.connect('powercurve.P', 'P')
-        self.connect('aep.AEP', 'AEP')
-        self.connect('powercurve.ratedConditions', 'ratedConditions')
-        self.connect('2*geom.R', 'diameter')
+    # connections to cdf
+    assembly.connect('powercurve.V', 'cdf.x')
+
+
+    # connections to aep
+    assembly.connect('cdf.F', 'aep.CDF_V')
+    assembly.connect('powercurve.P', 'aep.P')
+    assembly.connect('AEP_loss_factor', 'aep.lossFactor')
+
+
+    # connections to outputs
+    assembly.connect('powercurve.V', 'V')
+    assembly.connect('powercurve.P', 'P')
+    assembly.connect('aep.AEP', 'AEP')
+    assembly.connect('2*geom.R', 'diameter')
+    if regulated:
+        assembly.connect('powercurve.ratedConditions', 'ratedConditions')
 
 
 
+class RotorAeroVSVP(Assembly):
+
+    def configure(self):
+        varspeed = True
+        varpitch = True
+        common_io(self, varspeed, varpitch)
+        common_configure(self, varspeed, varpitch)
+
+
+class RotorAeroVSFP(Assembly):
+
+    def configure(self):
+        varspeed = True
+        varpitch = False
+        common_io(self, varspeed, varpitch)
+        common_configure(self, varspeed, varpitch)
+
+
+class RotorAeroFSVP(Assembly):
+
+    def configure(self):
+        varspeed = False
+        varpitch = True
+        common_io(self, varspeed, varpitch)
+        common_configure(self, varspeed, varpitch)
+
+
+class RotorAeroFSFP(Assembly):
+
+    def configure(self):
+        varspeed = False
+        varpitch = False
+        common_io(self, varspeed, varpitch)
+        common_configure(self, varspeed, varpitch)
+
+
+
+
+
+# class RotorAeroVS(Assembly):
+
+#     # --- inputs ---
+#     # rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
+#     control = VarTree(VarSpeedMachine(), iotype='in')
+
+#     # options
+#     npts_coarse_power_curve = Int(20, iotype='in', desc='number of points to evaluate aero analysis at')
+#     npts_spline_power_curve = Int(200, iotype='in', desc='number of points to use in fitting spline to power curve')
+#     AEP_loss_factor = Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)')
+
+#     # slots (must replace)
+#     geom = Slot(GeomtrySetupBase)
+#     analysis = Slot(AeroBase)
+#     dt = Slot(DrivetrainLossesBase)
+#     cdf = Slot(CDFBase)
+
+#     # --- outputs ---
+#     AEP = Float(iotype='out', units='kW*h', desc='annual energy production')
+#     V = Array(iotype='out', units='m/s', desc='wind speeds (power curve)')
+#     P = Array(iotype='out', units='W', desc='power (power curve)')
+#     ratedConditions = VarTree(RatedConditions(), iotype='out')
+#     diameter = Float(iotype='out', units='m')
+
+
+#     def configure(self):
+
+#         self.add('geom', GeomtrySetupBase())
+#         self.add('setup', SetupRun())
+#         self.add('analysis', AeroBase())
+#         self.add('dt', DrivetrainLossesBase())
+#         self.add('powercurve', RegulatedPowerCurve())
+#         self.add('brent', Brent())
+#         self.add('cdf', CDFBase())
+#         self.add('aep', AEP())
+
+#         self.brent.workflow.add(['powercurve'])
+
+#         self.driver.workflow.add(['geom', 'setup', 'analysis', 'dt', 'brent', 'cdf', 'aep'])
+
+#         # connections to setup
+#         self.connect('control', 'setup.control')
+#         self.connect('geom.R', 'setup.R')
+#         self.connect('npts_coarse_power_curve', 'setup.npts')
+
+#         # connections to analysis
+#         self.connect('setup.Uhub', 'analysis.Uhub')
+#         self.connect('setup.Omega', 'analysis.Omega')
+#         self.connect('setup.pitch', 'analysis.pitch')
+#         self.analysis.run_case = 'power'
+
+#         # connections to drivetrain
+#         self.connect('analysis.P', 'dt.aeroPower')
+#         self.connect('analysis.Q', 'dt.aeroTorque')
+#         self.connect('analysis.T', 'dt.aeroThrust')
+#         self.connect('control.ratedPower', 'dt.ratedPower')
+
+#         # connections to powercurve
+#         self.connect('control', 'powercurve.control')
+#         self.connect('setup.Uhub', 'powercurve.Vcoarse')
+#         self.connect('dt.power', 'powercurve.Pcoarse')
+#         self.connect('analysis.T', 'powercurve.Tcoarse')
+#         self.connect('geom.R', 'powercurve.R')
+#         self.connect('npts_spline_power_curve', 'powercurve.npts')
+
+#         # setup Brent method to find rated speed
+#         self.connect('control.Vin', 'brent.lower_bound')
+#         self.connect('control.Vout', 'brent.upper_bound')
+#         self.brent.add_parameter('powercurve.Vrated', low=-1e-15, high=1e15)
+#         self.brent.add_constraint('powercurve.residual = 0')
+
+#         # connections to cdf
+#         self.connect('powercurve.V', 'cdf.x')
+
+#         # connections to aep
+#         self.connect('cdf.F', 'aep.CDF_V')
+#         self.connect('powercurve.P', 'aep.P')
+#         self.connect('AEP_loss_factor', 'aep.lossFactor')
+
+
+#         # connections to outputs
+#         self.connect('powercurve.V', 'V')
+#         self.connect('powercurve.P', 'P')
+#         self.connect('aep.AEP', 'AEP')
+#         self.connect('powercurve.ratedConditions', 'ratedConditions')
+#         self.connect('2*geom.R', 'diameter')
 

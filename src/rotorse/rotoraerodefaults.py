@@ -9,12 +9,13 @@ Copyright (c) NREL. All rights reserved.
 
 import numpy as np
 from math import pi, gamma
-from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum
+from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum, VarTree, Slot
+from openmdao.main.api import Component, Assembly
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
-from openmdao.main.api import Component
 from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
-from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase
+from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase, \
+    VarSpeedMachine, FixedSpeedMachine, RatedConditions, common_configure
 from akima import Akima
 
 
@@ -443,9 +444,171 @@ class RayleighCDF(CDFBase):
 
         x = self.x
         xbar = self.xbar
-        J = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2*xbar**2))
+        J = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2.0*xbar**2))
 
         return J
+
+
+
+def common_io_with_ccblade(assembly, varspeed, varpitch, cdf_type):
+
+    regulated = varspeed or varpitch
+
+    # add inputs
+    assembly.add('r_af', Array(iotype='in', units='m', desc='locations where airfoils are defined on unit radius'))
+    assembly.add('r_max_chord', Float(iotype='in'))
+    assembly.add('chord_sub', Array(iotype='in', units='m', desc='chord at control points'))
+    assembly.add('theta_sub', Array(iotype='in', units='deg', desc='twist at control points'))
+    assembly.add('Rhub', Float(iotype='in', units='m', desc='hub radius'))
+    assembly.add('Rtip', Float(iotype='in', units='m', desc='tip radius'))
+    assembly.add('hubHt', Float(iotype='in', units='m'))
+    assembly.add('precone', Float(0.0, iotype='in', desc='precone angle', units='deg'))
+    assembly.add('tilt', Float(0.0, iotype='in', desc='shaft tilt', units='deg'))
+    assembly.add('yaw', Float(0.0, iotype='in', desc='yaw error', units='deg'))
+    assembly.add('airfoil_files', List(Str, iotype='in', desc='names of airfoil file'))
+    assembly.add('idx_cylinder', Int(iotype='in', desc='location where cylinder section ends on unit radius'))
+    assembly.add('B', Int(3, iotype='in', desc='number of blades'))
+    assembly.add('rho', Float(1.225, iotype='in', units='kg/m**3', desc='density of air'))
+    assembly.add('mu', Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air'))
+    assembly.add('shearExp', Float(0.2, iotype='in', desc='shear exponent'))
+    assembly.add('nSector', Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power'))
+    assembly.add('npts_coarse_power_curve', Int(20, iotype='in', desc='number of points to evaluate aero analysis at'))
+    assembly.add('npts_spline_power_curve', Int(200, iotype='in', desc='number of points to use in fitting spline to power curve'))
+    assembly.add('AEP_loss_factor', Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)'))
+
+    if varspeed:
+        assembly.add('control', VarTree(VarSpeedMachine(), iotype='in'))
+    else:
+        assembly.add('control', VarTree(FixedSpeedMachine(), iotype='in'))
+
+    assembly.add('drivetrainType', Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in'))
+    assembly.add('cdf_mean_wind_speed', Float(iotype='in', units='m/s', desc='mean wind speed of site cumulative distribution function'))
+
+    if cdf_type == 'weibull':
+        assembly.add('weibull_shape_factor', Float(iotype='in', desc='(shape factor of weibull distribution)'))
+
+    # outputs
+    assembly.add('AEP', Float(iotype='out', units='kW*h', desc='annual energy production'))
+    assembly.add('V', Array(iotype='out', units='m/s', desc='wind speeds (power curve)'))
+    assembly.add('P', Array(iotype='out', units='W', desc='power (power curve)'))
+    assembly.add('diameter', Float(iotype='out', units='m'))
+    if regulated:
+        assembly.add('ratedConditions', VarTree(RatedConditions(), iotype='out'))
+
+
+
+def common_configure_with_ccblade(assembly, varspeed, varpitch, cdf_type):
+    common_configure(assembly, varspeed, varpitch)
+
+    # put in parameterization for CCBlade
+    assembly.add('spline', GeometrySpline())
+    assembly.replace('geom', CCBladeGeometry())
+    assembly.replace('analysis', CCBlade())
+    assembly.replace('dt', CSMDrivetrain())
+    if cdf_type == 'rayleigh':
+        assembly.replace('cdf', RayleighCDF())
+    elif cdf_type == 'weibull':
+        assembly.replace('cdf', WeibullWithMeanCDF())
+
+
+    # add spline to workflow
+    assembly.driver.workflow.add('spline')
+
+    # connections to spline
+    assembly.connect('r_af', 'spline.r_af')
+    assembly.connect('r_max_chord', 'spline.r_max_chord')
+    assembly.connect('chord_sub', 'spline.chord_sub')
+    assembly.connect('theta_sub', 'spline.theta_sub')
+    assembly.connect('idx_cylinder', 'spline.idx_cylinder')
+    assembly.connect('Rhub', 'spline.Rhub')
+    assembly.connect('Rtip', 'spline.Rtip')
+
+    # connections to geom
+    assembly.connect('Rtip', 'geom.Rtip')
+    assembly.connect('precone', 'geom.precone')
+
+    # connections to analysis
+    assembly.connect('spline.r', 'analysis.r')
+    assembly.connect('spline.chord', 'analysis.chord')
+    assembly.connect('spline.theta', 'analysis.theta')
+    assembly.connect('Rhub', 'analysis.Rhub')
+    assembly.connect('Rtip', 'analysis.Rtip')
+    assembly.connect('hubHt', 'analysis.hubHt')
+    assembly.connect('precone', 'analysis.precone')
+    assembly.connect('tilt', 'analysis.tilt')
+    assembly.connect('yaw', 'analysis.yaw')
+    assembly.connect('airfoil_files', 'analysis.airfoil_files')
+    assembly.connect('B', 'analysis.B')
+    assembly.connect('rho', 'analysis.rho')
+    assembly.connect('mu', 'analysis.mu')
+    assembly.connect('shearExp', 'analysis.shearExp')
+    assembly.connect('nSector', 'analysis.nSector')
+
+    # connections to dt
+    assembly.connect('drivetrainType', 'dt.drivetrainType')
+    assembly.dt.missing_deriv_policy = 'assume_zero'  # TODO: openmdao bug remove later
+
+    # connnections to cdf
+    assembly.connect('cdf_mean_wind_speed', 'cdf.xbar')
+    if cdf_type == 'weibull':
+        assembly.connect('weibull_shape_factor', 'cdf.k')
+
+
+
+class RotorAeroVSVPWithCCBlade(Assembly):
+
+    def __init__(self, cdf_type='weibull'):
+        self.cdf_type = cdf_type
+        super(RotorAeroVSVPWithCCBlade, self).__init__()
+
+    def configure(self):
+        varspeed = True
+        varpitch = True
+        common_io_with_ccblade(self, varspeed, varpitch, self.cdf_type)
+        common_configure_with_ccblade(self, varspeed, varpitch, self.cdf_type)
+
+
+class RotorAeroVSFPWithCCBlade(Assembly):
+
+    def __init__(self, cdf_type='weibull'):
+        self.cdf_type = cdf_type
+        super(RotorAeroVSFPWithCCBlade, self).__init__()
+
+    def configure(self):
+        varspeed = True
+        varpitch = False
+        common_io_with_ccblade(self, varspeed, varpitch, self.cdf_type)
+        common_configure_with_ccblade(self, varspeed, varpitch, self.cdf_type)
+
+
+
+class RotorAeroFSVPWithCCBlade(Assembly):
+
+    def __init__(self, cdf_type='weibull'):
+        self.cdf_type = cdf_type
+        super(RotorAeroFSVPWithCCBlade, self).__init__()
+
+    def configure(self):
+        varspeed = False
+        varpitch = True
+        common_io_with_ccblade(self, varspeed, varpitch, self.cdf_type)
+        common_configure_with_ccblade(self, varspeed, varpitch, self.cdf_type)
+
+
+
+class RotorAeroFSFPWithCCBlade(Assembly):
+
+    def __init__(self, cdf_type='weibull'):
+        self.cdf_type = cdf_type
+        super(RotorAeroFSFPWithCCBlade, self).__init__()
+
+    def configure(self):
+        varspeed = False
+        varpitch = False
+        common_io_with_ccblade(self, varspeed, varpitch, self.cdf_type)
+        common_configure_with_ccblade(self, varspeed, varpitch, self.cdf_type)
+
+
 
 
 
