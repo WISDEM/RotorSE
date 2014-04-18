@@ -33,8 +33,8 @@ class VarSpeedMachine(VariableTree):
     Vin = Float(units='m/s', desc='cut-in wind speed')
     Vout = Float(units='m/s', desc='cut-out wind speed')
     ratedPower = Float(units='W', desc='rated power')
-    minOmega = Float(units='deg', desc='minimum allowed rotor rotation speed')
-    maxOmega = Float(units='deg', desc='maximum allowed rotor rotation speed')
+    minOmega = Float(units='rpm', desc='minimum allowed rotor rotation speed')
+    maxOmega = Float(units='rpm', desc='maximum allowed rotor rotation speed')
     tsr = Float(desc='tip-speed ratio in Region 2 (should be optimized externally)')
     pitch = Float(units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
@@ -282,7 +282,7 @@ class SetupRunFixedSpeed(Component):
 
     def list_deriv_vars(self):
 
-        inputs = ('',)
+        inputs = ('',)  # everything is constant
         outputs = ('',)
 
         return inputs, outputs
