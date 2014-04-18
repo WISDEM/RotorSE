@@ -10,8 +10,9 @@ Copyright (c) NREL. All rights reserved.
 import unittest
 import numpy as np
 from commonse.utilities import check_gradient_unit_test
-from rotorse.rotoraero import Coefficients, SetupRun, RegulatedPowerCurve, AEP
-from rotorse.rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, WeibullCDF, RayleighCDF
+from rotorse.rotoraero import Coefficients, SetupRunVarSpeed, RegulatedPowerCurve, AEP
+from rotorse.rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, \
+    WeibullCDF, WeibullWithMeanCDF, RayleighCDF
 
 
 # class TestMaxTipSpeed(unittest.TestCase):
@@ -43,11 +44,11 @@ class TestCoefficients(unittest.TestCase):
 
 
 
-class TestSetupRun(unittest.TestCase):
+class TestSetupRunVarSpeed(unittest.TestCase):
 
     def test1(self):
 
-        sr = SetupRun()
+        sr = SetupRunVarSpeed()
         sr.control.Vin = 3.0
         sr.control.Vout = 25.0
         sr.control.tsr = 7.55
@@ -80,7 +81,8 @@ class TestRegulatedPowerCurve(unittest.TestCase):
         rpc.Pcoarse = np.array([22143.0308767, 166086.474653, 417300.856162, 805659.094773, 1361034.10985, 2113298.82078, 3092326.1469, 4286358.61399, 5591725.34132, 6937129.28979, 8125185.26458, 8984885.40408, 9593871.7193, 10123953.8042, 10633976.0967, 11108130.4757, 11519828.4787, 11844353.1304, 12071672.597, 12199492.6409])
         rpc.Vrated = 11.7420119076
 
-        check_gradient_unit_test(self, rpc, tol=1e-6, display=True)
+        # check_gradient_unit_test(self, rpc, tol=1e-6, display=True)
+        check_gradient_unit_test(self, rpc, tol=3e-5)
 
 
 
@@ -294,6 +296,19 @@ class TestWeibullCDF(unittest.TestCase):
         check_gradient_unit_test(self, wcdf)
 
 
+class TestWeibullWithMeanCDF(unittest.TestCase):
+
+    def test1(self):
+
+        wcdf = WeibullWithMeanCDF()
+        wcdf.xbar = 8.0
+        wcdf.k = 2.2
+        wcdf.x = np.linspace(1.0, 15.0, 50)
+
+        check_gradient_unit_test(self, wcdf)
+
+
+
 class TestRayleighCDF(unittest.TestCase):
 
     def test1(self):
@@ -308,9 +323,9 @@ class TestRayleighCDF(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    # unittest.main()
+    unittest.main()
 
-    from unittest import TestSuite
-    blah = TestSuite()
-    blah.addTest(TestRegulatedPowerCurve('test1'))
-    unittest.TextTestRunner().run(blah)
+    # from unittest import TestSuite
+    # blah = TestSuite()
+    # blah.addTest(TestRegulatedPowerCurve('test1'))
+    # unittest.TextTestRunner().run(blah)
