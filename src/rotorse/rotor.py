@@ -1812,6 +1812,7 @@ class RotorTS(Assembly):
         self.connect('control.Vout', 'brent.upper_bound')
         self.brent.add_parameter('powercurve.Vrated', low=-1e-15, high=1e15)
         self.brent.add_constraint('powercurve.residual = 0')
+        self.brent.invalid_bracket_return = 1.0
 
         # connections to wind
         self.wind.z = np.zeros(1)
