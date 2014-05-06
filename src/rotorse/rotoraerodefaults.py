@@ -41,6 +41,7 @@ class GeometrySpline(Component):
     r = Array(iotype='out', units='m', desc='chord at airfoil locations')
     chord = Array(iotype='out', units='m', desc='chord at airfoil locations')
     theta = Array(iotype='out', units='deg', desc='twist at airfoil locations')
+    precurve = Array(iotype='out', units='deg', desc='precurve at airfoil locations')  # TODO: for now I'm forcing this to zero, just for backwards compatibility
     r_af_spacing = Array(iotype='out')
 
 
@@ -76,6 +77,8 @@ class GeometrySpline(Component):
         self.theta = np.concatenate([theta_inner, theta_outer])
 
         self.r_af_spacing = np.diff(self.r_af)
+
+        self.precurve = np.zeros_like(self.chord)
 
         # gradients (TODO: rethink these a bit or use Tapenade.)
         n = len(self.r_af)
@@ -142,11 +145,15 @@ class GeometrySpline(Component):
 class CCBladeGeometry(GeomtrySetupBase):
 
     Rtip = Float(iotype='in', units='m', desc='tip radius')
+    precurveTip = Float(0.0, iotype='in', units='m', desc='tip radius')
     precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
 
     def execute(self):
 
-        self.R = self.Rtip*cosd(self.precone)  # no precurvature
+        # self.R = self.Rtip*cosd(self.precone)  # no precurvature
+        self.R = self.Rtip*cosd(self.precone) + self.precurveTip*sind(self.precone)
+
+        # TODO: redo gradients
 
     def list_deriv_vars(self):
 
@@ -177,6 +184,10 @@ class CCBlade(AeroBase):
     tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
     yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
 
+    # TODO: I've not hooked up the gradients for these ones yet.
+    precurve = Array([0], iotype='in', units='m', desc='precurve at each section')
+    precurveTip = Float(0.0, iotype='in', units='m', desc='precurve at tip')
+
     # parameters
     airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
     B = Int(3, iotype='in', desc='number of blades')
@@ -203,8 +214,8 @@ class CCBlade(AeroBase):
 
         self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, af, self.Rhub, self.Rtip, self.B,
             self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
-            self.nSector, tiploss=self.tiploss, hubloss=self.hubloss, wakerotation=self.wakerotation,
-            usecd=self.usecd, derivatives=True)
+            self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
+            wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
 
 
         if self.run_case == 'power':
@@ -555,6 +566,7 @@ def common_configure_with_ccblade(assembly, varspeed, varpitch, cdf_type):
     assembly.connect('spline.r', 'analysis.r')
     assembly.connect('spline.chord', 'analysis.chord')
     assembly.connect('spline.theta', 'analysis.theta')
+    assembly.connect('spline.precurve', 'analysis.precurve')
     assembly.connect('Rhub', 'analysis.Rhub')
     assembly.connect('Rtip', 'analysis.Rtip')
     assembly.connect('hubHt', 'analysis.hubHt')
