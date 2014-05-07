@@ -31,10 +31,10 @@ module precomp
 
     implicit none
 
-!     integer, parameter   :: ReKi = selected_real_kind(15, 307)
-    real(8), parameter   :: pi = 3.141592654
-    real(8), parameter   :: r2d = 57.295779513
-    real(8), parameter   :: eps = 1.0e-10
+    integer, parameter :: dbp = kind(0.d0)
+    real(dbp), parameter   :: pi = 3.14159265358979323846_dbp
+    real(dbp), parameter   :: r2d = 57.29577951308232_dbp
+    real(dbp), parameter   :: eps = 1.0d-10
 
 contains
 
@@ -52,39 +52,40 @@ contains
 
 
         implicit none
+        integer, parameter :: dbp = kind(0.d0)
 
 
         ! ----- inputs ------
         ! geometry
-        real(8), intent(in) :: chord        ! section chord length (m)
-        real(8), intent(in) :: tw_aero_d    ! section twist angle (deg)
-        real(8), intent(in) :: tw_prime_d   ! derivative of section twist angle w.r.t. span location (deg/m)
-        real(8), intent(in) :: le_loc       ! leading edge location relative to reference axis (normalized by chord)
+        real(dbp), intent(in) :: chord        ! section chord length (m)
+        real(dbp), intent(in) :: tw_aero_d    ! section twist angle (deg)
+        real(dbp), intent(in) :: tw_prime_d   ! derivative of section twist angle w.r.t. span location (deg/m)
+        real(dbp), intent(in) :: le_loc       ! leading edge location relative to reference axis (normalized by chord)
 
         ! airfoil
-        real(8), intent(in), dimension(n_af_nodes)  :: xnode, ynode  ! x, y airfoil coordinates starting at leading edge traversing upper surface and back around lower surface
+        real(dbp), intent(in), dimension(n_af_nodes)  :: xnode, ynode  ! x, y airfoil coordinates starting at leading edge traversing upper surface and back around lower surface
 
         ! material properties
-        real(8), intent(in), dimension(n_materials) :: e1, e2, g12, anu12, density  ! material properties: E1, E2, G12, Nu12, density
+        real(dbp), intent(in), dimension(n_materials) :: e1, e2, g12, anu12, density  ! material properties: E1, E2, G12, Nu12, density
 
         ! laminates upper
-        real(8), intent(in), dimension(n_sctU+1)        :: xsec_nodeU  ! normalized chord location of sector boundaries
+        real(dbp), intent(in), dimension(n_sctU+1)        :: xsec_nodeU  ! normalized chord location of sector boundaries
         integer, intent(in), dimension(n_sctU)          :: n_laminaU  ! number of lamina in each sector
         integer, intent(in), dimension(n_laminaTotalU)  :: n_pliesU, mat_lamU  ! number of plies, material id for the lamina
-        real(8), intent(in), dimension(n_laminaTotalU)  :: t_lamU, tht_lamU  ! thickness (m) and orientation (deg) for the lamina
+        real(dbp), intent(in), dimension(n_laminaTotalU)  :: t_lamU, tht_lamU  ! thickness (m) and orientation (deg) for the lamina
 
         ! laminates lower
-        real(8), intent(in), dimension(n_sctL+1)        :: xsec_nodeL  ! all the same quantities on the lower surface
+        real(dbp), intent(in), dimension(n_sctL+1)        :: xsec_nodeL  ! all the same quantities on the lower surface
         integer, intent(in), dimension(n_sctL)          :: n_laminaL
         integer, intent(in), dimension(n_laminaTotalL)  :: n_pliesL, mat_lamL
-        real(8), intent(in), dimension(n_laminaTotalL)  :: t_lamL, tht_lamL
+        real(dbp), intent(in), dimension(n_laminaTotalL)  :: t_lamL, tht_lamL
 
         ! laminates web
         integer :: nweb  ! required to specify this b.c. of a bug in f2py
-        real(8), intent(in), dimension(nwebin) :: loc_web  ! same quantities for the webs
+        real(dbp), intent(in), dimension(nwebin) :: loc_web  ! same quantities for the webs
         integer, intent(in), dimension(nwebin) :: n_laminaW
         integer, intent(in), dimension(n_laminaTotalW) :: n_pliesW, mat_lamW
-        real(8), intent(in), dimension(n_laminaTotalW) :: t_lamW, tht_lamW
+        real(dbp), intent(in), dimension(n_laminaTotalW) :: t_lamW, tht_lamW
         ! -------------
 
         ! implicitly assigned inputs (length of arrays)
@@ -94,38 +95,38 @@ contains
 
 
         ! outputs
-        real(8), intent(out) :: eifbar      ! EI_flap, Section flap bending stiffness about the YE axis (Nm2)
-        real(8), intent(out) :: eilbar      ! EI_lag, Section lag (edgewise) bending stiffness about the XE axis (Nm2)
-        real(8), intent(out) :: gjbar       ! GJ, Section torsion stiffness (Nm2)
-        real(8), intent(out) :: eabar       ! EA, Section axial stiffness (N)
-        real(8), intent(out) :: eiflbar     ! S_f, Coupled flap-lag stiffness with respect to the XE-YE frame (Nm2)
-        real(8), intent(out) :: sfbar       ! S_airfoil, Coupled axial-flap stiffness with respect to the XE-YE frame (Nm)
-        real(8), intent(out) :: slbar       ! S_al, Coupled axial-lag stiffness with respect to the XE-YE frame (Nm.)
-        real(8), intent(out) :: sftbar      ! S_ft, Coupled flap-torsion stiffness with respect to the XE-YE frame (Nm2)
-        real(8), intent(out) :: sltbar      ! S_lt, Coupled lag-torsion stiffness with respect to the XE-YE frame (Nm2)
-        real(8), intent(out) :: satbar      ! S_at, Coupled axial-torsion stiffness (Nm)
-        real(8), intent(out) :: z_sc        ! X_sc, X-coordinate of the shear-center offset with respect to the XR-YR axes (m)
-        real(8), intent(out) :: y_sc        ! Y_sc, Chordwise offset of the section shear-center with respect to the reference frame, XR-YR (m)
-        real(8), intent(out) :: ztc_ref     ! X_tc, X-coordinate of the tension-center offset with respect to the XR-YR axes (m)
-        real(8), intent(out) :: ytc_ref     ! Y_tc, Chordwise offset of the section tension-center with respect to the XR-YR axes (m)
-        real(8), intent(out) :: mass        ! Mass, Section mass per unit length (Kg/m)
-        real(8), intent(out) :: iflap_eta   ! Flap_iner, Section flap inertia about the YG axis per unit length (Kg-m)
-        real(8), intent(out) :: ilag_zeta   ! Lag_iner, Section lag inertia about the XG axis per unit length (Kg-m)
-        real(8), intent(out) :: tw_iner     ! Tw_iner, Orientation of the section principal inertia axes with respect the blade reference plane, θ (deg)
-        real(8), intent(out) :: zcm_ref     ! X_cm, X-coordinate of the center-of-mass offset with respect to the XR-YR axes (m)
-        real(8), intent(out) :: ycm_ref     ! Y_cm, Chordwise offset of the section center of mass with respect to the XR-YR axes (m)
+        real(dbp), intent(out) :: eifbar      ! EI_flap, Section flap bending stiffness about the YE axis (Nm2)
+        real(dbp), intent(out) :: eilbar      ! EI_lag, Section lag (edgewise) bending stiffness about the XE axis (Nm2)
+        real(dbp), intent(out) :: gjbar       ! GJ, Section torsion stiffness (Nm2)
+        real(dbp), intent(out) :: eabar       ! EA, Section axial stiffness (N)
+        real(dbp), intent(out) :: eiflbar     ! S_f, Coupled flap-lag stiffness with respect to the XE-YE frame (Nm2)
+        real(dbp), intent(out) :: sfbar       ! S_airfoil, Coupled axial-flap stiffness with respect to the XE-YE frame (Nm)
+        real(dbp), intent(out) :: slbar       ! S_al, Coupled axial-lag stiffness with respect to the XE-YE frame (Nm.)
+        real(dbp), intent(out) :: sftbar      ! S_ft, Coupled flap-torsion stiffness with respect to the XE-YE frame (Nm2)
+        real(dbp), intent(out) :: sltbar      ! S_lt, Coupled lag-torsion stiffness with respect to the XE-YE frame (Nm2)
+        real(dbp), intent(out) :: satbar      ! S_at, Coupled axial-torsion stiffness (Nm)
+        real(dbp), intent(out) :: z_sc        ! X_sc, X-coordinate of the shear-center offset with respect to the XR-YR axes (m)
+        real(dbp), intent(out) :: y_sc        ! Y_sc, Chordwise offset of the section shear-center with respect to the reference frame, XR-YR (m)
+        real(dbp), intent(out) :: ztc_ref     ! X_tc, X-coordinate of the tension-center offset with respect to the XR-YR axes (m)
+        real(dbp), intent(out) :: ytc_ref     ! Y_tc, Chordwise offset of the section tension-center with respect to the XR-YR axes (m)
+        real(dbp), intent(out) :: mass        ! Mass, Section mass per unit length (Kg/m)
+        real(dbp), intent(out) :: iflap_eta   ! Flap_iner, Section flap inertia about the YG axis per unit length (Kg-m)
+        real(dbp), intent(out) :: ilag_zeta   ! Lag_iner, Section lag inertia about the XG axis per unit length (Kg-m)
+        real(dbp), intent(out) :: tw_iner     ! Tw_iner, Orientation of the section principal inertia axes with respect the blade reference plane, θ (deg)
+        real(dbp), intent(out) :: zcm_ref     ! X_cm, X-coordinate of the center-of-mass offset with respect to the XR-YR axes (m)
+        real(dbp), intent(out) :: ycm_ref     ! Y_cm, Chordwise offset of the section center of mass with respect to the XR-YR axes (m)
 
         ! local
-        real(8) :: tw_aero, tw_prime, tphip
+        real(dbp) :: tw_aero, tw_prime, tphip
 
         integer, dimension(:, :), allocatable :: n_laminas
-        real(8), dimension(:, :, :), allocatable :: tht_lam, tlam
+        real(dbp), dimension(:, :, :), allocatable :: tht_lam, tlam
         integer, dimension(:, :, :), allocatable :: mat_id
 
         integer :: max_sectors, max_laminates
         integer :: allocateStatus
 
-        real(8), dimension(nweb, 6) :: tht_wlam, twlam
+        real(dbp), dimension(nweb, 6) :: tht_wlam, twlam
         integer, dimension(nweb, 6) :: wmat_id
         integer, dimension(nweb) :: n_weblams
 
@@ -133,13 +134,13 @@ contains
 
         integer :: webs_exist, tenode_u, tenode_l
 
-        real(8) :: ieta1, izeta1, iepz, iemz, ipp, &
+        real(dbp) :: ieta1, izeta1, iepz, iemz, ipp, &
             iqq, ipq, iflap_sc, ilag_sc, ifl_sc, iflap_cm, ilag_cm, ifl_cm, &
             m_inertia, r_inertia
 
-        real(8) :: x, xl, xr, y, yl, yr
+        real(dbp) :: x, xl, xr, y, yl, yr
 
-        real(8) :: sths, s2ths, cths, c2ths, em_stiff, er_stiff, y_tc, z_tc, &
+        real(dbp) :: sths, s2ths, cths, c2ths, em_stiff, er_stiff, y_tc, z_tc, &
             sigm2, ycm_sc, zcm_sc, sigma, tbar, q11t, q11yt, q11zt, dtbar, &
             q2bar, zbart, ybart, tbart, q11ysqt, q11zsqt, q11yzt, rhot, rhoyt, &
             rhozt, rhoysqt, rhozsqt, rhoyzt, pflap_stff, plag_stff, &
@@ -156,14 +157,14 @@ contains
 
 
         ! ---- Embed ----
-        real(8), dimension(n_af_nodes+20) :: xnode_u, xnode_l, ynode_u, ynode_l
+        real(dbp), dimension(n_af_nodes+20) :: xnode_u, xnode_l, ynode_u, ynode_l
         integer :: newnode, nodes_u, nodes_l
         ! --------
 
         ! -- seg info ---
-        real(8), dimension(nweb) :: weby_u, weby_l
-        real(8), dimension(:, :), allocatable :: xsec_node
-        real(8), dimension(n_af_nodes+20) :: yseg, zseg, wseg, sthseg, &
+        real(dbp), dimension(nweb) :: weby_u, weby_l
+        real(dbp), dimension(:, :), allocatable :: xsec_node
+        real(dbp), dimension(n_af_nodes+20) :: yseg, zseg, wseg, sthseg, &
             cthseg, s2thseg, c2thseg
 
         integer :: nseg, nseg_l, nseg_u, nseg_p, ndl1, ndu1
@@ -172,9 +173,9 @@ contains
         ! -----------
 
         ! --- QBars ----
-        real(8) :: rho_m, thp, qbar11, qbar22, qbar12, qbar16, qbar26, qbar66
-        real(8), dimension(n_materials) :: q11, q22, q12, q66, anud  ! composite matrices
-        real(8), dimension(2, 2) :: qtil
+        real(dbp) :: rho_m, thp, qbar11, qbar22, qbar12, qbar16, qbar26, qbar66
+        real(dbp), dimension(n_materials) :: q11, q22, q12, q66, anud  ! composite matrices
+        real(dbp), dimension(2, 2) :: qtil
         integer :: mat
         ! -------------
 
@@ -194,18 +195,18 @@ contains
         ALLOCATE(xsec_node(2, max_sectors+1), STAT = allocateStatus)
            IF (allocateStatus /= 0) STOP "*** xsec_node not enough memory ***"
 
-        xsec_node = 0
-        xnode_u = 0
-        xnode_l = 0
-        ynode_u = 0
-        ynode_l = 0
-        yseg = 0
-        zseg = 0
-        wseg = 0
-        sthseg = 0
-        cthseg = 0
-        s2thseg = 0
-        c2thseg = 0
+        xsec_node = 0.0_dbp
+        xnode_u = 0.0_dbp
+        xnode_l = 0.0_dbp
+        ynode_u = 0.0_dbp
+        ynode_l = 0.0_dbp
+        yseg = 0.0_dbp
+        zseg = 0.0_dbp
+        wseg = 0.0_dbp
+        sthseg = 0.0_dbp
+        cthseg = 0.0_dbp
+        s2thseg = 0.0_dbp
+        c2thseg = 0.0_dbp
         isur = 0
         idsect = 0
 
@@ -284,7 +285,7 @@ contains
 
 
         ! material properties
-        anud = 1. - anu12*anu12*e2/e1
+        anud = 1.0_dbp - anu12*anu12*e2/e1
         q11 = e1 / anud
         q22 = e2 / anud
         q12 = anu12*e2 / anud
@@ -626,10 +627,10 @@ contains
     !------------------------------------------
 
         !   initialize for section (sc)
-        sigma = 0.
-        eabar = 0.
-        q11ya = 0.
-        q11za = 0.
+        sigma = 0.0_dbp
+        eabar = 0.0_dbp
+        q11ya = 0.0_dbp
+        q11za = 0.0_dbp
 
         !   segments loop for sc
 
@@ -651,12 +652,12 @@ contains
             nlam = n_laminas(is,idsec)    ! for sector seg
 
             !     initialization for seg (sc)
-            tbar = 0.
-            q11t = 0.
-            q11yt_u = 0.
-            q11zt_u = 0.
-            q11yt_l = 0.
-            q11zt_l = 0.
+            tbar = 0.0_dbp
+            q11t = 0.0_dbp
+            q11yt_u = 0.0_dbp
+            q11zt_u = 0.0_dbp
+            q11yt_l = 0.0_dbp
+            q11zt_l = 0.0_dbp
 
             do ilam = 1, nlam !laminas loop (sc)
 
@@ -664,9 +665,9 @@ contains
                 thp = tht_lam(is,idsec,ilam)  ! ply angle
                 mat = mat_id(is,idsec,ilam)    !material
 
-                tbar = tbar + t/2.
-                y0 = ysg - ((-1)**(is))*tbar*sths
-                z0 = zsg + ((-1)**(is))*tbar*cths
+                tbar = tbar + t/2.0_dbp
+                y0 = ysg - ((-1.0_dbp)**(is))*tbar*sths
+                z0 = zsg + ((-1.0_dbp)**(is))*tbar*cths
 
 
                 ! obtain qtil for specified mat
@@ -686,12 +687,12 @@ contains
                     q11zt_l = q11zt_l + qtil11t*z0
                 endif
 
-                tbar = tbar + t/2.
+                tbar = tbar + t/2.0_dbp
 
             enddo         ! end laminas loop
 
             ! add seg contributions (sc)
-            sigma = sigma + w*abs(zsg + ((-1)**is)*0.5*tbar*cths)*cths
+            sigma = sigma + w*abs(zsg + ((-1.0_dbp)**is)*0.5_dbp*tbar*cths)*cths
             eabar = eabar + q11t*w
             q11ya = q11ya + (q11yt_u+q11yt_l)*w
             q11za = q11za + (q11zt_u+q11zt_l)*w
@@ -708,24 +709,24 @@ contains
 
         !   initializations for section (properties)
 
-        eabar = 0.
-        q11ya = 0.
-        q11za = 0.
-        ap = 0.
-        bp = 0.
-        cp = 0.
-        dp = 0.
-        ep = 0.
-        q11ysqa = 0.
-        q11zsqa = 0.
-        q11yza = 0.
+        eabar = 0.0_dbp
+        q11ya = 0.0_dbp
+        q11za = 0.0_dbp
+        ap = 0.0_dbp
+        bp = 0.0_dbp
+        cp = 0.0_dbp
+        dp = 0.0_dbp
+        ep = 0.0_dbp
+        q11ysqa = 0.0_dbp
+        q11zsqa = 0.0_dbp
+        q11yza = 0.0_dbp
 
-        mass = 0.
-        rhoya = 0.
-        rhoza = 0.
-        rhoysqa = 0.
-        rhozsqa = 0.
-        rhoyza = 0.
+        mass = 0.0_dbp
+        rhoya = 0.0_dbp
+        rhoza = 0.0_dbp
+        rhoysqa = 0.0_dbp
+        rhozsqa = 0.0_dbp
+        rhoyza = 0.0_dbp
 
         !   segments loop (for properties)
 
@@ -750,25 +751,25 @@ contains
             endif
 
             ! initialization for seg (properties)
-            tbar = 0.
-            q11t = 0.
-            q11yt = 0.
-            q11zt = 0.
-            dtbar = 0.
-            q2bar = 0.
-            zbart = 0.
-            ybart = 0.
-            tbart = 0.
-            q11ysqt = 0.
-            q11zsqt = 0.
-            q11yzt = 0.
+            tbar = 0.0_dbp
+            q11t = 0.0_dbp
+            q11yt = 0.0_dbp
+            q11zt = 0.0_dbp
+            dtbar = 0.0_dbp
+            q2bar = 0.0_dbp
+            zbart = 0.0_dbp
+            ybart = 0.0_dbp
+            tbart = 0.0_dbp
+            q11ysqt = 0.0_dbp
+            q11zsqt = 0.0_dbp
+            q11yzt = 0.0_dbp
 
-            rhot = 0.
-            rhoyt = 0.
-            rhozt = 0.
-            rhoysqt = 0.
-            rhozsqt = 0.
-            rhoyzt = 0.
+            rhot = 0.0_dbp
+            rhoyt = 0.0_dbp
+            rhozt = 0.0_dbp
+            rhoysqt = 0.0_dbp
+            rhozsqt = 0.0_dbp
+            rhoyzt = 0.0_dbp
 
             do ilam = 1, nlam !laminas loop (properties)
 
@@ -776,15 +777,15 @@ contains
                     t = tlam(is,idsec,ilam)          !thickness
                     thp = tht_lam(is,idsec,ilam)  ! ply angle
                     mat = mat_id(is,idsec,ilam)      ! material
-                    tbar = tbar + t/2.
-                    y0 = ysg - ((-1)**(is))*tbar*sths - y_sc
-                    z0 = zsg + ((-1)**(is))*tbar*cths - z_sc
+                    tbar = tbar + t/2.0_dbp
+                    y0 = ysg - ((-1.0_dbp)**(is))*tbar*sths - y_sc
+                    z0 = zsg + ((-1.0_dbp)**(is))*tbar*cths - z_sc
                 else
                     t = twlam(iweb,ilam)
                     thp = tht_wlam(iweb,ilam)
                     mat = wmat_id(iweb,ilam)
-                    tbar = tbar + t/2.
-                    y0 = ysg - tbar/2. - y_sc
+                    tbar = tbar + t/2.0_dbp
+                    y0 = ysg - tbar/2.0_dbp - y_sc
                     z0 = zsg - z_sc
                 endif
 
@@ -798,10 +799,10 @@ contains
                     mat, qtil)
 
 
-                ieta1 = (t**2)/12.0
-                izeta1 = (w**2)/12.0
-                iepz = 0.5*(ieta1+izeta1)
-                iemz = 0.5*(ieta1-izeta1)
+                ieta1 = (t**2)/12.0_dbp
+                izeta1 = (w**2)/12.0_dbp
+                iepz = 0.5_dbp*(ieta1+izeta1)
+                iemz = 0.5_dbp*(ieta1-izeta1)
                 ipp = iepz + iemz*c2ths   ! check this block later
                 iqq = iepz - iemz*c2ths
                 ipq = iemz*s2ths
@@ -855,7 +856,7 @@ contains
 
                 endif
 
-                tbar = tbar + t/2.
+                tbar = tbar + t/2.0_dbp
 
             enddo         ! end laminas loop
 
@@ -897,7 +898,7 @@ contains
         eilbar = q11ysqa
         eiflbar = q11yza
 
-        sigm2 = sigma*2.
+        sigm2 = sigma*2.0_dbp
         gjbar = sigm2*(sigm2+cp)/ap
         sftbar = -sigm2*dp/ap
         sltbar = -sigm2*ep/ap
@@ -926,8 +927,8 @@ contains
 
         ! inertia principal axes orientation and moments of inertia
 
-        m_inertia = 0.5*(ilag_cm + iflap_cm)
-        r_inertia = sqrt(0.25*((ilag_cm-iflap_cm)**2) + ifl_cm**2)
+        m_inertia = 0.5_dbp*(ilag_cm + iflap_cm)
+        r_inertia = sqrt(0.25_dbp*((ilag_cm-iflap_cm)**2) + ifl_cm**2)
 
         if(iflap_cm .le. ilag_cm) then
             iflap_eta = m_inertia - r_inertia
@@ -938,14 +939,14 @@ contains
         endif
 
         if(ilag_cm .eq. iflap_cm) then
-            th_pa = pi/4.
-            if(abs(ifl_cm/iflap_cm) .lt. 1.e-6) th_pa = 0.
+            th_pa = pi/4.0_dbp
+            if(abs(ifl_cm/iflap_cm) .lt. 1.d-6) th_pa = 0.0_dbp
         else
-            th_pa = 0.5*abs(atan(2.*ifl_cm/(ilag_cm-iflap_cm)))
+            th_pa = 0.5_dbp*abs(atan(2.0_dbp*ifl_cm/(ilag_cm-iflap_cm)))
         endif
 
         if(abs(ifl_cm) .lt. eps) then
-            th_pa = 0.
+            th_pa = 0.0_dbp
         else          ! check this block later
             if(iflap_cm .ge. ilag_cm .and. ifl_cm .gt. 0.) th_pa = -th_pa
             if(iflap_cm .ge. ilag_cm .and. ifl_cm .lt. 0.) th_pa = th_pa
@@ -955,8 +956,8 @@ contains
 
         ! elastic principal axes orientation and principal bending stiffneses
 
-        em_stiff = 0.5*(eilbar + eifbar)
-        er_stiff = sqrt(0.25*((eilbar-eifbar)**2) + eiflbar**2)
+        em_stiff = 0.5_dbp*(eilbar + eifbar)
+        er_stiff = sqrt(0.25_dbp*((eilbar-eifbar)**2) + eiflbar**2)
 
         if(eifbar .le. eilbar) then
             pflap_stff = em_stiff - er_stiff
@@ -967,13 +968,13 @@ contains
         endif
 
         if(eilbar .eq. eifbar) then
-            the_pa = pi/4.
+            the_pa = pi/4.0_dbp
         else
-            the_pa = 0.5*abs(atan(2.*eiflbar/(eilbar-eifbar)))
+            the_pa = 0.5_dbp*abs(atan(2.0_dbp*eiflbar/(eilbar-eifbar)))
         endif
 
         if(abs(eiflbar) .lt. eps) then
-            the_pa = 0.
+            the_pa = 0.0_dbp
         else          ! check this block later
             if(eifbar .ge. eilbar .and. eiflbar .gt. 0.) the_pa = -the_pa
             if(eifbar .ge. eilbar .and. eiflbar .lt. 0.) the_pa = the_pa
@@ -1050,19 +1051,19 @@ contains
 
 
         implicit none
+        integer, parameter :: dbp = kind(0.d0)
 
 
-
-        real(8), intent(in) :: x  ! x-coordinate of node to be embedded in the u-surf
+        real(dbp), intent(in) :: x  ! x-coordinate of node to be embedded in the u-surf
 
         integer, intent(inout) :: nodes_u  ! no of current nodes on the upper surface / revised no of current nodes on upper surface
-        real(8), intent(inout), dimension(300) :: xnode_u, ynode_u
+        real(dbp), intent(inout), dimension(300) :: xnode_u, ynode_u
 
-        real(8), intent(out) :: y  ! y-coordinate of node embedded in the u-surf
+        real(dbp), intent(out) :: y  ! y-coordinate of node embedded in the u-surf
         integer, intent(out) :: newnode  ! number of the embedded node
 
         ! local
-        real(8) :: xl, xr, yl, yr
+        real(dbp) :: xl, xr, yl, yr
         integer :: isave, i
 
 
@@ -1124,19 +1125,19 @@ contains
 
 
         implicit none
+        integer, parameter :: dbp = kind(0.d0)
 
 
-
-        real(8), intent(in) :: x  ! x-coordinate of node to be embedded in the u-surf
+        real(dbp), intent(in) :: x  ! x-coordinate of node to be embedded in the u-surf
 
         integer, intent(inout) :: nodes_l  ! no of current nodes on the lower surface / revised no of current nodes on lower surface
-        real(8), intent(inout), dimension(300) :: xnode_l, ynode_l
+        real(dbp), intent(inout), dimension(300) :: xnode_l, ynode_l
 
-        real(8), intent(out) :: y  ! y-coordinate of node embedded in the u-surf
+        real(dbp), intent(out) :: y  ! y-coordinate of node embedded in the u-surf
         integer, intent(out) :: newnode  ! number of the embedded node
 
         ! local
-        real(8) :: xl, xr, yl, yr
+        real(dbp) :: xl, xr, yl, yr
         integer :: isave, i
 
 
@@ -1201,32 +1202,32 @@ contains
 
 
         implicit none
-
+        integer, parameter :: dbp = kind(0.d0)
 
         ! inputs
-        real(8), intent(in) :: ch, rle  ! chord length, loc of l.e. (non-d wrt chord)
+        real(dbp), intent(in) :: ch, rle  ! chord length, loc of l.e. (non-d wrt chord)
         integer, intent(in) :: nseg, nseg_u, nseg_p  ! total number of segs, no of segs on the upper surface, no of segs for both upper and lower surfaces
-        real(8), intent(in), dimension(300) :: xnode_u, ynode_u, xnode_l, ynode_l  ! x,y nodes on upper/lower
+        real(dbp), intent(in), dimension(300) :: xnode_u, ynode_u, xnode_l, ynode_l  ! x,y nodes on upper/lower
         integer, intent(in) :: ndl1, ndu1 ! 1st seg lhs node number lower/upper surface
-        real(8), intent(in), dimension(:) :: loc_web, weby_u, weby_l  ! x coord of web, y coord of web upper/lower
+        real(dbp), intent(in), dimension(:) :: loc_web, weby_u, weby_l  ! x coord of web, y coord of web upper/lower
         integer, intent(in), dimension(2) :: n_scts  ! no of sectors on 'is' surf
         integer, intent(in) :: nsecnode
-        real(8), dimension(2, nsecnode) :: xsec_node  ! x coord of sect-i lhs on 's' surf
+        real(dbp), dimension(2, nsecnode) :: xsec_node  ! x coord of sect-i lhs on 's' surf
 
         ! outputs
         integer, intent(out), dimension(:) :: isur  ! surf id
         integer, intent(out), dimension(:) :: idsect  ! associated sect or web number
-        real(8), intent(out), dimension(:) :: yseg  ! y-ref of mid-seg point
-        real(8), intent(out), dimension(:) :: zseg  ! z-ref of mid-seg point
-        real(8), intent(out), dimension(:) :: wseg  ! seg width
-        real(8), intent(out), dimension(:) :: sthseg  ! sin(th_seg)
-        real(8), intent(out), dimension(:) :: cthseg  ! cos(th_seg)
-        real(8), intent(out), dimension(:) :: s2thseg  ! sin(2*th_seg)
-        real(8), intent(out), dimension(:) :: c2thseg  ! cos(2*th_seg)
+        real(dbp), intent(out), dimension(:) :: yseg  ! y-ref of mid-seg point
+        real(dbp), intent(out), dimension(:) :: zseg  ! z-ref of mid-seg point
+        real(dbp), intent(out), dimension(:) :: wseg  ! seg width
+        real(dbp), intent(out), dimension(:) :: sthseg  ! sin(th_seg)
+        real(dbp), intent(out), dimension(:) :: cthseg  ! cos(th_seg)
+        real(dbp), intent(out), dimension(:) :: s2thseg  ! sin(2*th_seg)
+        real(dbp), intent(out), dimension(:) :: c2thseg  ! cos(2*th_seg)
 
         ! local
         integer :: iseg, is, i, icheck, iweb, nd_a
-        real(8) :: xa, ya, xb, yb, xba, yba, thseg
+        real(dbp) :: xa, ya, xb, yb, xba, yba, thseg
 
 
         do iseg = 1, nseg   ! seg numbering from le clockwise
@@ -1292,21 +1293,21 @@ contains
 
             xba = xb - xa
             yba = ya - yb
-            yseg(iseg) = ch*(2.*rle-xa-xb)/2. !yref coord of mid-seg pt (in r-frame)
-            zseg(iseg) = ch*(ya+yb)/2.    !zref coord of mid-seg pt (in r-frame)
+            yseg(iseg) = ch*(2.*rle-xa-xb)/2.0_dbp !yref coord of mid-seg pt (in r-frame)
+            zseg(iseg) = ch*(ya+yb)/2.0_dbp    !zref coord of mid-seg pt (in r-frame)
             wseg(iseg) = ch*sqrt(xba**2 + yba**2)
 
 
             if (is .eq. 0) then
-                thseg = -pi/2.
+                thseg = -pi/2.0_dbp
             else
                 thseg = atan(yba/xba) ! thseg +ve in new y-z ref frame
             endif
 
             sthseg(iseg) = sin(thseg)
             cthseg(iseg) = cos(thseg)
-            s2thseg(iseg) = sin(2*thseg)
-            c2thseg(iseg) = cos(2*thseg)
+            s2thseg(iseg) = sin(2.0_dbp*thseg)
+            c2thseg(iseg) = cos(2.0_dbp*thseg)
 
 
         enddo   ! end seg loop
@@ -1322,18 +1323,18 @@ contains
 
 
         implicit none
-
+        integer, parameter :: dbp = kind(0.d0)
 
         ! inputs
         integer, intent(in) :: naf  ! no of blade stations
-        real(8), intent(in), dimension(naf) :: sloc ! vector of station locations
-        real(8), intent(in), dimension(naf) :: tw_aero ! vector of twist distribution
+        real(dbp), intent(in), dimension(naf) :: sloc ! vector of station locations
+        real(dbp), intent(in), dimension(naf) :: tw_aero ! vector of twist distribution
 
         ! outputs
-        real(8), intent(out), dimension(naf) :: th_prime ! vector of twist rates
+        real(dbp), intent(out), dimension(naf) :: th_prime ! vector of twist rates
 
         ! local
-        real(8) :: f0, f1, f2, h1, h2
+        real(dbp) :: f0, f1, f2, h1, h2
         integer :: i
 
         do i = 2, naf-1
@@ -1358,18 +1359,19 @@ contains
 
 
         implicit none
+        integer, parameter :: dbp = kind(0.d0)
 
         ! input
         integer, intent(in) :: mat  ! material id
-        real(8), intent(in) :: thp  ! ply orientation
-        real(8), intent(in), dimension(:) :: density, q11, q22, q12, q66
+        real(dbp), intent(in) :: thp  ! ply orientation
+        real(dbp), intent(in), dimension(:) :: density, q11, q22, q12, q66
 
         ! outputs
-        real(8), intent(out) :: qbar11, qbar22, qbar12, qbar16, qbar26, qbar66, rho_m
+        real(dbp), intent(out) :: qbar11, qbar22, qbar12, qbar16, qbar26, qbar66, rho_m
 
         ! local
-        real(8) :: k11, k22, k12, k66, kmm, kmp
-        real(8) :: ct, st, c2t, c3t, c4t, s2t, s3t, s4t, s2thsq
+        real(dbp) :: k11, k22, k12, k66, kmm, kmp
+        real(dbp) :: ct, st, c2t, c3t, c4t, s2t, s3t, s4t, s2thsq
 
         ct = cos(thp)
         st = sin(thp)
@@ -1380,21 +1382,21 @@ contains
         s2t = st*st
         s3t = s2t*st
         s4t = s3t*st
-        s2thsq = 4.*s2t*c2t
+        s2thsq = 4.0_dbp*s2t*c2t
 
         k11 = q11(mat)
         k22 = q22(mat)
         k12 = q12(mat)
         k66 = q66(mat)
-        kmm = k11 -k12 -2.*k66
-        kmp = k12 -k22 +2.*k66
+        kmm = k11 -k12 -2.0_dbp*k66
+        kmp = k12 -k22 +2.0_dbp*k66
 
-        qbar11 = k11*c4t + 0.5*(k12+2.*k66)*s2thsq + k22*s4t
-        qbar22 = k11*s4t + 0.5*(k12+2.*k66)*s2thsq + k22*c4t
-        qbar12 = 0.25*(k11+k22-4.*k66)*s2thsq + k12*(s4t+c4t)
+        qbar11 = k11*c4t + 0.5_dbp*(k12+2.0_dbp*k66)*s2thsq + k22*s4t
+        qbar22 = k11*s4t + 0.5_dbp*(k12+2.0_dbp*k66)*s2thsq + k22*c4t
+        qbar12 = 0.25_dbp*(k11+k22-4.0_dbp*k66)*s2thsq + k12*(s4t+c4t)
         qbar16 = kmm*st*c3t + kmp*s3t*ct
         qbar26 = kmm*s3t*ct + kmp*st*c3t
-        qbar66 = 0.25*(kmm+k22-k12)*s2thsq  + k66*(s4t+c4t)
+        qbar66 = 0.25_dbp*(kmm+k22-k12)*s2thsq  + k66*(s4t+c4t)
 
         rho_m = density(mat)
 
@@ -1407,10 +1409,11 @@ contains
 
 
         implicit none
+        integer, parameter :: dbp = kind(0.d0)
 
-        real(8), intent(in) :: qbar11, qbar22, qbar12, qbar16, qbar26, qbar66
+        real(dbp), intent(in) :: qbar11, qbar22, qbar12, qbar16, qbar26, qbar66
         integer, intent(in) :: mat
-        real(8), intent(out), dimension(2, 2) :: qtil
+        real(dbp), intent(out), dimension(2, 2) :: qtil
 
 
         qtil(1,1) = qbar11 - qbar12*qbar12/qbar22
