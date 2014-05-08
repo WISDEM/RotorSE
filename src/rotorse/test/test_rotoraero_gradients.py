@@ -9,7 +9,7 @@ Copyright (c) NREL. All rights reserved.
 
 import unittest
 import numpy as np
-from commonse.utilities import check_gradient_unit_test
+from commonse.utilities import check_gradient_unit_test, check_for_missing_unit_tests
 from rotorse.rotoraero import Coefficients, SetupRunVarSpeed, RegulatedPowerCurve, AEP
 from rotorse.rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, \
     WeibullCDF, WeibullWithMeanCDF, RayleighCDF
@@ -82,7 +82,7 @@ class TestRegulatedPowerCurve(unittest.TestCase):
         rpc.Vrated = 11.7420119076
 
         # check_gradient_unit_test(self, rpc, tol=1e-6, display=True)
-        check_gradient_unit_test(self, rpc, tol=3e-5)
+        check_gradient_unit_test(self, rpc, tol=3e-5, display=False)
 
 
 
@@ -323,6 +323,11 @@ class TestRayleighCDF(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    import rotorse.rotoraero
+    import rotorse.rotoraerodefaults
+
+    check_for_missing_unit_tests([rotorse.rotoraero, rotorse.rotoraerodefaults])
+
     unittest.main()
 
     # from unittest import TestSuite

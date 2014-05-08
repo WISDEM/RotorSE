@@ -327,7 +327,7 @@ class SetupRunVarSpeed(Component):
 
         # corresponding rotation speed
         Omega_d = ctrl.tsr*V/R*RS2RPM
-        Omega, dOmega_dOmegad = smooth_min(Omega_d, ctrl.maxOmega, pct_offset=0.01)
+        Omega, dOmega_dOmegad, dOmega_dmaxOmega = smooth_min(Omega_d, ctrl.maxOmega, pct_offset=0.01)
 
         # store values
         self.Uhub = V
@@ -335,17 +335,17 @@ class SetupRunVarSpeed(Component):
         self.pitch = ctrl.pitch*np.ones_like(V)
 
         # gradients
-        dV = np.zeros((n, 2))
+        dV = np.zeros((n, 3))
         dOmega_dtsr = dOmega_dOmegad * V/R*RS2RPM
         dOmega_dR = dOmega_dOmegad * -ctrl.tsr*V/R**2*RS2RPM
-        dOmega = hstack([dOmega_dtsr, dOmega_dR])
-        dpitch = np.zeros((n, 2))
+        dOmega = hstack([dOmega_dtsr, dOmega_dR, dOmega_dmaxOmega])
+        dpitch = np.zeros((n, 3))
         self.J = vstack([dV, dOmega, dpitch])
 
 
     def list_deriv_vars(self):
 
-        inputs = ('control.tsr', 'R')
+        inputs = ('control.tsr', 'R', 'control.maxOmega')
         outputs = ('Uhub', 'Omega', 'pitch')
 
         return inputs, outputs
@@ -464,7 +464,8 @@ class RegulatedPowerCurve(ImplicitComponent):
 
         # rated speed conditions
         Omega_d = ctrl.tsr*Vrated/self.R*RS2RPM
-        OmegaRated, dOmegaRated_dOmegad = smooth_min(Omega_d, ctrl.maxOmega, pct_offset=0.01)
+        OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
+            = smooth_min(Omega_d, ctrl.maxOmega, pct_offset=0.01)
 
         splineT = Akima(self.Vcoarse, self.Tcoarse)
         Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
@@ -479,21 +480,22 @@ class RegulatedPowerCurve(ImplicitComponent):
         # gradients
         ncoarse = len(self.Vcoarse)
 
-        dres = np.concatenate([[0.0], dres_dVcoarse, dres_dPcoarse, np.zeros(ncoarse), np.array([dres_dVrated]), [0.0]])
+        dres = np.concatenate([[0.0], dres_dVcoarse, dres_dPcoarse, np.zeros(ncoarse), np.array([dres_dVrated]), [0.0, 0.0]])
 
         dV_dVrated = np.concatenate([dV2_dVrated, dV3_dVrated])
-        dV = hstack([np.zeros((n, 1)), np.zeros((n, 3*ncoarse)), dV_dVrated, np.zeros((n, 1))])
+        dV = hstack([np.zeros((n, 1)), np.zeros((n, 3*ncoarse)), dV_dVrated, np.zeros((n, 2))])
 
         dP_dVcoarse = vstack([dP2_dVcoarse, np.zeros((n/2, ncoarse))])
         dP_dPcoarse = vstack([dP2_dPcoarse, np.zeros((n/2, ncoarse))])
         dP_dVrated = np.concatenate([dP2_dV2*dV2_dVrated, np.zeros(n/2)])
-        dP = hstack([np.zeros((n, 1)), dP_dVcoarse, dP_dPcoarse, np.zeros((n, ncoarse)), dP_dVrated, np.zeros((n, 1))])
+        dP = hstack([np.zeros((n, 1)), dP_dVcoarse, dP_dPcoarse, np.zeros((n, ncoarse)), dP_dVrated, np.zeros((n, 2))])
 
-        drV = np.concatenate([[0.0], np.zeros(3*ncoarse), [1.0, 0.0]])
+        drV = np.concatenate([[0.0], np.zeros(3*ncoarse), [1.0, 0.0, 0.0]])
         drOmega = np.concatenate([[dOmegaRated_dOmegad*Vrated/self.R*RS2RPM], np.zeros(3*ncoarse),
-            [dOmegaRated_dOmegad*ctrl.tsr/self.R*RS2RPM, -dOmegaRated_dOmegad*ctrl.tsr*Vrated/self.R**2*RS2RPM]])
-        drpitch = np.zeros(3*ncoarse+3)
-        drT = np.concatenate([[0.0], dT_dVcoarse, np.zeros(ncoarse), dT_dTcoarse, [dT_dVrated, 0.0]])
+            [dOmegaRated_dOmegad*ctrl.tsr/self.R*RS2RPM, -dOmegaRated_dOmegad*ctrl.tsr*Vrated/self.R**2*RS2RPM,
+            dOmegaRated_dmaxOmega]])
+        drpitch = np.zeros(3*ncoarse+4)
+        drT = np.concatenate([[0.0], dT_dVcoarse, np.zeros(ncoarse), dT_dTcoarse, [dT_dVrated, 0.0, 0.0]])
         drQ = -ctrl.ratedPower / (self.ratedConditions.Omega**2 * RPM2RS) * drOmega
 
         self.J = vstack([dres, dV, dP, drV, drOmega, drpitch, drT, drQ])
@@ -501,7 +503,7 @@ class RegulatedPowerCurve(ImplicitComponent):
 
     def list_deriv_vars(self):
 
-        inputs = ('control.tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R')
+        inputs = ('control.tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R', 'control.maxOmega')
         outputs = ('residual', 'V', 'P', 'ratedConditions.V', 'ratedConditions.Omega',
             'ratedConditions.pitch', 'ratedConditions.T', 'ratedConditions.Q')
 

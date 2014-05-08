@@ -41,7 +41,7 @@ class GeometrySpline(Component):
     r = Array(iotype='out', units='m', desc='chord at airfoil locations')
     chord = Array(iotype='out', units='m', desc='chord at airfoil locations')
     theta = Array(iotype='out', units='deg', desc='twist at airfoil locations')
-    precurve = Array(iotype='out', units='deg', desc='precurve at airfoil locations')  # TODO: for now I'm forcing this to zero, just for backwards compatibility
+    precurve = Array(iotype='out', units='deg', desc='precurve at airfoil locations')
     r_af_spacing = Array(iotype='out')
 
 
@@ -78,7 +78,7 @@ class GeometrySpline(Component):
 
         self.r_af_spacing = np.diff(self.r_af)
 
-        self.precurve = np.zeros_like(self.chord)
+        self.precurve = np.zeros_like(self.chord)  # TODO: for now I'm forcing this to zero, just for backwards compatibility
 
         # gradients (TODO: rethink these a bit or use Tapenade.)
         n = len(self.r_af)
@@ -150,21 +150,20 @@ class CCBladeGeometry(GeomtrySetupBase):
 
     def execute(self):
 
-        # self.R = self.Rtip*cosd(self.precone)  # no precurvature
         self.R = self.Rtip*cosd(self.precone) + self.precurveTip*sind(self.precone)
 
-        # TODO: redo gradients
 
     def list_deriv_vars(self):
 
-        inputs = ('Rtip', 'precone')
+        inputs = ('Rtip', 'precurveTip', 'precone')
         outputs = ('R',)
 
         return inputs, outputs
 
     def provideJ(self):
 
-        J = np.array([[cosd(self.precone), -self.Rtip*sind(self.precone)*pi/180.0]])
+        J = np.array([[cosd(self.precone), sind(self.precone),
+            (-self.Rtip*sind(self.precone) + self.precurveTip*sind(self.precone))*pi/180.0]])
 
         return J
 
@@ -363,7 +362,7 @@ class CSMDrivetrain(DrivetrainLossesBase):
         Pbar1, dPbar1_dPbar0 = smooth_abs(Pbar0, dx=0.01)
 
         # truncate idealized power curve for purposes of efficiency calculation
-        Pbar, dPbar_dPbar1 = smooth_min(Pbar1, 1.0, pct_offset=0.01)
+        Pbar, dPbar_dPbar1, _ = smooth_min(Pbar1, 1.0, pct_offset=0.01)
 
         # compute efficiency
         eff = 1.0 - (constant/Pbar + linear + quadratic*Pbar)
