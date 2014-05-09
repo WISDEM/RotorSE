@@ -866,11 +866,61 @@ class BladeCurvature(Component):
 
     def execute(self):
 
-        self.x_az, self.y_az, self.z_az, cone, s = \
-            _bem.definecurvature(self.r, self.precurve, self.presweep, 0.0)
+        # self.x_az, self.y_az, self.z_az, cone, s = \
+        #     _bem.definecurvature(self.r, self.precurve, self.presweep, 0.0)
+
+        n = len(self.r)
+        dx_dx = np.eye(3*n)
+
+        self.x_az, x_azd, self.y_az, y_azd, self.z_az, z_azd, \
+            cone, coned, s, sd = _bem.definecurvature_dv2(self.r, dx_dx[:, :n],
+                self.precurve, dx_dx[:, n:2*n], self.presweep, dx_dx[:, 2*n:], 0.0, np.zeros(3*n))
 
         self.totalCone = self.precone + np.degrees(cone)
         self.s = self.r[0] + s
+
+        dxaz_dr = x_azd[:n, :].T
+        dxaz_dprecurve = x_azd[n:2*n, :].T
+        dxaz_dpresweep = x_azd[2*n:, :].T
+        dx = hstack([dxaz_dr, dxaz_dprecurve, dxaz_dpresweep, np.zeros(n)])
+
+        dyaz_dr = y_azd[:n, :].T
+        dyaz_dprecurve = y_azd[n:2*n, :].T
+        dyaz_dpresweep = y_azd[2*n:, :].T
+        dy = hstack([dyaz_dr, dyaz_dprecurve, dyaz_dpresweep, np.zeros(n)])
+
+        dzaz_dr = z_azd[:n, :].T
+        dzaz_dprecurve = z_azd[n:2*n, :].T
+        dzaz_dpresweep = z_azd[2*n:, :].T
+        dz = hstack([dzaz_dr, dzaz_dprecurve, dzaz_dpresweep, np.zeros(n)])
+
+        dcone_dr = np.degrees(coned[:n, :]).T
+        dcone_dprecurve = np.degrees(coned[n:2*n, :]).T
+        dcone_dpresweep = np.degrees(coned[2*n:, :]).T
+        dcone = hstack([dcone_dr, dcone_dprecurve, dcone_dpresweep, np.ones(n)])
+
+        ds_dr = sd[:n, :].T
+        ds_dr[:, 0] += 1
+        ds_dprecurve = sd[n:2*n, :].T
+        ds_dpresweep = sd[2*n:, :].T
+        ds = hstack([ds_dr, ds_dprecurve, ds_dpresweep, np.zeros(n)])
+
+        self.J = vstack([dx, dy, dz, dcone, ds])
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('r', 'precurve', 'presweep', 'precone')
+        outputs = ('x_az', 'y_az', 'z_az', 'totalCone', 's')
+
+        return inputs, outputs
+
+
+    def provideJ(self):
+
+        return self.J
+
+
 
 
         # n = len(self.r)
@@ -919,15 +969,64 @@ class DamageLoads(Component):
 
     def execute(self):
 
-        rstar = (self.r-self.r[0])/(self.r[-1]-self.r[0])
+        rstar_str = (self.r-self.r[0])/(self.r[-1]-self.r[0])
 
-        Mxb = np.interp(rstar, self.rstar, self.Mxb)
-        Myb = np.interp(rstar, self.rstar, self.Myb)
+        Mxb_str, self.dMxbstr_drstarstr, self.dMxbstr_drstar, self.dMxbstr_dMxb = \
+            akima_interp_with_derivs(self.rstar, self.Mxb, rstar_str)
 
-        Ma = DirectionVector(Mxb, Myb, 0.0).bladeToAirfoil(self.theta)
-        self.Mxa = Ma.x
-        self.Mya = Ma.y
+        Myb_str, self.dMybstr_drstarstr, self.dMybstr_drstar, self.dMybstr_dMyb = \
+            akima_interp_with_derivs(self.rstar, self.Myb, rstar_str)
 
+        self.Ma = DirectionVector(Mxb_str, Myb_str, 0.0).bladeToAirfoil(self.theta)
+        self.Mxa = self.Ma.x
+        self.Mya = self.Ma.y
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('rstar', 'Mxb', 'Myb', 'theta', 'r')
+        outputs = ('Mxa', 'Mya')
+
+        return inputs, outputs
+
+    def provideJ(self):
+
+        n = len(self.r)
+        drstarstr_dr = np.zeros((n, n))
+        for i in range(1, n-1):
+            drstarstr_dr[i, i] = 1.0/(self.r[-1] - self.r[0])
+        drstarstr_dr[1:, 0] = (self.r[1:] - self.r[-1])/(self.r[-1] - self.r[0])**2
+        drstarstr_dr[:-1, -1] = -(self.r[:-1] - self.r[0])/(self.r[-1] - self.r[0])**2
+
+        dMxbstr_drstarstr = np.diag(self.dMxbstr_drstarstr)
+        dMybstr_drstarstr = np.diag(self.dMybstr_drstarstr)
+
+        dMxbstr_dr = np.dot(dMxbstr_drstarstr, drstarstr_dr)
+        dMybstr_dr = np.dot(dMybstr_drstarstr, drstarstr_dr)
+
+        dMxa_dr = np.dot(np.diag(self.Ma.dx['dx']), dMxbstr_dr)\
+            + np.dot(np.diag(self.Ma.dx['dy']), dMybstr_dr)
+        dMxa_drstar = np.dot(np.diag(self.Ma.dx['dx']), self.dMxbstr_drstar)\
+            + np.dot(np.diag(self.Ma.dx['dy']), self.dMybstr_drstar)
+        dMxa_dMxb = np.dot(np.diag(self.Ma.dx['dx']), self.dMxbstr_dMxb)
+        # (self.Ma.dx['dx'] * self.dMxbstr_dMxb.T).T
+        dMxa_dMyb = np.dot(np.diag(self.Ma.dx['dy']), self.dMybstr_dMyb)
+        dMxa_dtheta = np.diag(self.Ma.dx['dtheta'])
+
+        dMya_dr = np.dot(np.diag(self.Ma.dy['dx']), dMxbstr_dr)\
+            + np.dot(np.diag(self.Ma.dy['dy']), dMybstr_dr)
+        dMya_drstar = np.dot(np.diag(self.Ma.dy['dx']), self.dMxbstr_drstar)\
+            + np.dot(np.diag(self.Ma.dy['dy']), self.dMybstr_drstar)
+        dMya_dMxb = np.dot(np.diag(self.Ma.dy['dx']), self.dMxbstr_dMxb)
+        dMya_dMyb = np.dot(np.diag(self.Ma.dy['dy']), self.dMybstr_dMyb)
+        dMya_dtheta = np.diag(self.Ma.dy['dtheta'])
+
+        dMxa = hstack([dMxa_drstar, dMxa_dMxb, dMxa_dMyb, dMxa_dtheta, dMxa_dr])
+        dMya = hstack([dMya_drstar, dMya_dMxb, dMya_dMyb, dMya_dtheta, dMya_dr])
+
+        J = vstack([dMxa, dMya])
+
+        return J
 
 
 class TotalLoads(Component):
@@ -937,7 +1036,6 @@ class TotalLoads(Component):
     r = Array(iotype='in')
     theta = Array(iotype='in')
     tilt = Float(iotype='in')
-    # precone = Float(iotype='in')
     totalCone = Array(iotype='in')
     z_az = Array(iotype='in')
     rhoA = Array(iotype='in')
@@ -1009,7 +1107,7 @@ class TotalLoads(Component):
     def list_deriv_vars(self):
 
         inputs = ('aeroLoads.r', 'aeroLoads.Px', 'aeroLoads.Py', 'aeroLoads.Pz', 'aeroLoads.Omega',
-            'aeroLoads.pitch', 'aeroLoads.azimuth', 'r', 'theta', 'tilt', 'precone', 'rhoA')
+            'aeroLoads.pitch', 'aeroLoads.azimuth', 'r', 'theta', 'tilt', 'totalCone', 'rhoA', 'z_az')
         outputs = ('Px_af', 'Py_af', 'Pz_af')
 
         return inputs, outputs
@@ -1021,20 +1119,24 @@ class TotalLoads(Component):
         dPcx, dPcy, dPcz = self.P_c.dx, self.P_c.dy, self.P_c.dz
         dPx, dPy, dPz = self.P.dx, self.P.dy, self.P.dz
         Omega = self.aeroLoads.Omega*RPM2RS
-        z_az = self.r*cosd(self.precone)
+        z_az = self.z_az
 
 
         dPx_dOmega = dPcx['dz']*self.rhoA*z_az*2*Omega*RPM2RS
         dPy_dOmega = dPcy['dz']*self.rhoA*z_az*2*Omega*RPM2RS
         dPz_dOmega = dPcz['dz']*self.rhoA*z_az*2*Omega*RPM2RS
 
-        dPx_dr = np.diag(self.dPax_dr + dPcx['dz']*self.rhoA*Omega**2*cosd(self.precone))
-        dPy_dr = np.diag(self.dPay_dr + dPcy['dz']*self.rhoA*Omega**2*cosd(self.precone))
-        dPz_dr = np.diag(self.dPaz_dr + dPcz['dz']*self.rhoA*Omega**2*cosd(self.precone))
+        dPx_dr = np.diag(self.dPax_dr)
+        dPy_dr = np.diag(self.dPay_dr)
+        dPz_dr = np.diag(self.dPaz_dr)
 
-        dPx_dprecone = dPwx['dprecone'] + dPcx['dprecone'] - dPcx['dz']*self.rhoA*Omega**2*self.r*sind(self.precone)*math.pi/180.0
-        dPy_dprecone = dPwy['dprecone'] + dPcy['dprecone'] - dPcy['dz']*self.rhoA*Omega**2*self.r*sind(self.precone)*math.pi/180.0
-        dPz_dprecone = dPwz['dprecone'] + dPcz['dprecone'] - dPcz['dz']*self.rhoA*Omega**2*self.r*sind(self.precone)*math.pi/180.0
+        dPx_dprecone = np.diag(dPwx['dprecone'] + dPcx['dprecone'])
+        dPy_dprecone = np.diag(dPwy['dprecone'] + dPcy['dprecone'])
+        dPz_dprecone = np.diag(dPwz['dprecone'] + dPcz['dprecone'])
+
+        dPx_dzaz = np.diag(dPcx['dz']*self.rhoA*Omega**2)
+        dPy_dzaz = np.diag(dPcy['dz']*self.rhoA*Omega**2)
+        dPz_dzaz = np.diag(dPcz['dz']*self.rhoA*Omega**2)
 
         dPx_drhoA = np.diag(-dPwx['dz']*self.g + dPcx['dz']*Omega**2*z_az)
         dPy_drhoA = np.diag(-dPwy['dz']*self.g + dPcy['dz']*Omega**2*z_az)
@@ -1088,12 +1190,16 @@ class TotalLoads(Component):
         dPyaf_drhoA = dPy['dx']*dPx_drhoA + dPy['dy']*dPy_drhoA + dPy['dz']*dPz_drhoA
         dPzaf_drhoA = dPz['dx']*dPx_drhoA + dPz['dy']*dPy_drhoA + dPz['dz']*dPz_drhoA
 
+        dPxaf_dzaz = dPx['dx']*dPx_dzaz + dPx['dy']*dPy_dzaz + dPx['dz']*dPz_dzaz
+        dPyaf_dzaz = dPy['dx']*dPx_dzaz + dPy['dy']*dPy_dzaz + dPy['dz']*dPz_dzaz
+        dPzaf_dzaz = dPz['dx']*dPx_dzaz + dPz['dy']*dPy_dzaz + dPz['dz']*dPz_dzaz
+
         dPx = hstack([dPxaf_daeror, dPxaf_dPxaero, dPxaf_dPyaero, dPxaf_dPzaero, dPxaf_dOmega, dPxaf_dpitch, dPxaf_dazimuth,
-            dPxaf_dr, dPxaf_dtheta, dPxaf_dtilt, dPxaf_dprecone, dPxaf_drhoA])
+            dPxaf_dr, dPxaf_dtheta, dPxaf_dtilt, dPxaf_dprecone, dPxaf_drhoA, dPxaf_dzaz])
         dPy = hstack([dPyaf_daeror, dPyaf_dPxaero, dPyaf_dPyaero, dPyaf_dPzaero, dPyaf_dOmega, dPyaf_dpitch, dPyaf_dazimuth,
-            dPyaf_dr, dPyaf_dtheta, dPyaf_dtilt, dPyaf_dprecone, dPyaf_drhoA])
+            dPyaf_dr, dPyaf_dtheta, dPyaf_dtilt, dPyaf_dprecone, dPyaf_drhoA, dPyaf_dzaz])
         dPz = hstack([dPzaf_daeror, dPzaf_dPxaero, dPzaf_dPyaero, dPzaf_dPzaero, dPzaf_dOmega, dPzaf_dpitch, dPzaf_dazimuth,
-            dPzaf_dr, dPzaf_dtheta, dPzaf_dtilt, dPzaf_dprecone, dPzaf_drhoA])
+            dPzaf_dr, dPzaf_dtheta, dPzaf_dtilt, dPzaf_dprecone, dPzaf_drhoA, dPzaf_dzaz])
 
         J = vstack([dPx, dPy, dPz])
 
@@ -1151,7 +1257,7 @@ class TipDeflection(Component):
         dpitch = self.dynamicFactor * self.delta.dx['dtheta']
         dazimuth = self.dynamicFactor * self.delta.dx['dazimuth']
         dtilt = self.dynamicFactor * self.delta.dx['dtilt']
-        dtotalConeTip = self.dynamicFactor * self.delta.dx['dtotalConeTip']
+        dtotalConeTip = self.dynamicFactor * self.delta.dx['dprecone']
 
         J = np.array([[dx, dy, dz, dtheta, dpitch, dazimuth, dtilt, dtotalConeTip]])
 
@@ -1198,18 +1304,12 @@ class BladeDeflection(Component):
     pitch = Float(iotype='in')
     theta_str = Array(iotype='in')
 
-    # r_sub_precurve = Array(iotype='in')
-    # Rhub = Float(iotype='in')
-    # r_str = Array(iotype='in')
-    # precurve_str = Array(iotype='in')
-
     r_sub_precurve0 = Array(iotype='in')
     Rhub0 = Float(iotype='in')
     r_str0 = Array(iotype='in')
     precurve_str0 = Array(iotype='in')
 
     bladeLength0 = Float(iotype='in', units='m', desc='original blade length')
-    precurve_sub0 = Array(np.zeros(3), iotype='in', units='m', desc='original precurve at control points')  # defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
 
     delta_bladeLength = Float(iotype='out', units='m')
     delta_precurve_sub = Array(iotype='out', units='m')
@@ -1219,19 +1319,124 @@ class BladeDeflection(Component):
         theta = self.theta_str + self.pitch
 
         dr = DirectionVector(self.dx, self.dy, self.dz)
-        delta = dr.airfoilToBlade(theta)
+        self.delta = dr.airfoilToBlade(theta)
 
-        precurve_str_out = self.precurve_str0 + delta.x
+        precurve_str_out = self.precurve_str0 + self.delta.x
 
-        length0 = self.Rhub0 + np.sum(np.sqrt((self.precurve_str0[1:] - self.precurve_str0[:-1])**2 +
+        self.length0 = self.Rhub0 + np.sum(np.sqrt((self.precurve_str0[1:] - self.precurve_str0[:-1])**2 +
                                             (self.r_str0[1:] - self.r_str0[:-1])**2))
-        length = self.Rhub0 + np.sum(np.sqrt((precurve_str_out[1:] - precurve_str_out[:-1])**2 +
+        self.length = self.Rhub0 + np.sum(np.sqrt((precurve_str_out[1:] - precurve_str_out[:-1])**2 +
                                            (self.r_str0[1:] - self.r_str0[:-1])**2))
 
-        shortening = length0/length
+        self.shortening = self.length0/self.length
 
-        self.delta_bladeLength = self.bladeLength0 * (shortening - 1)
-        self.delta_precurve_sub = np.interp(self.r_sub_precurve0, self.r_str0, delta.x)
+        self.delta_bladeLength = self.bladeLength0 * (self.shortening - 1)
+        # TODO: linearly interpolation is not C1 continuous.  it should work OK for now, but is not ideal
+        self.delta_precurve_sub, self.dpcs_drsubpc0, self.dpcs_drstr0, self.dpcs_ddeltax = \
+            interp_with_deriv(self.r_sub_precurve0, self.r_str0, self.delta.x)
+
+
+
+    def list_deriv_vars(self):
+
+        inputs = ('dx', 'dy', 'dz', 'pitch', 'theta_str', 'r_sub_precurve0', 'Rhub0',
+            'r_str0', 'precurve_str0', 'bladeLength0')
+        outputs = ('delta_bladeLength', 'delta_precurve_sub')
+
+        return inputs, outputs
+
+    def provideJ(self):
+
+        n = len(self.theta_str)
+
+        ddeltax_ddx = self.delta.dx['dx']
+        ddeltax_ddy = self.delta.dx['dy']
+        ddeltax_ddz = self.delta.dx['dz']
+        ddeltax_dtheta = self.delta.dx['dtheta']
+        ddeltax_dthetastr = ddeltax_dtheta
+        ddeltax_dpitch = ddeltax_dtheta
+
+        dl0_drhub0 = 1.0
+        dl_drhub0 = 1.0
+        dl0_dprecurvestr0 = np.zeros(n)
+        dl_dprecurvestr0 = np.zeros(n)
+        dl0_drstr0 = np.zeros(n)
+        dl_drstr0 = np.zeros(n)
+
+        precurve_str_out = self.precurve_str0 + self.delta.x
+
+
+        for i in range(1, n-1):
+            sm0 = math.sqrt((self.precurve_str0[i] - self.precurve_str0[i-1])**2 + (self.r_str0[i] - self.r_str0[i-1])**2)
+            sm = math.sqrt((precurve_str_out[i] - precurve_str_out[i-1])**2 + (self.r_str0[i] - self.r_str0[i-1])**2)
+            sp0 = math.sqrt((self.precurve_str0[i+1] - self.precurve_str0[i])**2 + (self.r_str0[i+1] - self.r_str0[i])**2)
+            sp = math.sqrt((precurve_str_out[i+1] - precurve_str_out[i])**2 + (self.r_str0[i+1] - self.r_str0[i])**2)
+            dl0_dprecurvestr0[i] = (self.precurve_str0[i] - self.precurve_str0[i-1]) / sm0 \
+                - (self.precurve_str0[i+1] - self.precurve_str0[i]) / sp0
+            dl_dprecurvestr0[i] = (precurve_str_out[i] - precurve_str_out[i-1]) / sm \
+                - (precurve_str_out[i+1] - precurve_str_out[i]) / sp
+            dl0_drstr0[i] = (self.r_str0[i] - self.r_str0[i-1]) / sm0 \
+                - (self.r_str0[i+1] - self.r_str0[i]) / sp0
+            dl_drstr0[i] = (self.r_str0[i] - self.r_str0[i-1]) / sm \
+                - (self.r_str0[i+1] - self.r_str0[i]) / sp
+
+        sfirst0 = math.sqrt((self.precurve_str0[1] - self.precurve_str0[0])**2 + (self.r_str0[1] - self.r_str0[0])**2)
+        sfirst = math.sqrt((precurve_str_out[1] - precurve_str_out[0])**2 + (self.r_str0[1] - self.r_str0[0])**2)
+        slast0 = math.sqrt((self.precurve_str0[n-1] - self.precurve_str0[n-2])**2 + (self.r_str0[n-1] - self.r_str0[n-2])**2)
+        slast = math.sqrt((precurve_str_out[n-1] - precurve_str_out[n-2])**2 + (self.r_str0[n-1] - self.r_str0[n-2])**2)
+        dl0_dprecurvestr0[0] = -(self.precurve_str0[1] - self.precurve_str0[0]) / sfirst0
+        dl0_dprecurvestr0[n-1] = (self.precurve_str0[n-1] - self.precurve_str0[n-2]) / slast0
+        dl_dprecurvestr0[0] = -(precurve_str_out[1] - precurve_str_out[0]) / sfirst
+        dl_dprecurvestr0[n-1] = (precurve_str_out[n-1] - precurve_str_out[n-2]) / slast
+        dl0_drstr0[0] = -(self.r_str0[1] - self.r_str0[0]) / sfirst0
+        dl0_drstr0[n-1] = (self.r_str0[n-1] - self.r_str0[n-2]) / slast0
+        dl_drstr0[0] = -(self.r_str0[1] - self.r_str0[0]) / sfirst
+        dl_drstr0[n-1] = (self.r_str0[n-1] - self.r_str0[n-2]) / slast
+
+        dl_ddeltax = dl_dprecurvestr0
+        dl_ddx = dl_ddeltax * ddeltax_ddx
+        dl_ddy = dl_ddeltax * ddeltax_ddy
+        dl_ddz = dl_ddeltax * ddeltax_ddz
+        dl_dthetastr = dl_ddeltax * ddeltax_dthetastr
+        dl_dpitch = np.dot(dl_ddeltax, ddeltax_dpitch)
+
+        dshort_dl = -self.length0/self.length**2
+        dshort_dl0 = 1.0/self.length
+        dshort_drhub0 = dshort_dl0*dl0_drhub0 + dshort_dl*dl_drhub0
+        dshort_dprecurvestr0 = dshort_dl0*dl0_dprecurvestr0 + dshort_dl*dl_dprecurvestr0
+        dshort_drstr0 = dshort_dl0*dl0_drstr0 + dshort_dl*dl_drstr0
+        dshort_ddx = dshort_dl*dl_ddx
+        dshort_ddy = dshort_dl*dl_ddy
+        dshort_ddz = dshort_dl*dl_ddz
+        dshort_dthetastr = dshort_dl*dl_dthetastr
+        dshort_dpitch = dshort_dl*dl_dpitch
+
+        dbl_dbl0 = (self.shortening - 1)
+        dbl_drhub0 = self.bladeLength0 * dshort_drhub0
+        dbl_dprecurvestr0 = self.bladeLength0 * dshort_dprecurvestr0
+        dbl_drstr0 = self.bladeLength0 * dshort_drstr0
+        dbl_ddx = self.bladeLength0 * dshort_ddx
+        dbl_ddy = self.bladeLength0 * dshort_ddy
+        dbl_ddz = self.bladeLength0 * dshort_ddz
+        dbl_dthetastr = self.bladeLength0 * dshort_dthetastr
+        dbl_dpitch = self.bladeLength0 * dshort_dpitch
+
+        m = len(self.r_sub_precurve0)
+        dpcs_ddx = self.dpcs_ddeltax*ddeltax_ddx
+        dpcs_ddy = self.dpcs_ddeltax*ddeltax_ddy
+        dpcs_ddz = self.dpcs_ddeltax*ddeltax_ddz
+        dpcs_dpitch = np.dot(self.dpcs_ddeltax, ddeltax_dpitch)
+        dpcs_dthetastr = self.dpcs_ddeltax*ddeltax_dthetastr
+
+        dbl = np.concatenate([dbl_ddx, dbl_ddy, dbl_ddz, [dbl_dpitch], dbl_dthetastr,
+            np.zeros(m), [dbl_drhub0], dbl_drstr0, dbl_dprecurvestr0, [dbl_dbl0]])
+        dpcs = hstack([dpcs_ddx, dpcs_ddy, dpcs_ddz, dpcs_dpitch, dpcs_dthetastr,
+            self.dpcs_drsubpc0, np.zeros(m), self.dpcs_drstr0, np.zeros((m, n)), np.zeros(m)])
+
+
+        J = vstack([dbl, dpcs])
+
+        return J
 
 
 class RootMoment(Component):
@@ -1239,7 +1444,6 @@ class RootMoment(Component):
 
     r_str = Array(iotype='in')
     aeroLoads = VarTree(AeroLoads(), iotype='in')  # aerodynamic loads in blade c.s.
-    # precone = Float(iotype='in')
     totalCone = Array(iotype='in')
     x_az = Array(iotype='in')
     y_az = Array(iotype='in')
@@ -1253,19 +1457,12 @@ class RootMoment(Component):
     def execute(self):
 
         r = self.r_str
-        # x_az = -r*sind(self.precone)
-        # z_az = r*cosd(self.precone)
-        # y_az = np.zeros_like(r)
         x_az = self.x_az
         y_az = self.y_az
         z_az = self.z_az
-        # TODO: redo gradients
 
 
         aL = self.aeroLoads
-        # Px = np.interp(r, aL.r, aL.Px)
-        # Py = np.interp(r, aL.r, aL.Py)
-        # Pz = np.interp(r, aL.r, aL.Pz)
         # TODO: linearly interpolation is not C1 continuous.  it should work OK for now, but is not ideal
         Px, self.dPx_dr, self.dPx_dalr, self.dPx_dalPx = interp_with_deriv(r, aL.r, aL.Px)
         Py, self.dPy_dr, self.dPy_dalr, self.dPy_dalPy = interp_with_deriv(r, aL.r, aL.Py)
@@ -1288,11 +1485,6 @@ class RootMoment(Component):
 
 
 
-        # self.root_bending_moment, self.J = _rotor.rootmoment_with_derivs(r, aL.r, aL.Px, aL.Py, aL.Pz, self.precone)
-
-
-
-
         self.P = P
         self.az = az
         self.Mp = Mp
@@ -1304,7 +1496,8 @@ class RootMoment(Component):
 
     def list_deriv_vars(self):
 
-        inputs = ('r_str', 'aeroLoads.r', 'aeroLoads.Px', 'aeroLoads.Py', 'aeroLoads.Pz', 'precone')
+        inputs = ('r_str', 'aeroLoads.r', 'aeroLoads.Px', 'aeroLoads.Py', 'aeroLoads.Pz', 'totalCone',
+                  'x_az', 'y_az', 'z_az', 's')
         outputs = ('root_bending_moment',)
 
         return inputs, outputs
@@ -1312,11 +1505,11 @@ class RootMoment(Component):
 
     def provideJ(self):
 
-        dx_dr = -sind(self.precone)
-        dz_dr = cosd(self.precone)
+        # dx_dr = -sind(self.precone)
+        # dz_dr = cosd(self.precone)
 
-        dx_dprecone = -self.r*cosd(self.precone)*math.pi/180.0
-        dz_dprecone = -self.r*sind(self.precone)*math.pi/180.0
+        # dx_dprecone = -self.r*cosd(self.precone)*math.pi/180.0
+        # dz_dprecone = -self.r*sind(self.precone)*math.pi/180.0
 
         dPx_dr = (self.P.dx['dx']*self.dPx_dr.T + self.P.dx['dy']*self.dPy_dr.T + self.P.dx['dz']*self.dPz_dr.T).T
         dPy_dr = (self.P.dy['dx']*self.dPx_dr.T + self.P.dy['dy']*self.dPy_dr.T + self.P.dy['dz']*self.dPz_dr.T).T
@@ -1339,29 +1532,23 @@ class RootMoment(Component):
         dPz_dalPz = (self.P.dz['dz']*self.dPz_dalPz.T).T
 
 
-        dazx_dr = np.diag(self.az.dx['dx']*dx_dr + self.az.dx['dz']*dz_dr)
-        dazy_dr = np.diag(self.az.dy['dx']*dx_dr + self.az.dy['dz']*dz_dr)
-        dazz_dr = np.diag(self.az.dz['dx']*dx_dr + self.az.dz['dz']*dz_dr)
+        # dazx_dr = np.diag(self.az.dx['dx']*dx_dr + self.az.dx['dz']*dz_dr)
+        # dazy_dr = np.diag(self.az.dy['dx']*dx_dr + self.az.dy['dz']*dz_dr)
+        # dazz_dr = np.diag(self.az.dz['dx']*dx_dr + self.az.dz['dz']*dz_dr)
 
-        dazx_dprecone = (self.az.dx['dx']*dx_dprecone.T + self.az.dx['dz']*dz_dprecone.T).T
-        dazy_dprecone = (self.az.dy['dx']*dx_dprecone.T + self.az.dy['dz']*dz_dprecone.T).T
-        dazz_dprecone = (self.az.dz['dx']*dx_dprecone.T + self.az.dz['dz']*dz_dprecone.T).T
+        # dazx_dprecone = (self.az.dx['dx']*dx_dprecone.T + self.az.dx['dz']*dz_dprecone.T).T
+        # dazy_dprecone = (self.az.dy['dx']*dx_dprecone.T + self.az.dy['dz']*dz_dprecone.T).T
+        # dazz_dprecone = (self.az.dz['dx']*dx_dprecone.T + self.az.dz['dz']*dz_dprecone.T).T
 
         dMpx, dMpy, dMpz = self.az.cross_deriv_array(self.P, namea='az', nameb='P')
 
-        dMpx_dr = (dMpx['dPx']*dPx_dr.T + dMpx['dPy']*dPy_dr.T + dMpx['dPz']*dPz_dr.T
-            + dMpx['dazx']*dazx_dr.T + dMpx['dazy']*dazy_dr.T + dMpx['dazz']*dazz_dr.T).T
-        dMpy_dr = (dMpy['dPx']*dPx_dr.T + dMpy['dPy']*dPy_dr.T + dMpy['dPz']*dPz_dr.T
-            + dMpy['dazx']*dazx_dr.T + dMpy['dazy']*dazy_dr.T + dMpy['dazz']*dazz_dr.T).T
-        dMpz_dr = (dMpz['dPx']*dPx_dr.T + dMpz['dPy']*dPy_dr.T + dMpz['dPz']*dPz_dr.T
-            + dMpz['dazx']*dazx_dr.T + dMpz['dazy']*dazy_dr.T + dMpz['dazz']*dazz_dr.T).T
+        dMpx_dr = dMpx['dPx']*dPx_dr.T + dMpx['dPy']*dPy_dr.T + dMpx['dPz']*dPz_dr.T
+        dMpy_dr = dMpy['dPx']*dPx_dr.T + dMpy['dPy']*dPy_dr.T + dMpy['dPz']*dPz_dr.T
+        dMpz_dr = dMpz['dPx']*dPx_dr.T + dMpz['dPy']*dPy_dr.T + dMpz['dPz']*dPz_dr.T
 
-        dMpx_dprecone = (dMpx['dPx']*self.P.dx['dprecone'].T + dMpx['dPy']*self.P.dy['dprecone'].T + dMpx['dPz']*self.P.dz['dprecone'].T
-            + dMpx['dazx']*dazx_dprecone.T + dMpx['dazy']*dazy_dprecone.T + dMpx['dazz']*dazz_dprecone.T).T
-        dMpy_dprecone = (dMpy['dPx']*self.P.dx['dprecone'].T + dMpy['dPy']*self.P.dy['dprecone'].T + dMpy['dPz']*self.P.dz['dprecone'].T
-            + dMpy['dazx']*dazx_dprecone.T + dMpy['dazy']*dazy_dprecone.T + dMpy['dazz']*dazz_dprecone.T).T
-        dMpz_dprecone = (dMpz['dPx']*self.P.dx['dprecone'].T + dMpz['dPy']*self.P.dy['dprecone'].T + dMpz['dPz']*self.P.dz['dprecone'].T
-            + dMpz['dazx']*dazx_dprecone.T + dMpz['dazy']*dazy_dprecone.T + dMpz['dazz']*dazz_dprecone.T).T
+        dMpx_dtotalcone = dMpx['dPx']*self.P.dx['dprecone'].T + dMpx['dPy']*self.P.dy['dprecone'].T + dMpx['dPz']*self.P.dz['dprecone'].T
+        dMpy_dtotalcone = dMpy['dPx']*self.P.dx['dprecone'].T + dMpy['dPy']*self.P.dy['dprecone'].T + dMpy['dPz']*self.P.dz['dprecone'].T
+        dMpz_dtotalcone = dMpz['dPx']*self.P.dx['dprecone'].T + dMpz['dPy']*self.P.dy['dprecone'].T + dMpz['dPz']*self.P.dz['dprecone'].T
 
         dMpx_dalr = (dMpx['dPx']*dPx_dalr.T + dMpx['dPy']*dPy_dalr.T + dMpx['dPz']*dPz_dalr.T).T
         dMpy_dalr = (dMpy['dPx']*dPx_dalr.T + dMpy['dPy']*dPy_dalr.T + dMpy['dPz']*dPz_dalr.T).T
@@ -1379,17 +1566,13 @@ class RootMoment(Component):
         dMpy_dalPz = (dMpy['dPx']*dPx_dalPz.T + dMpy['dPy']*dPy_dalPz.T + dMpy['dPz']*dPz_dalPz.T).T
         dMpz_dalPz = (dMpz['dPx']*dPx_dalPz.T + dMpz['dPy']*dPy_dalPz.T + dMpz['dPz']*dPz_dalPz.T).T
 
-        dMx_dMpx, dMx_dr = trapz_deriv(self.Mp.x, self.r)
-        dMy_dMpy, dMy_dr = trapz_deriv(self.Mp.y, self.r)
-        dMz_dMpz, dMz_dr = trapz_deriv(self.Mp.z, self.r)
+        dMx_dMpx, dMx_ds = trapz_deriv(self.Mp.x, self.s)
+        dMy_dMpy, dMy_ds = trapz_deriv(self.Mp.y, self.s)
+        dMz_dMpz, dMz_ds = trapz_deriv(self.Mp.z, self.s)
 
-        dMx_dr = dMx_dr + np.dot(dMx_dMpx, dMpx_dr)
-        dMy_dr = dMy_dr + np.dot(dMy_dMpy, dMpy_dr)
-        dMz_dr = dMz_dr + np.dot(dMz_dMpz, dMpz_dr)
-
-        dMx_dprecone = np.dot(dMx_dMpx, dMpx_dprecone)
-        dMy_dprecone = np.dot(dMy_dMpy, dMpy_dprecone)
-        dMz_dprecone = np.dot(dMz_dMpz, dMpz_dprecone)
+        dMx_dr = np.dot(dMx_dMpx, dMpx_dr)
+        dMy_dr = np.dot(dMy_dMpy, dMpy_dr)
+        dMz_dr = np.dot(dMz_dMpz, dMpz_dr)
 
         dMx_dalr = np.dot(dMx_dMpx, dMpx_dalr)
         dMy_dalr = np.dot(dMy_dMpy, dMpy_dalr)
@@ -1407,19 +1590,38 @@ class RootMoment(Component):
         dMy_dalPz = np.dot(dMy_dMpy, dMpy_dalPz)
         dMz_dalPz = np.dot(dMz_dMpz, dMpz_dalPz)
 
+        dMx_dtotalcone = dMx_dMpx * dMpx_dtotalcone
+        dMy_dtotalcone = dMy_dMpy * dMpy_dtotalcone
+        dMz_dtotalcone = dMz_dMpz * dMpz_dtotalcone
+
+        dMx_dazx = dMx_dMpx * dMpx['dazx']
+        dMx_dazy = dMx_dMpx * dMpx['dazy']
+        dMx_dazz = dMx_dMpx * dMpx['dazz']
+
+        dMy_dazx = dMy_dMpy * dMpy['dazx']
+        dMy_dazy = dMy_dMpy * dMpy['dazy']
+        dMy_dazz = dMy_dMpy * dMpy['dazz']
+
+        dMz_dazx = dMz_dMpz * dMpz['dazx']
+        dMz_dazy = dMz_dMpz * dMpz['dazy']
+        dMz_dazz = dMz_dMpz * dMpz['dazz']
+
         drbm_dr = (self.Mx*dMx_dr + self.My*dMy_dr + self.Mz*dMz_dr)/self.root_bending_moment
-        drbm_dprecone = (self.Mx*dMx_dprecone + self.My*dMy_dprecone + self.Mz*dMz_dprecone)/self.root_bending_moment
         drbm_dalr = (self.Mx*dMx_dalr + self.My*dMy_dalr + self.Mz*dMz_dalr)/self.root_bending_moment
         drbm_dalPx = (self.Mx*dMx_dalPx + self.My*dMy_dalPx + self.Mz*dMz_dalPx)/self.root_bending_moment
         drbm_dalPy = (self.Mx*dMx_dalPy + self.My*dMy_dalPy + self.Mz*dMz_dalPy)/self.root_bending_moment
         drbm_dalPz = (self.Mx*dMx_dalPz + self.My*dMy_dalPz + self.Mz*dMz_dalPz)/self.root_bending_moment
+        drbm_dtotalcone = (self.Mx*dMx_dtotalcone + self.My*dMy_dtotalcone + self.Mz*dMz_dtotalcone)/self.root_bending_moment
+        drbm_dazx = (self.Mx*dMx_dazx + self.My*dMy_dazx + self.Mz*dMz_dazx)/self.root_bending_moment
+        drbm_dazy = (self.Mx*dMx_dazy + self.My*dMy_dazy + self.Mz*dMz_dazy)/self.root_bending_moment
+        drbm_dazz = (self.Mx*dMx_dazz + self.My*dMy_dazz + self.Mz*dMz_dazz)/self.root_bending_moment
+        drbm_ds = (self.Mx*dMx_ds + self.My*dMy_ds + self.Mz*dMz_ds)/self.root_bending_moment
 
-        J = np.array([np.concatenate([drbm_dr, drbm_dalr, drbm_dalPx, drbm_dalPy, drbm_dalPz, [drbm_dprecone]])])
+
+        J = np.array([np.concatenate([drbm_dr, drbm_dalr, drbm_dalPx, drbm_dalPy, drbm_dalPz,
+            drbm_dtotalcone, drbm_dazx, drbm_dazy, drbm_dazz, drbm_ds])])
 
         return J
-
-
-        # return self.J
 
 
 
@@ -1604,11 +1806,32 @@ class SetupPCModVarSpeed(Component):
     Omega = Float(iotype='out', units='rpm', desc='rotation speeds to run')
     pitch = Float(iotype='out', units='deg', desc='pitch angles to run')
 
+    missing_deriv_policy = 'assume_zero'
+
     def execute(self):
 
         self.Uhub = self.Vfactor * self.Vrated
         self.Omega = self.control.tsr*self.Uhub/self.R*RS2RPM
         self.pitch = self.control.pitch
+
+    def list_deriv_vars(self):
+
+        inputs = ('control.tsr', 'Vrated', 'R')
+        outputs = ('Uhub', 'Omega', 'pitch')
+
+        return inputs, outputs
+
+    def provideJ(self):
+
+        dU = np.array([0.0, self.Vfactor, 0.0])
+        dOmega = np.array([self.Uhub/self.R*RS2RPM,
+            self.control.tsr*self.Vfactor/self.R*RS2RPM,
+            -self.control.tsr*self.Uhub/self.R**2*RS2RPM])
+        dpitch = np.zeros(3)
+
+        J = vstack([dU, dOmega, dpitch])
+
+        return J
 
 
 class RotorTS(Assembly):
@@ -2187,7 +2410,7 @@ class RotorTS(Assembly):
         self.connect('spline0.r_str', 'blade_defl.r_str0')
         self.connect('spline0.precurve_str', 'blade_defl.precurve_str0')
         self.connect('bladeLength', 'blade_defl.bladeLength0')
-        self.connect('precurve_sub', 'blade_defl.precurve_sub0')
+        # self.connect('precurve_sub', 'blade_defl.precurve_sub0')
 
         # connect to outputs
         self.connect('turbineclass.V_extreme', 'V_extreme')
