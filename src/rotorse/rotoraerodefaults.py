@@ -438,7 +438,7 @@ class WeibullWithMeanCDF(CDFBase):
 
     def list_deriv_vars(self):
 
-        inputs = ('x',)
+        inputs = ('x', 'xbar')
         outputs = ('F',)
 
         return inputs, outputs
@@ -448,7 +448,10 @@ class WeibullWithMeanCDF(CDFBase):
         x = self.x
         k = self.k
         A = self.xbar / gamma(1.0 + 1.0/k)
-        J = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
+        dx = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
+        dxbar = -np.exp(-(x/A)**k)*(x/A)**(k-1)*k*x/A**2/gamma(1.0 + 1.0/k)
+
+        J = hstack([dx, dxbar])
 
         return J
 
@@ -465,7 +468,7 @@ class RayleighCDF(CDFBase):
 
     def list_deriv_vars(self):
 
-        inputs = ('x',)
+        inputs = ('x', 'xbar')
         outputs = ('F',)
 
         return inputs, outputs
@@ -474,7 +477,9 @@ class RayleighCDF(CDFBase):
 
         x = self.x
         xbar = self.xbar
-        J = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2.0*xbar**2))
+        dx = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2.0*xbar**2))
+        dxbar = -np.exp(-pi/4.0*(x/xbar)**2)*pi*x**2/(2.0*xbar**3)
+        J = hstack([dx, dxbar])
 
         return J
 
