@@ -27,7 +27,7 @@ INTEGER                             :: j        ! Index
 INTEGER                             :: ipjm1    ! i + j - 1
 
 ! Initialize full matrix
-full = 0.0
+full = 0.0d0
 
 ! Build upper triangle of full
 DO i = 1, n
@@ -124,8 +124,8 @@ elemloop1: DO i = 1, ne
     ! If element is vertical there is special handling
     IF (ivert(i) == 1) THEN
 
-        b32(i) = 0.0
-        b33(i) = 0.0
+        b32(i) = 0.0d0
+        b33(i) = 0.0d0
 
     ELSE
 
@@ -137,7 +137,7 @@ elemloop1: DO i = 1, ne
 END DO elemloop1
 
 ! Initialize axial force values
-f1 = 0.0
+f1 = 0.0d0
 
 elemloop2: DO i = 1, ne
 
@@ -268,9 +268,9 @@ DOUBLE PRECISION, DIMENSION(12)     :: n        ! Used for assembling global sti
 DOUBLE PRECISION                    :: ss       ! Sin(alpha)
 
 ! Initialize global matrices
-cf = 0.0
-gyro = 0.0
-kspin = 0.0
+cf = 0.0d0
+gyro = 0.0d0
+kspin = 0.0d0
 
 ! Calculate axial forces for the elements
 CALL taper_axial_force_dbl(nn,ne,loc,cx,cy,cz,mu,ivert,omega,f1)
@@ -278,9 +278,9 @@ CALL taper_axial_force_dbl(nn,ne,loc,cx,cy,cz,mu,ivert,omega,f1)
 elemloop: DO ii = 1, ne
 
     ! Initialize local element matrices
-    cf_e = 0.0
-    gyro_e = 0.0
-    kspin_e = 0.0
+    cf_e = 0.0d0
+    gyro_e = 0.0d0
+    kspin_e = 0.0d0
 
     ! Find node element node number
     ie = loc(ii,1)
@@ -299,15 +299,15 @@ elemloop: DO ii = 1, ne
     ! If element is vertical there is special handling
     IF (ivert(ii) == 1) THEN
 
-        b(1,1) = 0.0
+        b(1,1) = 0.0d0
         b(1,2) = -DSIN(alpha(ii))
         b(1,3) = -DCOS(alpha(ii))
-        b(2,1) = 0.0
+        b(2,1) = 0.0d0
         b(2,2) = DCOS(alpha(ii))
         b(2,3) = -DSIN(alpha(ii))
-        b(3,1) = 1.0
-        b(3,2) = 0.0
-        b(3,3) = 0.0
+        b(3,1) = 1.0d0
+        b(3,2) = 0.0d0
+        b(3,3) = 0.0d0
 
     ELSE
 
@@ -315,7 +315,7 @@ elemloop: DO ii = 1, ne
         a11 = (amz**2 + anz**2)/d
         a12 = -(alz * amz) /d
         a13 = -(alz * anz) /d
-        a21 = 0.0
+        a21 = 0.0d0
         a22 = anz/d
         a23 = -amz/d
         cs = DCOS(alpha(ii))
@@ -746,7 +746,7 @@ elemloop: DO ii = 1, ne
     kspin_e = kspin_e * al * omega**2
 
     ! Initialize transformation matrix
-    lambda = 0.0
+    lambda = 0.0d0
 
     ! Build transformation matrix
     DO i = 1, 3
@@ -909,12 +909,12 @@ DOUBLE PRECISION, DIMENSION(12)     :: n        ! Used for assembling global mas
 DOUBLE PRECISION                    :: ss       ! Sin(alpha)
 
 ! Initialize global stiffness matrix
-gm = 0.0
+gm = 0.0d0
 
 elemloop: DO ii = 1, ne
 
     ! Initialize local element stiffness matrix
-    ml = 0.0
+    ml = 0.0d0
 
     ! Find node element node number
     ie = loc(ii,1)
@@ -962,7 +962,7 @@ elemloop: DO ii = 1, ne
     END DO
 
     ! Initialize transformation matrix
-    lamda = 0.0
+    lamda = 0.0d0
 
     ! Compute slopes
     alz = (cx(je) - cx(ie))/al
@@ -972,15 +972,15 @@ elemloop: DO ii = 1, ne
     ! If element is vertical there is special handling
     IF (ivert(ii) == 1) THEN
 
-        b(1,1) = 0.0
+        b(1,1) = 0.0d0
         b(1,2) = -DSIN(alpha(ii))
         b(1,3) = -DCOS(alpha(ii))
-        b(2,1) = 0.0
+        b(2,1) = 0.0d0
         b(2,2) = DCOS(alpha(ii))
         b(2,3) = -DSIN(alpha(ii))
-        b(3,1) = 1.0
-        b(3,2) = 0.0
-        b(3,3) = 0.0
+        b(3,1) = 1.0d0
+        b(3,2) = 0.0d0
+        b(3,3) = 0.0d0
 
     ELSE
 
@@ -988,7 +988,7 @@ elemloop: DO ii = 1, ne
         a11 = (amz**2 + anz**2)/d
         a12 = -(alz * amz) /d
         a13 = -(alz * anz) /d
-        a21 = 0.0
+        a21 = 0.0d0
         a22 = anz/d
         a23 = -amz/d
         cs = DCOS(alpha(ii))
@@ -1160,12 +1160,12 @@ DOUBLE PRECISION, DIMENSION(12)     :: n        ! Used for assembling global sti
 DOUBLE PRECISION                    :: ss       ! Sin(alpha)
 
 ! Initialize global stiffness matrix
-gs = 0.0
+gs = 0.0d0
 
 elemloop: DO ii = 1, ne
 
     ! Initialize local element stiffness matrix
-    kl = 0.0
+    kl = 0.0d0
 
     ! Find node element node number
     ie = loc(ii,1)
@@ -1213,7 +1213,7 @@ elemloop: DO ii = 1, ne
     END DO
 
     ! Initialize transformation matrix
-    lamda = 0.0
+    lamda = 0.0d0
 
     ! Compute slopes
     alz = (cx(je) - cx(ie))/al
@@ -1223,15 +1223,15 @@ elemloop: DO ii = 1, ne
     ! If element is vertical there is special handling
     IF (ivert(ii) == 1) THEN
 
-        b(1,1) = 0.0
+        b(1,1) = 0.0d0
         b(1,2) = -DSIN(alpha(ii))
         b(1,3) = -DCOS(alpha(ii))
-        b(2,1) = 0.0
+        b(2,1) = 0.0d0
         b(2,2) = DCOS(alpha(ii))
         b(2,3) = -DSIN(alpha(ii))
-        b(3,1) = 1.0
-        b(3,2) = 0.0
-        b(3,3) = 0.0
+        b(3,1) = 1.0d0
+        b(3,2) = 0.0d0
+        b(3,3) = 0.0d0
 
     ELSE
 
@@ -1239,7 +1239,7 @@ elemloop: DO ii = 1, ne
         a11 = (amz**2 + anz**2)/d
         a12 = -(alz * amz) /d
         a13 = -(alz * anz) /d
-        a21 = 0.0
+        a21 = 0.0d0
         a22 = anz/d
         a23 = -amz/d
         cs = DCOS(alpha(ii))
@@ -1423,9 +1423,9 @@ SUBROUTINE frequencies(NBlInpSt, omegaRPM, BldFlexL, HubRad, BlFract, &
 
     ! parameters
 !     INTEGER, PARAMETER      :: ReKi = selected_real_kind(15, 307)
-    DOUBLE PRECISION, PARAMETER :: RPM2RPS = 0.10471976 ! Factor to convert revolutions per minute to radians per second.
-    REAL, PARAMETER             :: D2R = 0.017453293    ! Factor to convert degrees to radians.
-    REAL, PARAMETER             :: RPS2HZ = 0.159154943 ! Factor to convert radians/sec to Hertz
+    DOUBLE PRECISION, PARAMETER :: RPM2RPS = 0.10471975511965977d0 ! Factor to convert revolutions per minute to radians per second.
+    REAL, PARAMETER             :: D2R = 0.017453292519943295d0    ! Factor to convert degrees to radians.
+    REAL, PARAMETER             :: RPS2HZ = 0.15915494309189535d0 ! Factor to convert radians/sec to Hertz
     INTEGER, PARAMETER          :: nb = 12              ! Bandwidth of overall stiffness matrix
     INTEGER, PARAMETER          :: nfix = 6             ! Number of fixed degrees of freedom
     DOUBLE PRECISION,PARAMETER  :: SmllNmbr  = 9.999E-4 ! A small number used to define rotational inertia to avoid singularities
