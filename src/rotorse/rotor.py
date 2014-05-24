@@ -2218,7 +2218,7 @@ class RotorTS(Assembly):
         self.aero_extrm.Omega_load = 0.0  # parked case
         self.aero_extrm.run_case = 'loads'
 
-        # connections to aero_extrm (for tower thrust)
+        # connections to aero_extrm_forces (for tower thrust)
         self.connect('spline.r_aero', 'aero_extrm_forces.r')
         self.connect('spline.chord_aero', 'aero_extrm_forces.chord')
         self.connect('spline.theta_aero', 'aero_extrm_forces.theta')
