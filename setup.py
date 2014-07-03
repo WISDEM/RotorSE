@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='RotorSE',
-    version='0.1',
+    version='0.1.0',
     description='Rotor Systems Engineering Model',
     author='S. Andrew Ning',
     author_email='andrew.ning@nrel.gov',
@@ -15,9 +15,9 @@ setup(
     package_dir={'': 'src'},
     packages=find_packages(),
     license='Apache License, Version 2.0',
-    dependency_links=['https://github.com/NREL-WISDEM/CCBlade/tarball/master#egg=ccblade',
-        'https://github.com/NREL-WISDEM/pBEAM/tarball/master#egg=pbeam',
-        'https://github.nrel.gov/sning/CommonSE/tarball/master#egg=commonse'],
+    dependency_links=['https://github.com/WISDEM/CCBlade/tarball/master#egg=ccblade',
+        'https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam',
+        'https://github.com/WISDEM/CommonSE/tarball/master#egg=commonse'],
     zip_safe=False
 )
 
