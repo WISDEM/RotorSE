@@ -17,15 +17,13 @@ from rotoraero import SetupRunVarSpeed, RegulatedPowerCurve, AEP, VarSpeedMachin
 from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF
 from openmdao.lib.drivers.api import Brent
 from commonse.csystem import DirectionVector
-from commonse.utilities import cosd, sind, hstack, vstack, trapz_deriv, interp_with_deriv
+from commonse.utilities import hstack, vstack, trapz_deriv, interp_with_deriv
 from commonse.environment import PowerWind
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 from akima import Akima, akima_interp_with_derivs
 import _pBEAM
 import _curvefem
 import _bem  # TODO: move to rotoraero
-# also why not use bem.f90
-# from _rotor import rotor_dv as _rotor
 
 
 
@@ -72,7 +70,7 @@ class BeamProperties(VariableTree):
 
 class BeamPropertiesBase(Component):
 
-    properties = VarTree(BeamProperties(), iotype='out')
+    properties = VarTree(BeamProperties(), iotype='out', desc='beam properties')
 
 
 
@@ -81,57 +79,57 @@ class StrucBase(Component):
     # all inputs/outputs in airfoil coordinate system
 
     # inputs
-    beam = VarTree(BeamProperties(), iotype='in')
+    beam = VarTree(BeamProperties(), iotype='in', desc='beam properties')
 
     nF = Int(iotype='in', desc='number of natural frequencies to return')
 
-    Px_defl = Array(iotype='in')
-    Py_defl = Array(iotype='in')
-    Pz_defl = Array(iotype='in')
+    Px_defl = Array(iotype='in', desc='distributed load (force per unit length) in airfoil x-direction at max deflection condition')
+    Py_defl = Array(iotype='in', desc='distributed load (force per unit length) in airfoil y-direction at max deflection condition')
+    Pz_defl = Array(iotype='in', desc='distributed load (force per unit length) in airfoil z-direction at max deflection condition')
 
-    Px_strain = Array(iotype='in')
-    Py_strain = Array(iotype='in')
-    Pz_strain = Array(iotype='in')
+    Px_strain = Array(iotype='in', desc='distributed load (force per unit length) in airfoil x-direction at max strain condition')
+    Py_strain = Array(iotype='in', desc='distributed load (force per unit length) in airfoil y-direction at max strain condition')
+    Pz_strain = Array(iotype='in', desc='distributed load (force per unit length) in airfoil z-direction at max strain condition')
 
-    Px_pc_defl = Array(iotype='in')
-    Py_pc_defl = Array(iotype='in')
-    Pz_pc_defl = Array(iotype='in')
+    Px_pc_defl = Array(iotype='in', desc='distributed load (force per unit length) in airfoil x-direction for deflection used in generated power curve')
+    Py_pc_defl = Array(iotype='in', desc='distributed load (force per unit length) in airfoil y-direction for deflection used in generated power curve')
+    Pz_pc_defl = Array(iotype='in', desc='distributed load (force per unit length) in airfoil z-direction for deflection used in generated power curve')
 
-    xu_strain_spar = Array(iotype='in')
-    xl_strain_spar = Array(iotype='in')
-    yu_strain_spar = Array(iotype='in')
-    yl_strain_spar = Array(iotype='in')
-    xu_strain_te = Array(iotype='in')
-    xl_strain_te = Array(iotype='in')
-    yu_strain_te = Array(iotype='in')
-    yl_strain_te = Array(iotype='in')
+    xu_strain_spar = Array(iotype='in', desc='x-position of midpoint of spar cap on upper surface for strain calculation')
+    xl_strain_spar = Array(iotype='in', desc='x-position of midpoint of spar cap on lower surface for strain calculation')
+    yu_strain_spar = Array(iotype='in', desc='y-position of midpoint of spar cap on upper surface for strain calculation')
+    yl_strain_spar = Array(iotype='in', desc='y-position of midpoint of spar cap on lower surface for strain calculation')
+    xu_strain_te = Array(iotype='in', desc='x-position of midpoint of trailing-edge panel on upper surface for strain calculation')
+    xl_strain_te = Array(iotype='in', desc='x-position of midpoint of trailing-edge panel on lower surface for strain calculation')
+    yu_strain_te = Array(iotype='in', desc='y-position of midpoint of trailing-edge panel on upper surface for strain calculation')
+    yl_strain_te = Array(iotype='in', desc='y-position of midpoint of trailing-edge panel on lower surface for strain calculation')
 
-    Mx_damage = Array(iotype='in')
-    My_damage = Array(iotype='in')
-    strain_ult_spar = Float(0.01, iotype='in')
-    strain_ult_te = Float(2500*1e-6, iotype='in')
-    eta_damage = Float(1.755, iotype='in')
-    m_damage = Float(10.0, iotype='in')
-    N_damage = Float(365*24*3600*20.0, iotype='in')
+    Mx_damage = Array(iotype='in', units='N*m', desc='damage equivalent moments about airfoil x-direction')
+    My_damage = Array(iotype='in', units='N*m', desc='damage equivalent moments about airfoil y-direction')
+    strain_ult_spar = Float(0.01, iotype='in', desc='ultimate strain in spar cap')
+    strain_ult_te = Float(2500*1e-6, iotype='in', desc='uptimate strain in trailing-edge panels')
+    eta_damage = Float(1.755, iotype='in', desc='safety factor for fatigue')
+    m_damage = Float(10.0, iotype='in', desc='slope of S-N curve for fatigue analysis')
+    N_damage = Float(365*24*3600*20.0, iotype='in', desc='number of cycles used in fatigue analysis')
 
     # outputs
     blade_mass = Float(iotype='out', desc='mass of one blades')
     blade_moment_of_inertia = Float(iotype='out', desc='out of plane moment of inertia of a blade')
-    freq = Array(iotype='out')
-    dx_defl = Array(iotype='out')
-    dy_defl = Array(iotype='out')
-    dz_defl = Array(iotype='out')
-    dx_pc_defl = Array(iotype='out')
-    dy_pc_defl = Array(iotype='out')
-    dz_pc_defl = Array(iotype='out')
-    strainU_spar = Array(iotype='out')
-    strainL_spar = Array(iotype='out')
-    strainU_te = Array(iotype='out')
-    strainL_te = Array(iotype='out')
-    damageU_spar = Array(iotype='out')
-    damageL_spar = Array(iotype='out')
-    damageU_te = Array(iotype='out')
-    damageL_te = Array(iotype='out')
+    freq = Array(iotype='out', units='Hz', desc='first nF natural frequencies of blade')
+    dx_defl = Array(iotype='out', desc='deflection of blade section in airfoil x-direction under max deflection loading')
+    dy_defl = Array(iotype='out', desc='deflection of blade section in airfoil y-direction under max deflection loading')
+    dz_defl = Array(iotype='out', desc='deflection of blade section in airfoil z-direction under max deflection loading')
+    dx_pc_defl = Array(iotype='out', desc='deflection of blade section in airfoil x-direction under power curve loading')
+    dy_pc_defl = Array(iotype='out', desc='deflection of blade section in airfoil y-direction under power curve loading')
+    dz_pc_defl = Array(iotype='out', desc='deflection of blade section in airfoil z-direction under power curve loading')
+    strainU_spar = Array(iotype='out', desc='strain in spar cap on upper surface at location xu,yu_strain with loads P_strain')
+    strainL_spar = Array(iotype='out', desc='strain in spar cap on lower surface at location xl,yl_strain with loads P_strain')
+    strainU_te = Array(iotype='out', desc='strain in trailing-edge panels on upper surface at location xu,yu_te with loads P_te')
+    strainL_te = Array(iotype='out', desc='strain in trailing-edge panels on lower surface at location xl,yl_te with loads P_te')
+    damageU_spar = Array(iotype='out', desc='fatigue damage on upper surface in spar cap')
+    damageL_spar = Array(iotype='out', desc='fatigue damage on lower surface in spar cap')
+    damageU_te = Array(iotype='out', desc='fatigue damage on upper surface in trailing-edge panels')
+    damageL_te = Array(iotype='out', desc='fatigue damage on lower surface in trailing-edge panels')
 
 
 
@@ -151,14 +149,15 @@ class ResizeCompositeSection(Component):
     websCSIn = List(CompositeSection, iotype='in',
         desc='list of CompositeSection objections defining the properties for shear webs')
 
-    chord_str_ref = Array(iotype='in', units='m')
+    # TODO: remove fixed t/c assumption
+    chord_str_ref = Array(iotype='in', units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)')
 
-    sector_idx_strain_spar = Array(iotype='in', dtype=np.int)
-    sector_idx_strain_te = Array(iotype='in', dtype=np.int)
+    sector_idx_strain_spar = Array(iotype='in', dtype=np.int, desc='index of sector for spar (PreComp definition of sector)')
+    sector_idx_strain_te = Array(iotype='in', dtype=np.int, desc='index of sector for trailing-edge (PreComp definition of sector)')
 
-    chord_str = Array(iotype='in', units='m')
-    sparT_str = Array(iotype='in', units='m')
-    teT_str = Array(iotype='in', units='m')
+    chord_str = Array(iotype='in', units='m', desc='structural chord distribution')
+    sparT_str = Array(iotype='in', units='m', desc='structural spar cap thickness distribution')
+    teT_str = Array(iotype='in', units='m', desc='structural trailing-edge panel thickness distribution')
 
     # out
     upperCSOut = List(CompositeSection, iotype='out',
@@ -244,21 +243,21 @@ class PreCompSections(BeamPropertiesBase):
     websCS = List(CompositeSection, iotype='in',
         desc='list of CompositeSection objections defining the properties for shear webs')
 
-    sector_idx_strain_spar = Array(iotype='in', dtype=np.int)
-    sector_idx_strain_te = Array(iotype='in', dtype=np.int)
+    sector_idx_strain_spar = Array(iotype='in', dtype=np.int, desc='index of sector for spar (PreComp definition of sector)')
+    sector_idx_strain_te = Array(iotype='in', dtype=np.int, desc='index of sector for trailing-edge (PreComp definition of sector)')
 
 
-    eps_crit_spar = Array(iotype='out')
-    eps_crit_te = Array(iotype='out')
+    eps_crit_spar = Array(iotype='out', desc='critical strain in spar from panel buckling calculation')
+    eps_crit_te = Array(iotype='out', desc='critical strain in trailing-edge panels from panel buckling calculation')
 
-    xu_strain_spar = Array(iotype='out')
-    xl_strain_spar = Array(iotype='out')
-    yu_strain_spar = Array(iotype='out')
-    yl_strain_spar = Array(iotype='out')
-    xu_strain_te = Array(iotype='out')
-    xl_strain_te = Array(iotype='out')
-    yu_strain_te = Array(iotype='out')
-    yl_strain_te = Array(iotype='out')
+    xu_strain_spar = Array(iotype='out', desc='x-position of midpoint of spar cap on upper surface for strain calculation')
+    xl_strain_spar = Array(iotype='out', desc='x-position of midpoint of spar cap on lower surface for strain calculation')
+    yu_strain_spar = Array(iotype='out', desc='y-position of midpoint of spar cap on upper surface for strain calculation')
+    yl_strain_spar = Array(iotype='out', desc='y-position of midpoint of spar cap on lower surface for strain calculation')
+    xu_strain_te = Array(iotype='out', desc='x-position of midpoint of trailing-edge panel on upper surface for strain calculation')
+    xl_strain_te = Array(iotype='out', desc='x-position of midpoint of trailing-edge panel on lower surface for strain calculation')
+    yu_strain_te = Array(iotype='out', desc='y-position of midpoint of trailing-edge panel on upper surface for strain calculation')
+    yl_strain_te = Array(iotype='out', desc='y-position of midpoint of trailing-edge panel on lower surface for strain calculation')
 
 
     def criticalStrainLocations(self, sector_idx_strain, x_ec_nose, y_ec_nose):
@@ -599,15 +598,16 @@ class RotorWithpBEAM(StrucBase):
 
 
 class CurveFEM(Component):
+    """natural frequencies for curved blades"""
 
-    Omega = Float(iotype='in')
-    beam = VarTree(BeamProperties(), iotype='in')
-    theta_str = Array(iotype='in')
-    precurve_str = Array(iotype='in')
-    presweep_str = Array(iotype='in')
-    nF = Int(iotype='in')
+    Omega = Float(iotype='in', units='rpm', desc='rotor rotation frequency')
+    beam = VarTree(BeamProperties(), iotype='in', desc='beam properties')
+    theta_str = Array(iotype='in', units='deg', desc='structural twist distribution')
+    precurve_str = Array(iotype='in', units='m', desc='structural precuve (see FAST definition)')
+    presweep_str = Array(iotype='in', units='m', desc='structural presweep (see FAST definition)')
+    nF = Int(iotype='in', desc='number of frequencies to return')
 
-    freq = Array(iotype='out')
+    freq = Array(iotype='out', units='Hz', desc='first nF natural frequencies')
 
 
 
@@ -631,12 +631,12 @@ class GridSetup(Component):
     """preprocessing step.  inputs and outputs should not change during optimization"""
 
     # should be constant
-    initial_aero_grid = Array(iotype='in')
-    initial_str_grid = Array(iotype='in')
+    initial_aero_grid = Array(iotype='in', desc='initial aerodynamic grid on unit radius')
+    initial_str_grid = Array(iotype='in', desc='initial structural grid on unit radius')
 
     # outputs are also constant during optimization
-    fraction = Array(iotype='out')
-    idxj = Array(iotype='out', dtype=np.int)
+    fraction = Array(iotype='out', desc='fractional location of structural grid on aero grid')
+    idxj = Array(iotype='out', dtype=np.int, desc='index of augmented aero grid corresponding to structural index')
 
     def execute(self):
 
@@ -665,14 +665,14 @@ class GridSetup(Component):
 class RGrid(Component):
 
     # variables
-    r_aero = Array(iotype='in')
+    r_aero = Array(iotype='in', desc='new aerodynamic grid on unit radius')
 
     # parameters
-    fraction = Array(iotype='in')
-    idxj = Array(iotype='in', dtype=np.int)
+    fraction = Array(iotype='in', desc='fractional location of structural grid on aero grid')
+    idxj = Array(iotype='in', dtype=np.int, desc='index of augmented aero grid corresponding to structural index')
 
     # outputs
-    r_str = Array(iotype='out')
+    r_str = Array(iotype='out', desc='corresponding structural grid corresponding to new aerodynamic grid')
 
 
     missing_deriv_policy = 'assume_zero'
@@ -719,24 +719,24 @@ class GeometrySpline(Component):
     # variables
     r_aero_unit = Array(iotype='in', desc='locations where airfoils are defined on unit radius')
     r_str_unit = Array(np.array([0]), iotype='in', desc='locations where airfoils are defined on unit radius')
-    r_max_chord = Float(iotype='in')
+    r_max_chord = Float(iotype='in', desc='location of max chord on unit radius')
     chord_sub = Array(iotype='in', units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
     theta_sub = Array(iotype='in', units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
     precurve_sub = Array(iotype='in', units='m', desc='precurve at control points')  # defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-    bladeLength = Float(iotype='in', units='m')
-    sparT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
-    teT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
+    bladeLength = Float(iotype='in', units='m', desc='blade length (if not precurved or swept) otherwise length of blade before curvature')
+    sparT = Array(iotype='in', units='m', desc='thickness values of spar cap')
+    teT = Array(iotype='in', units='m', desc='thickness values of trailing edge panels')
 
     # parameters
     idx_cylinder_aero = Int(iotype='in', desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
     idx_cylinder_str = Int(iotype='in', desc='first idx in r_str_unit of non-cylindrical section')
-    hubFraction = Float(iotype='in')
+    hubFraction = Float(iotype='in', desc='hub location as fraction of radius')
 
     # out
-    Rhub = Float(iotype='out', units='m')
-    Rtip = Float(iotype='out', units='m')
-    r_aero = Array(iotype='out', units='m')
-    r_str = Array(iotype='out', units='m')
+    Rhub = Float(iotype='out', units='m', desc='dimensional radius of hub')
+    Rtip = Float(iotype='out', units='m', desc='dimensional radius of tip')
+    r_aero = Array(iotype='out', units='m', desc='dimensional aerodynamic grid')
+    r_str = Array(iotype='out', units='m', desc='dimensional structural grid')
     chord_aero = Array(iotype='out', units='m', desc='chord at airfoil locations')
     chord_str = Array(iotype='out', units='m', desc='chord at structural locations')
     theta_aero = Array(iotype='out', units='deg', desc='twist at airfoil locations')
@@ -744,9 +744,9 @@ class GeometrySpline(Component):
     precurve_aero = Array(iotype='out', units='m', desc='precurve at airfoil locations')
     precurve_str = Array(iotype='out', units='m', desc='precurve at structural locations')
     presweep_str = Array(iotype='out', units='m', desc='presweep at structural locations')
-    sparT_str = Array(iotype='out', units='m')
-    teT_str = Array(iotype='out', units='m')
-    r_sub_precurve = Array(iotype='out', units='m')
+    sparT_str = Array(iotype='out', units='m', desc='dimensional spar cap thickness distribution')
+    teT_str = Array(iotype='out', units='m', desc='dimensional trailing-edge panel thickness distribution')
+    r_sub_precurve = Array(iotype='out', desc='precurve locations (used internally)')
 
 
     def execute(self):
@@ -788,22 +788,30 @@ class GeometrySpline(Component):
         self.precurve_str, _, _, _ = precurve_spline.interp(self.r_str)
         self.presweep_str = np.zeros_like(self.precurve_str)  # TODO: for now
 
-        # ----- TODO: the below is not generalized at all... -----------
         # setup sparT parameterization
-        nt = len(self.sparT) - 1
-        rt = np.linspace(r_cylinder, Rtip, nt)
-        sparT_spline = Akima(rt, self.sparT[1:])
+        nt = len(self.sparT)
+        rt = np.linspace(0.0, Rtip, nt)
+        sparT_spline = Akima(rt, self.sparT)
+        teT_spline = Akima(rt, self.teT)
 
-        self.sparT_cylinder = np.array([0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05457, 0.03859, 0.03812, 0.03906, 0.04799, 0.05363, 0.05833])
-        self.teT_cylinder = np.array([0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05457, 0.03859, 0.05765, 0.05765, 0.04731, 0.04167])
+        self.sparT_str, _, _, _ = sparT_spline.interp(self.r_str)
+        self.teT_str, _, _, _ = teT_spline.interp(self.r_str)
 
-        sparT_str_in = self.sparT[0]*self.sparT_cylinder
-        sparT_str_out, _, _, _ = sparT_spline.interp(self.r_str[idxc_str:])
-        self.sparT_str = np.concatenate([sparT_str_in, [sparT_str_out[0]], sparT_str_out])
+        # below is not generalized and was for a specific study
+        # nt = len(self.sparT) - 1
+        # rt = np.linspace(r_cylinder, Rtip, nt)
+        # sparT_spline = Akima(rt, self.sparT[1:])
 
-        # trailing edge thickness
-        teT_str_in = self.teT[0]*self.teT_cylinder
-        self.teT_str = np.concatenate((teT_str_in, self.teT[1]*np.ones(9), self.teT[2]*np.ones(7), self.teT[3]*np.ones(8), self.teT[4]*np.ones(2)))
+        # self.sparT_cylinder = np.array([0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05457, 0.03859, 0.03812, 0.03906, 0.04799, 0.05363, 0.05833])
+        # self.teT_cylinder = np.array([0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05457, 0.03859, 0.05765, 0.05765, 0.04731, 0.04167])
+
+        # sparT_str_in = self.sparT[0]*self.sparT_cylinder
+        # sparT_str_out, _, _, _ = sparT_spline.interp(self.r_str[idxc_str:])
+        # self.sparT_str = np.concatenate([sparT_str_in, [sparT_str_out[0]], sparT_str_out])
+
+        # # trailing edge thickness
+        # teT_str_in = self.teT[0]*self.teT_cylinder
+        # self.teT_str = np.concatenate((teT_str_in, self.teT[1]*np.ones(9), self.teT[2]*np.ones(7), self.teT[3]*np.ones(8), self.teT[4]*np.ones(2)))
 
 
     # def list_deriv_vars(self):
@@ -853,16 +861,16 @@ class GeometrySpline(Component):
 
 class BladeCurvature(Component):
 
-    r = Array(iotype='in')
-    precurve = Array(iotype='in')
-    presweep = Array(iotype='in')
-    precone = Float(iotype='in')
+    r = Array(iotype='in', units='m', desc='location in blade z-coordinate')
+    precurve = Array(iotype='in', units='m', desc='location in blade x-coordinate')
+    presweep = Array(iotype='in', units='m', desc='location in blade y-coordinate')
+    precone = Float(iotype='in', units='deg', desc='precone angle')
 
-    totalCone = Array(iotype='out')
-    x_az = Array(iotype='out')
-    y_az = Array(iotype='out')
-    z_az = Array(iotype='out')
-    s = Array(iotype='out')
+    totalCone = Array(iotype='out', units='deg', desc='total cone angle from precone and curvature')
+    x_az = Array(iotype='out', units='m', desc='location of blade in azimuth x-coordinate system')
+    y_az = Array(iotype='out', units='m', desc='location of blade in azimuth y-coordinate system')
+    z_az = Array(iotype='out', units='m', desc='location of blade in azimuth z-coordinate system')
+    s = Array(iotype='out', units='m', desc='cumulative path length along blade')
 
     def execute(self):
 
@@ -958,14 +966,14 @@ class BladeCurvature(Component):
 
 class DamageLoads(Component):
 
-    rstar = Array(iotype='in')
-    Mxb = Array(iotype='in')
-    Myb = Array(iotype='in')
-    theta = Array(iotype='in')
-    r = Array(iotype='in')
+    rstar = Array(iotype='in', desc='nondimensional radial locations of damage equivalent moments')
+    Mxb = Array(iotype='in', units='N*m', desc='damage equivalent moments about blade c.s. x-direction')
+    Myb = Array(iotype='in', units='N*m', desc='damage equivalent moments about blade c.s. y-direction')
+    theta = Array(iotype='in', units='deg', desc='structural twist')
+    r = Array(iotype='in', units='m', desc='structural radial locations')
 
-    Mxa = Array(iotype='out')
-    Mya = Array(iotype='out')
+    Mxa = Array(iotype='out', units='N*m', desc='damage equivalent moments about airfoil c.s. x-direction')
+    Mya = Array(iotype='out', units='N*m', desc='damage equivalent moments about airfoil c.s. y-direction')
 
     def execute(self):
 
@@ -1032,21 +1040,21 @@ class DamageLoads(Component):
 class TotalLoads(Component):
 
     # variables
-    aeroLoads = VarTree(AeroLoads(), iotype='in')  # aerodynamic loads in blade c.s.
-    r = Array(iotype='in')
-    theta = Array(iotype='in')
-    tilt = Float(iotype='in')
-    totalCone = Array(iotype='in')
-    z_az = Array(iotype='in')
-    rhoA = Array(iotype='in')
+    aeroLoads = VarTree(AeroLoads(), iotype='in', desc='aerodynamic loads in blade c.s.')
+    r = Array(iotype='in', units='m', desc='structural radial locations')
+    theta = Array(iotype='in', units='deg', desc='structural twist')
+    tilt = Float(iotype='in', units='deg', desc='tilt angle')
+    totalCone = Array(iotype='in', units='deg', desc='total cone angle from precone and curvature')
+    z_az = Array(iotype='in', units='m', desc='location of blade in azimuth z-coordinate system')
+    rhoA = Array(iotype='in', units='kg/m', desc='mass per unit length')
 
     # parameters
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity')
 
     # outputs
-    Px_af = Array(iotype='out')  # total loads in af c.s.
-    Py_af = Array(iotype='out')
-    Pz_af = Array(iotype='out')
+    Px_af = Array(iotype='out', desc='total distributed loads in airfoil x-direction')
+    Py_af = Array(iotype='out', desc='total distributed loads in airfoil y-direction')
+    Pz_af = Array(iotype='out', desc='total distributed loads in airfoil z-direction')
 
     missing_deriv_policy = 'assume_zero'
 
@@ -1056,8 +1064,6 @@ class TotalLoads(Component):
         # z_az = self.r*cosd(self.precone)
         totalCone = self.totalCone
         z_az = self.z_az
-
-        # TODO: redo gradients with precurve
 
         # keep all in blade c.s. then rotate all at end
 
@@ -1212,21 +1218,20 @@ class TotalLoads(Component):
 class TipDeflection(Component):
 
     # variables
-    dx = Float(iotype='in')  # deflection at tip in airfoil c.s.
-    dy = Float(iotype='in')
-    dz = Float(iotype='in')
-    theta = Float(iotype='in')
-    pitch = Float(iotype='in')
-    azimuth = Float(iotype='in')
-    tilt = Float(iotype='in')
-    # precone = Float(iotype='in')
-    totalConeTip = Float(iotype='in')
+    dx = Float(iotype='in', desc='deflection at tip in airfoil x-direction')
+    dy = Float(iotype='in', desc='deflection at tip in airfoil y-direction')
+    dz = Float(iotype='in', desc='deflection at tip in airfoil z-direction')
+    theta = Float(iotype='in', units='deg', desc='twist at tip section')
+    pitch = Float(iotype='in', units='deg', desc='blade pitch angle')
+    azimuth = Float(iotype='in', units='deg', desc='azimuth angle')
+    tilt = Float(iotype='in', units='deg', desc='tilt angle')
+    totalConeTip = Float(iotype='in', units='deg', desc='total coning angle including precone and curvature')
 
     # parameters
-    dynamicFactor = Float(1.2, iotype='in')
+    dynamicFactor = Float(1.2, iotype='in', desc='a dynamic amplification factor to adjust the static deflection calculation')
 
     # outputs
-    tip_deflection = Float(iotype='out')
+    tip_deflection = Float(iotype='out', desc='deflection at tip in yaw x-direction')
 
 
     def execute(self):
@@ -1298,21 +1303,21 @@ class TipDeflection(Component):
 
 class BladeDeflection(Component):
 
-    dx = Array(iotype='in')  # deflections in airfoil c.s.
-    dy = Array(iotype='in')
-    dz = Array(iotype='in')
-    pitch = Float(iotype='in')
-    theta_str = Array(iotype='in')
+    dx = Array(iotype='in', desc='deflections in airfoil x-direction')
+    dy = Array(iotype='in', desc='deflections in airfoil y-direction')
+    dz = Array(iotype='in', desc='deflections in airfoil z-direction')
+    pitch = Float(iotype='in', units='deg', desc='blade pitch angle')
+    theta_str = Array(iotype='in', units='deg', desc='structural twist')
 
-    r_sub_precurve0 = Array(iotype='in')
-    Rhub0 = Float(iotype='in')
-    r_str0 = Array(iotype='in')
-    precurve_str0 = Array(iotype='in')
+    r_sub_precurve0 = Array(iotype='in', desc='undeflected precurve locations (internal)')
+    Rhub0 = Float(iotype='in', units='m', desc='hub radius')
+    r_str0 = Array(iotype='in', units='m', desc='undeflected radial locations')
+    precurve_str0 = Array(iotype='in', units='m', desc='undeflected precurve locations')
 
-    bladeLength0 = Float(iotype='in', units='m', desc='original blade length')
+    bladeLength0 = Float(iotype='in', units='m', desc='original blade length (only an actual length if no curvature)')
 
-    delta_bladeLength = Float(iotype='out', units='m')
-    delta_precurve_sub = Array(iotype='out', units='m')
+    delta_bladeLength = Float(iotype='out', units='m', desc='adjustment to blade length to account for curvature from loading')
+    delta_precurve_sub = Array(iotype='out', units='m', desc='adjustment to precurve to account for curvature from loading')
 
     def execute(self):
 
@@ -1440,17 +1445,17 @@ class BladeDeflection(Component):
 
 
 class RootMoment(Component):
-    """docstring for RootMoment"""
+    """blade root bending moment"""
 
     r_str = Array(iotype='in')
-    aeroLoads = VarTree(AeroLoads(), iotype='in')  # aerodynamic loads in blade c.s.
-    totalCone = Array(iotype='in')
-    x_az = Array(iotype='in')
-    y_az = Array(iotype='in')
-    z_az = Array(iotype='in')
-    s = Array(iotype='in')
+    aeroLoads = VarTree(AeroLoads(), iotype='in', desc='aerodynamic loads in blade c.s.')
+    totalCone = Array(iotype='in', units='deg', desc='total cone angle from precone and curvature')
+    x_az = Array(iotype='in', units='m', desc='location of blade in azimuth x-coordinate system')
+    y_az = Array(iotype='in', units='m', desc='location of blade in azimuth y-coordinate system')
+    z_az = Array(iotype='in', units='m', desc='location of blade in azimuth z-coordinate system')
+    s = Array(iotype='in', units='m', desc='cumulative path length along blade')
 
-    root_bending_moment = Float(iotype='out')
+    root_bending_moment = Float(iotype='out', units='N*m', desc='total magnitude of bending moment at root of blade')
 
     missing_deriv_policy = 'assume_zero'
 
@@ -1628,16 +1633,16 @@ class RootMoment(Component):
 class MassProperties(Component):
 
     # variables
-    blade_mass = Float(iotype='in')
-    blade_moment_of_inertia = Float(iotype='in')
-    tilt = Float(iotype='in')
+    blade_mass = Float(iotype='in', units='kg', desc='mass of one blade')
+    blade_moment_of_inertia = Float(iotype='in', units='kg*m**2', desc='mass moment of inertia of blade about hub')
+    tilt = Float(iotype='in', units='deg', desc='rotor tilt angle (used to translate moments of inertia from hub to yaw c.s.')
 
     # parameters
-    nBlades = Int(iotype='in')
+    nBlades = Int(iotype='in', desc='number of blades')
 
     # outputs
-    mass_all_blades = Float(iotype='out')
-    I_all_blades = Array(iotype='out')
+    mass_all_blades = Float(iotype='out', desc='mass of all blades')
+    I_all_blades = Array(iotype='out', desc='mass moments of inertia of all blades in yaw c.s. order:Ixx, Iyy, Izz, Ixy, Ixz, Iyz')
 
     def execute(self):
 
@@ -1686,11 +1691,11 @@ class MassProperties(Component):
 class TurbineClass(Component):
 
     # parameters
-    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
+    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in', desc='IEC turbine class')
 
     # outputs should be constant
-    V_mean = Float(iotype='out', units='m/s')
-    V_extreme = Float(iotype='out', units='m/s')
+    V_mean = Float(iotype='out', units='m/s', desc='IEC mean wind speed for Rayleigh distribution')
+    V_extreme = Float(iotype='out', units='m/s', desc='IEC extreme wind speed at hub height')
 
     def execute(self):
         if self.turbine_class == 'I':
@@ -1708,15 +1713,15 @@ class TurbineClass(Component):
 class ExtremeLoads(Component):
 
     # variables
-    T = Array(np.zeros(2), iotype='in', units='N', shape=((2,)), desc='index 0 is at worst-case, index 1 feathered')
-    Q = Array(np.zeros(2), iotype='in', units='N*m', shape=((2,)), desc='index 0 is at worst-case, index 1 feathered')
+    T = Array(np.zeros(2), iotype='in', units='N', shape=((2,)), desc='rotor thrust, index 0 is at worst-case, index 1 feathered')
+    Q = Array(np.zeros(2), iotype='in', units='N*m', shape=((2,)), desc='rotor torque, index 0 is at worst-case, index 1 feathered')
 
     # parameters
-    nBlades = Int(iotype='in')
+    nBlades = Int(iotype='in', desc='number of blades')
 
     # outputs
-    T_extreme = Float(iotype='out', units='N')
-    Q_extreme = Float(iotype='out', units='N*m')
+    T_extreme = Float(iotype='out', units='N', desc='rotor thrust at survival wind condition')
+    Q_extreme = Float(iotype='out', units='N*m', desc='rotor torque at survival wind condition')
 
 
     def execute(self):
@@ -1747,15 +1752,15 @@ class ExtremeLoads(Component):
 class GustETM(Component):
 
     # variables
-    V_mean = Float(iotype='in', units='m/s')
-    V_hub = Float(iotype='in', units='m/s')
+    V_mean = Float(iotype='in', units='m/s', desc='IEC average wind speed for turbine class')
+    V_hub = Float(iotype='in', units='m/s', desc='hub height wind speed')
 
     # parameters
-    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
-    std = Int(3, iotype='in')
+    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in', desc='IEC turbulence class')
+    std = Int(3, iotype='in', desc='number of standard deviations for strength of gust')
 
     # out
-    V_gust = Float(iotype='out', units='m/s')
+    V_gust = Float(iotype='out', units='m/s', desc='gust wind speed')
 
 
     def execute(self):
@@ -1797,10 +1802,10 @@ class GustETM(Component):
 
 class SetupPCModVarSpeed(Component):
 
-    control = VarTree(VarSpeedMachine(), iotype='in')
+    control = VarTree(VarSpeedMachine(), iotype='in', desc='control parameters')
     Vrated = Float(iotype='in', units='m/s', desc='rated wind speed')
     R = Float(iotype='in', units='m', desc='rotor radius')
-    Vfactor = Float(0.7, iotype='in')
+    Vfactor = Float(0.7, iotype='in', desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation')
 
     Uhub = Float(iotype='out', units='m/s', desc='freestream velocities to run')
     Omega = Float(iotype='out', units='rpm', desc='rotation speeds to run')
@@ -1834,23 +1839,23 @@ class SetupPCModVarSpeed(Component):
         return J
 
 
-class RotorTS(Assembly):
-    """rotor for tip-speed study"""
+class RotorSE(Assembly):
+    """rotor model"""
 
     # --- geometry inputs ---
-    initial_aero_grid = Array(iotype='in')
-    initial_str_grid = Array(iotype='in')
-    idx_cylinder_aero = Int(iotype='in', desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
+    initial_aero_grid = Array(iotype='in', desc='initial aerodynamic grid on unit radius')
+    initial_str_grid = Array(iotype='in', desc='initial structural grid on unit radius')
+    idx_cylinder_aero = Int(iotype='in', desc='first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here')
     idx_cylinder_str = Int(iotype='in', desc='first idx in r_str_unit of non-cylindrical section')
-    hubFraction = Float(iotype='in')
-    r_aero = Array(iotype='in')
-    r_max_chord = Float(iotype='in')
-    chord_sub = Array(iotype='in', units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
-    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
-    precurve_sub = Array(np.zeros(3), iotype='in', units='m', desc='precurve at control points')  # defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-    delta_precurve_sub = Array(iotype='in', units='m')
-    bladeLength = Float(iotype='in', units='m', deriv_ignore=True)
-    delta_bladeLength = Float(iotype='in', units='m')
+    hubFraction = Float(iotype='in', desc='hub location as fraction of radius')
+    r_aero = Array(iotype='in', desc='new aerodynamic grid on unit radius')
+    r_max_chord = Float(iotype='in', desc='location of max chord on unit radius')
+    chord_sub = Array(iotype='in', units='m', desc='chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip')
+    theta_sub = Array(iotype='in', units='deg', desc='twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip')
+    precurve_sub = Array(np.zeros(3), iotype='in', units='m', desc='precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)')
+    delta_precurve_sub = Array(iotype='in', units='m', desc='adjustment to precurve to account for curvature from loading')
+    bladeLength = Float(iotype='in', units='m', deriv_ignore=True, desc='blade length (if not precurved or swept) otherwise length of blade before curvature')
+    delta_bladeLength = Float(iotype='in', units='m', desc='adjustment to blade length to account for curvature from loading')
     precone = Float(0.0, iotype='in', desc='precone angle', units='deg', deriv_ignore=True)
     tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg', deriv_ignore=True)
     yaw = Float(0.0, iotype='in', desc='yaw error', units='deg', deriv_ignore=True)
@@ -1861,22 +1866,21 @@ class RotorTS(Assembly):
     rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air', deriv_ignore=True)
     mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air', deriv_ignore=True)
     shearExp = Float(0.2, iotype='in', desc='shear exponent', deriv_ignore=True)
-    hubHt = Float(iotype='in', units='m')
-    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in')
-    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in')
+    hubHt = Float(iotype='in', units='m', desc='hub height')
+    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in', desc='IEC turbine class')
+    turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in', desc='IEC turbulence class class')
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity', deriv_ignore=True)
+    cdf_reference_height_wind_speed = Float(iotype='in', desc='reference hub height for IEC wind speed (used in CDF calculation)')
     # cdf_reference_mean_wind_speed = Float(iotype='in')
-    cdf_reference_height_wind_speed = Float(iotype='in')
     # weibull_shape = Float(iotype='in')
 
-    # yawW = Float(130.0, iotype='in', units='deg')
-    # worst_case_pitch_yaw_error = Float(90.0, iotype='in', units='deg')
-    VfactorPC = Float(0.7, iotype='in')
+    VfactorPC = Float(0.7, iotype='in', desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation')
+
 
     # --- composite sections ---
-    sparT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
-    teT = Array(iotype='in', units='m')  # first is multiplier, then thickness values
-    chord_str_ref = Array(iotype='in', units='m')
+    sparT = Array(iotype='in', units='m', desc='spar cap thickness parameters')
+    teT = Array(iotype='in', units='m', desc='trailing-edge thickness parameters')
+    chord_str_ref = Array(iotype='in', units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)')
     leLoc = Array(iotype='in', desc='array of leading-edge positions from a reference blade axis \
         (usually blade pitch axis). locations are normalized by the local chord length.  \
         e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
@@ -1890,49 +1894,48 @@ class RotorTS(Assembly):
         desc='list of CompositeSection objections defining the properties for lower surface')
     websCS = List(CompositeSection, iotype='in',
         desc='list of CompositeSection objections defining the properties for shear webs')
-    sector_idx_strain_spar = Array(iotype='in', dtype=np.int)
-    sector_idx_strain_te = Array(iotype='in', dtype=np.int)
+    sector_idx_strain_spar = Array(iotype='in', dtype=np.int, desc='index of sector for spar (PreComp definition of sector)')
+    sector_idx_strain_te = Array(iotype='in', dtype=np.int, desc='index of sector for trailing-edge (PreComp definition of sector)')
 
 
     # --- control ---
-    control = VarTree(VarSpeedMachine(), iotype='in')
-    # max_tip_speed = Float(iotype='in', units='m/s', desc='maximum tip speed')
-    pitch_extreme = Float(iotype='in')
-    azimuth_extreme = Float(iotype='in')
+    control = VarTree(VarSpeedMachine(), iotype='in', desc='control parameters')
+    pitch_extreme = Float(iotype='in', units='deg', desc='worst-case pitch at survival wind condition')
+    azimuth_extreme = Float(iotype='in', units='deg', desc='worst-case azimuth at survival wind condition')
 
     # --- drivetrain efficiency ---
     drivetrainType = Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in')
 
     # --- fatigue ---
-    rstar_damage = Array(iotype='in')
-    Mxb_damage = Array(iotype='in')
-    Myb_damage = Array(iotype='in')
-    strain_ult_spar = Float(0.01, iotype='in')
-    strain_ult_te = Float(2500*1e-6, iotype='in')
-    eta_damage = Float(1.755, iotype='in')
-    m_damage = Float(10.0, iotype='in')
-    N_damage = Float(365*24*3600*20.0, iotype='in')
+    rstar_damage = Array(iotype='in', desc='nondimensional radial locations of damage equivalent moments')
+    Mxb_damage = Array(iotype='in', units='N*m', desc='damage equivalent moments about blade c.s. x-direction')
+    Myb_damage = Array(iotype='in', units='N*m', desc='damage equivalent moments about blade c.s. y-direction')
+    strain_ult_spar = Float(0.01, iotype='in', desc='ultimate strain in spar cap')
+    strain_ult_te = Float(2500*1e-6, iotype='in', desc='uptimate strain in trailing-edge panels')
+    eta_damage = Float(1.755, iotype='in', desc='safety factor for fatigue')
+    m_damage = Float(10.0, iotype='in', desc='slope of S-N curve for fatigue analysis')
+    N_damage = Float(365*24*3600*20.0, iotype='in', desc='number of cycles used in fatigue analysis')
 
     # --- options ---
     nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
     npts_coarse_power_curve = Int(20, iotype='in', desc='number of points to evaluate aero analysis at')
     npts_spline_power_curve = Int(200, iotype='in', desc='number of points to use in fitting spline to power curve')
     AEP_loss_factor = Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)')
-    dynamic_amplication_tip_deflection = Float(1.2, iotype='in')
+    dynamic_amplication_tip_deflection = Float(1.2, iotype='in', desc='a dynamic amplification factor to adjust the static deflection calculation')
     nF = Int(5, iotype='in', desc='number of natural frequencies to compute')
 
     # --- outputs ---
     AEP = Float(iotype='out', units='kW*h', desc='annual energy production')
     V = Array(iotype='out', units='m/s', desc='wind speeds (power curve)')
     P = Array(iotype='out', units='W', desc='power (power curve)')
-    ratedConditions = VarTree(RatedConditions(), iotype='out')
-    hub_diameter = Float(iotype='out', units='m')
-    diameter = Float(iotype='out', units='m')
-    V_extreme = Float(iotype='out', units='m/s')
-    T_extreme = Float(iotype='out', units='N')
-    Q_extreme = Float(iotype='out', units='N*m')
+    ratedConditions = VarTree(RatedConditions(), iotype='out', desc='conditions at rated speed')
+    hub_diameter = Float(iotype='out', units='m', desc='hub diameter')
+    diameter = Float(iotype='out', units='m', desc='rotor diameter')
+    V_extreme = Float(iotype='out', units='m/s', desc='survival wind speed')
+    T_extreme = Float(iotype='out', units='N', desc='thrust at survival wind condition')
+    Q_extreme = Float(iotype='out', units='N*m', desc='thrust at survival wind condition')
 
-    # outputs
+    # structural outputs
     mass_one_blade = Float(iotype='out', units='kg', desc='mass of one blade')
     mass_all_blades = Float(iotype='out', units='kg', desc='mass of all blade')
     I_all_blades = Array(iotype='out', desc='out of plane moments of inertia in yaw-aligned c.s.')
@@ -1943,20 +1946,20 @@ class RotorTS(Assembly):
     strainL_spar = Array(iotype='out', desc='axial strain and specified locations')
     strainU_te = Array(iotype='out', desc='axial strain and specified locations')
     strainL_te = Array(iotype='out', desc='axial strain and specified locations')
-    eps_crit_spar = Array(iotype='out')
-    eps_crit_te = Array(iotype='out')
-    root_bending_moment = Float(iotype='out', units='N*m')
-    damageU_spar = Array(iotype='out')
-    damageL_spar = Array(iotype='out')
-    damageU_te = Array(iotype='out')
-    damageL_te = Array(iotype='out')
-    delta_bladeLength_out = Float(iotype='out', units='m')
-    delta_precurve_sub_out = Array(iotype='out', units='m')
+    eps_crit_spar = Array(iotype='out', desc='critical strain in spar from panel buckling calculation')
+    eps_crit_te = Array(iotype='out', desc='critical strain in trailing-edge panels from panel buckling calculation')
+    root_bending_moment = Float(iotype='out', units='N*m', desc='total magnitude of bending moment at root of blade')
+    damageU_spar = Array(iotype='out', desc='fatigue damage on upper surface in spar cap')
+    damageL_spar = Array(iotype='out', desc='fatigue damage on lower surface in spar cap')
+    damageU_te = Array(iotype='out', desc='fatigue damage on upper surface in trailing-edge panels')
+    damageL_te = Array(iotype='out', desc='fatigue damage on lower surface in trailing-edge panels')
+    delta_bladeLength_out = Float(iotype='out', units='m', desc='adjustment to blade length to account for curvature from loading')
+    delta_precurve_sub_out = Array(iotype='out', units='m', desc='adjustment to precurve to account for curvature from loading')
 
-
-    Rtip = Float(iotype='out')
-    precurveTip = Float(iotype='out')
-    presweepTip = Float(0.0, iotype='out')  # TODO: connect later
+    # internal use outputs
+    Rtip = Float(iotype='out', units='m', desc='tip location in z_b')
+    precurveTip = Float(iotype='out', units='m', desc='tip location in x_b')
+    presweepTip = Float(0.0, iotype='out', units='m', desc='tip location in y_b')  # TODO: connect later
 
 
     def configure(self):
@@ -2443,50 +2446,50 @@ class RotorTS(Assembly):
 
 if __name__ == '__main__':
 
+    # === import and instantiate ===
     import os
+    import matplotlib.pyplot as plt
+    # from rotorse.rotor import RotorSE  (include this line)
 
-    rotor = RotorTS()
+    rotor = RotorSE()
+    # -------------------
 
-    # --- blade grid ---
-    rotor.initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667, 0.43333333,
-        0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
-    rotor.initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154, 0.0114340970275,
-        0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455, 0.11111057,
-        0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319, 0.36666667,
-        0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333, 0.667358391486,
-        0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724, 1.0])
-    rotor.idx_cylinder_aero = 3
-    rotor.idx_cylinder_str = 14
-    rotor.hubFraction = 0.025
+    # === blade grid ===
+    rotor.initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
+        0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
+        0.97777724])  # (Array): initial aerodynamic grid on unit radius
+    rotor.initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
+        0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
+        0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
+        0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
+        0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
+        1.0])  # (Array): initial structural grid on unit radius
+    rotor.idx_cylinder_aero = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
+    rotor.idx_cylinder_str = 14  # (Int): first idx in r_str_unit of non-cylindrical section
+    rotor.hubFraction = 0.025  # (Float): hub location as fraction of radius
+    # ------------------
 
-    # --- geometry -----
-    rotor.hubHt = 80.0
-    rotor.precone = 2.5
-    rotor.tilt = -5.0
-    rotor.yaw = 0.0
-    rotor.nBlades = 3
-    rotor.turbine_class = 'I'
+    # === blade geometry ===
+    rotor.r_aero = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333,
+        0.5, 0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333,
+        0.97777724])  # (Array): new aerodynamic grid on unit radius
+    rotor.r_max_chord = 0.23577  # (Float): location of max chord on unit radius
+    rotor.chord_sub = [3.2612, 4.5709, 3.3178, 1.4621]  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    rotor.theta_sub = [13.2783, 7.46036, 2.89317, -0.0878099]  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
+    rotor.precurve_sub = [0.0, 0.0, 0.0]  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
+    rotor.delta_precurve_sub = [0.0, 0.0, 0.0]  # (Array, m): adjustment to precurve to account for curvature from loading
+    rotor.sparT = [0.05, 0.047754, 0.045376, 0.031085, 0.0061398]  # (Array, m): spar cap thickness parameters
+    rotor.teT = [0.1, 0.09569, 0.06569, 0.02569, 0.00569]  # (Array, m): trailing-edge thickness parameters
+    rotor.bladeLength = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+    rotor.delta_bladeLength = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
+    rotor.precone = 2.5  # (Float, deg): precone angle
+    rotor.tilt = 5.0  # (Float, deg): shaft tilt
+    rotor.yaw = 0.0  # (Float, deg): yaw error
+    rotor.nBlades = 3  # (Int): number of blades
+    # ------------------
 
-    # --- atmosphere ---
-    rotor.rho = 1.225
-    rotor.mu = 1.81206e-5
-    rotor.shearExp = 0.2
-
-    # --- operational conditions ---
-    rotor.control.Vin = 3.0
-    rotor.control.Vout = 25.0
-    rotor.control.ratedPower = 5e6
-    rotor.control.minOmega = 0.0
-    rotor.control.maxOmega = 12.0
-    rotor.control.tsr = 7.55
-    rotor.control.pitch = 0.0
-
-    rotor.pitch_extreme = 0.0
-    rotor.azimuth_extreme = 0.0
-
-
-    # --- airfoil files ---
-    basepath = os.path.join(os.path.expanduser('~'), 'Dropbox', 'NREL', '5MW_files', '5MW_AFFiles')
+    # === airfoil files ===
+    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles')
 
     # load all airfoils
     airfoil_types = [0]*8
@@ -2506,17 +2509,45 @@ if __name__ == '__main__':
     af = [0]*n
     for i in range(n):
         af[i] = airfoil_types[af_idx[i]]
-    rotor.airfoil_files = af
+    rotor.airfoil_files = af  # (List): names of airfoil file
+    # ----------------------
 
-    # --- aero analysis options ---
-    rotor.npts_coarse_power_curve = 20
-    rotor.npts_spline_power_curve = 200
-    rotor.AEP_loss_factor = 1.0
-    rotor.nSector = 4
-    rotor.drivetrainType = 'geared'
+    # === atmosphere ===
+    rotor.rho = 1.225  # (Float, kg/m**3): density of air
+    rotor.mu = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
+    rotor.shearExp = 0.2  # (Float): shear exponent
+    rotor.hubHt = 90.0  # (Float, m): hub height
+    rotor.turbine_class = 'I'  # (Enum): IEC turbine class
+    rotor.turbulence_class = 'B'  # (Enum): IEC turbulence class class
+    rotor.cdf_reference_height_wind_speed = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
+    rotor.g = 9.81  # (Float, m/s**2): acceleration of gravity
+    # ----------------------
 
-    # --- materials and composite layup  ---
-    basepath = os.path.join(os.path.expanduser('~'), 'Dropbox', 'NREL', '5MW_files', '5MW_PrecompFiles')
+    # === control ===
+    rotor.control.Vin = 3.0  # (Float, m/s): cut-in wind speed
+    rotor.control.Vout = 25.0  # (Float, m/s): cut-out wind speed
+    rotor.control.ratedPower = 5e6  # (Float, W): rated power
+    rotor.control.minOmega = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
+    rotor.control.maxOmega = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
+    rotor.control.tsr = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    rotor.control.pitch = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    rotor.pitch_extreme = 0.0  # (Float, deg): worst-case pitch at survival wind condition
+    rotor.azimuth_extreme = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
+    rotor.VfactorPC = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
+    # ----------------------
+
+    # === aero and structural analysis options ===
+    rotor.nSector = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
+    rotor.npts_coarse_power_curve = 20  # (Int): number of points to evaluate aero analysis at
+    rotor.npts_spline_power_curve = 200  # (Int): number of points to use in fitting spline to power curve
+    rotor.AEP_loss_factor = 1.0  # (Float): availability and other losses (soiling, array, etc.)
+    rotor.drivetrainType = 'geared'  # (Enum)
+    rotor.nF = 5  # (Int): number of natural frequencies to compute
+    rotor.dynamic_amplication_tip_deflection = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
+    # ----------------------
+
+    # === materials and composite layup  ===
+    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PrecompFiles')
 
     materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
 
@@ -2526,28 +2557,20 @@ if __name__ == '__main__':
     webs = [0]*ncomp
     profile = [0]*ncomp
 
-    rotor.leLoc = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.498, 0.497, 0.465, 0.447, 0.43, 0.411, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
-    rotor.sector_idx_strain = [2]*ncomp
+    rotor.leLoc = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.498, 0.497, 0.465, 0.447, 0.43, 0.411,
+        0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4,
+        0.4, 0.4, 0.4, 0.4])    # (Array): array of leading-edge positions from a reference blade axis (usually blade pitch axis). locations are normalized by the local chord length. e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.  positive in -x direction for airfoil-aligned coordinate system
+    rotor.sector_idx_strain_spar = [2]*ncomp  # (Array): index of sector for spar (PreComp definition of sector)
+    rotor.sector_idx_strain_te = [3]*ncomp  # (Array): index of sector for trailing-edge (PreComp definition of sector)
     web1 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 0.4114, 0.4102, 0.4094, 0.3876, 0.3755, 0.3639, 0.345, 0.3342, 0.3313, 0.3274, 0.323, 0.3206, 0.3172, 0.3138, 0.3104, 0.307, 0.3003, 0.2982, 0.2935, 0.2899, 0.2867, 0.2833, 0.2817, 0.2799, 0.2767, 0.2731, 0.2664, 0.2607, 0.2562, 0.1886, -1.0])
     web2 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 0.5886, 0.5868, 0.5854, 0.5508, 0.5315, 0.5131, 0.4831, 0.4658, 0.4687, 0.4726, 0.477, 0.4794, 0.4828, 0.4862, 0.4896, 0.493, 0.4997, 0.5018, 0.5065, 0.5101, 0.5133, 0.5167, 0.5183, 0.5201, 0.5233, 0.5269, 0.5336, 0.5393, 0.5438, 0.6114, -1.0])
     web3 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0])
-
-    # # web 1
-    # ib_idx = 7
-    # ob_idx = 36
-    # ib_webc = 0.4114
-    # ob_webc = 0.1886
-
-    # web1 = web_loc(r_str, chord_str, le_str, ib_idx, ob_idx, ib_webc, ob_webc)
-
-    # # web 2
-    # ib_idx = 7
-    # ob_idx = 36
-    # ib_webc = 0.5886
-    # ob_webc = 0.6114
-
-    # web2 = web_loc(r_str, chord_str, le_str, ib_idx, ob_idx, ib_webc, ob_webc)
-
+    rotor.chord_str_ref = np.array([3.2612, 3.3100915356, 3.32587052924, 3.34159388653, 3.35823798667, 3.37384375335,
+        3.38939112914, 3.4774055542, 3.49839685, 3.51343645709, 3.87017220335, 4.04645623801, 4.19408216643,
+         4.47641008477, 4.55844487985, 4.57383098262, 4.57285771934, 4.51914315648, 4.47677655262, 4.40075650022,
+         4.31069949379, 4.20483735936, 4.08985563932, 3.82931757126, 3.74220276467, 3.54415796922, 3.38732428502,
+         3.24931446473, 3.23421422609, 3.22701537997, 3.21972125648, 3.08979310611, 2.95152261813, 2.330753331,
+         2.05553464181, 1.82577817774, 1.5860853279, 1.4621])  # (Array, m): chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)
 
     for i in range(ncomp):
 
@@ -2562,35 +2585,35 @@ if __name__ == '__main__':
         upper[i], lower[i], webs[i] = CompositeSection.initFromPreCompLayupFile(os.path.join(basepath, 'layup_' + str(i+1) + '.inp'), webLoc, materials)
         profile[i] = Profile.initFromPreCompFile(os.path.join(basepath, 'shape_' + str(i+1) + '.inp'))
 
-    rotor.materials = materials
-    rotor.upperCS = upper
-    rotor.lowerCS = lower
-    rotor.websCS = webs
-    rotor.profile = profile
+    rotor.materials = materials  # (List): list of all Orthotropic2DMaterial objects used in defining the geometry
+    rotor.upperCS = upper  # (List): list of CompositeSection objections defining the properties for upper surface
+    rotor.lowerCS = lower  # (List): list of CompositeSection objections defining the properties for lower surface
+    rotor.websCS = webs  # (List): list of CompositeSection objections defining the properties for shear webs
+    rotor.profile = profile  # (List): airfoil shape at each radial position
     # --------------------------------------
 
 
-    # --- structural options ---
-    rotor.g = 9.81
-    rotor.nF = 5
+    # === fatigue ===
+    rotor.rstar_damage = np.array([0.000, 0.022, 0.067, 0.111, 0.167, 0.233, 0.300, 0.367, 0.433, 0.500,
+        0.567, 0.633, 0.700, 0.767, 0.833, 0.889, 0.933, 0.978])  # (Array): nondimensional radial locations of damage equivalent moments
+    rotor.Mxb_damage = 1e3*np.array([2.3743E+003, 2.0834E+003, 1.8108E+003, 1.5705E+003, 1.3104E+003,
+        1.0488E+003, 8.2367E+002, 6.3407E+002, 4.7727E+002, 3.4804E+002, 2.4458E+002, 1.6339E+002,
+        1.0252E+002, 5.7842E+001, 2.7349E+001, 1.1262E+001, 3.8549E+000, 4.4738E-001])  # (Array, N*m): damage equivalent moments about blade c.s. x-direction
+    rotor.Myb_damage = 1e3*np.array([2.7732E+003, 2.8155E+003, 2.6004E+003, 2.3933E+003, 2.1371E+003,
+        1.8459E+003, 1.5582E+003, 1.2896E+003, 1.0427E+003, 8.2015E+002, 6.2449E+002, 4.5229E+002,
+        3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
+    rotor.strain_ult_spar = 1.0e-2  # (Float): ultimate strain in spar cap
+    rotor.strain_ult_te = 2500*1e-6 * 2   # (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
+    rotor.eta_damage = 1.35*1.3*1.0  # (Float): safety factor for fatigue
+    rotor.m_damage = 10.0  # (Float): slope of S-N curve for fatigue analysis
+    rotor.N_damage = 365*24*3600*20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
+    # ----------------
 
-    # --- design variables ---
-    rotor.r_aero = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333, 0.5,
-        0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
-    rotor.r_max_chord = 0.23577
-    rotor.chord_sub = [3.2612, 4.5709, 3.3178, 1.4621]
-    rotor.theta_sub = [13.2783, 7.46036, 2.89317, -0.0878099]
-    rotor.bladeLength = 63.0
+    from myutilities import plt
 
-    # TODO: calculate these
-    rotor.x_strain = np.array([1.62953277093, 1.65378760431, 1.6848244664, 1.69280026956, 1.70125331952, 1.70918845043, 1.71710285872, 1.7379700867, 1.77191347081, 1.77769022081, 1.66549686777, 1.46236108547, 1.24412860472, 0.946027322623, 0.855159937668, 0.793030786156, 0.741219389531, 0.678388044164, 0.656104367978, 0.626195492951, 0.594991331198, 0.535300387358, 0.49436378615, 0.466270531861, 0.437964716508, 0.374175959337, 0.35504758904, 0.343037547915, 0.30479534701, 0.285300267572, 0.270977493752, 0.256272902802, 0.243171569781, 0.215017502212, 0.190697407308, 0.170514014614, 0.149901126795, 0.13789004202])
-    rotor.y_strain = np.array([-0.00113112893698, -0.00114796526232, -0.0172978765403, -0.0173797630875, -0.0174665494665, -0.0175480184371, -0.0176292746511, -0.0015645000705, -0.02731068479, -0.0305932407033, -0.109340525932, -0.125949563315, -0.12117411121, -0.128218415335, -0.149327182633, -0.14656631794, -0.140266481404, -0.135652296602, -0.132851488119, -0.1287750113, -0.124992337883, -0.118409965897, -0.110552832125, -0.0979009471516, -0.0937777322172, -0.084620004667, -0.0782777410193, -0.0716491412175, -0.0584114110202, -0.0591831317106, -0.0558251490105, -0.0488944452438, -0.050399265575, -0.0549454662041, -0.0623708745921, -0.0713825225821, -0.0823128686813, -0.0695992262681])
-    rotor.z_strain = np.array([1.50142903976, 1.80306613137, 1.90155987557, 2.00005361977, 2.10470322299, 2.20319696719, 2.30169071139, 2.86802974054, 3.00345863882, 3.10195238302, 5.60738700113, 7.00476699698, 8.3405884027, 10.5074507751, 11.7632460137, 13.5115099732, 15.863048116, 18.5162233505, 19.9690060774, 22.0189071286, 24.0749640388, 26.12486509, 28.1747661411, 32.2807241025, 33.5303634821, 36.3866820639, 38.5350768593, 40.4864841663, 42.5425410764, 43.5397902365, 44.5924421276, 46.5438494346, 48.698400089, 52.7982021914, 56.2208598023, 58.9540612039, 61.6934184645, 63.0600191653])
-
-
+    # === run and outputs ===
     rotor.run()
 
-    # outputs
     print 'AEP =', rotor.AEP
     print 'diameter =', rotor.diameter
     print 'ratedConditions.V =', rotor.ratedConditions.V
@@ -2605,14 +2628,32 @@ if __name__ == '__main__':
     print 'tip_deflection =', rotor.tip_deflection
     print 'root_bending_moment =', rotor.root_bending_moment
 
-    import matplotlib.pyplot as plt
-    plt.plot(rotor.V, rotor.P)
     plt.figure()
-    plt.plot(rotor.spline.r_str, rotor.strainU)
-    plt.plot(rotor.spline.r_str, rotor.strainL)
-    plt.plot(rotor.spline.r_str, rotor.eps_crit)
-    plt.ylim([-5e-3, 5e-3])
-    plt.show()
+    plt.plot(rotor.V, rotor.P/1e6)
+    plt.xlabel('wind speed (m/s)')
+    plt.xlabel('power (W)')
 
-    # TODO: the strain is not right
-    # TODO: more variable trees?
+    plt.figure()
+    plt.plot(rotor.spline.r_str, rotor.strainU_spar, label='suction')
+    plt.plot(rotor.spline.r_str, rotor.strainL_spar, label='pressure')
+    plt.plot(rotor.spline.r_str, rotor.eps_crit_spar, label='critical')
+    plt.ylim([-5e-3, 5e-3])
+    plt.xlabel('r')
+    plt.ylabel('strain')
+    plt.legend()
+    plt.save('/Users/sning/Desktop/strain_spar.pdf')
+    plt.save('/Users/sning/Desktop/strain_spar.png')
+
+    plt.figure()
+    plt.plot(rotor.spline.r_str, rotor.strainU_te, label='suction')
+    plt.plot(rotor.spline.r_str, rotor.strainL_te, label='pressure')
+    plt.plot(rotor.spline.r_str, rotor.eps_crit_te, label='critical')
+    plt.ylim([-5e-3, 5e-3])
+    plt.xlabel('r')
+    plt.ylabel('strain')
+    plt.legend()
+    plt.save('/Users/sning/Desktop/strain_te.pdf')
+    plt.save('/Users/sning/Desktop/strain_te.png')
+
+    plt.show()
+    # ----------------

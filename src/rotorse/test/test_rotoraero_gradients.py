@@ -183,7 +183,7 @@ class TestCCBlade(unittest.TestCase):
         ccblade.Omega = np.array([3.43647024491, 4.76282718154, 6.08918411817, 7.41554105481, 8.74189799144, 10.0682549281, 11.3946118647, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0])
         ccblade.pitch = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-        check_gradient_unit_test(self, ccblade, display=True)
+        check_gradient_unit_test(self, ccblade, tol=1e-5, display=True)
 
 
 
@@ -240,7 +240,7 @@ class TestCCBlade(unittest.TestCase):
         ccblade.pitch_load = 0.0
         ccblade.azimuth_load = 180.0
 
-        check_gradient_unit_test(self, ccblade, display=True)
+        check_gradient_unit_test(self, ccblade, tol=1e-5, display=True)
 
 
 

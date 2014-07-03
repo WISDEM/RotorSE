@@ -30,7 +30,7 @@ class GeometrySpline(Component):
     r_af = Array(iotype='in', units='m', desc='locations where airfoils are defined on unit radius')
 
     idx_cylinder = Int(iotype='in', desc='location where cylinder section ends on unit radius')
-    r_max_chord = Float(iotype='in')
+    r_max_chord = Float(iotype='in', desc='position of max chord on unit radius')
 
     Rhub = Float(iotype='in', units='m', desc='blade hub radius')
     Rtip = Float(iotype='in', units='m', desc='blade tip radius')
@@ -41,8 +41,8 @@ class GeometrySpline(Component):
     r = Array(iotype='out', units='m', desc='chord at airfoil locations')
     chord = Array(iotype='out', units='m', desc='chord at airfoil locations')
     theta = Array(iotype='out', units='deg', desc='twist at airfoil locations')
-    precurve = Array(iotype='out', units='deg', desc='precurve at airfoil locations')
-    r_af_spacing = Array(iotype='out')
+    precurve = Array(iotype='out', units='m', desc='precurve at airfoil locations')
+    r_af_spacing = Array(iotype='out')  # deprecated: not used anymore
 
 
     def execute(self):
@@ -119,13 +119,15 @@ class GeometrySpline(Component):
             drafs_dr[i, i+1] = 1.0
         drafs = hstack([drafs_dr, np.zeros((n-1, 3+nc+nt))])
 
-        self.J = vstack([dr, dchord, dtheta, drafs])
+        dprecurve = np.zeros((len(self.precurve), n+3+nc+nt))
+
+        self.J = vstack([dr, dchord, dtheta, drafs, dprecurve])
 
 
     def list_deriv_vars(self):
 
         inputs = ('r_af', 'r_max_chord', 'Rhub', 'Rtip', 'chord_sub', 'theta_sub')
-        outputs = ('r', 'chord', 'theta', 'r_af_spacing')
+        outputs = ('r', 'chord', 'theta', 'r_af_spacing', 'precurve')
 
         return inputs, outputs
 
@@ -178,13 +180,13 @@ class CCBlade(AeroBase):
     theta = Array(iotype='in', units='deg', desc='twist angle at each section (positive decreases angle of attack)')
     Rhub = Float(iotype='in', units='m', desc='hub radius')
     Rtip = Float(iotype='in', units='m', desc='tip radius')
-    hubHt = Float(iotype='in', units='m')
+    hubHt = Float(iotype='in', units='m', desc='hub height')
     precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
     tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
     yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
 
     # TODO: I've not hooked up the gradients for these ones yet.
-    precurve = Array([0], iotype='in', units='m', desc='precurve at each section')
+    precurve = Array(iotype='in', units='m', desc='precurve at each section')
     precurveTip = Float(0.0, iotype='in', units='m', desc='precurve at tip')
 
     # parameters
@@ -203,6 +205,9 @@ class CCBlade(AeroBase):
 
 
     def execute(self):
+
+        if len(self.precurve) == 0:
+            self.precurve = np.zeros_like(self.r)
 
         # airfoil files
         n = len(self.airfoil_files)
@@ -251,13 +256,13 @@ class CCBlade(AeroBase):
 
         if self.run_case == 'power':
             inputs = ('precone', 'tilt', 'hubHt', 'Rhub', 'Rtip', 'yaw',
-                'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta')
+                'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta', 'precurve', 'precurveTip')
             outputs = ('P', 'T', 'Q')
 
         elif self.run_case == 'loads':
 
             inputs = ('r', 'chord', 'theta', 'Rhub', 'Rtip', 'hubHt', 'precone',
-                'tilt', 'yaw', 'V_load', 'Omega_load', 'pitch_load', 'azimuth_load')
+                'tilt', 'yaw', 'V_load', 'Omega_load', 'pitch_load', 'azimuth_load', 'precurve')
             outputs = ('loads.r', 'loads.Px', 'loads.Py', 'loads.Pz', 'loads.V',
                 'loads.Omega', 'loads.pitch', 'loads.azimuth')
 
@@ -273,11 +278,14 @@ class CCBlade(AeroBase):
             dQ = self.dQ
 
             jP = hstack([dP['dprecone'], dP['dtilt'], dP['dhubHt'], dP['dRhub'], dP['dRtip'],
-                dP['dyaw'], dP['dUinf'], dP['dOmega'], dP['dpitch'], dP['dr'], dP['dchord'], dP['dtheta']])
+                dP['dyaw'], dP['dUinf'], dP['dOmega'], dP['dpitch'], dP['dr'], dP['dchord'], dP['dtheta'],
+                dP['dprecurve'], dP['dprecurveTip']])
             jT = hstack([dT['dprecone'], dT['dtilt'], dT['dhubHt'], dT['dRhub'], dT['dRtip'],
-                dT['dyaw'], dT['dUinf'], dT['dOmega'], dT['dpitch'], dT['dr'], dT['dchord'], dT['dtheta']])
+                dT['dyaw'], dT['dUinf'], dT['dOmega'], dT['dpitch'], dT['dr'], dT['dchord'], dT['dtheta'],
+                dT['dprecurve'], dT['dprecurveTip']])
             jQ = hstack([dQ['dprecone'], dQ['dtilt'], dQ['dhubHt'], dQ['dRhub'], dQ['dRtip'],
-                dQ['dyaw'], dQ['dUinf'], dQ['dOmega'], dQ['dpitch'], dQ['dr'], dQ['dchord'], dQ['dtheta']])
+                dQ['dyaw'], dQ['dUinf'], dQ['dOmega'], dQ['dpitch'], dQ['dr'], dQ['dchord'], dQ['dtheta'],
+                dQ['dprecurve'], dQ['dprecurveTip']])
 
             J = vstack([jP, jT, jQ])
 
@@ -293,25 +301,25 @@ class CCBlade(AeroBase):
             dr_dRtip = np.zeros(n+2)
             dr_dRhub[0] = 1.0
             dr_dRtip[-1] = 1.0
-            dr = hstack([dr_dr, np.zeros((n+2, 2*n)), dr_dRhub, dr_dRtip, np.zeros((n+2, 8))])
+            dr = hstack([dr_dr, np.zeros((n+2, 2*n)), dr_dRhub, dr_dRtip, np.zeros((n+2, 8+n))])
 
             jNp = hstack([dNp['dr'], dNp['dchord'], dNp['dtheta'], dNp['dRhub'], dNp['dRtip'],
                 dNp['dhubHt'], dNp['dprecone'], dNp['dtilt'], dNp['dyaw'], dNp['dUinf'],
-                dNp['dOmega'], dNp['dpitch'], dNp['dazimuth']])
+                dNp['dOmega'], dNp['dpitch'], dNp['dazimuth'], dNp['dprecurve']])
             jTp = hstack([dTp['dr'], dTp['dchord'], dTp['dtheta'], dTp['dRhub'], dTp['dRtip'],
                 dTp['dhubHt'], dTp['dprecone'], dTp['dtilt'], dTp['dyaw'], dTp['dUinf'],
-                dTp['dOmega'], dTp['dpitch'], dTp['dazimuth']])
-            dPx = vstack([np.zeros(3*n+10), jNp, np.zeros(3*n+10)])
-            dPy = vstack([np.zeros(3*n+10), -jTp, np.zeros(3*n+10)])
-            dPz = np.zeros((n+2, 3*n+10))
+                dTp['dOmega'], dTp['dpitch'], dTp['dazimuth'], dTp['dprecurve']])
+            dPx = vstack([np.zeros(4*n+10), jNp, np.zeros(4*n+10)])
+            dPy = vstack([np.zeros(4*n+10), -jTp, np.zeros(4*n+10)])
+            dPz = np.zeros((n+2, 4*n+10))
 
-            dV = np.zeros(3*n+10)
+            dV = np.zeros(4*n+10)
             dV[3*n+6] = 1.0
-            dOmega = np.zeros(3*n+10)
+            dOmega = np.zeros(4*n+10)
             dOmega[3*n+7] = 1.0
-            dpitch = np.zeros(3*n+10)
+            dpitch = np.zeros(4*n+10)
             dpitch[3*n+8] = 1.0
-            dazimuth = np.zeros(3*n+10)
+            dazimuth = np.zeros(4*n+10)
             dazimuth[3*n+9] = 1.0
 
             J = vstack([dr, dPx, dPy, dPz, dV, dOmega, dpitch, dazimuth])
@@ -656,139 +664,143 @@ class RotorAeroFSFPWithCCBlade(Assembly):
 
 if __name__ == '__main__':
 
-    from rotoraero import RotorAeroVS
+    optimize = True
 
-    # ---------- inputs ---------------
+    import os
 
-    # geometry
-    r = np.array([2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500,
-                  28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500,
-                  56.1667, 58.9000, 61.6333])
-    chord = np.array([3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249, 4.007, 3.748,
-                      3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419])
-    theta = np.array([13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
-                      6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106])
-    Rhub = 1.5
-    Rtip = 63.0
-    hubheight = 80.0
-    precone = 2.5
-    tilt = -5.0
-    yaw = 0.0
-    B = 3
+    # --- instantiate rotor ----
+    cdf_type = 'weibull'
+    rotor = RotorAeroVSVPWithCCBlade(cdf_type)
+    # --------------------------------
 
-    # airfoils
-    basepath = '/Users/Andrew/Dropbox/NREL/5MW_files/5MW_AFFiles/'
+    # --- rotor geometry ------------
+    rotor.r_max_chord = 0.23577  # (Float): location of second control point (generally also max chord)
+    rotor.chord_sub = [3.2612, 4.5709, 3.3178, 1.4621]  # (Array, m): chord at control points
+    rotor.theta_sub = [13.2783, 7.46036, 2.89317, -0.0878099]  # (Array, deg): twist at control points
+    rotor.Rhub = 1.5  # (Float, m): hub radius
+    rotor.Rtip = 63.0  # (Float, m): tip radius
+    rotor.precone = 2.5  # (Float, deg): precone angle
+    rotor.tilt = -5.0  # (Float, deg): shaft tilt
+    rotor.yaw = 0.0  # (Float, deg): yaw error
+    rotor.B = 3  # (Int): number of blades
+    # -------------------------------------
+
+    # --- airfoils ------------
+    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles')
 
     # load all airfoils
     airfoil_types = [0]*8
-    airfoil_types[0] = basepath + 'Cylinder1.dat'
-    airfoil_types[1] = basepath + 'Cylinder2.dat'
-    airfoil_types[2] = basepath + 'DU40_A17.dat'
-    airfoil_types[3] = basepath + 'DU35_A17.dat'
-    airfoil_types[4] = basepath + 'DU30_A17.dat'
-    airfoil_types[5] = basepath + 'DU25_A17.dat'
-    airfoil_types[6] = basepath + 'DU21_A17.dat'
-    airfoil_types[7] = basepath + 'NACA64_A17.dat'
+    airfoil_types[0] = basepath + os.path.sep + 'Cylinder1.dat'
+    airfoil_types[1] = basepath + os.path.sep + 'Cylinder2.dat'
+    airfoil_types[2] = basepath + os.path.sep + 'DU40_A17.dat'
+    airfoil_types[3] = basepath + os.path.sep + 'DU35_A17.dat'
+    airfoil_types[4] = basepath + os.path.sep + 'DU30_A17.dat'
+    airfoil_types[5] = basepath + os.path.sep + 'DU25_A17.dat'
+    airfoil_types[6] = basepath + os.path.sep + 'DU21_A17.dat'
+    airfoil_types[7] = basepath + os.path.sep + 'NACA64_A17.dat'
 
     # place at appropriate radial stations
     af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 
-    n = len(r)
+    n = len(af_idx)
     af = [0]*n
     for i in range(n):
         af[i] = airfoil_types[af_idx[i]]
 
-    # atmosphere
-    rho = 1.225
-    mu = 1.81206e-5
-    shearExp = 0.2
-    Ubar = 6.0
+    rotor.airfoil_files = af  # (List): paths to AeroDyn-style airfoil files
+    rotor.r_af = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
+        0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943,
+        0.93333333, 0.97777724])    # (Array, m): locations where airfoils are defined on unit radius
+    rotor.idx_cylinder = 3  # (Int): index in r_af where cylinder section ends
+    # -------------------------------------
 
-    # operational conditions
-    Vin = 3.0
-    Vout = 25.0
-    ratedPower = 5e6
-    minOmega = 0.0
-    maxOmega = 12.0
-    tsr_opt = 7.55
-    pitch_opt = 0.0
-
-
-    # options
-    nSectors_power_integration = 4
-    tsr_sweep_step_size = 0.25
-    npts_power_curve = 200
-    drivetrainType = 'geared'
-    AEP_loss_factor = 1.0
-
-    # -------------------------
+    # --- site characteristics --------
+    rotor.rho = 1.225  # (Float, kg/m**3): density of air
+    rotor.mu = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
+    rotor.shearExp = 0.2  # (Float): shear exponent
+    rotor.hubHt = 80.0  # (Float, m)
+    rotor.cdf_mean_wind_speed = 6.0  # (Float, m/s): mean wind speed of site cumulative distribution function
+    rotor.weibull_shape_factor = 2.0  # (Float): shape factor of weibull distribution
+    # -------------------------------------
 
 
-    # OpenMDAO setup
+    # --- control settings ------------
+    rotor.control.Vin = 3.0  # (Float, m/s): cut-in wind speed
+    rotor.control.Vout = 25.0  # (Float, m/s): cut-out wind speed
+    rotor.control.ratedPower = 5e6  # (Float, W): rated power
+    rotor.control.pitch = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    rotor.control.minOmega = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
+    rotor.control.maxOmega = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
+    rotor.control.tsr = 7.55  # **dv** (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    # -------------------------------------
 
-    rotor = RotorAeroVS()
-    rotor.replace('geom', CCBladeGeometry())
-    rotor.replace('analysis', CCBlade())
-    rotor.replace('dt', CSMDrivetrain())
-    rotor.replace('cdf', RayleighCDF())
-
-    # geometry
-    rotor.geom.Rtip = Rtip
-    rotor.geom.precone = precone
-
-    # aero analysis
-
-    rotor.analysis.r = r
-    rotor.analysis.chord = chord
-    rotor.analysis.theta = theta
-    rotor.analysis.Rhub = Rhub
-    rotor.analysis.Rtip = Rtip
-    rotor.analysis.hubHt = hubheight
-    rotor.analysis.airfoil_files = af
-    rotor.analysis.precone = precone
-    rotor.analysis.tilt = tilt
-    rotor.analysis.yaw = yaw
-    rotor.analysis.B = B
-    rotor.analysis.rho = rho
-    rotor.analysis.mu = mu
-    rotor.analysis.shearExp = shearExp
-    rotor.analysis.nSector = nSectors_power_integration
+    # --- drivetrain model for efficiency --------
+    rotor.drivetrainType = 'geared'
+    # -------------------------------------
 
 
-    # drivetrain efficiency
-    rotor.dt.drivetrainType = drivetrainType
+    # --- analysis options ------------
+    rotor.nSector = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
+    rotor.npts_coarse_power_curve = 20  # (Int): number of points to evaluate aero analysis at
+    rotor.npts_spline_power_curve = 200  # (Int): number of points to use in fitting spline to power curve
+    rotor.AEP_loss_factor = 1.0  # (Float): availability and other losses (soiling, array, etc.)
+    rotor.tiploss = True  # (Bool): include Prandtl tip loss model
+    rotor.hubloss = True  # (Bool): include Prandtl hub loss model
+    rotor.wakerotation = True  # (Bool): include effect of wake rotation (i.e., tangential induction factor is nonzero)
+    rotor.usecd = True  # (Bool): use drag coefficient in computing induction factors
+    # -------------------------------------
 
-    # CDF
-    rotor.cdf.xbar = Ubar
-
-    # other parameters
-    # rotor.rho = rho
-
-    rotor.control.Vin = Vin
-    rotor.control.Vout = Vout
-    rotor.control.ratedPower = ratedPower
-    rotor.control.minOmega = minOmega
-    rotor.control.maxOmega = maxOmega
-    rotor.control.tsr = tsr_opt
-    rotor.control.pitch = pitch_opt
-
+    # --- run ------------
     rotor.run()
 
-    print rotor.AEP
-
-    # print len(rotor.V)
-
-    rc = rotor.ratedConditions
-    print rc.V
-    print rc.Omega
-    print rc.pitch
-    print rc.T
-    print rc.Q
-
-    print rotor.diameter
+    AEP0 = rotor.AEP
+    print 'AEP0 =', AEP0
 
     import matplotlib.pyplot as plt
     plt.plot(rotor.V, rotor.P/1e6)
+    plt.xlabel('wind speed (m/s)')
+    plt.ylabel('power (MW)')
     plt.show()
 
+    # --------------------------
+
+
+    if optimize:
+
+        # --- optimizer imports ---
+        from pyopt_driver.pyopt_driver import pyOptDriver
+        from openmdao.lib.casehandlers.api import DumpCaseRecorder
+        # ----------------------
+
+        # --- Setup Pptimizer ---
+        rotor.replace('driver', pyOptDriver())
+        rotor.driver.optimizer = 'SNOPT'
+        rotor.driver.options = {'Major feasibility tolerance': 1e-6,
+                               'Minor feasibility tolerance': 1e-6,
+                               'Major optimality tolerance': 1e-5,
+                               'Function precision': 1e-8}
+        # ----------------------
+
+        # --- Objective ---
+        rotor.driver.add_objective('-aep.AEP/%f' % AEP0)
+        # ----------------------
+
+        # --- Design Variables ---
+        rotor.driver.add_parameter('r_max_chord', low=0.1, high=0.5)
+        rotor.driver.add_parameter('chord_sub', low=0.4, high=5.3)
+        rotor.driver.add_parameter('theta_sub', low=-10.0, high=30.0)
+        rotor.driver.add_parameter('control.tsr', low=3.0, high=14.0)
+        # ----------------------
+
+        # --- recorder ---
+        rotor.recorders = [DumpCaseRecorder()]
+        # ----------------------
+
+        # --- Constraints ---
+        rotor.driver.add_constraint('1.0 >= 0.0')  # dummy constraint, OpenMDAO bug when using pyOpt
+        # ----------------------
+
+        # --- run opt ---
+        rotor.run()
+        # ---------------
 

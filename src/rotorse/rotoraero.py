@@ -255,7 +255,7 @@ class Coefficients(Component):
 class SetupRunFixedSpeed(Component):
     """determines approriate conditions to run AeroBase code across the power curve"""
 
-    control = VarTree(FixedSpeedMachine(), iotype='in')
+    control = VarTree(FixedSpeedMachine(), iotype='in', desc='control parameters')
     npts = Int(20, iotype='in', desc='number of points to evalute aero code to generate power curve')
 
     # outputs
@@ -296,7 +296,7 @@ class SetupRunFixedSpeed(Component):
 class SetupRunVarSpeed(Component):
     """determines approriate conditions to run AeroBase code across the power curve"""
 
-    control = VarTree(VarSpeedMachine(), iotype='in')
+    control = VarTree(VarSpeedMachine(), iotype='in', desc='control parameters')
     R = Float(iotype='in', units='m', desc='rotor radius')
     npts = Int(20, iotype='in', desc='number of points to evalute aero code to generate power curve')
 
@@ -361,7 +361,7 @@ class SetupRunVarSpeed(Component):
 class UnregulatedPowerCurve(Component):
 
     # inputs
-    control = VarTree(FixedSpeedMachine(), iotype='in')
+    control = VarTree(FixedSpeedMachine(), iotype='in', desc='control parameters')
     Vcoarse = Array(iotype='in', units='m/s', desc='wind speeds')
     Pcoarse = Array(iotype='in', units='W', desc='unregulated power curve (but after drivetrain losses)')
     Tcoarse = Array(iotype='in', units='N', desc='unregulated thrust curve')
@@ -405,7 +405,7 @@ class RegulatedPowerCurve(ImplicitComponent):
     then compute the regulated power curve and rated conditions"""
 
     # inputs
-    control = VarTree(VarSpeedMachine(), iotype='in')
+    control = VarTree(VarSpeedMachine(), iotype='in', desc='control parameters')
     Vcoarse = Array(iotype='in', units='m/s', desc='wind speeds')
     Pcoarse = Array(iotype='in', units='W', desc='unregulated power curve (but after drivetrain losses)')
     Tcoarse = Array(iotype='in', units='N', desc='unregulated thrust curve')
@@ -522,7 +522,7 @@ class AEP(Component):
     """integrate to find annual energy production"""
 
     # inputs
-    CDF_V = Array(iotype='in')
+    CDF_V = Array(iotype='in', desc='cumulative distribution function evaluated at each wind speed')
     P = Array(iotype='in', units='W', desc='power curve (power)')
     lossFactor = Float(iotype='in', desc='multiplicative factor for availability and other losses (soiling, array, etc.)')
 
@@ -577,9 +577,9 @@ def common_io(assembly, varspeed, varpitch):
     assembly.add('npts_spline_power_curve', Int(200, iotype='in', desc='number of points to use in fitting spline to power curve'))
     assembly.add('AEP_loss_factor', Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)'))
     if varspeed:
-        assembly.add('control', VarTree(VarSpeedMachine(), iotype='in'))
+        assembly.add('control', VarTree(VarSpeedMachine(), iotype='in'), desc='control parameters')
     else:
-        assembly.add('control', VarTree(FixedSpeedMachine(), iotype='in'))
+        assembly.add('control', VarTree(FixedSpeedMachine(), iotype='in'), desc='control parameters')
 
 
     # add slots (must replace)
@@ -593,7 +593,7 @@ def common_io(assembly, varspeed, varpitch):
     assembly.add('AEP', Float(iotype='out', units='kW*h', desc='annual energy production'))
     assembly.add('V', Array(iotype='out', units='m/s', desc='wind speeds (power curve)'))
     assembly.add('P', Array(iotype='out', units='W', desc='power (power curve)'))
-    assembly.add('diameter', Float(iotype='out', units='m'))
+    assembly.add('diameter', Float(iotype='out', units='m', desc='rotor diameter'))
     if regulated:
         assembly.add('ratedConditions', VarTree(RatedConditions(), iotype='out'))
 
