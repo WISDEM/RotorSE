@@ -1,6 +1,4 @@
-# RotorSE
-
-Systems engineering model for wind turbines rotors implemented as an OpenMDAO assembly.
+RotorSE is a Systems engineering model for wind turbines rotors implemented as an OpenMDAO assembly.
 
 Author: [S. Andrew Ning](mailto:andrew.ning@nrel.gov)
 
