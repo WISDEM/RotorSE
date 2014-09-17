@@ -34,6 +34,8 @@ setup(
     package_dir={'': 'src/rotorse'},
     ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'],
         extra_compile_args=['-O2'],
-        libraries=['lapack']
+        include_dirs=['C:/boost_1_55_0'],
+        library_dirs=['C:/boost_1_55_0/stage/lib', 'C:/lapack'],
+        libraries=['boost_python-mgw46-mt-1_55', 'lapack']
         )],
 )
