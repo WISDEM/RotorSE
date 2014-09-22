@@ -2,6 +2,10 @@ RotorSE is a Systems engineering model for wind turbines rotors implemented as a
 
 Author: [S. Andrew Ning](mailto:andrew.ning@nrel.gov)
 
+## Detailed Documentation
+
+For detailed documentation see <http://wisdem.github.io/RotorSE/>
+
 ## Prerequisites
 
 Fortran compiler, C compiler, NumPy, SciPy
@@ -24,8 +28,6 @@ You may also run the unit tests.
     $ python src/rotorse/test/test_rotoraero_gradients.py
     $ python src/rotorse/test/test_rotor_gradients.py
 
-## Detailed Documentation
 
-Access the online version at <http://wisdem.github.io/RotorSE/>
 
 
