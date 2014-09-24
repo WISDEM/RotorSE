@@ -2,6 +2,10 @@ RotorSE is a Systems engineering model for wind turbines rotors implemented as a
 
 Author: [S. Andrew Ning](mailto:andrew.ning@nrel.gov)
 
+## Version
+
+This software is a beta version 0.1.0.
+
 ## Detailed Documentation
 
 For detailed documentation see <http://wisdem.github.io/RotorSE/>
