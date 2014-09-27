@@ -2609,7 +2609,7 @@ if __name__ == '__main__':
     rotor.N_damage = 365*24*3600*20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
     # ----------------
 
-    from myutilities import plt
+    #from myutilities import plt
 
     # === run and outputs ===
     rotor.run()
@@ -2628,7 +2628,7 @@ if __name__ == '__main__':
     print 'tip_deflection =', rotor.tip_deflection
     print 'root_bending_moment =', rotor.root_bending_moment
 
-    plt.figure()
+    '''plt.figure()
     plt.plot(rotor.V, rotor.P/1e6)
     plt.xlabel('wind speed (m/s)')
     plt.xlabel('power (W)')
@@ -2656,4 +2656,4 @@ if __name__ == '__main__':
     plt.save('/Users/sning/Desktop/strain_te.png')
 
     plt.show()
-    # ----------------
+    # ----------------'''

@@ -577,9 +577,9 @@ def common_io(assembly, varspeed, varpitch):
     assembly.add('npts_spline_power_curve', Int(200, iotype='in', desc='number of points to use in fitting spline to power curve'))
     assembly.add('AEP_loss_factor', Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)'))
     if varspeed:
-        assembly.add('control', VarTree(VarSpeedMachine(), iotype='in'), desc='control parameters')
+        assembly.add('control', VarTree(VarSpeedMachine(), iotype='in', desc='control parameters'))
     else:
-        assembly.add('control', VarTree(FixedSpeedMachine(), iotype='in'), desc='control parameters')
+        assembly.add('control', VarTree(FixedSpeedMachine(), iotype='in', desc='control parameters'))
 
 
     # add slots (must replace)
