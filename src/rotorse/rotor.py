@@ -2609,7 +2609,8 @@ if __name__ == '__main__':
     rotor.N_damage = 365*24*3600*20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
     # ----------------
 
-    from myutilities import plt
+    # from myutilities import plt
+    import matplotlib.pyplot as plt
 
     # === run and outputs ===
     rotor.run()
@@ -2641,8 +2642,8 @@ if __name__ == '__main__':
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()
-    plt.save('/Users/sning/Desktop/strain_spar.pdf')
-    plt.save('/Users/sning/Desktop/strain_spar.png')
+    # plt.save('/Users/sning/Desktop/strain_spar.pdf')
+    # plt.save('/Users/sning/Desktop/strain_spar.png')
 
     plt.figure()
     plt.plot(rotor.spline.r_str, rotor.strainU_te, label='suction')
@@ -2652,8 +2653,8 @@ if __name__ == '__main__':
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()
-    plt.save('/Users/sning/Desktop/strain_te.pdf')
-    plt.save('/Users/sning/Desktop/strain_te.png')
+    # plt.save('/Users/sning/Desktop/strain_te.pdf')
+    # plt.save('/Users/sning/Desktop/strain_te.png')
 
     plt.show()
     # ----------------
