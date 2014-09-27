@@ -9,7 +9,7 @@ Installation
 Clone the repository at `<https://github.com/WISDEM/RotorSE>`_
 or download the releases and uncompress/unpack (RotorSE.py-|release|.tar.gz or RotorSE.py-|release|.zip)
 
-Install RotorSE with the following command.
+Install RotorSE with the following command (for windows see the additional instructions in the README.md file).
 
 .. code-block:: bash
 

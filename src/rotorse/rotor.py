@@ -2610,7 +2610,6 @@ if __name__ == '__main__':
     # ----------------
 
     # from myutilities import plt
-    import matplotlib.pyplot as plt
 
     # === run and outputs ===
     rotor.run()
