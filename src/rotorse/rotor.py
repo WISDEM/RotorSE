@@ -1928,6 +1928,7 @@ class RotorSE(Assembly):
     AEP = Float(iotype='out', units='kW*h', desc='annual energy production')
     V = Array(iotype='out', units='m/s', desc='wind speeds (power curve)')
     P = Array(iotype='out', units='W', desc='power (power curve)')
+    Omega = Array(iotype='out', units='rpm', desc='speed (power curve)')
     ratedConditions = VarTree(RatedConditions(), iotype='out', desc='conditions at rated speed')
     hub_diameter = Float(iotype='out', units='m', desc='hub diameter')
     diameter = Float(iotype='out', units='m', desc='rotor diameter')

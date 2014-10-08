@@ -131,6 +131,7 @@ class DrivetrainLossesBase(Component):
     ratedPower = Float(iotype='in', units='W', desc='rated power')
 
     power = Array(iotype='out', units='W', desc='total power after drivetrain losses')
+    rpm = Array(iotype='out',units='rpm', desc='rpm curve after drivetrain losses')
 
 
 class PDFBase(Component):

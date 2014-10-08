@@ -5,7 +5,7 @@ RotorSE
 
     An aero/structural systems engineering model of a horizontal axis wind turbine rotor.
 
-    Author: `S. Andrew Ning <mailto:andrew.ning@nrel.gov>`_
+    Author: `S. Andrew Ning <mailto:nrel.wisdem+rotorse@gmail.com>`_
 
     .. rubric:: Table of Contents
 

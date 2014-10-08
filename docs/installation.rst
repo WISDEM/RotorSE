@@ -4,18 +4,24 @@ Installation
 .. admonition:: Prerequisites
    :class: warning
 
-   C compiler, Fortran compiler, NumPy, SciPy
+	General: C compiler, Fortran compiler, NumPy, SciPy, Swig, pyWin32, MatlPlotLib, Lxml, OpenMDAO
+
+	Wind Plant Framework: FUSED-Wind (Framework for Unified Systems Engineering and Design of Wind Plants)
+
+	Sub-Models: CommonSE, CCBlade, Akima
+
+	Supporting python packages: Pandas, Algopy, Zope.interface, Sphinx, Xlrd, PyOpt, py2exe, Pyzmq, Sphinxcontrib-bibtex, Sphinxcontrib-zopeext, Numpydoc, Ipython
 
 Clone the repository at `<https://github.com/WISDEM/RotorSE>`_
-or download the releases and uncompress/unpack (RotorSE.py-|release|.tar.gz or RotorSE.py-|release|.zip)
+or download the releases and uncompress/unpack (RotorSE.py-|release|.tar.gz or RotorSE.py-|release|.zip) from the website link at the bottom the `RotorSE site<http://nwtc.nrel.gov/RotorSE>`_.
 
-Install RotorSE with the following command (for windows see the additional instructions in the README.md file).
+Install RotorSE with the following command (for windows see the additional instructions in the README.md file).  For full instructions for Windows, see the README.md file.
 
 .. code-block:: bash
 
    $ python setup.py install
 
-To check if installation was successful try to import the module
+To check if installation was successful try to import the module from within an activated OpenMDAO environment:
 
 .. code-block:: bash
 
@@ -25,7 +31,7 @@ To check if installation was successful try to import the module
 
     > import rotorse.rotor
 
-or run the unit tests for the gradient checks
+or run the unit tests for the gradient checks:
 
 .. code-block:: bash
 

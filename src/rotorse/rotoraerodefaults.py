@@ -340,6 +340,7 @@ class CSMDrivetrain(DrivetrainLossesBase):
 
         drivetrainType = self.drivetrainType
         aeroPower = self.aeroPower
+        aeroTorque = self.aeroTorque
         ratedPower = self.ratedPower
 
 
@@ -376,7 +377,6 @@ class CSMDrivetrain(DrivetrainLossesBase):
         eff = 1.0 - (constant/Pbar + linear + quadratic*Pbar)
 
         self.power = aeroPower * eff
-
 
         # gradients
         dPbar_dPa = dPbar_dPbar1*dPbar1_dPbar0/ratedPower
