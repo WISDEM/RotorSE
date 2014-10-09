@@ -40,8 +40,15 @@ if platform.system() == 'Windows':
 		        libraries=['boost_python-mgw46-mt-1_55', 'lapack'] 
 		        )], 
 		) 
-else:
+elif platform.system() == 'Darwin':
     setup(
         name='curvefem',
         package_dir={'': 'src/rotorse'},
         ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], extra_compile_args=['-O2'])])
+else:
+    setup(
+        name='curvefem',
+        package_dir={'': 'src/rotorse'},
+        ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], extra_compile_args=['-O2'],
+                               libraries=['boost_python', 'lapack'])])
+
