@@ -1726,9 +1726,9 @@ class ExtremeLoads(Component):
 
     def execute(self):
         n = float(self.nBlades)
-        self.T_extreme = (self.T[1] + self.T[1]*(n-1)) / n #kld - changing to all feathered
-        #self.Q_extreme = (self.Q[1] + self.Q[1]*(n-1)) / n #kld - commenting out since extreme torque analysis is suspect
-
+        self.T_extreme = (self.T[1] + self.T[1]*(n-1)) / n #changing to all feathered since the stuck case overestimating load
+        #self.Q_extreme = (self.Q[1] + self.Q[1]*(n-1)) / n #TODO - commenting out since extreme torque analysis is suspect
+        self.Q_extreme = 0.0 #TODO - temporary setting of survival torque to 0
 
     def list_deriv_vars(self):
 
@@ -1741,8 +1741,8 @@ class ExtremeLoads(Component):
     def provideJ(self):
         n = float(self.nBlades)
 
-        J = np.array([[1.0/n, (n-1)/n, 0.0, 0.0],
-                      [0.0, 0.0, 1.0/n, (n-1)/n]])
+        J = np.array([[0.0, 1.0, 0.0, 0.0],
+                      [0.0, 0.0, 0.0, 0.0]])
 
         return J
 
