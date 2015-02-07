@@ -1726,8 +1726,8 @@ class ExtremeLoads(Component):
 
     def execute(self):
         n = float(self.nBlades)
-        self.T_extreme = (self.T[0] + self.T[1]*(n-1)) / n
-        self.Q_extreme = (self.Q[0] + self.Q[1]*(n-1)) / n
+        self.T_extreme = (self.T[1] + self.T[1]*(n-1)) / n #kld - changing to all feathered
+        #self.Q_extreme = (self.Q[1] + self.Q[1]*(n-1)) / n #kld - commenting out since extreme torque analysis is suspect
 
 
     def list_deriv_vars(self):
