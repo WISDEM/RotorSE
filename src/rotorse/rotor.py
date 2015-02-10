@@ -1691,7 +1691,7 @@ class MassProperties(Component):
 class TurbineClass(Component):
 
     # parameters
-    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in', desc='IEC turbine class')
+    turbine_class = Enum('I', ('I', 'II', 'III', 'IV'), iotype='in', desc='IEC turbine class')
 
     # outputs should be constant
     V_mean = Float(iotype='out', units='m/s', desc='IEC mean wind speed for Rayleigh distribution')
@@ -1704,6 +1704,8 @@ class TurbineClass(Component):
             Vref = 42.5
         elif self.turbine_class == 'III':
             Vref = 37.5
+        elif self.turbine_class == 'IV':
+            Vref = 30.0
 
         self.V_mean = 0.2*Vref
         self.V_extreme = 1.4*Vref
