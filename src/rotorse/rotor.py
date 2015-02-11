@@ -747,12 +747,14 @@ class GeometrySpline(Component):
     sparT_str = Array(iotype='out', units='m', desc='dimensional spar cap thickness distribution')
     teT_str = Array(iotype='out', units='m', desc='dimensional trailing-edge panel thickness distribution')
     r_sub_precurve = Array(iotype='out', desc='precurve locations (used internally)')
+    root_diameter = Float(iotype='out', units='m', desc='blade root diameter')
 
 
     def execute(self):
 
         Rhub = self.hubFraction * self.bladeLength
         Rtip = Rhub + self.bladeLength
+        root_diameter = self.chord_sub[0]
 
         # setup chord parmeterization
         nc = len(self.chord_sub)
@@ -1958,6 +1960,7 @@ class RotorSE(Assembly):
     damageL_te = Array(iotype='out', desc='fatigue damage on lower surface in trailing-edge panels')
     delta_bladeLength_out = Float(iotype='out', units='m', desc='adjustment to blade length to account for curvature from loading')
     delta_precurve_sub_out = Array(iotype='out', units='m', desc='adjustment to precurve to account for curvature from loading')
+    root_diameter = Float(iotype='out', units='m', desc='blade root diameter')
 
     # internal use outputs
     Rtip = Float(iotype='out', units='m', desc='tip location in z_b')
@@ -2422,7 +2425,7 @@ class RotorSE(Assembly):
         self.connect('turbineclass.V_extreme', 'V_extreme')
         self.connect('extreme.T_extreme', 'T_extreme')
         self.connect('extreme.Q_extreme', 'Q_extreme')
-        self.connect('struc.blade_mass', 'mass_one_blade')
+        self.connect('mass.blade_mass', 'mass_one_blade')
         self.connect('mass.mass_all_blades', 'mass_all_blades')
         self.connect('mass.I_all_blades', 'I_all_blades')
         self.connect('struc.freq', 'freq')
@@ -2441,6 +2444,7 @@ class RotorSE(Assembly):
         self.connect('struc.damageL_te', 'damageL_te')
         self.connect('blade_defl.delta_bladeLength', 'delta_bladeLength_out')
         self.connect('blade_defl.delta_precurve_sub', 'delta_precurve_sub_out')
+        self.connect('spline.root_diameter','root_diameter')
 
         self.connect('spline.Rtip', 'Rtip')
         self.connect('spline.precurve_str[-1]', 'precurveTip')
