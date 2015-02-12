@@ -747,14 +747,12 @@ class GeometrySpline(Component):
     sparT_str = Array(iotype='out', units='m', desc='dimensional spar cap thickness distribution')
     teT_str = Array(iotype='out', units='m', desc='dimensional trailing-edge panel thickness distribution')
     r_sub_precurve = Array(iotype='out', desc='precurve locations (used internally)')
-    root_diameter = Float(iotype='out', units='m', desc='blade root diameter')
 
 
     def execute(self):
 
         Rhub = self.hubFraction * self.bladeLength
         Rtip = Rhub + self.bladeLength
-        root_diameter = self.chord_sub[0]
 
         # setup chord parmeterization
         nc = len(self.chord_sub)
@@ -1871,7 +1869,7 @@ class RotorSE(Assembly):
     mu = Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air', deriv_ignore=True)
     shearExp = Float(0.2, iotype='in', desc='shear exponent', deriv_ignore=True)
     hubHt = Float(iotype='in', units='m', desc='hub height')
-    turbine_class = Enum('I', ('I', 'II', 'III'), iotype='in', desc='IEC turbine class')
+    turbine_class = Enum('I', ('I', 'II', 'III', 'IV'), iotype='in', desc='IEC turbine class')
     turbulence_class = Enum('B', ('A', 'B', 'C'), iotype='in', desc='IEC turbulence class class')
     g = Float(9.81, iotype='in', units='m/s**2', desc='acceleration of gravity', deriv_ignore=True)
     cdf_reference_height_wind_speed = Float(iotype='in', desc='reference hub height for IEC wind speed (used in CDF calculation)')
@@ -1960,7 +1958,6 @@ class RotorSE(Assembly):
     damageL_te = Array(iotype='out', desc='fatigue damage on lower surface in trailing-edge panels')
     delta_bladeLength_out = Float(iotype='out', units='m', desc='adjustment to blade length to account for curvature from loading')
     delta_precurve_sub_out = Array(iotype='out', units='m', desc='adjustment to precurve to account for curvature from loading')
-    root_diameter = Float(iotype='out', units='m', desc='blade root diameter')
 
     # internal use outputs
     Rtip = Float(iotype='out', units='m', desc='tip location in z_b')
@@ -2444,7 +2441,6 @@ class RotorSE(Assembly):
         self.connect('struc.damageL_te', 'damageL_te')
         self.connect('blade_defl.delta_bladeLength', 'delta_bladeLength_out')
         self.connect('blade_defl.delta_precurve_sub', 'delta_precurve_sub_out')
-        self.connect('spline.root_diameter','root_diameter')
 
         self.connect('spline.Rtip', 'Rtip')
         self.connect('spline.precurve_str[-1]', 'precurveTip')
