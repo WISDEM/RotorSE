@@ -1456,6 +1456,7 @@ class RootMoment(Component):
     s = Array(iotype='in', units='m', desc='cumulative path length along blade')
 
     root_bending_moment = Float(iotype='out', units='N*m', desc='total magnitude of bending moment at root of blade')
+    Mxyz = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
 
     missing_deriv_policy = 'assume_zero'
 
@@ -1497,6 +1498,8 @@ class RootMoment(Component):
         self.Mx = Mx
         self.My = My
         self.Mz = Mz
+        
+        self.Mxyz = [Mx, My, Mz]
 
 
     def list_deriv_vars(self):
@@ -1504,6 +1507,7 @@ class RootMoment(Component):
         inputs = ('r_str', 'aeroLoads.r', 'aeroLoads.Px', 'aeroLoads.Py', 'aeroLoads.Pz', 'totalCone',
                   'x_az', 'y_az', 'z_az', 's')
         outputs = ('root_bending_moment',)
+        # TODO: the derivatives for each of the individual moments
 
         return inputs, outputs
 
@@ -1952,6 +1956,7 @@ class RotorSE(Assembly):
     eps_crit_spar = Array(iotype='out', desc='critical strain in spar from panel buckling calculation')
     eps_crit_te = Array(iotype='out', desc='critical strain in trailing-edge panels from panel buckling calculation')
     root_bending_moment = Float(iotype='out', units='N*m', desc='total magnitude of bending moment at root of blade')
+    Mxyz = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')    
     damageU_spar = Array(iotype='out', desc='fatigue damage on upper surface in spar cap')
     damageL_spar = Array(iotype='out', desc='fatigue damage on lower surface in spar cap')
     damageU_te = Array(iotype='out', desc='fatigue damage on upper surface in trailing-edge panels')
@@ -2433,6 +2438,7 @@ class RotorSE(Assembly):
         self.connect('struc.strainU_te', 'strainU_te')
         self.connect('struc.strainL_te', 'strainL_te')
         self.connect('root_moment.root_bending_moment', 'root_bending_moment')
+        self.connect('root_moment.Mxyz','Mxyz')
         self.connect('beam.eps_crit_spar', 'eps_crit_spar')
         self.connect('beam.eps_crit_te', 'eps_crit_te')
         self.connect('struc.damageU_spar', 'damageU_spar')
