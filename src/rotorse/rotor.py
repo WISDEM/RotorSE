@@ -1955,14 +1955,17 @@ class RotorSE(Assembly):
     strainL_te = Array(iotype='out', desc='axial strain and specified locations')
     eps_crit_spar = Array(iotype='out', desc='critical strain in spar from panel buckling calculation')
     eps_crit_te = Array(iotype='out', desc='critical strain in trailing-edge panels from panel buckling calculation')
-    root_bending_moment = Float(iotype='out', units='N*m', desc='total magnitude of bending moment at root of blade')
-    Mxyz = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')    
+    root_bending_moment = Float(iotype='out', units='N*m', desc='total magnitude of bending moment at root of blade')    
     damageU_spar = Array(iotype='out', desc='fatigue damage on upper surface in spar cap')
     damageL_spar = Array(iotype='out', desc='fatigue damage on lower surface in spar cap')
     damageU_te = Array(iotype='out', desc='fatigue damage on upper surface in trailing-edge panels')
     damageL_te = Array(iotype='out', desc='fatigue damage on lower surface in trailing-edge panels')
     delta_bladeLength_out = Float(iotype='out', units='m', desc='adjustment to blade length to account for curvature from loading')
     delta_precurve_sub_out = Array(iotype='out', units='m', desc='adjustment to precurve to account for curvature from loading')
+    # additional drivetrain moments output
+    Mxyz_0 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
+    Mxyz_120 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
+    Mxyz_240 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
 
     # internal use outputs
     Rtip = Float(iotype='out', units='m', desc='tip location in z_b')
@@ -2144,12 +2147,17 @@ class RotorSE(Assembly):
         self.add('mass', MassProperties())
         self.add('extreme', ExtremeLoads())
         self.add('blade_defl', BladeDeflection())
-
+        self.add('aero_0', CCBlade())
+        self.add('aero_120', CCBlade())
+        self.add('aero_240', CCBlade())
+        self.add('root_moment_0', RootMoment())
+        self.add('root_moment_120', RootMoment())
+        self.add('root_moment_240', RootMoment())
 
         self.driver.workflow.add(['curvature', 'resize', 'gust', 'setuppc', 'aero_rated', 'aero_extrm',
             'aero_extrm_forces', 'aero_defl_powercurve', 'beam', 'loads_defl', 'loads_pc_defl',
             'loads_strain', 'damage', 'struc', 'curvefem', 'tip', 'root_moment', 'mass', 'extreme',
-            'blade_defl'])
+            'blade_defl', 'aero_0', 'aero_120', 'aero_240', 'root_moment_0', 'root_moment_120', 'root_moment_240'])
 
         # connections to curvature
         self.connect('spline.r_str', 'curvature.r')
@@ -2438,7 +2446,6 @@ class RotorSE(Assembly):
         self.connect('struc.strainU_te', 'strainU_te')
         self.connect('struc.strainL_te', 'strainL_te')
         self.connect('root_moment.root_bending_moment', 'root_bending_moment')
-        self.connect('root_moment.Mxyz','Mxyz')
         self.connect('beam.eps_crit_spar', 'eps_crit_spar')
         self.connect('beam.eps_crit_te', 'eps_crit_te')
         self.connect('struc.damageU_spar', 'damageU_spar')
@@ -2451,7 +2458,50 @@ class RotorSE(Assembly):
         self.connect('spline.Rtip', 'Rtip')
         self.connect('spline.precurve_str[-1]', 'precurveTip')
 
+        ### adding for the drivetrain root moment calculations:
+        # TODO - number and value of azimuth angles should be arbitrary user inputs
+        # connections to aero_0 (for rated loads at 0 azimuth angle)
+        self.connect('spline.r_aero', ['aero_0.r','aero_120.r','aero_240.r'])
+        self.connect('spline.chord_aero', ['aero_0.chord', 'aero_120.chord', 'aero_240.chord'])
+        self.connect('spline.theta_aero', ['aero_0.theta', 'aero_120.theta', 'aero_240.theta'])
+        self.connect('spline.precurve_aero', ['aero_0.precurve', 'aero_120.precurve', 'aero_240.precurve'])
+        self.connect('spline.precurve_str[-1]', ['aero_0.precurveTip', 'aero_120.precurveTip', 'aero_240.precurveTip'])
+        self.connect('spline.Rhub', ['aero_0.Rhub', 'aero_120.Rhub', 'aero_240.Rhub'])
+        self.connect('spline.Rtip', ['aero_0.Rtip', 'aero_120.Rtip', 'aero_240.Rtip'])
+        self.connect('hubHt', ['aero_0.hubHt', 'aero_120.hubHt', 'aero_240.hubHt'])
+        self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
+        self.connect('tilt', ['aero_0.tilt', 'aero_120.tilt', 'aero_240.tilt'])
+        self.connect('yaw', ['aero_0.yaw', 'aero_120.yaw', 'aero_240.yaw'])
+        self.connect('airfoil_files', ['aero_0.airfoil_files', 'aero_120.airfoil_files', 'aero_240.airfoil_files'])
+        self.connect('nBlades', ['aero_0.B','aero_120.B', 'aero_240.B'])
+        self.connect('rho', ['aero_0.rho', 'aero_120.rho', 'aero_240.rho'])
+        self.connect('mu', ['aero_0.mu','aero_120.mu' ,'aero_240.mu'])
+        self.connect('shearExp', ['aero_0.shearExp','aero_120.shearExp','aero_240.shearExp'])
+        self.connect('nSector', ['aero_0.nSector','aero_120.nSector','aero_240.nSector'])
+        # self.connect('powercurve.ratedConditions.V + 3*gust.sigma', 'aero_0.V_load')  # OpenMDAO bug
+        self.connect('gust.V_gust', ['aero_0.V_load','aero_120.V_load','aero_240.V_load'])
+        self.connect('powercurve.ratedConditions.Omega', ['aero_0.Omega_load','aero_120.Omega_load','aero_240.Omega_load'])
+        self.connect('powercurve.ratedConditions.pitch', ['aero_0.pitch_load','aero_120.pitch_load','aero_240.pitch_load'])
+        self.aero_0.azimuth_load = 0.0
+        self.aero_120.azimuth_load = 120.0
+        self.aero_240.azimuth_load = 240.0
+        self.aero_0.run_case = 'loads'
+        self.aero_120.run_case = 'loads'
+        self.aero_240.run_case = 'loads'
 
+        # connections to root moment for drivetrain
+        self.connect('spline.r_str', ['root_moment_0.r_str', 'root_moment_120.r_str', 'root_moment_240.r_str'])
+        self.connect('aero_rated.loads', ['root_moment_0.aeroLoads', 'root_moment_120.aeroLoads', 'root_moment_240.aeroLoads'])
+        self.connect('curvature.totalCone', ['root_moment_0.totalCone', 'root_moment_120.totalCone', 'root_moment_240.totalCone'])
+        self.connect('curvature.x_az', ['root_moment_0.x_az','root_moment_120.x_az','root_moment_240.x_az'])
+        self.connect('curvature.y_az', ['root_moment_0.y_az','root_moment_120.y_az','root_moment_240.y_az'])
+        self.connect('curvature.z_az', ['root_moment_0.z_az','root_moment_120.z_az','root_moment_240.z_az'])
+        self.connect('curvature.s', ['root_moment_0.s','root_moment_120.s','root_moment_240.s'])
+        
+        # connections to root Mxyz outputs
+        self.connect('root_moment_0.Mxyz','Mxyz_0')
+        self.connect('root_moment_120.Mxyz','Mxyz_120')
+        self.connect('root_moment_240.Mxyz','Mxyz_240')
 
 if __name__ == '__main__':
 
