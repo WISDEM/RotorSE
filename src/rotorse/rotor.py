@@ -1966,6 +1966,8 @@ class RotorSE(Assembly):
     Mxyz_0 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
     Mxyz_120 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
     Mxyz_240 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
+    TotalCone = Float(iotype='out',units='rad', desc='total cone angle for blades at rated')
+    Pitch = Float(iotype='out', units='rad', desc='pitch angle at rated')
 
     # internal use outputs
     Rtip = Float(iotype='out', units='m', desc='tip location in z_b')
@@ -2502,6 +2504,10 @@ class RotorSE(Assembly):
         self.connect('root_moment_0.Mxyz','Mxyz_0')
         self.connect('root_moment_120.Mxyz','Mxyz_120')
         self.connect('root_moment_240.Mxyz','Mxyz_240')
+        self.connect('curvature.totalCone[-1]','TotalCone')
+        self.connect('powercurve.ratedConditions.pitch','Pitch')
+        #azimuths not passed. assumed 0,120,240 in drivese function
+
 
 if __name__ == '__main__':
 
@@ -2686,6 +2692,7 @@ if __name__ == '__main__':
     print 'freq =', rotor.freq
     print 'tip_deflection =', rotor.tip_deflection
     print 'root_bending_moment =', rotor.root_bending_moment
+    print 'totalCone =', rotor.TotalCone
 
     plt.figure()
     plt.plot(rotor.V, rotor.P/1e6)
