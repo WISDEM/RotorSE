@@ -2483,7 +2483,9 @@ class RotorSE(Assembly):
         # self.connect('powercurve.ratedConditions.V + 3*gust.sigma', 'aero_0.V_load')  # OpenMDAO bug
         self.connect('gust.V_gust', ['aero_0.V_load','aero_120.V_load','aero_240.V_load'])
         self.connect('powercurve.ratedConditions.Omega', ['aero_0.Omega_load','aero_120.Omega_load','aero_240.Omega_load'])
-        self.connect('powercurve.ratedConditions.pitch', ['aero_0.pitch_load','aero_120.pitch_load','aero_240.pitch_load'])
+        self.aero_0.pitch_load = 89.0
+        self.aero_120.pitch_load = 89.0
+        self.aero_240.pitch_load = 89.0
         self.aero_0.azimuth_load = 0.0
         self.aero_120.azimuth_load = 120.0
         self.aero_240.azimuth_load = 240.0
@@ -2505,7 +2507,7 @@ class RotorSE(Assembly):
         self.connect('root_moment_120.Mxyz','Mxyz_120')
         self.connect('root_moment_240.Mxyz','Mxyz_240')
         self.connect('curvature.totalCone[-1]','TotalCone')
-        self.connect('powercurve.ratedConditions.pitch','Pitch')
+        self.connect('aero_0.pitch_load','Pitch')
         #azimuths not passed. assumed 0,120,240 in drivese function
 
 
@@ -2580,7 +2582,7 @@ if __name__ == '__main__':
     # === atmosphere ===
     rotor.rho = 1.225  # (Float, kg/m**3): density of air
     rotor.mu = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
-    rotor.shearExp = 0.2  # (Float): shear exponent
+    rotor.shearExp = 0.25  # (Float): shear exponent
     rotor.hubHt = 90.0  # (Float, m): hub height
     rotor.turbine_class = 'I'  # (Enum): IEC turbine class
     rotor.turbulence_class = 'B'  # (Enum): IEC turbulence class class
