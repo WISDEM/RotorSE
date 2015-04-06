@@ -95,14 +95,14 @@ class AeroBase(Component):
     # --- use these if (run_case == 'power') ---
 
     # inputs
-    Uhub = Array(iotype='in', units='m/s', desc='hub height wind speed')
-    Omega = Array(iotype='in', units='rpm', desc='rotor rotation speed')
-    pitch = Array(iotype='in', units='deg', desc='blade pitch setting')
+    Uhub = Array(np.array([1.0]), iotype='in', units='m/s', desc='hub height wind speed')
+    Omega = Array(np.array([0.0]), iotype='in', units='rpm', desc='rotor rotation speed')
+    pitch = Array(np.array([0.0]), iotype='in', units='deg', desc='blade pitch setting')
 
     # outputs
-    T = Array(iotype='out', units='N', desc='rotor aerodynamic thrust')
-    Q = Array(iotype='out', units='N*m', desc='rotor aerodynamic torque')
-    P = Array(iotype='out', units='W', desc='rotor aerodynamic power')
+    T = Array(np.array([0.0]), iotype='out', units='N', desc='rotor aerodynamic thrust')
+    Q = Array(np.array([0.0]), iotype='out', units='N*m', desc='rotor aerodynamic torque')
+    P = Array(np.array([0.0]), iotype='out', units='W', desc='rotor aerodynamic power')
 
 
     # --- use these if (run_case == 'loads') ---
