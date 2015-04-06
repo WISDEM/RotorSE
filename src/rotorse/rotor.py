@@ -1457,6 +1457,7 @@ class RootMoment(Component):
 
     root_bending_moment = Float(iotype='out', units='N*m', desc='total magnitude of bending moment at root of blade')
     Mxyz = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
+    Fxyz = Array(np.array([0.0,0.0,0.0]),iotype='out', units='N', desc='individual forces [x,y,z] at the blade root in blade c.s.')
 
     missing_deriv_policy = 'assume_zero'
 
@@ -1474,6 +1475,12 @@ class RootMoment(Component):
         Py, self.dPy_dr, self.dPy_dalr, self.dPy_dalPy = interp_with_deriv(r, aL.r, aL.Py)
         Pz, self.dPz_dr, self.dPz_dalr, self.dPz_dalPz = interp_with_deriv(r, aL.r, aL.Pz)
 
+        # print 'al.Pz: ', aL.Pz #check=0
+
+        Fx=np.trapz(Px,self.s)
+        Fy=np.trapz(Py,self.s)
+        Fz=np.trapz(Pz,self.s)
+
         # loads in azimuthal c.s.
         P = DirectionVector(Px, Py, Pz).bladeToAzimuth(self.totalCone)
 
@@ -1489,8 +1496,6 @@ class RootMoment(Component):
         # get total magnitude
         self.root_bending_moment = math.sqrt(Mx**2 + My**2 + Mz**2)
 
-
-
         self.P = P
         self.az = az
         self.Mp = Mp
@@ -1499,8 +1504,9 @@ class RootMoment(Component):
         self.My = My
         self.Mz = Mz
         
-        self.Mxyz = [Mx, My, Mz]
-
+        self.Mxyz = np.array([Mx, My, Mz])
+        self.Fxyz = np.array([Fx,Fy,Fz])
+        # print 'Forces: ', self.Fxyz
 
     def list_deriv_vars(self):
 
@@ -1966,6 +1972,9 @@ class RotorSE(Assembly):
     Mxyz_0 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
     Mxyz_120 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
     Mxyz_240 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
+    Fxyz_0 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N', desc='individual forces [x,y,z] at the blade root in blade c.s.')
+    Fxyz_120 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N', desc='individual forces [x,y,z] at the blade root in blade c.s.')
+    Fxyz_240 = Array(np.array([0.0, 0.0, 0.0]), iotype='out', units='N', desc='individual forces [x,y,z] at the blade root in blade c.s.')
     TotalCone = Float(iotype='out',units='rad', desc='total cone angle for blades at rated')
     Pitch = Float(iotype='out', units='rad', desc='pitch angle at rated')
 
@@ -2508,6 +2517,9 @@ class RotorSE(Assembly):
         self.connect('root_moment_240.Mxyz','Mxyz_240')
         self.connect('curvature.totalCone[-1]','TotalCone')
         self.connect('aero_0.pitch_load','Pitch')
+        self.connect('root_moment_0.Fxyz', 'Fxyz_0')
+        self.connect('root_moment_120.Fxyz', 'Fxyz_120')
+        self.connect('root_moment_240.Fxyz', 'Fxyz_240')
         #azimuths not passed. assumed 0,120,240 in drivese function
 
 
