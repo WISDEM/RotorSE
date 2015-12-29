@@ -9,8 +9,7 @@ Copyright (c) NREL. All rights reserved.
 
 import numpy as np
 from scipy.linalg import solve_banded
-from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder
-from itertools import chain
+from openmdao.api import IndepVarComp, Component, Problem, Group
 
 def cosd(value):
     """cosine of value where value is given in degrees"""
@@ -553,7 +552,7 @@ def check_for_missing_unit_tests(modules):
 
 
 def check_gradient_unit_test(unittest, prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
-        show_missing_warnings=True, show_scaling_warnings=False, min_grad=1e-6, max_grad=1e6):
+        show_missing_warnings=True, show_scaling_warnings=False, min_grad=1e-6, max_grad=1e6, comp=None):
     """compare provided analytic gradients to finite-difference gradients with unit testing.
     Same as check_gradient, but provides a unit test for each gradient for convenience.
     the unit tests checks that the error for each gradient is less than tol.
@@ -582,26 +581,68 @@ def check_gradient_unit_test(unittest, prob, fd='central', step_size=1e-6, tol=1
 
     J_fd, J_fwd, J_rev = check_gradient(prob, fd, step_size, tol, display, show_missing_warnings,
         show_scaling_warnings, min_grad, max_grad)
-    for comp in prob.root.components(recurse=True):
-        try:
-            inputs, outputs = comp.list_deriv_vars()
-            print inputs
-            for output in outputs:
-                for input in inputs:
-                    try:
-                        np.testing.assert_allclose(J_fd[output, input], J_fwd[output, input], atol=tol )#rtol=tol)
-                        # unittest.assertLessEqual(err, tol)
-                    except AssertionError, e:
-                        print '*** error in:', output, input
-                        raise e
-        except:
-            for key, value in J_fd.iteritems():
-                try:
-                    np.testing.assert_allclose(J_fd[key], J_fwd[key], atol=tol )#rtol=tol)
-                    # unittest.assertLessEqual(err, tol)
-                except AssertionError, e:
-                    print '*** error in:', key
-                    raise e
+    if comp == None:
+        comp = prob.root.comp
+    if "list_deriv_vars" in dir(comp): #  callable(getattr(comp, 'list_deriv_vars')):
+        inputs, outputs = comp.list_deriv_vars()
+        for output in outputs:
+            for input in inputs:
+                J = J_fwd[output, input]
+                JFD = J_fd[output, input]
+                m, n = J.shape
+                for i in range(m):
+                    for j in range(n):
+                        if np.abs(J[i, j]) <= tol:
+                            errortype = 'absolute'
+                            error = J[i, j] - JFD[i, j]
+                        else:
+                            errortype = 'relative'
+                            error = 1.0 - JFD[i, j]/J[i, j]
+                        error = np.abs(error)
+
+                        # # display
+                        # if error > tol:
+                        #     star = ' ***** '
+                        # else:
+                        #     star = ''
+                        #
+                        # if display:
+                        #     output = '{}{:<20} ({}) {}: ({}, {})'.format(star, error, errortype, name, J[i, j], JFD[i, j])
+                        #     print output
+                        #
+                        # if show_scaling_warnings and J[i, j] != 0 and np.abs(J[i, j]) < min_grad:
+                        #     print '*** Warning: The following analytic gradient is very small and may need to be scaled:'
+                        #     print '\t(' + comp.__class__.__name__ + ') ' + name + ':', J[i, j]
+                        #
+                        # if show_scaling_warnings and np.abs(J[i, j]) > max_grad:
+                        #     print '*** Warning: The following analytic gradient is very large and may need to be scaled:'
+                        #     print '\t(' + comp.__class__.__name__ + ') ' + name + ':', J[i, j]
+                        #
+
+                        try:
+                            unittest.assertLessEqual(error, tol)
+                        except AssertionError, e:
+                            print '*** error in:', "\n\tOutput: ", output, "\n\tInput: ", input, "\n\tPosition: ", i, j
+                            raise e
+    else:
+        for key, value in J_fd.iteritems():
+                J = J_fwd[key]
+                JFD = J_fd[key]
+                m, n = J.shape
+                for i in range(m):
+                    for j in range(n):
+                        if np.abs(J[i, j]) <= tol:
+                            errortype = 'absolute'
+                            error = J[i, j] - JFD[i, j]
+                        else:
+                            errortype = 'relative'
+                            error = 1.0 - JFD[i, j]/J[i, j]
+                        error = np.abs(error)
+                        try:
+                            unittest.assertLessEqual(error, tol)
+                        except AssertionError, e:
+                            print '*** error in:', "\n\tKey: ", key, "\n\tPosition: ", i, j
+                            raise e
 
 
 def check_gradient(prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
@@ -696,7 +737,9 @@ def check_gradient(prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
         jac_fd = {}
 
         # try:
-
+        #     params, unknowns = comp.list_deriv_vars()
+        # except:
+        #     pass
         params = comp.params
         unknowns = comp.unknowns
         resids = comp.resids
@@ -715,8 +758,12 @@ def check_gradient(prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
 
         states = comp.states
 
+        param_list = [item for item in dparams if not \
+                      dparams.metadata(item).get('pass_by_obj')]
+        param_list.extend(states)
+
         # Create all our keys and allocate Jacs
-        for p_name in chain(dparams, states):
+        for p_name in param_list:
 
             dinputs = dunknowns if p_name in states else dparams
             p_size = np.size(dinputs[p_name])
@@ -762,7 +809,7 @@ def check_gradient(prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
                 finally:
                     dparams._apply_unit_derivatives()
 
-                for p_name in chain(dparams, states):
+                for p_name in param_list:
 
                     dinputs = dunknowns if p_name in states else dparams
                     # try:
@@ -770,7 +817,7 @@ def check_gradient(prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
                     # except:
                     #     pass
         # Forward derivatives second
-        for p_name in chain(dparams, states):
+        for p_name in param_list:
 
             dinputs = dunknowns if p_name in states else dparams
             p_size = np.size(dinputs[p_name])

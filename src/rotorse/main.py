@@ -1,6 +1,6 @@
 # from __future__ import print_function
 
-from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder, Problem
+from openmdao.api import Problem
 from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
 import numpy as np
 from rotor import RotorSE
@@ -9,49 +9,40 @@ import matplotlib.pyplot as plt
 from precomp import Orthotropic2DMaterial, CompositeSection, Profile
 from akima import Akima
 
+initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
+    0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
+    0.97777724])  # (Array): initial aerodynamic grid on unit radius
+initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
+    0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
+    0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
+    0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
+    0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
+    1.0])  # (Array): initial structural grid on unit radius
+
 
 rotor = Problem()
-rotor.root = RotorSE()
+naero = len(initial_aero_grid)
+nstr = len(initial_str_grid)
+rotor.root = RotorSE(naero, nstr)
 
 ### SETUP OPTIMIZATION
-rotor.driver = pyOptSparseDriver()
-rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+# rotor.driver = pyOptSparseDriver()
+# rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
 # ccblade.driver.options['tol'] = 1.0e-8
 
-rotor.driver.add_desvar('control:tsr', lower=1.5, upper=14.0)
-
-rotor.driver.add_objective('obj')
+# rotor.driver.add_desvar('control:tsr', lower=1.5, upper=14.0)
+# rotor.driver.add_objective('obj')
 #
 # recorder = SqliteRecorder('recorder')
 # recorder.options['record_params'] = True
 # recorder.options['record_metadata'] = True
 # rotor.driver.add_recorder(recorder)
 
-# rotor.driver = pyOptSparseDriver()
-# rotor.driver.options['optimizer'] = 'SNOPT'
-# rotor.driver.options['tol'] = 1.0e-8
-
-# rotor.driver.add_desvar('r', low=0.0, high=10.0)
-
-# rotor.driver.add_objective('obj')
-# rotor.driver.add_constraint('con1')
-# rotor.driver.add_constraint('con2')
-
-# recorder = BaseRecorder()
-# rotor.driver.add_recorder(recorder)
-
-rotor.setup()
+rotor.setup(check=False)
 
 # === blade grid ===
-rotor['initial_aero_grid'] = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
-    0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
-    0.97777724])  # (Array): initial aerodynamic grid on unit radius
-rotor['initial_str_grid'] = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
-    0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
-    0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
-    0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
-    0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
-    1.0])  # (Array): initial structural grid on unit radius
+rotor['initial_aero_grid'] = initial_aero_grid  # (Array): initial aerodynamic grid on unit radius
+rotor['initial_str_grid'] = initial_str_grid  # (Array): initial structural grid on unit radius
 rotor['idx_cylinder_aero'] = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
 rotor['idx_cylinder_str'] = 14  # (Int): first idx in r_str_unit of non-cylindrical section
 rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
@@ -201,11 +192,6 @@ rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigu
 
 # === run and outputs ===
 rotor.run()
-
-
-# test_grad = open('partial_test_grad.txt', 'w')
-# power_gradients = ccblade.check_total_derivatives_modified2(out_stream=test_grad)
-# power_partial = rotor.check_partial_derivatives(out_stream=test_grad)
 
 print 'AEP =', rotor['AEP']
 print 'diameter =', rotor['diameter']
