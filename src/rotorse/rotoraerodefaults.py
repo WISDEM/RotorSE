@@ -152,8 +152,8 @@ class GeometrySpline(Component):
 
 class CCBladeGeometry(GeomtrySetupBase):
     def __init__(self):
-        super(CCBladeGeometry).__init__()
-        self.add_param('Rtip', units='m', desc='tip radius')
+        super(CCBladeGeometry, self).__init__()
+        self.add_param('Rtip', shape=1, units='m', desc='tip radius')
         self.add_param('recurveTip', val=0.0, units='m', desc='tip radius')
         self.add_param('precone', val=0.0, desc='precone angle', units='deg')
 
@@ -180,26 +180,26 @@ class CCBladeGeometry(GeomtrySetupBase):
 
 class CCBlade(AeroBase):
     def __init__(self):
-        super(CCBlade).__init__()
+        super(CCBlade, self).__init__()
         """blade element momentum code"""
 
         # (potential) variables
-        self.add_param('r', units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
-        self.add_param('chord', units='m', desc='chord length at each section')
-        self.add_param('theta', units='deg', desc='twist angle at each section (positive decreases angle of attack)')
-        self.add_param('Rhub', units='m', desc='hub radius')
-        self.add_param('Rtip', units='m', desc='tip radius')
-        self.add_param('hubHtn', units='m', desc='hub height')
-        self.add_param('precone', desc='precone angle', units='deg')
-        self.add_param('tilt', desc='shaft tilt', units='deg')
-        self.add_param('yaw', desc='yaw error', units='deg')
+        self.add_param('r', shape=17, units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
+        self.add_param('chord', shape=4, units='m', desc='chord length at each section')
+        self.add_param('theta', shape=4,units='deg', desc='twist angle at each section (positive decreases angle of attack)')
+        self.add_param('Rhub', shape=1,units='m', desc='hub radius')
+        self.add_param('Rtip', shape=1,units='m', desc='tip radius')
+        self.add_param('hubHtn',shape=1, units='m', desc='hub height')
+        self.add_param('precone',shape=1, desc='precone angle', units='deg')
+        self.add_param('tilt',shape=1, desc='shaft tilt', units='deg')
+        self.add_param('yaw', shape=1,desc='yaw error', units='deg')
 
         # TODO: I've not hooked up the gradients for these ones yet.
-        self.add_param('precurve', units='m', desc='precurve at each section')
+        self.add_param('precurve', shape=3, units='m', desc='precurve at each section')
         self.add_param('precurveTip', val=0.0, units='m', desc='precurve at tip')
 
         # parameters
-        self.add_param('airfoil_files', desc='names of airfoil file')
+        self.add_param('airfoil_files', shape=17, desc='names of airfoil file')
         self.add_param('B', val=3, desc='number of blades')
         self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
         self.add_param('mu', val=1.81206e-5, units='kg/(m*s)', desc='dynamic viscosity of air')
@@ -340,10 +340,10 @@ class CCBlade(AeroBase):
 
 class CSMDrivetrain(DrivetrainLossesBase):
     def __init__(self):
-        super(CSMDrivetrain).__init__()
+        super(CSMDrivetrain, self).__init__()
         """drivetrain losses from NREL cost and scaling model"""
 
-        self.add_param('drivetrainType', val=Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive')))
+        self.add_param('drivetrainType', val='geared') #, ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive')))
 
         missing_deriv_policy = 'assume_zero'
 

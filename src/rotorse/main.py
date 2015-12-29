@@ -87,13 +87,13 @@ rotor.g = 9.81  # (Float, m/s**2): acceleration of gravity
 # ----------------------
 
 # === control ===
-rotor.control.Vin = 3.0  # (Float, m/s): cut-in wind speed
-rotor.control.Vout = 25.0  # (Float, m/s): cut-out wind speed
-rotor.control.ratedPower = 5e6  # (Float, W): rated power
-rotor.control.minOmega = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
-rotor.control.maxOmega = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
-rotor.control.tsr = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-rotor.control.pitch = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+# rotor.control.Vin = 3.0  # (Float, m/s): cut-in wind speed
+# rotor.control.Vout = 25.0  # (Float, m/s): cut-out wind speed
+# rotor.control.ratedPower = 5e6  # (Float, W): rated power
+# rotor.control.minOmega = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
+# rotor.control.maxOmega = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
+# rotor.control.tsr = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+# rotor.control.pitch = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
 rotor.pitch_extreme = 0.0  # (Float, deg): worst-case pitch at survival wind condition
 rotor.azimuth_extreme = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
 rotor.VfactorPC = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
@@ -134,6 +134,7 @@ rotor.chord_str_ref = np.array([3.2612, 3.3100915356, 3.32587052924, 3.341593886
      4.31069949379, 4.20483735936, 4.08985563932, 3.82931757126, 3.74220276467, 3.54415796922, 3.38732428502,
      3.24931446473, 3.23421422609, 3.22701537997, 3.21972125648, 3.08979310611, 2.95152261813, 2.330753331,
      2.05553464181, 1.82577817774, 1.5860853279, 1.4621])  # (Array, m): chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)
+# TODO: CHECK OUT
 
 for i in range(ncomp):
 
@@ -175,6 +176,7 @@ rotor.N_damage = 365*24*3600*20.0  # (Float): number of cycles used in fatigue a
 # from myutilities import plt
 
 # === run and outputs ===
+rotor.setup()
 rotor.run()
 
 print 'AEP =', rotor.AEP
