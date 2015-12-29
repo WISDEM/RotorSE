@@ -1,11 +1,7 @@
 # from __future__ import print_function
 
-from openmdao.components.paramcomp import ParamComp
-from openmdao.core.component import Component
-from openmdao.core.problem import Problem, Group
+from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder, Problem
 from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
-from openmdao.components.execcomp import ExecComp
-from openmdao.recorders.shelverecorder import ShelveRecorder, BaseRecorder
 import numpy as np
 from rotor import RotorSE
 import os
@@ -17,11 +13,26 @@ from akima import Akima
 rotor = Problem()
 rotor.root = RotorSE()
 
+# rotor.driver = pyOptSparseDriver()
+# rotor.driver.options['optimizer'] = 'SNOPT'
+# rotor.driver.options['tol'] = 1.0e-8
+
+# rotor.driver.add_desvar('r', low=0.0, high=10.0)
+
+# rotor.driver.add_objective('obj')
+# rotor.driver.add_constraint('con1')
+# rotor.driver.add_constraint('con2')
+
+# recorder = BaseRecorder()
+# rotor.driver.add_recorder(recorder)
+
+rotor.setup()
+
 # === blade grid ===
-rotor.initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
+rotor['initial_aero_grid'] = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
     0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
     0.97777724])  # (Array): initial aerodynamic grid on unit radius
-rotor.initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
+rotor['initial_str_grid'] = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
     0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
     0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
     0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
@@ -83,17 +94,17 @@ rotor.hubHt = 90.0  # (Float, m): hub height
 rotor.turbine_class = 'I'  # (Enum): IEC turbine class
 rotor.turbulence_class = 'B'  # (Enum): IEC turbulence class class
 rotor.cdf_reference_height_wind_speed = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
-rotor.g = 9.81  # (Float, m/s**2): acceleration of gravity
+rotor['g'] = 9.81  # (Float, m/s**2): acceleration of gravity
 # ----------------------
 
 # === control ===
-# rotor.control.Vin = 3.0  # (Float, m/s): cut-in wind speed
-# rotor.control.Vout = 25.0  # (Float, m/s): cut-out wind speed
-# rotor.control.ratedPower = 5e6  # (Float, W): rated power
-# rotor.control.minOmega = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
-# rotor.control.maxOmega = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
-# rotor.control.tsr = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-# rotor.control.pitch = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+rotor.control.Vin = 3.0  # (Float, m/s): cut-in wind speed
+rotor.control.Vout = 25.0  # (Float, m/s): cut-out wind speed
+rotor.control.ratedPower = 5e6  # (Float, W): rated power
+rotor.control.minOmega = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
+rotor.control.maxOmega = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
+rotor.control.tsr = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+rotor.control.pitch = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
 rotor.pitch_extreme = 0.0  # (Float, deg): worst-case pitch at survival wind condition
 rotor.azimuth_extreme = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
 rotor.VfactorPC = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
@@ -134,7 +145,6 @@ rotor.chord_str_ref = np.array([3.2612, 3.3100915356, 3.32587052924, 3.341593886
      4.31069949379, 4.20483735936, 4.08985563932, 3.82931757126, 3.74220276467, 3.54415796922, 3.38732428502,
      3.24931446473, 3.23421422609, 3.22701537997, 3.21972125648, 3.08979310611, 2.95152261813, 2.330753331,
      2.05553464181, 1.82577817774, 1.5860853279, 1.4621])  # (Array, m): chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)
-# TODO: CHECK OUT
 
 for i in range(ncomp):
 
@@ -176,7 +186,6 @@ rotor.N_damage = 365*24*3600*20.0  # (Float): number of cycles used in fatigue a
 # from myutilities import plt
 
 # === run and outputs ===
-rotor.setup()
 rotor.run()
 
 print 'AEP =', rotor.AEP
@@ -223,23 +232,7 @@ plt.legend()
 plt.show()
 # ----------------
 
-rotor.driver = pyOptSparseDriver()
-rotor.driver.options['optimizer'] = 'SNOPT'
-# rotor.driver.options['tol'] = 1.0e-8
 
-rotor.driver.add_param('z', low=np.array([-10.0, 0.0]),
-                     high=np.array([10.0, 10.0]))
-rotor.driver.add_param('x', low=0.0, high=10.0)
-
-rotor.driver.add_objective('obj')
-rotor.driver.add_constraint('con1')
-rotor.driver.add_constraint('con2')
-
-# recorder = BaseRecorder()
-# rotor.driver.add_recorder(recorder)
-
-rotor.setup()
-rotor.run()
 
 print("\n")
 print( "Minimum found at (%f, %f, %f)" % (rotor['z'][0], \

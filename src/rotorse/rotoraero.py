@@ -9,18 +9,18 @@ Copyright (c) NREL. All rights reserved.
 
 import numpy as np
 from math import pi
-from openmdao.core.component import Component
-from openmdao.components.execcomp import ExecComp
-from openmdao.components.paramcomp import ParamComp
-from openmdao.core.group import Group
+from openmdao.api import Component
+from openmdao.api import ExecComp, IndepVarComp, Group, NLGaussSeidel
 from openmdao.solvers.nl_gauss_seidel import NLGaussSeidel
+from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder
+from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
 # from openmdao.main.api import VariableTree, Component, Assembly, ImplicitComponent
 # from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Enum
 # from openmdao.lib.drivers.api import Brent
 
 from commonse.utilities import hstack, vstack, linspace_with_deriv, smooth_min, trapz_deriv
 from akima import Akima
-
+from enum import Enum
 
 # convert between rotations/minute and radians/second
 RPM2RS = pi/30.0
@@ -30,93 +30,7 @@ RS2RPM = 30.0/pi
 # Base Components
 # ---------------------
 
-class GeomtrySetupBase(Component):
-    def __init__(self):
-        super(GeomtrySetupBase, self).__init__()
-        """a base component that computes the rotor radius from the geometry"""
 
-        self.add_output('R', shape=1, units='m', desc='rotor radius')
-
-
-class AeroBase(Component):
-    def __init__(self):
-        super(AeroBase, self).__init__()
-        """A base component for a rotor aerodynamics code."""
-
-        self.add_param('run_case', val='power') # , ('power', 'loads')))
-
-
-        # --- use these if (run_case == 'power') ---
-
-        # inputs
-        self.add_param('Uhub', shape=1, units='m/s', desc='hub height wind speed')
-        self.add_param('Omega', shape=1, units='rpm', desc='rotor rotation speed')
-        self.add_param('pitch', shape=1, units='deg', desc='blade pitch setting')
-
-        # outputs
-        self.add_param('T', shape=1, units='N', desc='rotor aerodynamic thrust')
-        self.add_param('Q', shape=1, units='N*m', desc='rotor aerodynamic torque')
-        self.add_param('P', shape=1, units='W', desc='rotor aerodynamic power')
-
-
-        # --- use these if (run_case == 'loads') ---
-        # if you only use rotoraero.py and not rotor.py
-        # (i.e., only care about power curves, and not structural loads)
-        # then these second set of inputs/outputs are not needed
-
-        # inputs
-        self.add_param('V_load', shape=1, units='m/s', desc='hub height wind speed')
-        self.add_param('Omega_load', shape=1,  units='rpm', desc='rotor rotation speed')
-        self.add_param('pitch_load', shape=1, units='deg', desc='blade pitch setting')
-        self.add_param('azimuth_load', shape=1, units='deg', desc='blade azimuthal location')
-
-        # outputs
-        # loads = VarTree(AeroLoads(), iotype='out', desc='loads in blade-aligned coordinate system')
-        self.add_output('loads:r', shape=38, units='m', desc='radial positions along blade going toward tip')
-        self.add_output('loads:Px', shape=38, units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_output('loads:Py', shape=38, units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_output('loads:Pz', shape=38, units='N/m', desc='distributed loads in blade-aligned z-direction')
-
-        # corresponding setting for loads
-        self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
-        self.add_output('loads:Omega', shape=1, units='rpm', desc='rotor rotation speed')
-        self.add_output('loads:pitch', shape=1, units='deg', desc='pitch angle')
-        self.add_output('loads:azimuth',shape=1, units='deg', desc='azimuthal angle')
-
-
-
-
-class DrivetrainLossesBase(Component):
-    def __init__(self):
-        super(DrivetrainLossesBase, self).__init__()
-        """base component for drivetrain efficiency losses"""
-
-        self.add_param('aeroPower', shape=1, units='W', desc='aerodynamic power')
-        self.add_param('aeroTorque', shape=1, units='N*m', desc='aerodynamic torque')
-        self.add_param('aeroThrust', shape=1, units='N', desc='aerodynamic thrust')
-        self.add_param('ratedPower', shape=1, units='W', desc='rated power')
-
-        self.add_output('power', shape=1, units='W', desc='total power after drivetrain losses')
-        self.add_output('rpm', shape=1, units='rpm', desc='rpm curve after drivetrain losses')
-
-
-class PDFBase(Component):
-    def __init__(self):
-        super(PDFBase).__init__()
-        """probability distribution function"""
-
-        self.add_param('x')
-
-        self.add_output('f')
-
-
-class CDFBase(Component):
-    def __init__(self):
-        super(CDFBase, self).__init__()
-        """cumulative distribution function"""
-        self.add_param('x', shape=1)
-
-        self.add_output('F', shape=1)
 
 
 # ---------------------
@@ -175,11 +89,18 @@ class Coefficients(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        q = 0.5 * self.rho * self.V**2
-        A = pi * self.R**2
-        self.CP = self.P / (q * A * self.V)
-        self.CT = self.T / (q * A)
-        self.CQ = self.Q / (q * self.R * A)
+        rho = params['rho']
+        V = params['V']
+        R = params['R']
+        T = params['T']
+        Q = params['Q']
+        P = params['P']
+
+        q = 0.5 * rho * V**2
+        A = pi * R**2
+        unknowns['CP'] = P / (q * A * V)
+        unknowns['CT'] = T / (q * A)
+        unknowns['CQ'] = Q / (q * R * A)
 
 
     def list_deriv_vars(self):
@@ -191,33 +112,32 @@ class Coefficients(Component):
 
 
     def jacobian(self, params, unknowns, resids):
+        J = {}
 
-        V = self.V
-        R = self.R
-        CT = self.CT
-        CQ = self.CQ
-        CP = self.CP
-        n = len(self.V)
-        q = 0.5 * self.rho * V**2
+        rho = params['rho']
+        V = params['V']
+        R = params['R']
+
+        n = len(V)
+        CP = unknowns['CP']
+        CT = unknowns['CT']
+        CQ = unknowns['CQ']
+
+        q = 0.5 * rho * V**2
         A = pi * R**2
         zeronn = np.zeros((n, n))
 
-        dCT_dV = np.diag(-2.0*CT/V)
-        dCT_dT = np.diag(1.0/(q*A))
-        dCT_dR = -2.0*CT/R
-        dCT = hstack((dCT_dV, dCT_dT, zeronn, zeronn, dCT_dR))
+        J['CT', 'V'] = np.diag(-2.0*CT/V)
+        J['CT', 'T'] = np.diag(1.0/(q*A))
+        J['CT', 'R'] = -2.0*CT/R
 
-        dCQ_dV = np.diag(-2.0*CQ/V)
-        dCQ_dQ = np.diag(1.0/(q*R*A))
-        dCQ_dR = -3.0*CQ/R
-        dCQ = hstack((dCQ_dV, zeronn, dCQ_dQ, zeronn, dCQ_dR))
+        J['CQ', 'V'] = np.diag(-2.0*CQ/V)
+        J['CQ', 'V'] = np.diag(1.0/(q*R*A))
+        J['CQ', 'V'] = -3.0*CQ/R
 
-        dCP_dV = np.diag(-3.0*CP/V)
-        dCP_dP = np.diag(1.0/(q*A*V))
-        dCP_dR = -2.0*CP/R
-        dCP = hstack((dCP_dV, zeronn, zeronn, dCP_dP, dCP_dR))
-
-        J = vstack((dCT, dCQ, dCP))
+        J['CP', 'V'] = np.diag(-3.0*CP/V)
+        J['CP', 'P'] = np.diag(1.0/(q*A*V))
+        J['CP', 'R'] = -2.0*CP/R
 
         return J
 
@@ -240,35 +160,17 @@ class SetupRunFixedSpeed(Component):
         self.add_output('Omega', units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', units='deg', desc='pitch angles to run')
 
-        missing_deriv_policy = 'assume_zero'
-
     def solve_nonlinear(self, params, unknowns, resids):
-
-        ctrl = self.control
-        n = self.npts
+        ctrl = params['control']
+        n = ctrl.n
 
         # velocity sweep
         V = np.linspace(ctrl.Vin, ctrl.Vout, n)
 
         # store values
-        self.Uhub = V
-        self.Omega = ctrl.Omega*np.ones_like(V)
-        self.pitch = ctrl.pitch*np.ones_like(V)
-
-
-
-    def list_deriv_vars(self):
-
-        inputs = ('',)  # everything is constant
-        outputs = ('',)
-
-        return inputs, outputs
-
-    def jacobian(self, params, unknowns, resids):
-
-        return []
-
-
+        unknowns['Uhub'] = V
+        unknowns['Omega'] = ctrl.Omega*np.ones_like(V)
+        unknowns['pitch'] = ctrl.pitch*np.ones_like(V)
 
 class SetupRunVarSpeed(Component):
     def __init__(self):
@@ -284,20 +186,18 @@ class SetupRunVarSpeed(Component):
         self.add_param('control:pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
         self.add_param('R', shape=1, units='m', desc='rotor radius')
-        self.add_param('npts', val=20, desc='number of points to evalute aero code to generate power curve')
+        self.add_param('npts', shape=1, val=20, desc='number of points to evalute aero code to generate power curve')
 
         # outputs
-        self.add_output('Uhub', shape=20, units='m/s', desc='freestream velocities to run')
-        self.add_output('Omega', shape=20, units='rpm', desc='rotation speeds to run')
-        self.add_output('pitch', shape=20, units='deg', desc='pitch angles to run')
-
-        missing_deriv_policy = 'assume_zero'
+        self.add_output('Uhub', shape=1, units='m/s', desc='freestream velocities to run')
+        self.add_output('Omega', shape=1, units='rpm', desc='rotation speeds to run')
+        self.add_output('pitch', shape=1, units='deg', desc='pitch angles to run')
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        ctrl = self.control
-        n = self.npts
-        R = self.R
+        ctrl = params['control']
+        n = ctrl.n
+        R = params['R']
 
         # # attempt to distribute points mostly before rated
         # cpguess = 0.5
@@ -316,25 +216,17 @@ class SetupRunVarSpeed(Component):
         Omega, dOmega_dOmegad, dOmega_dmaxOmega = smooth_min(Omega_d, ctrl.maxOmega, pct_offset=0.01)
 
         # store values
-        self.Uhub = V
-        self.Omega = Omega
-        self.pitch = ctrl.pitch*np.ones_like(V)
+        unknowns['Uhub'] = V
+        unknowns['Omega'] = Omega
+        unknowns['pitch'] = ctrl.pitch*np.ones_like(V)
 
         # gradients
-        dV = np.zeros((n, 3))
-        dOmega_dtsr = dOmega_dOmegad * V/R*RS2RPM
-        dOmega_dR = dOmega_dOmegad * -ctrl.tsr*V/R**2*RS2RPM
-        dOmega = hstack([dOmega_dtsr, dOmega_dR, dOmega_dmaxOmega])
-        dpitch = np.zeros((n, 3))
-        self.J = vstack([dV, dOmega, dpitch])
+        J = {}
+        J['Omega', 'tsr'] = dOmega_dOmegad * V/R*RS2RPM
+        J['Omega', 'R'] = dOmega_dOmegad * -ctrl.tsr*V/R**2*RS2RPM
+        J['Omega', 'control.maxOmega'] = dOmega_dmaxOmega
 
-
-    def list_deriv_vars(self):
-
-        inputs = ('control.tsr', 'R', 'control.maxOmega')
-        outputs = ('Uhub', 'Omega', 'pitch')
-
-        return inputs, outputs
+        self.J = J
 
     def jacobian(self, params, unknowns, resids):
 
@@ -365,27 +257,22 @@ class UnregulatedPowerCurve(Component):
         self.add_output('V', units='m/s', desc='wind speeds')
         self.add_output('P', units='W', desc='power')
 
-        missing_deriv_policy = 'assume_zero'
-
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        ctrl = self.control
-        n = self.npts
+        ctrl = params['control']
+        n = ctrl.n
 
         # finer power curve
-        self.V, _, _ = linspace_with_deriv(ctrl.Vin, ctrl.Vout, n)
-        spline = Akima(self.Vcoarse, self.Pcoarse)
-        self.P, dP_dV, dP_dVcoarse, dP_dPcoarse = spline.interp(self.V)
-
-        self.J = hstack([dP_dVcoarse, dP_dPcoarse])
-
-    def list_deriv_vars(self):
-
-        inputs = ('Vcoarse', 'Pcoarse')
-        outputs = ('P')
-
-        return inputs, outputs
+        V, _, _ = linspace_with_deriv(ctrl.Vin, ctrl.Vout, n)
+        unknowns['V'] = V
+        spline = Akima(params['Vcoarse'], params['Pcoarse'])
+        P, dP_dV, dP_dVcoarse, dP_dPcoarse = spline.interp(self.V)
+        unknowns['P'] = P
+        J = {}
+        J['P', 'Vcoarse'] = dP_dVcoarse
+        J['P', 'Pcoarse'] = dP_dPcoarse
+        self.J = J
 
     def jacobian(self, params, unknowns, resids):
 
@@ -421,8 +308,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_state('Vrated', shape=1, units='m/s', desc='rated wind speed')
 
         # residual
-        # self.residual('residual')
-        # TODO: FIX
+        self.add_state('residual', shape=1)
 
         # outputs
         self.add_output('V', shape=1, units='m/s', desc='wind speeds')
@@ -434,19 +320,19 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('ratedConditions:T', shape=1, units='N', desc='rotor aerodynamic thrust at rated')
         self.add_output('ratedConditions:Q', shape=1, units='N*m', desc='rotor aerodynamic torque at rated')
 
-        missing_deriv_policy = 'assume_zero'
-
     def solve_nonlinear(self, params, unknowns, resids):
+        pass
 
-        ctrl = self.control
-        n = self.npts
-        Vrated = self.Vrated
+    def apply_nonlinear(self, params, unknowns, resids):
+
+        ctrl = params['control']
+        n = ctrl.n
+        Vrated = params['Vrated']
 
         # residual
-        spline = Akima(self.Vcoarse, self.Pcoarse)
+        spline = Akima(params['Vcoarse'], params['Pcoarse'])
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
-        self.residual = P - ctrl.ratedPower
-
+        resids['residual'] = P - ctrl.ratedPower
         # functional
 
         # place half of points in region 2, half in region 3
@@ -465,26 +351,27 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         P3 = ctrl.ratedPower*np.ones_like(V3)
 
         # concatenate
-        self.V = np.concatenate([V2, V3])
-        self.P = np.concatenate([P2, P3])
+        unknowns['V'] = np.concatenate([V2, V3])
+        unknowns['P'] = np.concatenate([P2, P3])
 
+        R = params['R']
         # rated speed conditions
-        Omega_d = ctrl.tsr*Vrated/self.R*RS2RPM
+        Omega_d = ctrl.tsr*Vrated/R*RS2RPM
         OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
             = smooth_min(Omega_d, ctrl.maxOmega, pct_offset=0.01)
 
-        splineT = Akima(self.Vcoarse, self.Tcoarse)
+        splineT = Akima(params['Vcoarse'], params['Tcoarse'])
         Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
 
-        self.ratedConditions.V = Vrated
-        self.ratedConditions.Omega = OmegaRated
-        self.ratedConditions.pitch = ctrl.pitch
-        self.ratedConditions.T = Trated
-        self.ratedConditions.Q = ctrl.ratedPower / (self.ratedConditions.Omega * RPM2RS)
+        unknowns['ratedConditions.V'] = Vrated
+        unknowns['ratedConditions.Omega'] = OmegaRated
+        unknowns['ratedConditions.pitch'] = ctrl.pitch
+        unknowns['ratedConditions.T'] = Trated
+        unknowns['ratedConditions.Q'] = ctrl.ratedPower / (OmegaRated * RPM2RS)
 
 
         # gradients
-        ncoarse = len(self.Vcoarse)
+        ncoarse = len(params['coarse'])
 
         dres = np.concatenate([[0.0], dres_dVcoarse, dres_dPcoarse, np.zeros(ncoarse), np.array([dres_dVrated]), [0.0, 0.0]])
 
@@ -497,30 +384,34 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         dP = hstack([np.zeros((n, 1)), dP_dVcoarse, dP_dPcoarse, np.zeros((n, ncoarse)), dP_dVrated, np.zeros((n, 2))])
 
         drV = np.concatenate([[0.0], np.zeros(3*ncoarse), [1.0, 0.0, 0.0]])
-        drOmega = np.concatenate([[dOmegaRated_dOmegad*Vrated/self.R*RS2RPM], np.zeros(3*ncoarse),
-            [dOmegaRated_dOmegad*ctrl.tsr/self.R*RS2RPM, -dOmegaRated_dOmegad*ctrl.tsr*Vrated/self.R**2*RS2RPM,
+        drOmega = np.concatenate([[dOmegaRated_dOmegad*Vrated/R*RS2RPM], np.zeros(3*ncoarse),
+            [dOmegaRated_dOmegad*ctrl.tsr/R*RS2RPM, -dOmegaRated_dOmegad*ctrl.tsr*Vrated/R**2*RS2RPM,
             dOmegaRated_dmaxOmega]])
         drpitch = np.zeros(3*ncoarse+4)
         drT = np.concatenate([[0.0], dT_dVcoarse, np.zeros(ncoarse), dT_dTcoarse, [dT_dVrated, 0.0, 0.0]])
-        drQ = -ctrl.ratedPower / (self.ratedConditions.Omega**2 * RPM2RS) * drOmega
+        drQ = -ctrl.ratedPower / (OmegaRated**2 * RPM2RS) * drOmega
 
-        self.J = vstack([dres, dV, dP, drV, drOmega, drpitch, drT, drQ])
+        J = {}
 
+        J['V', 'Vrated'] = dV_dVrated
+        J['P', 'Vrated'] = dP_dVrated
+        J['P', 'Vcoarse'] = dP_dVcoarse
+        J['P', 'Pcoarse'] = dP_dPcoarse
+        J['ratedConditions.V', 'Vrated'] = 1
+        J['ratedConditions.Omega', 'control.tsr'] = dOmegaRated_dOmegad*Vrated/R*RS2RPM
+        J['ratedConditions.Omega', 'Vrated'] = dOmegaRated_dOmegad*ctrl.tsr/R*RS2RPM
+        J['ratedConditions.Omega', 'R'] = -dOmegaRated_dOmegad*ctrl.tsr*Vrated/R**2*RS2RPM
+        J['ratedConditions.Omega', 'control.maxOmega'] = dOmegaRated_dmaxOmega
+        J['ratedConditions.T', 'Vcoarse'] = dT_dVcoarse
+        J['ratedConditions.T', 'Tcoarse'] = dT_dTcoarse
+        J['ratedConditions.T', 'Vrated'] = dT_dVrated
+        J['ratedConditions.Q', 'control.maxOmega'] = drQ ## TODO: Fix
 
-    def list_deriv_vars(self):
-
-        inputs = ('control.tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R', 'control.maxOmega')
-        outputs = ('residual', 'V', 'P', 'ratedConditions.V', 'ratedConditions.Omega',
-            'ratedConditions.pitch', 'ratedConditions.T', 'ratedConditions.Q')
-
-        return inputs, outputs
+        self.J = J
 
     def jacobian(self, params, unknowns, resids):
 
         return self.J
-
-
-
 
 
 
@@ -540,7 +431,7 @@ class AEP(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        self.AEP = self.lossFactor*np.trapz(self.P, self.CDF_V)/1e3*365.0*24.0  # in kWh
+        unknowns['AEP'] = params['lossFactor']*np.trapz(params['P'], params['CDF_V'])/1e3*365.0*24.0  # in kWh
 
 
     def list_deriv_vars(self):
@@ -553,19 +444,20 @@ class AEP(Component):
 
     def jacobian(self, params, unknowns, resids):
 
-        factor = self.lossFactor/1e3*365.0*24.0
+        lossFactor = params['lossFactor']
+        P = params['P']
+        factor = lossFactor/1e3*365.0*24.0
 
-        dAEP_dP, dAEP_dCDF = trapz_deriv(self.P, self.CDF_V)
+        dAEP_dP, dAEP_dCDF = trapz_deriv(P, params['CDF_V'])
         dAEP_dP *= factor
         dAEP_dCDF *= factor
 
-        dAEP_dlossFactor = np.array([self.AEP/self.lossFactor])
+        dAEP_dlossFactor = np.array([unknowns['AEP']/lossFactor])
 
-        n = len(self.P)
-        J = np.zeros((1, 2*n+1))
-        J[0, 0:n] = dAEP_dCDF
-        J[0, n:2*n] = dAEP_dP
-        J[0, 2*n] = dAEP_dlossFactor
+        J = {}
+        J['AEP', 'CDF_V'] = dAEP_dCDF
+        J['AEP', 'P'] = dAEP_dP
+        J['AEP', 'lossFactor'] = dAEP_dlossFactor
 
         return J
 
@@ -575,7 +467,7 @@ class AEP(Component):
 # Assemblies
 # ---------------------
 
-
+#
 def common_io(assembly, varspeed, varpitch):
 
     regulated = varspeed or varpitch

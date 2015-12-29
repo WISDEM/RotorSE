@@ -11,25 +11,175 @@ import numpy as np
 from math import pi, gamma
 # from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum, VarTree, Bool
 # from openmdao.main.api import Component, Assembly
-from openmdao.core.component import Component
-from openmdao.components.execcomp import ExecComp
-from openmdao.components.paramcomp import ParamComp
-from openmdao.core.group import Group
-from openmdao.solvers.nl_gauss_seidel import NLGaussSeidel
+from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder
+from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
 
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
 from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
-from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase, \
-    common_configure
+from rotoraero import common_configure
 from akima import Akima
+from enum import Enum
+from scipy.optimize import brentq
+
+
+from scipy.optimize import brentq
+
+# class Brent(Component):
+#     """Root finding using Brent's method."""
+#     def __init__(self):
+#         super(Brent, self).__init__()
+#             self.workflow = CyclicWorkflow()
+#             self.xstar = self._param = None
+#
+#             self.add_param('lower_bound', val=0., desc="lower bound for the root search")
+#             self.add_param('upper_bound', val=100., desc="upper bound for the root search")
+#             self.add_param('xtol', val=0.0, desc='The routine converges when a root is known to lie within xtol of the value return. Should be >= 0. '
+#                          'The routine modifies this to take into account the relative precision of doubles.')
+#             self.add_param('rtol', val=0.0, desc='The routine converges when a root is known to lie within rtol times the value returned of '
+#                          'the value returned. Should be >= 0. Defaults to np.finfo(float).eps * 2.')
+#             self.add_param('maxiter', val=100, desc='if convergence is not achieved in maxiter iterations, and error is raised. Must be >= 0.')
+#             self.add_param('iprint', val=0, desc='Set to 1 to print out itercount and residual.')
+#             self.add_param('f_resize_bracket', Slot(object,
+#                                    desc='user supplied function to handle resizing bracket.  Form of function is: \
+#                                    lower_new, upper_new, continue = f_resize_bracket(lower, upper, iteration) \
+#                                    inputs include the current lower and upper bracket and the current iteration \
+#                                    count starting from 1.  Outputs include a new lower and upper bracket, and a \
+#                                    boolean flag on whether or not to terminate calling resize bracket')
+#
+#             self.add_param('invalid_bracket_return', val=-1,
+#                                            desc='user supplied value to handle what value should be returned \
+#                                                  when a suitable bracket cannot be found. sets the "zero" as a \
+#                                                  linear combination of the lower and upper brackets. \
+#                                                  Must be between 0 and 1 or an error will be thrown. \
+#                                                  root = lower + invalid_bracket_return*(upper-lower)')
+#     def _eval(self, x):
+#         """Callback function for evaluating f(x)"""
+#         self._param.set(x)
+#         self.run_iteration()
+#         return self.eval_eq_constraints(self.parent)[0]
+#
+#     def solv(self):
+#
+#         bracket_invalid = self._eval(self.lower_bound)*self._eval(self.upper_bound) > 0
+#
+#         # check if user supplied function to handle resizing bracket
+#         if bracket_invalid and self.f_resize_bracket:
+#
+#             # try to resize bracket to find a valid bracket.
+#             iteration = 1
+#             should_continue = True
+#             bracket_invalid = True
+#
+#             while bracket_invalid and should_continue:
+#                 self.lower_bound, self.upper_bound, should_continue = \
+#                     self.f_resize_bracket(self.lower_bound, self.upper_bound, iteration)
+#
+#                 bracket_invalid = self._eval(self.lower_bound)*self._eval(self.upper_bound) > 0
+#                 iteration += 1
+#
+#         if bracket_invalid:  # if bracket is still invalid, see if user has specified what to return
+#
+#             if self.invalid_bracket_return >= 0.0 and self.invalid_bracket_return <= 1.0:
+#                 xstar = self.lower_bound + self.invalid_bracket_return*(self.upper_bound-self.lower_bound)
+#                 brent_iterations = 'valid bracket not found.  returning user specified value'
+#
+#             else:
+#                 self.raise_exception('bounds (low=%s, high=%s) do not bracket a root' %
+#                                  (self.lower_bound, self.upper_bound))
+#
+#         else:
+#
+#             kwargs = {'maxiter': self.maxiter, 'a': self.lower_bound,
+#                       'b': self.upper_bound, 'full_output': True}
+#
+#             if self.xtol > 0:
+#                 kwargs['xtol'] = self.xtol
+#             if self.rtol > 0:
+#                 kwargs['rtol'] = self.rtol
+#
+#             # Brent's method
+#             xstar, r = brentq(self._eval, **kwargs)
+#             brent_iterations = r.iterations
+#
+#
+#         # Propagate solution back into the model
+#         self._param.set(xstar)
+#         self.run_iteration()
+#
+#         if self.iprint == 1:
+#             print 'iterations:', brent_iterations
+#             print 'residual:', self.eval_eq_constraints()
+#
+#     def check_config(self, strict=False):
+#         '''Make sure we have 1 parameter and 1 constraint'''
+#
+#         super(Brent, self).check_config(strict=strict)
+#
+#         params = self.get_parameters().values()
+#         if len(params) != 1:
+#             self.raise_exception("Brent driver must have 1 parameter, "
+#                                  "but instead it has %d" % len(params))
+#
+#         constraints = self.get_eq_constraints()
+#         if len(constraints) != 1:
+#             self.raise_exception("Brent driver must have 1 equality constraint, "
+#                                  "but instead it has %d" % len(constraints))
+#         self._param = params[0]
+
+class Brent(Component):
+    """root finding using Brent's method."""
+    def __init__(self):
+        super(Brent, self).__init__()
+
+        self.add_param('lower_bound', val=0.)
+        self.add_param('upper_bound', val=100., desc="upper bound for the root search")
+
+        self.add_param('xtol', val=0.0, desc='The routine converges when a root is known to lie within xtol of the value return. Should be >= 0. '
+            'The routine modifies this to take into account the relative precision of doubles.')
+
+        self.add_param('rtol', val=0.0, desc='The routine converges when a root is known to lie within rtol times the value returned of '
+            'the value returned. Should be >= 0. Defaults to np.finfo(float).eps * 2.')
+
+        self.add_param('maxiter', val=100, desc='if convergence is not achieved in maxiter iterations, and error is raised. Must be >= 0.')
+        self.add_output('xstar', val=0.0)
+
+    def solve_nonlinear(self, params, unknowns, resids):
+
+        xlow = params['lower_bound']
+        xhigh = params['upper_bound']
+        maxiter = params['maxiter']
+
+        if self._eval(xlow)*self._eval(xhigh) > 0:
+            raise Exception('bounds do not bracket a root')
+
+        kwargs = {'maxiter': maxiter, 'a': xlow, 'b': xhigh}
+        if self.xtol > 0:
+            kwargs['xtol'] = self.xtol
+        if self.rtol > 0:
+            kwargs['rtol'] = self.rtol
+
+
+        # Brent's method
+        xstar = brentq(self._eval, **kwargs)
+
+        # set result
+        #param.set(xstar)
+        unknowns['xstar'] = xstar
 
 
 # ---------------------
 # Map Design Variables to Discretization
 # ---------------------
 
+class PDFBase(Component):
+    def __init__(self):
+        super(PDFBase).__init__()
+        """probability distribution function"""
 
+        self.add_param('x')
+
+        self.add_output('f')
 
 class GeometrySpline(Component):
     def __init__(self):
@@ -53,13 +203,19 @@ class GeometrySpline(Component):
 
 
     def solve_nonlinear(self, params, unknowns, resids):
-        nc = len(self.chord_sub)
-        nt = len(self.theta_sub)
-        Rhub = self.Rhub
-        Rtip = self.Rtip
-        idxc = self.idx_cylinder
-        r_max_chord = Rhub + (Rtip-Rhub)*self.r_max_chord
-        r_cylinder = Rhub + (Rtip-Rhub)*self.r_af[idxc]
+
+        chord_sub = params['chord_sub']
+        theta_sub = params['theta_sub']
+        r_max_chord = params['r_max_chord']
+
+        nc = len(chord_sub)
+        nt = len(theta_sub)
+        Rhub = params['Rhub']
+        Rtip = params['Rtip']
+        idxc = params['idx_cylinder']
+        r_max_chord = Rhub + (Rtip-Rhub)*r_max_chord
+        r_af = params['r_af']
+        r_cylinder = Rhub + (Rtip-Rhub)*r_af[idxc]
 
         # chord parameterization
         rc_outer, drc_drcmax, drc_drtip = linspace_with_deriv(r_max_chord, Rtip, nc-1)
@@ -72,32 +228,33 @@ class GeometrySpline(Component):
         r_theta, drt_drcyl, drt_drtip = linspace_with_deriv(r_cylinder, Rtip, nt)
 
         # spline
-        chord_spline = Akima(r_chord, self.chord_sub)
-        theta_spline = Akima(r_theta, self.theta_sub)
+        chord_spline = Akima(r_chord, chord_sub)
+        theta_spline = Akima(r_theta, theta_sub)
 
-        self.r = Rhub + (Rtip-Rhub)*self.r_af
-        self.chord, dchord_dr, dchord_drchord, dchord_dchordsub = chord_spline.interp(self.r)
-        theta_outer, dthetaouter_dr, dthetaouter_drtheta, dthetaouter_dthetasub = theta_spline.interp(self.r[idxc:])
+        r = Rhub + (Rtip-Rhub)*r_af
+        chord, dchord_dr, dchord_drchord, dchord_dchordsub = chord_spline.interp(r)
+        theta_outer, dthetaouter_dr, dthetaouter_drtheta, dthetaouter_dthetasub = theta_spline.interp(r[idxc:])
+        unknowns['chord'] = chord
 
         theta_inner = theta_outer[0] * np.ones(idxc)
-        self.theta = np.concatenate([theta_inner, theta_outer])
+        unknowns['theta'] = np.concatenate([theta_inner, theta_outer])
 
-        self.r_af_spacing = np.diff(self.r_af)
+        unknowns['r_af_spacing'] = np.diff(r_af)
 
-        self.precurve = np.zeros_like(self.chord)  # TODO: for now I'm forcing this to zero, just for backwards compatibility
+        unknowns['precurve'] = np.zeros_like(unknowns['chord'])  # TODO: for now I'm forcing this to zero, just for backwards compatibility
 
         # gradients (TODO: rethink these a bit or use Tapenade.)
-        n = len(self.r_af)
+        n = len(r_af)
         dr_draf = (Rtip-Rhub)*np.ones(n)
-        dr_dRhub = 1.0 - self.r_af
-        dr_dRtip = self.r_af
+        dr_dRhub = 1.0 - r_af
+        dr_dRtip = r_af
         dr = hstack([np.diag(dr_draf), np.zeros((n, 1)), dr_dRhub, dr_dRtip, np.zeros((n, nc+nt))])
 
         dchord_draf = dchord_dr * dr_draf
         dchord_drmaxchord0 = np.dot(dchord_drchord, drc_drcmax)
         dchord_drmaxchord = dchord_drmaxchord0 * (Rtip-Rhub)
-        dchord_drhub = np.dot(dchord_drchord, drc_drhub) + dchord_drmaxchord0*(1.0 - self.r_max_chord) + dchord_dr*dr_dRhub
-        dchord_drtip = np.dot(dchord_drchord, drc_drtip) + dchord_drmaxchord0*(self.r_max_chord) + dchord_dr*dr_dRtip
+        dchord_drhub = np.dot(dchord_drchord, drc_drhub) + dchord_drmaxchord0*(1.0 - r_max_chord) + dchord_dr*dr_dRhub
+        dchord_drtip = np.dot(dchord_drchord, drc_drtip) + dchord_drmaxchord0*(r_max_chord) + dchord_dr*dr_dRtip
         dchord = hstack([np.diag(dchord_draf), dchord_drmaxchord, dchord_drhub, dchord_drtip, dchord_dchordsub, np.zeros((n, nt))])
 
         dthetaouter_dcyl = np.dot(dthetaouter_drtheta, drt_drcyl)
@@ -114,8 +271,8 @@ class GeometrySpline(Component):
         dtheta_draf = np.diag(dtheta_draf)
         dtheta_dcyl = np.concatenate([dthetaouter_dcyl[0]*np.ones(idxc), dthetaouter_dcyl])
         dtheta_draf[idxc:, idxc] += dthetaouter_dcyl*(Rtip-Rhub)
-        dtheta_drhub += dtheta_dcyl*(1.0 - self.r_af[idxc])
-        dtheta_drtip += dtheta_dcyl*self.r_af[idxc]
+        dtheta_drhub += dtheta_dcyl*(1.0 - r_af[idxc])
+        dtheta_drtip += dtheta_dcyl*r_af[idxc]
 
         dtheta = hstack([dtheta_draf, np.zeros((n, 1)), dtheta_drhub, dtheta_drtip, np.zeros((n, nc)), dtheta_dthetasub])
 
@@ -125,9 +282,23 @@ class GeometrySpline(Component):
             drafs_dr[i, i+1] = 1.0
         drafs = hstack([drafs_dr, np.zeros((n-1, 3+nc+nt))])
 
-        dprecurve = np.zeros((len(self.precurve), n+3+nc+nt))
+        dprecurve = np.zeros((len(unknowns['precurve']), n+3+nc+nt))
+        J = {}
+        J['r', 'r_af'] = np.diag(dr_draf)
+        J['r', 'Rhub'] = dr_dRhub
+        J['r', 'Rtip'] = dr_dRtip
+        J['chord', 'r_af'] = np.diag(dchord_draf)
+        J['chord', 'r_max_chord'] = dchord_drmaxchord
+        J['chord', 'Rhub'] =dchord_drhub
+        J['chord', 'Rtip'] =dchord_drtip
+        J['chord', 'chord_sub'] =dchord_dchordsub
+        J['theta', 'r_af'] = dtheta_draf
+        J['theta', 'Rhub'] =dtheta_drhub
+        J['theta', 'Rtip'] =dtheta_drtip
+        J['theta', 'theta_sub'] =dtheta_dthetasub
+        J['r_af_spacing', 'r_af'] = drafs_dr
 
-        self.J = vstack([dr, dchord, dtheta, drafs, dprecurve])
+        self.J = J
 
 
     def list_deriv_vars(self):
@@ -150,12 +321,14 @@ class GeometrySpline(Component):
 # ---------------------
 
 
-class CCBladeGeometry(GeomtrySetupBase):
+class CCBladeGeometry(Component):
     def __init__(self):
         super(CCBladeGeometry, self).__init__()
         self.add_param('Rtip', shape=1, units='m', desc='tip radius')
         self.add_param('recurveTip', val=0.0, units='m', desc='tip radius')
         self.add_param('precone', val=0.0, desc='precone angle', units='deg')
+        self.add_output('R', shape=1, units='m', desc='rotor radius')
+        self.add_output('diameter', shape=1)
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -174,28 +347,30 @@ class CCBladeGeometry(GeomtrySetupBase):
         J = np.array([[cosd(self.precone), sind(self.precone),
             (-self.Rtip*sind(self.precone) + self.precurveTip*sind(self.precone))*pi/180.0]])
 
+        J['diameter', 'R'] = 2.0
+
         return J
 
 
-
-class CCBlade(AeroBase):
+## TODO
+class CCBlade(Component):
     def __init__(self):
         super(CCBlade, self).__init__()
         """blade element momentum code"""
 
         # (potential) variables
         self.add_param('r', shape=17, units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
-        self.add_param('chord', shape=4, units='m', desc='chord length at each section')
-        self.add_param('theta', shape=4,units='deg', desc='twist angle at each section (positive decreases angle of attack)')
-        self.add_param('Rhub', shape=1,units='m', desc='hub radius')
-        self.add_param('Rtip', shape=1,units='m', desc='tip radius')
-        self.add_param('hubHtn',shape=1, units='m', desc='hub height')
-        self.add_param('precone',shape=1, desc='precone angle', units='deg')
-        self.add_param('tilt',shape=1, desc='shaft tilt', units='deg')
-        self.add_param('yaw', shape=1,desc='yaw error', units='deg')
+        self.add_param('chord', shape=17, units='m', desc='chord length at each section')
+        self.add_param('theta', shape=17,  units='deg', desc='twist angle at each section (positive decreases angle of attack)')
+        self.add_param('Rhub', shape=1, units='m', desc='hub radius')
+        self.add_param('Rtip', shape=1, units='m', desc='tip radius')
+        self.add_param('hubHt', shape=1, units='m', desc='hub height')
+        self.add_param('precone', shape=1, desc='precone angle', units='deg')
+        self.add_param('tilt', shape=1, desc='shaft tilt', units='deg')
+        self.add_param('yaw', shape=1, desc='yaw error', units='deg')
 
         # TODO: I've not hooked up the gradients for these ones yet.
-        self.add_param('precurve', shape=3, units='m', desc='precurve at each section')
+        self.add_param('precurve', shape=17, units='m', desc='precurve at each section')
         self.add_param('precurveTip', val=0.0, units='m', desc='precurve at tip')
 
         # parameters
@@ -211,6 +386,47 @@ class CCBlade(AeroBase):
         self.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors')
 
         missing_deriv_policy = 'assume_zero'
+
+
+        self.add_param('run_case', val=Enum('power', 'loads'))
+
+
+        # --- use these if (run_case == 'power') ---
+
+        # inputs
+        self.add_param('Uhub', shape=1, units='m/s', desc='hub height wind speed')
+        self.add_param('Omega', shape=1, units='rpm', desc='rotor rotation speed')
+        self.add_param('pitch', shape=1, units='deg', desc='blade pitch setting')
+
+        # outputs
+        self.add_param('T', shape=1, units='N', desc='rotor aerodynamic thrust')
+        self.add_param('Q', shape=1, units='N*m', desc='rotor aerodynamic torque')
+        self.add_param('P', shape=1, units='W', desc='rotor aerodynamic power')
+
+
+        # --- use these if (run_case == 'loads') ---
+        # if you only use rotoraero.py and not rotor.py
+        # (i.e., only care about power curves, and not structural loads)
+        # then these second set of inputs/outputs are not needed
+
+        # inputs
+        self.add_param('V_load', shape=1, units='m/s', desc='hub height wind speed')
+        self.add_param('Omega_load', shape=1, units='rpm', desc='rotor rotation speed')
+        self.add_param('pitch_load', shape=1, units='deg', desc='blade pitch setting')
+        self.add_param('azimuth_load', shape=1, units='deg', desc='blade azimuthal location')
+
+        # outputs
+        # loads = VarTree(AeroLoads(), iotype='out', desc='loads in blade-aligned coordinate system')
+        self.add_output('loads:r', shape=1, units='m', desc='radial positions along blade going toward tip')
+        self.add_output('loads:Px', shape=1, units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_output('loads:Py', shape=1, units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_output('loads:Pz', shape=1, units='N/m', desc='distributed loads in blade-aligned z-direction')
+
+        # corresponding setting for loads
+        self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
+        self.add_output('loads:Omega', shape=1, units='rpm', desc='rotor rotation speed')
+        self.add_output('loads:pitch', shape=1, units='deg', desc='pitch angle')
+        self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
 
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -338,22 +554,30 @@ class CCBlade(AeroBase):
 
 
 
-class CSMDrivetrain(DrivetrainLossesBase):
+class CSMDrivetrain(Component):
     def __init__(self):
         super(CSMDrivetrain, self).__init__()
         """drivetrain losses from NREL cost and scaling model"""
 
-        self.add_param('drivetrainType', val='geared') #, ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive')))
+        self.add_param('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'))
+
+
+        self.add_param('aeroPower', shape=1, units='W', desc='aerodynamic power')
+        self.add_param('aeroTorque', shape=1, units='N*m', desc='aerodynamic torque')
+        self.add_param('aeroThrust', shape=1, units='N', desc='aerodynamic thrust')
+        self.add_param('ratedPower', shape=1, units='W', desc='rated power')
+
+        self.add_output('power', shape=1, units='W', desc='total power after drivetrain losses')
+        self.add_output('rpm', shape=1, units='rpm', desc='rpm curve after drivetrain losses')
 
         missing_deriv_policy = 'assume_zero'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        drivetrainType = self.drivetrainType
-        aeroPower = self.aeroPower
-        aeroTorque = self.aeroTorque
-        ratedPower = self.ratedPower
-
+        drivetrainType = params['drivetrainType']
+        aeroPower = params['aeroPower']
+        aeroTorque = params['aeroTorque']
+        ratedPower = params['ratedPower']
 
         if drivetrainType == 'geared':
             constant = 0.01289
@@ -387,7 +611,7 @@ class CSMDrivetrain(DrivetrainLossesBase):
         # compute efficiency
         eff = 1.0 - (constant/Pbar + linear + quadratic*Pbar)
 
-        self.power = aeroPower * eff
+        unknowns['power'] = aeroPower * eff
 
         # gradients
         dPbar_dPa = dPbar_dPbar1*dPbar1_dPbar0/ratedPower
@@ -398,8 +622,10 @@ class CSMDrivetrain(DrivetrainLossesBase):
 
         dP_dPa = eff + aeroPower*deff_dPa
         dP_dPr = aeroPower*deff_dPr
-
-        self.J = hstack([np.diag(dP_dPa), dP_dPr])
+        J = {}
+        J['power', 'Pa'] = np.diag(dP_dPa)
+        J['power', 'Pr'] = dP_dPr
+        self.J = J
 
 
     def list_deriv_vars(self):
@@ -416,17 +642,20 @@ class CSMDrivetrain(DrivetrainLossesBase):
 
 
 
-class WeibullCDF(CDFBase):
+class WeibullCDF(Component):
     def __init__(self):
         super(WeibullCDF).__init__()
         """Weibull cumulative distribution function"""
 
         self.add_param('A', desc='scale factor')
         self.add_param('k', desc='shape or form factor')
+        self.add_param('x')
+
+        self.add_output('F')
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        self.F = 1.0 - np.exp(-(self.x/self.A)**self.k)
+        unknowns['F'] = 1.0 - np.exp(-(params['x']/params['A'])**params['k'])
 
     def list_deriv_vars(self):
         inputs = ('x',)
@@ -436,26 +665,31 @@ class WeibullCDF(CDFBase):
 
     def jacobian(self, params, unknowns, resids):
 
-        x = self.x
-        A = self.A
-        k = self.k
+        x = params['x']
+        A = params['A']
+        k = params['k']
         J = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
-
+        J = {}
+        # J['']
         return J
 
 
-class WeibullWithMeanCDF(CDFBase):
+class WeibullWithMeanCDF(Component):
     def __init__(self):
         super(WeibullWithMeanCDF).__init__()
         """Weibull cumulative distribution function"""
 
         self.add_param('xbar', desc='mean value of distribution')
         self.add_param('k', desc='shape or form factor')
+        self.add_param('x')
+
+        self.add_output('F')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        A = self.xbar / gamma(1.0 + 1.0/self.k)
 
-        self.F = 1.0 - np.exp(-(self.x/A)**self.k)
+        A = params['xbar'] / gamma(1.0 + 1.0/params['k'])
+
+        unknowns['F'] = 1.0 - np.exp(-(params['x']/A)**params['k'])
 
 
     def list_deriv_vars(self):
@@ -467,29 +701,33 @@ class WeibullWithMeanCDF(CDFBase):
 
     def jacobian(self, params, unknowns, resids):
 
-        x = self.x
-        k = self.k
-        A = self.xbar / gamma(1.0 + 1.0/k)
+        x = params['x']
+        k = params['k']
+        A = params['xbar'] / gamma(1.0 + 1.0/k)
         dx = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
         dxbar = -np.exp(-(x/A)**k)*(x/A)**(k-1)*k*x/A**2/gamma(1.0 + 1.0/k)
-
-        J = hstack([dx, dxbar])
+        J = {}
+        J['F', 'x'] = dx
+        J['F', 'xbar'] = dxbar
 
         return J
 
 
 
-class RayleighCDF(CDFBase):
+class RayleighCDF(Component):
     def __init(self):
-        super(RayleighCDF).__init__()
+        super(RayleighCDF, self).__init__()
 
         """Rayleigh cumulative distribution function"""
 
         self.add_param('xbar', desc='mean value of distribution')
+        self.add_param('x')
+
+        self.add_output('F')
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        self.F = 1.0 - np.exp(-pi/4.0*(self.x/self.xbar)**2)
+        unknowns['F'] = 1.0 - np.exp(-pi/4.0*(params['x']/params['xbar'])**2)
 
     def list_deriv_vars(self):
 
@@ -500,11 +738,13 @@ class RayleighCDF(CDFBase):
 
     def jacobian(self, params, unknowns, resids):
 
-        x = self.x
-        xbar = self.xbar
+        x = params['x']
+        xbar = params['xbar']
         dx = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2.0*xbar**2))
         dxbar = -np.exp(-pi/4.0*(x/xbar)**2)*pi*x**2/(2.0*xbar**3)
-        J = hstack([dx, dxbar])
+        J = {}
+        J['F', 'x'] = dx
+        J['F', 'xbar'] = dxbar
 
         return J
 
