@@ -9,13 +9,19 @@ Copyright (c) NREL. All rights reserved.
 
 import numpy as np
 from math import pi, gamma
-from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum, VarTree, Bool
-from openmdao.main.api import Component, Assembly
+# from openmdao.main.datatypes.api import Int, Float, Array, Str, List, Enum, VarTree, Bool
+# from openmdao.main.api import Component, Assembly
+from openmdao.core.component import Component
+from openmdao.components.execcomp import ExecComp
+from openmdao.components.paramcomp import ParamComp
+from openmdao.core.group import Group
+from openmdao.solvers.nl_gauss_seidel import NLGaussSeidel
+
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
 from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import GeomtrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase, \
-    VarSpeedMachine, FixedSpeedMachine, RatedConditions, common_configure
+    common_configure
 from akima import Akima
 
 
@@ -26,27 +32,27 @@ from akima import Akima
 
 
 class GeometrySpline(Component):
+    def __init__(self):
+        super(GeometrySpline).__init__()
+        self.add_param('r_af', units='m', desc='locations where airfoils are defined on unit radius')
 
-    r_af = Array(iotype='in', units='m', desc='locations where airfoils are defined on unit radius')
+        self.add_param('idx_cylinder', desc='location where cylinder section ends on unit radius')
+        self.add_param('r_max_chord', desc='position of max chord on unit radius')
 
-    idx_cylinder = Int(iotype='in', desc='location where cylinder section ends on unit radius')
-    r_max_chord = Float(iotype='in', desc='position of max chord on unit radius')
+        self.add_param('Rhub', units='m', desc='blade hub radius')
+        self.add_param('Rtip', units='m', desc='blade tip radius')
 
-    Rhub = Float(iotype='in', units='m', desc='blade hub radius')
-    Rtip = Float(iotype='in', units='m', desc='blade tip radius')
+        self.add_param('chord_sub', units='m', desc='chord at control points')
+        self.add_param('theta_sub', units='deg', desc='twist at control points')
 
-    chord_sub = Array(iotype='in', units='m', desc='chord at control points')
-    theta_sub = Array(iotype='in', units='deg', desc='twist at control points')
-
-    r = Array(iotype='out', units='m', desc='chord at airfoil locations')
-    chord = Array(iotype='out', units='m', desc='chord at airfoil locations')
-    theta = Array(iotype='out', units='deg', desc='twist at airfoil locations')
-    precurve = Array(iotype='out', units='m', desc='precurve at airfoil locations')
-    r_af_spacing = Array(iotype='out')  # deprecated: not used anymore
+        self.add_output('r', units='m', desc='chord at airfoil locations')
+        self.add_output('chord', units='m', desc='chord at airfoil locations')
+        self.add_output('theta', units='deg', desc='twist at airfoil locations')
+        self.add_output('precurve', units='m', desc='precurve at airfoil locations')
+        self.add_output('r_af_spacing')  # deprecated: not used anymore
 
 
-    def execute(self):
-
+    def solve_nonlinear(self, params, unknowns, resids):
         nc = len(self.chord_sub)
         nt = len(self.theta_sub)
         Rhub = self.Rhub
@@ -132,7 +138,7 @@ class GeometrySpline(Component):
         return inputs, outputs
 
 
-    def provideJ(self):
+    def jacobian(self, params, unknowns, resids):
 
         return self.J
 
@@ -145,12 +151,13 @@ class GeometrySpline(Component):
 
 
 class CCBladeGeometry(GeomtrySetupBase):
+    def __init__(self):
+        super(CCBladeGeometry).__init__()
+        self.add_param('Rtip', units='m', desc='tip radius')
+        self.add_param('recurveTip', val=0.0, units='m', desc='tip radius')
+        self.add_param('precone', val=0.0, desc='precone angle', units='deg')
 
-    Rtip = Float(iotype='in', units='m', desc='tip radius')
-    precurveTip = Float(0.0, iotype='in', units='m', desc='tip radius')
-    precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
-
-    def execute(self):
+    def solve_nonlinear(self, params, unknowns, resids):
 
         self.R = self.Rtip*cosd(self.precone) + self.precurveTip*sind(self.precone)
 
@@ -162,7 +169,7 @@ class CCBladeGeometry(GeomtrySetupBase):
 
         return inputs, outputs
 
-    def provideJ(self):
+    def jacobian(self, params, unknowns, resids):
 
         J = np.array([[cosd(self.precone), sind(self.precone),
             (-self.Rtip*sind(self.precone) + self.precurveTip*sind(self.precone))*pi/180.0]])
@@ -172,39 +179,41 @@ class CCBladeGeometry(GeomtrySetupBase):
 
 
 class CCBlade(AeroBase):
-    """blade element momentum code"""
+    def __init__(self):
+        super(CCBlade).__init__()
+        """blade element momentum code"""
 
-    # (potential) variables
-    r = Array(iotype='in', units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
-    chord = Array(iotype='in', units='m', desc='chord length at each section')
-    theta = Array(iotype='in', units='deg', desc='twist angle at each section (positive decreases angle of attack)')
-    Rhub = Float(iotype='in', units='m', desc='hub radius')
-    Rtip = Float(iotype='in', units='m', desc='tip radius')
-    hubHt = Float(iotype='in', units='m', desc='hub height')
-    precone = Float(0.0, iotype='in', desc='precone angle', units='deg')
-    tilt = Float(0.0, iotype='in', desc='shaft tilt', units='deg')
-    yaw = Float(0.0, iotype='in', desc='yaw error', units='deg')
+        # (potential) variables
+        self.add_param('r', units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
+        self.add_param('chord', units='m', desc='chord length at each section')
+        self.add_param('theta', units='deg', desc='twist angle at each section (positive decreases angle of attack)')
+        self.add_param('Rhub', units='m', desc='hub radius')
+        self.add_param('Rtip', units='m', desc='tip radius')
+        self.add_param('hubHtn', units='m', desc='hub height')
+        self.add_param('precone', desc='precone angle', units='deg')
+        self.add_param('tilt', desc='shaft tilt', units='deg')
+        self.add_param('yaw', desc='yaw error', units='deg')
 
-    # TODO: I've not hooked up the gradients for these ones yet.
-    precurve = Array(iotype='in', units='m', desc='precurve at each section')
-    precurveTip = Float(0.0, iotype='in', units='m', desc='precurve at tip')
+        # TODO: I've not hooked up the gradients for these ones yet.
+        self.add_param('precurve', units='m', desc='precurve at each section')
+        self.add_param('precurveTip', val=0.0, units='m', desc='precurve at tip')
 
-    # parameters
-    airfoil_files = List(Str, iotype='in', desc='names of airfoil file')
-    B = Int(3, iotype='in', desc='number of blades')
-    rho = Float(1.225, iotype='in', units='kg/m**3', desc='density of air')
-    mu = Float(1.81206e-5, iotype='in', units='kg/(m*s)', desc='dynamic viscosity of air')
-    shearExp = Float(0.2, iotype='in', desc='shear exponent')
-    nSector = Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power')
-    tiploss = Bool(True, iotype='in', desc='include Prandtl tip loss model')
-    hubloss = Bool(True, iotype='in', desc='include Prandtl hub loss model')
-    wakerotation = Bool(True, iotype='in', desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)')
-    usecd = Bool(True, iotype='in', desc='use drag coefficient in computing induction factors')
+        # parameters
+        self.add_param('airfoil_files', desc='names of airfoil file')
+        self.add_param('B', val=3, desc='number of blades')
+        self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
+        self.add_param('mu', val=1.81206e-5, units='kg/(m*s)', desc='dynamic viscosity of air')
+        self.add_param('shearExp', val=0.2, desc='shear exponent')
+        self.add_param('nSector', val=4, desc='number of sectors to divide rotor face into in computing thrust and power')
+        self.add_param('tiploss', val=True, desc='include Prandtl tip loss model')
+        self.add_param('hubloss', val=True, desc='include Prandtl hub loss model')
+        self.add_param('wakerotation', val=True, desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)')
+        self.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors')
 
-    missing_deriv_policy = 'assume_zero'
+        missing_deriv_policy = 'assume_zero'
 
 
-    def execute(self):
+    def solve_nonlinear(self, params, unknowns, resids):
 
         if len(self.precurve) == 0:
             self.precurve = np.zeros_like(self.r)
@@ -269,7 +278,7 @@ class CCBlade(AeroBase):
         return inputs, outputs
 
 
-    def provideJ(self):
+    def jacobian(self, params, unknowns, resids):
 
         if self.run_case == 'power':
 
@@ -330,13 +339,15 @@ class CCBlade(AeroBase):
 
 
 class CSMDrivetrain(DrivetrainLossesBase):
-    """drivetrain losses from NREL cost and scaling model"""
+    def __init__(self):
+        super(CSMDrivetrain).__init__()
+        """drivetrain losses from NREL cost and scaling model"""
 
-    drivetrainType = Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in')
+        self.add_param('drivetrainType', val=Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive')))
 
-    missing_deriv_policy = 'assume_zero'
+        missing_deriv_policy = 'assume_zero'
 
-    def execute(self):
+    def solve_nonlinear(self, params, unknowns, resids):
 
         drivetrainType = self.drivetrainType
         aeroPower = self.aeroPower
@@ -398,7 +409,7 @@ class CSMDrivetrain(DrivetrainLossesBase):
 
         return inputs, outputs
 
-    def provideJ(self):
+    def jacobian(self, params, unknowns, resids):
 
         return self.J
 
@@ -406,12 +417,14 @@ class CSMDrivetrain(DrivetrainLossesBase):
 
 
 class WeibullCDF(CDFBase):
-    """Weibull cumulative distribution function"""
+    def __init__(self):
+        super(WeibullCDF).__init__()
+        """Weibull cumulative distribution function"""
 
-    A = Float(iotype='in', desc='scale factor')
-    k = Float(iotype='in', desc='shape or form factor')
+        self.add_param('A', desc='scale factor')
+        self.add_param('k', desc='shape or form factor')
 
-    def execute(self):
+    def solve_nonlinear(self, params, unknowns, resids):
 
         self.F = 1.0 - np.exp(-(self.x/self.A)**self.k)
 
@@ -421,7 +434,7 @@ class WeibullCDF(CDFBase):
 
         return inputs, outputs
 
-    def provideJ(self):
+    def jacobian(self, params, unknowns, resids):
 
         x = self.x
         A = self.A
@@ -432,13 +445,14 @@ class WeibullCDF(CDFBase):
 
 
 class WeibullWithMeanCDF(CDFBase):
-    """Weibull cumulative distribution function"""
+    def __init__(self):
+        super(WeibullWithMeanCDF).__init__()
+        """Weibull cumulative distribution function"""
 
-    xbar = Float(iotype='in', desc='mean value of distribution')
-    k = Float(iotype='in', desc='shape or form factor')
+        self.add_param('xbar', desc='mean value of distribution')
+        self.add_param('k', desc='shape or form factor')
 
-    def execute(self):
-
+    def solve_nonlinear(self, params, unknowns, resids):
         A = self.xbar / gamma(1.0 + 1.0/self.k)
 
         self.F = 1.0 - np.exp(-(self.x/A)**self.k)
@@ -451,7 +465,7 @@ class WeibullWithMeanCDF(CDFBase):
 
         return inputs, outputs
 
-    def provideJ(self):
+    def jacobian(self, params, unknowns, resids):
 
         x = self.x
         k = self.k
@@ -466,11 +480,14 @@ class WeibullWithMeanCDF(CDFBase):
 
 
 class RayleighCDF(CDFBase):
-    """Rayleigh cumulative distribution function"""
+    def __init(self):
+        super(RayleighCDF).__init__()
 
-    xbar = Float(iotype='in', desc='mean value of distribution')
+        """Rayleigh cumulative distribution function"""
 
-    def execute(self):
+        self.add_param('xbar', desc='mean value of distribution')
+
+    def solve_nonlinear(self, params, unknowns, resids):
 
         self.F = 1.0 - np.exp(-pi/4.0*(self.x/self.xbar)**2)
 
@@ -481,7 +498,7 @@ class RayleighCDF(CDFBase):
 
         return inputs, outputs
 
-    def provideJ(self):
+    def jacobian(self, params, unknowns, resids):
 
         x = self.x
         xbar = self.xbar
@@ -498,49 +515,64 @@ def common_io_with_ccblade(assembly, varspeed, varpitch, cdf_type):
     regulated = varspeed or varpitch
 
     # add inputs
-    assembly.add('r_af', Array(iotype='in', units='m', desc='locations where airfoils are defined on unit radius'))
-    assembly.add('r_max_chord', Float(iotype='in'))
-    assembly.add('chord_sub', Array(iotype='in', units='m', desc='chord at control points'))
-    assembly.add('theta_sub', Array(iotype='in', units='deg', desc='twist at control points'))
-    assembly.add('Rhub', Float(iotype='in', units='m', desc='hub radius'))
-    assembly.add('Rtip', Float(iotype='in', units='m', desc='tip radius'))
-    assembly.add('hubHt', Float(iotype='in', units='m'))
-    assembly.add('precone', Float(0.0, iotype='in', desc='precone angle', units='deg'))
-    assembly.add('tilt', Float(0.0, iotype='in', desc='shaft tilt', units='deg'))
-    assembly.add('yaw', Float(0.0, iotype='in', desc='yaw error', units='deg'))
-    assembly.add('airfoil_files', List(Str, iotype='in', desc='names of airfoil file'))
-    assembly.add('idx_cylinder', Int(iotype='in', desc='location where cylinder section ends on unit radius'))
-    assembly.add('B', Int(3, iotype='in', desc='number of blades'))
-    assembly.add('rho', Float(1.225, iotype='in', units='kg/m**3', desc='density of air'))
-    assembly.add('mu', Float(1.81206e-5, iotype='in', units='kg/m/s', desc='dynamic viscosity of air'))
-    assembly.add('shearExp', Float(0.2, iotype='in', desc='shear exponent'))
-    assembly.add('nSector', Int(4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power'))
-    assembly.add('tiploss', Bool(True, iotype='in', desc='include Prandtl tip loss model'))
-    assembly.add('hubloss', Bool(True, iotype='in', desc='include Prandtl hub loss model'))
-    assembly.add('wakerotation', Bool(True, iotype='in', desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)'))
-    assembly.add('usecd', Bool(True, iotype='in', desc='use drag coefficient in computing induction factors'))
-    assembly.add('npts_coarse_power_curve', Int(20, iotype='in', desc='number of points to evaluate aero analysis at'))
-    assembly.add('npts_spline_power_curve', Int(200, iotype='in', desc='number of points to use in fitting spline to power curve'))
-    assembly.add('AEP_loss_factor', Float(1.0, iotype='in', desc='availability and other losses (soiling, array, etc.)'))
+    assembly.add_param('r_af', units='m', desc='locations where airfoils are defined on unit radius')
+    assembly.add_param('r_max_chord')
+    assembly.add_param('chord_sub', units='m', desc='chord at control points')
+    assembly.add_param('theta_sub', units='deg', desc='twist at control points')
+    assembly.add_param('Rhub', units='m', desc='hub radius')
+    assembly.add_param('Rtip', units='m', desc='tip radius')
+    assembly.add_param('hubHt', units='m')
+    assembly.add_param('precone', desc='precone angle', units='deg')
+    assembly.add_param('tilt', val=0.0, desc='shaft tilt', units='deg')
+    assembly.add_param('yaw', val=0.0, desc='yaw error', units='deg')
+    assembly.add_param('airfoil_files', desc='names of airfoil file')
+    assembly.add_param('idx_cylinder', desc='location where cylinder section ends on unit radius')
+    assembly.add_param('B', val=3, desc='number of blades')
+    assembly.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
+    assembly.add_param('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air')
+    assembly.add_param('shearExp', val=0.2, desc='shear exponent')
+    assembly.add_param('nSector', val=4, desc='number of sectors to divide rotor face into in computing thrust and power')
+    assembly.add_param('tiploss', val=True, desc='include Prandtl tip loss model')
+    assembly.add_param('hubloss', val=True, desc='include Prandtl hub loss model')
+    assembly.add_param('wakerotation', val=True, desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)')
+    assembly.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors')
+    assembly.add_param('npts_coarse_power_curve', val=20, desc='number of points to evaluate aero analysis at')
+    assembly.add_param('npts_spline_power_curve', val=200, desc='number of points to use in fitting spline to power curve')
+    assembly.add_param('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)')
 
     if varspeed:
-        assembly.add('control', VarTree(VarSpeedMachine(), iotype='in'))
+        assembly.add_param('control.Vin', units='m/s', desc='cut-in wind speed')
+        assembly.add_param('control.Vout', units='m/s', desc='cut-out wind speed')
+        assembly.add_param('control.ratedPower', units='W', desc='rated power')
+        assembly.add_param('control.minOmega', units='rpm', desc='minimum allowed rotor rotation speed')
+        assembly.add_param('control.maxOmega', units='rpm', desc='maximum allowed rotor rotation speed')
+        assembly.add_param('control.tsr', desc='tip-speed ratio in Region 2 (should be optimized externally)')
+        assembly.add_param('control.pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
     else:
-        assembly.add('control', VarTree(FixedSpeedMachine(), iotype='in'))
+        assembly.add_param('control.Vin', units='m/s', desc='cut-in wind speed')
+        assembly.add_param('control.Vout', units='m/s', desc='cut-out wind speed')
+        assembly.add_param('control.ratedPower', units='W', desc='rated power')
+        assembly.add_param('control.Omega', units='rpm', desc='fixed rotor rotation speed')
+        assembly.add_param('control.pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+        assembly.add_param('control.npts', val=20, desc='number of points to evalute aero code to generate power curve')
 
-    assembly.add('drivetrainType', Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), iotype='in'))
-    assembly.add('cdf_mean_wind_speed', Float(iotype='in', units='m/s', desc='mean wind speed of site cumulative distribution function'))
+    assembly.add_param('drivetrainType', val=Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive')))
+    assembly.add_param('cdf_mean_wind_speed', units='m/s', desc='mean wind speed of site cumulative distribution function')
 
     if cdf_type == 'weibull':
-        assembly.add('weibull_shape_factor', Float(iotype='in', desc='(shape factor of weibull distribution)'))
+        assembly.add_param('weibull_shape_factor', desc='(shape factor of weibull distribution)')
 
     # outputs
-    assembly.add('AEP', Float(iotype='out', units='kW*h', desc='annual energy production'))
-    assembly.add('V', Array(iotype='out', units='m/s', desc='wind speeds (power curve)'))
-    assembly.add('P', Array(iotype='out', units='W', desc='power (power curve)'))
-    assembly.add('diameter', Float(iotype='out', units='m'))
+    assembly.add_output('AEP', units='kW*h', desc='annual energy production')
+    assembly.add_output('V', units='m/s', desc='wind speeds (power curve)')
+    assembly.add_output('P', units='W', desc='power (power curve)')
+    assembly.add_output('diameter', units='m')
     if regulated:
-        assembly.add('ratedConditions', VarTree(RatedConditions(), iotype='out'))
+        assembly.add_output('ratedConditions.V', units='m/s', desc='rated wind speed')
+        assembly.add_output('ratedConditions.Omega', units='rpm', desc='rotor rotation speed at rated')
+        assembly.add_output('ratedConditions.pitch', units='deg', desc='pitch setting at rated')
+        assembly.add_output('ratedConditions.T', units='N', desc='rotor aerodynamic thrust at rated')
+        assembly.add_output('ratedConditions.Q', units='N*m', desc='rotor aerodynamic torque at rated')
 
 
 
@@ -607,7 +639,7 @@ def common_configure_with_ccblade(assembly, varspeed, varpitch, cdf_type):
 
 
 
-class RotorAeroVSVPWithCCBlade(Assembly):
+class RotorAeroVSVPWithCCBlade(Group):
 
     def __init__(self, cdf_type='weibull'):
         self.cdf_type = cdf_type
@@ -620,7 +652,7 @@ class RotorAeroVSVPWithCCBlade(Assembly):
         common_configure_with_ccblade(self, varspeed, varpitch, self.cdf_type)
 
 
-class RotorAeroVSFPWithCCBlade(Assembly):
+class RotorAeroVSFPWithCCBlade(Group):
 
     def __init__(self, cdf_type='weibull'):
         self.cdf_type = cdf_type
@@ -634,7 +666,7 @@ class RotorAeroVSFPWithCCBlade(Assembly):
 
 
 
-class RotorAeroFSVPWithCCBlade(Assembly):
+class RotorAeroFSVPWithCCBlade(Group):
 
     def __init__(self, cdf_type='weibull'):
         self.cdf_type = cdf_type
@@ -648,7 +680,7 @@ class RotorAeroFSVPWithCCBlade(Assembly):
 
 
 
-class RotorAeroFSFPWithCCBlade(Assembly):
+class RotorAeroFSFPWithCCBlade(Group):
 
     def __init__(self, cdf_type='weibull'):
         self.cdf_type = cdf_type
