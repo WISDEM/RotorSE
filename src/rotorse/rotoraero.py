@@ -17,6 +17,8 @@ from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
 # from openmdao.main.api import VariableTree, Component, Assembly, ImplicitComponent
 # from openmdao.main.datatypes.api import Int, Float, Array, VarTree, Slot, Enum
 # from openmdao.lib.drivers.api import Brent
+from openmdao.api import ScipyGMRES
+from brent import Brent
 
 from commonse.utilities import hstack, vstack, linspace_with_deriv, smooth_min, trapz_deriv
 from akima import Akima
@@ -189,14 +191,13 @@ class SetupRunVarSpeed(Component):
         self.add_param('npts', shape=1, val=20, desc='number of points to evalute aero code to generate power curve')
 
         # outputs
-        self.add_output('Uhub', shape=1, units='m/s', desc='freestream velocities to run')
-        self.add_output('Omega', shape=1, units='rpm', desc='rotation speeds to run')
-        self.add_output('pitch', shape=1, units='deg', desc='pitch angles to run')
+        self.add_output('Uhub', shape=20, units='m/s', desc='freestream velocities to run')
+        self.add_output('Omega', shape=20, units='rpm', desc='rotation speeds to run')
+        self.add_output('pitch', shape=20, units='deg', desc='pitch angles to run')
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        ctrl = params['control']
-        n = ctrl.n
+        n = params['npts']
         R = params['R']
 
         # # attempt to distribute points mostly before rated
@@ -209,21 +210,21 @@ class SetupRunVarSpeed(Component):
         # V = np.concatenate([V1, V2[1:]])
 
         # velocity sweep
-        V = np.linspace(ctrl.Vin, ctrl.Vout, n)
+        V = np.linspace(params['control:Vin'], params['control:Vout'], n)
 
         # corresponding rotation speed
-        Omega_d = ctrl.tsr*V/R*RS2RPM
-        Omega, dOmega_dOmegad, dOmega_dmaxOmega = smooth_min(Omega_d, ctrl.maxOmega, pct_offset=0.01)
+        Omega_d = params['control:tsr']*V/R*RS2RPM
+        Omega, dOmega_dOmegad, dOmega_dmaxOmega = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
 
         # store values
         unknowns['Uhub'] = V
         unknowns['Omega'] = Omega
-        unknowns['pitch'] = ctrl.pitch*np.ones_like(V)
+        unknowns['pitch'] = params['control:pitch']*np.ones_like(V)
 
         # gradients
         J = {}
         J['Omega', 'tsr'] = dOmega_dOmegad * V/R*RS2RPM
-        J['Omega', 'R'] = dOmega_dOmegad * -ctrl.tsr*V/R**2*RS2RPM
+        J['Omega', 'R'] = dOmega_dOmegad * -params['control:tsr']*V/R**2*RS2RPM
         J['Omega', 'control.maxOmega'] = dOmega_dmaxOmega
 
         self.J = J
@@ -247,9 +248,9 @@ class UnregulatedPowerCurve(Component):
         self.add_param('control.pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
         self.add_param('control.npts', val=20, desc='number of points to evalute aero code to generate power curve')
 
-        self.add_param('Vcoarse', units='m/s', desc='wind speeds')
-        self.add_param('Pcoarse', units='W', desc='unregulated power curve (but after drivetrain losses)')
-        self.add_param('Tcoarse', units='N', desc='unregulated thrust curve')
+        self.add_param('Vcoarse', shape=20, units='m/s', desc='wind speeds')
+        self.add_param('Pcoarse', shape=20, units='W', desc='unregulated power curve (but after drivetrain losses)')
+        self.add_param('Tcoarse', shape=20, units='N', desc='unregulated thrust curve')
         self.add_param('npts', val=200, desc='number of points for splined power curve')
 
 
@@ -284,6 +285,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
     def __init__(self):
         super(RegulatedPowerCurve, self).__init__()
+
         self.eval_only = True  # allows an external solver to converge this, otherwise it will converge itself to mimic an explicit comp
         """Fit a spline to the coarse sampled power curve (and thrust curve),
         find rated speed through a residual convergence strategy,
@@ -298,21 +300,22 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('control:tsr', shape=1, desc='tip-speed ratio in Region 2 (should be optimized externally)')
         self.add_param('control:pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
-        self.add_param('Vcoarse', shape=1, units='m/s', desc='wind speeds')
-        self.add_param('Pcoarse', shape=1, units='W', desc='unregulated power curve (but after drivetrain losses)')
-        self.add_param('Tcoarse', shape=1, units='N', desc='unregulated thrust curve')
+        self.add_param('Vcoarse', shape=20, units='m/s', desc='wind speeds')
+        self.add_param('Pcoarse', shape=20, units='W', desc='unregulated power curve (but after drivetrain losses)')
+        self.add_param('Tcoarse', shape=20, units='N', desc='unregulated thrust curve')
         self.add_param('R', shape=1, units='m', desc='rotor radius')
         self.add_param('npts', val=200, desc='number of points for splined power curve')
 
         # state
-        self.add_state('Vrated', shape=1, units='m/s', desc='rated wind speed')
+        self.add_state('Vrated', val=11.0, units='m/s', desc='rated wind speed', lower=-1e-15, upper=1e15)
+
 
         # residual
-        self.add_state('residual', shape=1)
+        # self.add_state('residual', shape=1)
 
         # outputs
-        self.add_output('V', shape=1, units='m/s', desc='wind speeds')
-        self.add_output('P', shape=1, units='W', desc='power')
+        self.add_output('V', shape=200, units='m/s', desc='wind speeds')
+        self.add_output('P', shape=200, units='W', desc='power')
 
         self.add_output('ratedConditions:V', shape=1, units='m/s', desc='rated wind speed')
         self.add_output('ratedConditions:Omega', shape=1, units='rpm', desc='rotor rotation speed at rated')
@@ -320,19 +323,21 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('ratedConditions:T', shape=1, units='N', desc='rotor aerodynamic thrust at rated')
         self.add_output('ratedConditions:Q', shape=1, units='N*m', desc='rotor aerodynamic torque at rated')
 
+        self.add_output('azimuth', shape=1, units='deg', desc='azimuth load')
+
     def solve_nonlinear(self, params, unknowns, resids):
         pass
 
     def apply_nonlinear(self, params, unknowns, resids):
 
-        ctrl = params['control']
-        n = ctrl.n
-        Vrated = params['Vrated']
+        n = params['npts']
+        Vrated = unknowns['Vrated']
 
         # residual
         spline = Akima(params['Vcoarse'], params['Pcoarse'])
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
-        resids['residual'] = P - ctrl.ratedPower
+        # resids['residual'] = P - ctrl.ratedPower
+        resids = P - params['control:ratedPower']
         # functional
 
         # place half of points in region 2, half in region 3
@@ -341,14 +346,14 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # speed distribution
 
         # region 2
-        V2, _, dV2_dVrated = linspace_with_deriv(ctrl.Vin, Vrated, n/2)
+        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, n/2)
         P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
 
         # region 3
-        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, ctrl.Vout, n/2+1)
+        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], n/2+1)
         V3 = V3[1:]  # remove duplicate point
         dV3_dVrated = dV3_dVrated[1:]
-        P3 = ctrl.ratedPower*np.ones_like(V3)
+        P3 = params['control:ratedPower']*np.ones_like(V3)
 
         # concatenate
         unknowns['V'] = np.concatenate([V2, V3])
@@ -356,22 +361,22 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         R = params['R']
         # rated speed conditions
-        Omega_d = ctrl.tsr*Vrated/R*RS2RPM
+        Omega_d = params['control:tsr']*Vrated/R*RS2RPM
         OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
-            = smooth_min(Omega_d, ctrl.maxOmega, pct_offset=0.01)
+            = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
 
         splineT = Akima(params['Vcoarse'], params['Tcoarse'])
         Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
 
-        unknowns['ratedConditions.V'] = Vrated
-        unknowns['ratedConditions.Omega'] = OmegaRated
-        unknowns['ratedConditions.pitch'] = ctrl.pitch
-        unknowns['ratedConditions.T'] = Trated
-        unknowns['ratedConditions.Q'] = ctrl.ratedPower / (OmegaRated * RPM2RS)
-
+        unknowns['ratedConditions:V'] = Vrated
+        unknowns['ratedConditions:Omega'] = OmegaRated
+        unknowns['ratedConditions:pitch'] = params['control:pitch']
+        unknowns['ratedConditions:T'] = Trated
+        unknowns['ratedConditions:Q'] = params['control:ratedPower'] / (OmegaRated * RPM2RS)
+        unknowns['azimuth'] = 180.0
 
         # gradients
-        ncoarse = len(params['coarse'])
+        ncoarse = len(params['Vcoarse'])
 
         dres = np.concatenate([[0.0], dres_dVcoarse, dres_dPcoarse, np.zeros(ncoarse), np.array([dres_dVrated]), [0.0, 0.0]])
 
@@ -385,11 +390,11 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         drV = np.concatenate([[0.0], np.zeros(3*ncoarse), [1.0, 0.0, 0.0]])
         drOmega = np.concatenate([[dOmegaRated_dOmegad*Vrated/R*RS2RPM], np.zeros(3*ncoarse),
-            [dOmegaRated_dOmegad*ctrl.tsr/R*RS2RPM, -dOmegaRated_dOmegad*ctrl.tsr*Vrated/R**2*RS2RPM,
+            [dOmegaRated_dOmegad*params['control:tsr']/R*RS2RPM, -dOmegaRated_dOmegad*params['control:tsr']*Vrated/R**2*RS2RPM,
             dOmegaRated_dmaxOmega]])
         drpitch = np.zeros(3*ncoarse+4)
         drT = np.concatenate([[0.0], dT_dVcoarse, np.zeros(ncoarse), dT_dTcoarse, [dT_dVrated, 0.0, 0.0]])
-        drQ = -ctrl.ratedPower / (OmegaRated**2 * RPM2RS) * drOmega
+        drQ = -params['control:ratedPower'] / (OmegaRated**2 * RPM2RS) * drOmega
 
         J = {}
 
@@ -399,8 +404,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         J['P', 'Pcoarse'] = dP_dPcoarse
         J['ratedConditions.V', 'Vrated'] = 1
         J['ratedConditions.Omega', 'control.tsr'] = dOmegaRated_dOmegad*Vrated/R*RS2RPM
-        J['ratedConditions.Omega', 'Vrated'] = dOmegaRated_dOmegad*ctrl.tsr/R*RS2RPM
-        J['ratedConditions.Omega', 'R'] = -dOmegaRated_dOmegad*ctrl.tsr*Vrated/R**2*RS2RPM
+        J['ratedConditions.Omega', 'Vrated'] = dOmegaRated_dOmegad*params['control:tsr']/R*RS2RPM
+        J['ratedConditions.Omega', 'R'] = -dOmegaRated_dOmegad*params['control:tsr']*Vrated/R**2*RS2RPM
         J['ratedConditions.Omega', 'control.maxOmega'] = dOmegaRated_dmaxOmega
         J['ratedConditions.T', 'Vcoarse'] = dT_dVcoarse
         J['ratedConditions.T', 'Tcoarse'] = dT_dTcoarse
@@ -413,7 +418,25 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         return self.J
 
+class RegulatedPowerCurveGroup(Group):
+    def __init__(self):
+        super(RegulatedPowerCurveGroup, self).__init__()
 
+        sub = self.add('sub', Group(), promotes=['*'])
+
+        sub.add('powercurve', RegulatedPowerCurve(), promotes=['*'])
+
+        sub.nl_solver = Brent()
+        sub.ln_solver = ScipyGMRES()
+        # self.connect('control:Vin', 'brent.lower_bound')
+        # self.connect('control:Vout', 'brent.upper_bound')
+        # self.brent.add_parameter('powercurve.Vrated', low=-1e-15, high=1e15)
+        # self.brent.add_constraint('powercurve.residual = 0')
+        # self.brent.invalid_bracket_return = 1.0
+        sub.nl_solver.options['lower_bound'] = 3.0
+        sub.nl_solver.options['upper_bound'] = 11.73845
+        sub.nl_solver.options['state_var'] = 'Vrated'
+        sub.nl_solver.options['xtol'] = 1
 
 class AEP(Component):
     def __init__(self):
@@ -421,8 +444,8 @@ class AEP(Component):
         """integrate to find annual energy production"""
 
         # inputs
-        self.add_param('CDF_V', shape=1, desc='cumulative distribution function evaluated at each wind speed')
-        self.add_param('P', shape=1, units='W', desc='power curve (power)')
+        self.add_param('CDF_V', shape=200, desc='cumulative distribution function evaluated at each wind speed')
+        self.add_param('P', shape=200, units='W', desc='power curve (power)')
         self.add_param('lossFactor', shape=1, desc='multiplicative factor for availability and other losses (soiling, array, etc.)')
 
         # outputs
@@ -432,7 +455,6 @@ class AEP(Component):
     def solve_nonlinear(self, params, unknowns, resids):
 
         unknowns['AEP'] = params['lossFactor']*np.trapz(params['P'], params['CDF_V'])/1e3*365.0*24.0  # in kWh
-
 
     def list_deriv_vars(self):
 

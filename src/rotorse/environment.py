@@ -100,13 +100,13 @@ class PowerWind(Component):
         # variables
         self.add_param('Uref', shape=1, units='m/s', desc='reference wind speed (usually at hub height)')
         self.add_param('zref', shape=1,  units='m', desc='corresponding reference height')
-        self.add_param('z',  shape=1, units='m', desc='heights where wind speed should be computed')
+        self.add_param('z',  val=90.0, units='m', desc='heights where wind speed should be computed')
 
         # parameters
         self.add_param('z0', val=0.0, units='m', desc='bottom of wind profile (height of ground/sea)')
 
         # out
-        self.add_output('U', shape=1, units='m/s', desc='magnitude of wind speed at each z location')
+        self.add_output('U', val=np.zeros(1), units='m/s', desc='magnitude of wind speed at each z location')
         self.add_output('beta', shape=1, units='deg', desc='corresponding wind angles relative to inertial coordinate system')
 
         """power-law profile wind.  any nodes must not cross z0, and if a node is at z0
@@ -122,16 +122,19 @@ class PowerWind(Component):
     def solve_nonlinear(self, params, unknowns, resids):
 
         # rename
-        z = self.z
-        zref = self.zref
-        z0 = self.z0
-
+        z = np.zeros(1)
+        z[0] = params['z']
+        zref = params['zref']
+        z0 = params['z0']
+        zref = 90.0
         # velocity
         idx = z > z0
         n = len(z)
-        self.U = np.zeros(n)
-        self.U[idx] = self.Uref*((z[idx] - z0)/(zref - z0))**self.shearExp
-        self.beta = self.betaWind*np.ones_like(z)
+        self.n = n
+        unknowns['U'] = np.zeros(n)
+        # unknowns['U'][idx] = params['Uref']*((z[idx] - z0)/(zref - z0))**params['shearExp']
+        unknowns['U'][idx] = params['Uref']*((z[idx] - z0)/(zref - z0))**params['shearExp']
+        unknowns['beta'] = params['betaWind']*np.ones_like(z)
 
         # # add small cubic spline to allow continuity in gradient
         # k = 0.01  # fraction of profile with cubic spline
@@ -158,15 +161,15 @@ class PowerWind(Component):
     def jacobian(self, params, unknowns, resids):
 
         # rename
-        z = self.z
-        zref = self.zref
-        z0 = self.z0
-        shearExp = self.shearExp
-        U = self.U
-        Uref = self.Uref
+        z = params['z']
+        zref = params['zref']
+        z0 = params['z0']
+        shearExp = params['shearExp']
+        U = unknowns['U']
+        Uref = params['Uref']
 
         # gradients
-        n = len(z)
+        n = self.n
         dU_dUref = np.zeros(n)
         dU_dz = np.zeros(n)
         dU_dzref = np.zeros(n)

@@ -325,15 +325,21 @@ class CCBladeGeometry(Component):
     def __init__(self):
         super(CCBladeGeometry, self).__init__()
         self.add_param('Rtip', shape=1, units='m', desc='tip radius')
-        self.add_param('recurveTip', val=0.0, units='m', desc='tip radius')
+        self.add_param('precurveTip', val=0.0, units='m', desc='tip radius')
         self.add_param('precone', val=0.0, desc='precone angle', units='deg')
         self.add_output('R', shape=1, units='m', desc='rotor radius')
         self.add_output('diameter', shape=1)
 
     def solve_nonlinear(self, params, unknowns, resids):
 
+        self.Rtip = params['Rtip']
+        self.precurveTip = params['precurveTip']
+        self.precone = params['precone']
+
         self.R = self.Rtip*cosd(self.precone) + self.precurveTip*sind(self.precone)
 
+        unknowns['R'] = self.R
+        unknowns['diameter'] = self.R*2
 
     def list_deriv_vars(self):
 
@@ -354,7 +360,7 @@ class CCBladeGeometry(Component):
 
 ## TODO
 class CCBlade(Component):
-    def __init__(self):
+    def __init__(self, run_case, n):
         super(CCBlade, self).__init__()
         """blade element momentum code"""
 
@@ -374,7 +380,7 @@ class CCBlade(Component):
         self.add_param('precurveTip', val=0.0, units='m', desc='precurve at tip')
 
         # parameters
-        self.add_param('airfoil_files', shape=17, desc='names of airfoil file')
+        self.add_param('airfoil_files', shape=17, desc='names of airfoil file', pass_by_obj=True)
         self.add_param('B', val=3, desc='number of blades')
         self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
         self.add_param('mu', val=1.81206e-5, units='kg/(m*s)', desc='dynamic viscosity of air')
@@ -388,20 +394,21 @@ class CCBlade(Component):
         missing_deriv_policy = 'assume_zero'
 
 
+        # self.add_param('run_case', val=Enum('power', 'loads'))
         self.add_param('run_case', val=Enum('power', 'loads'))
 
 
         # --- use these if (run_case == 'power') ---
 
         # inputs
-        self.add_param('Uhub', shape=1, units='m/s', desc='hub height wind speed')
-        self.add_param('Omega', shape=1, units='rpm', desc='rotor rotation speed')
-        self.add_param('pitch', shape=1, units='deg', desc='blade pitch setting')
+        self.add_param('Uhub', shape=n, units='m/s', desc='hub height wind speed')
+        self.add_param('Omega', shape=n, units='rpm', desc='rotor rotation speed')
+        self.add_param('pitch', shape=n, units='deg', desc='blade pitch setting')
 
         # outputs
-        self.add_param('T', shape=1, units='N', desc='rotor aerodynamic thrust')
-        self.add_param('Q', shape=1, units='N*m', desc='rotor aerodynamic torque')
-        self.add_param('P', shape=1, units='W', desc='rotor aerodynamic power')
+        self.add_output('T', shape=n, units='N', desc='rotor aerodynamic thrust')
+        self.add_output('Q', shape=n, units='N*m', desc='rotor aerodynamic torque')
+        self.add_output('P', shape=n, units='W', desc='rotor aerodynamic power')
 
 
         # --- use these if (run_case == 'loads') ---
@@ -417,10 +424,10 @@ class CCBlade(Component):
 
         # outputs
         # loads = VarTree(AeroLoads(), iotype='out', desc='loads in blade-aligned coordinate system')
-        self.add_output('loads:r', shape=1, units='m', desc='radial positions along blade going toward tip')
-        self.add_output('loads:Px', shape=1, units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_output('loads:Py', shape=1, units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_output('loads:Pz', shape=1, units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_output('loads:r', shape=19, units='m', desc='radial positions along blade going toward tip')
+        self.add_output('loads:Px', shape=19, units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_output('loads:Py', shape=19, units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_output('loads:Pz', shape=19, units='N/m', desc='distributed loads in blade-aligned z-direction')
 
         # corresponding setting for loads
         self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
@@ -428,8 +435,40 @@ class CCBlade(Component):
         self.add_output('loads:pitch', shape=1, units='deg', desc='pitch angle')
         self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
 
+        self.run_case = run_case
 
     def solve_nonlinear(self, params, unknowns, resids):
+
+        self.r = params['r']
+        self.chord = params['chord']
+        self.theta = params['theta']
+        self.Rhub = params['Rhub']
+        self.Rtip = params['Rtip']
+        self.hubHt = params['hubHt']
+        self.precone = params['precone']
+        self.tilt = params['tilt']
+        self.yaw = params['yaw']
+        self.precurve = params['precurve']
+        self.precurveTip = params['precurveTip']
+        self.airfoil_files = params['airfoil_files']
+        self.B = params['B']
+        self.rho = params['rho']
+        self.mu = params['mu']
+        self.shearExp = params['shearExp']
+        self.nSector = params['nSector']
+        self.tiploss = params['tiploss']
+        self.hubloss = params['hubloss']
+        self.wakerotation = params['wakerotation']
+        self.usecd = params['usecd']
+        # self.run_case = params['run_case']
+        self.Uhub = params['Uhub']
+        self.Omega = params['Omega']
+        self.pitch = params['pitch']
+        self.V_load = params['V_load']
+        self.Omega_load = params['Omega_load']
+        self.pitch_load = params['pitch_load']
+        self.azimuth_load = params['azimuth_load']
+
 
         if len(self.precurve) == 0:
             self.precurve = np.zeros_like(self.r)
@@ -450,31 +489,36 @@ class CCBlade(Component):
         if self.run_case == 'power':
 
             # power, thrust, torque
+
             self.P, self.T, self.Q, self.dP, self.dT, self.dQ \
                 = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
-
+            unknowns['T'] = self.T
+            unknowns['Q'] = self.Q
+            unknowns['P'] = self.P
 
         elif self.run_case == 'loads':
-
+            if self.azimuth_load == 180.0:
+                pass
             # distributed loads
             Np, Tp, self.dNp, self.dTp \
                 = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
             # concatenate loads at root/tip
-            self.loads.r = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
+            unknowns['loads:r'] = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
             Np = np.concatenate([[0.0], Np, [0.0]])
             Tp = np.concatenate([[0.0], Tp, [0.0]])
 
             # conform to blade-aligned coordinate system
-            self.loads.Px = Np
-            self.loads.Py = -Tp
-            self.loads.Pz = 0*Np
+            unknowns['loads:Px'] = Np
+            unknowns['loads:Py'] = -Tp
+            unknowns['loads:Pz'] = 0*Np
 
             # return other outputs needed
-            self.loads.V = self.V_load
-            self.loads.Omega = self.Omega_load
-            self.loads.pitch = self.pitch_load
-            self.loads.azimuth = self.azimuth_load
+            unknowns['loads:V'] = self.V_load
+            unknowns['loads:Omega'] = self.Omega_load
+            unknowns['loads:pitch'] = self.pitch_load
+            unknowns['loads:azimuth'] = self.azimuth_load
+
 
 
     def list_deriv_vars(self):
@@ -562,13 +606,13 @@ class CSMDrivetrain(Component):
         self.add_param('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'))
 
 
-        self.add_param('aeroPower', shape=1, units='W', desc='aerodynamic power')
-        self.add_param('aeroTorque', shape=1, units='N*m', desc='aerodynamic torque')
-        self.add_param('aeroThrust', shape=1, units='N', desc='aerodynamic thrust')
+        self.add_param('aeroPower', shape=20, units='W', desc='aerodynamic power')
+        self.add_param('aeroTorque', shape=20, units='N*m', desc='aerodynamic torque')
+        self.add_param('aeroThrust', shape=20, units='N', desc='aerodynamic thrust')
         self.add_param('ratedPower', shape=1, units='W', desc='rated power')
 
-        self.add_output('power', shape=1, units='W', desc='total power after drivetrain losses')
-        self.add_output('rpm', shape=1, units='rpm', desc='rpm curve after drivetrain losses')
+        self.add_output('power', shape=20, units='W', desc='total power after drivetrain losses')
+        # self.add_output('rpm', shape=1, units='rpm', desc='rpm curve after drivetrain losses')
 
         missing_deriv_policy = 'assume_zero'
 
@@ -623,7 +667,8 @@ class CSMDrivetrain(Component):
         dP_dPa = eff + aeroPower*deff_dPa
         dP_dPr = aeroPower*deff_dPr
         J = {}
-        J['power', 'Pa'] = np.diag(dP_dPa)
+        # J['power', 'Pa'] = np.diag(dP_dPa)
+        J['power', 'Pa'] = dP_dPa
         J['power', 'Pr'] = dP_dPr
         self.J = J
 
@@ -713,17 +758,16 @@ class WeibullWithMeanCDF(Component):
         return J
 
 
-
 class RayleighCDF(Component):
     def __init(self):
         super(RayleighCDF, self).__init__()
 
         """Rayleigh cumulative distribution function"""
 
-        self.add_param('xbar', desc='mean value of distribution')
-        self.add_param('x')
+        self.add_param('xbar', shape=1, desc='mean value of distribution')
+        self.add_param('x', shape=200)
 
-        self.add_output('F')
+        self.add_output('F', shape=20)
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -736,7 +780,7 @@ class RayleighCDF(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         x = params['x']
         xbar = params['xbar']
@@ -748,7 +792,30 @@ class RayleighCDF(Component):
 
         return J
 
+class RayleighCDF2(Component):
+    def __init__(self):
+        super(RayleighCDF2,  self).__init__()
 
+        # variables
+        self.add_param('xbar', shape=1, units='m/s', desc='reference wind speed (usually at hub height)')
+        self.add_param('x', shape=200,  units='m/s', desc='corresponding reference height')
+
+        # out
+        self.add_output('F', shape=200, units='m/s', desc='magnitude of wind speed at each z location')
+
+
+    def solve_nonlinear(self, params, unknowns, resids):
+
+        unknowns['F'] = 1.0 - np.exp(-pi/4.0*(params['x']/params['xbar'])**2)
+
+    def jacobian(self, params, unknowns, resids):
+        x = params['x']
+        xbar = params['xbar']
+        dx = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2.0*xbar**2))
+        dxbar = -np.exp(-pi/4.0*(x/xbar)**2)*pi*x**2/(2.0*xbar**3)
+        J = {}
+        J['F', 'x'] = dx
+        J['F', 'xbar'] = dxbar
 
 def common_io_with_ccblade(assembly, varspeed, varpitch, cdf_type):
 
