@@ -158,15 +158,20 @@ class PowerWind(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         # rename
-        z = params['z']
-        zref = params['zref']
-        z0 = params['z0']
+        # z = params['z']
+        # zref = params['zref']
+        # z0 = params['z0']
         shearExp = params['shearExp']
         U = unknowns['U']
         Uref = params['Uref']
+        z = np.zeros(1)
+        z[0] = params['z']
+        zref = params['zref']
+        z0 = params['z0']
+        zref = 90.0
 
         # gradients
         n = self.n
@@ -179,7 +184,10 @@ class PowerWind(Component):
         dU_dz[idx] = U[idx]*shearExp/(z[idx] - z0)
         dU_dzref[idx] = -U[idx]*shearExp/(zref - z0)
 
-
+        J = {}
+        J['U', 'Uref'] = dU_dUref
+        J['U', 'z'] = dU_dz
+        J['U', 'zref'] = dU_dzref
         # # cubic spline region
         # idx = np.logical_and(z > z0, z < zsmall)
 
@@ -196,7 +204,7 @@ class PowerWind(Component):
         # dg2_dzref = -Uref*k**shearExp*shearExp/k/(zref - z0)**2
         # dU_dzref[idx] = self.spline.eval_deriv_params(z[idx], 0.0, dx2_dzref, 0.0, 0.0, 0.0, dg2_dzref)
 
-        J = hstack([dU_dUref, np.diag(dU_dz), dU_dzref])
+        # J = hstack([dU_dUref, np.diag(dU_dz), dU_dzref])
 
         return J
 

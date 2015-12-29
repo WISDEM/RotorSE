@@ -25,107 +25,6 @@ from scipy.optimize import brentq
 
 from scipy.optimize import brentq
 
-# class Brent(Component):
-#     """Root finding using Brent's method."""
-#     def __init__(self):
-#         super(Brent, self).__init__()
-#             self.workflow = CyclicWorkflow()
-#             self.xstar = self._param = None
-#
-#             self.add_param('lower_bound', val=0., desc="lower bound for the root search")
-#             self.add_param('upper_bound', val=100., desc="upper bound for the root search")
-#             self.add_param('xtol', val=0.0, desc='The routine converges when a root is known to lie within xtol of the value return. Should be >= 0. '
-#                          'The routine modifies this to take into account the relative precision of doubles.')
-#             self.add_param('rtol', val=0.0, desc='The routine converges when a root is known to lie within rtol times the value returned of '
-#                          'the value returned. Should be >= 0. Defaults to np.finfo(float).eps * 2.')
-#             self.add_param('maxiter', val=100, desc='if convergence is not achieved in maxiter iterations, and error is raised. Must be >= 0.')
-#             self.add_param('iprint', val=0, desc='Set to 1 to print out itercount and residual.')
-#             self.add_param('f_resize_bracket', Slot(object,
-#                                    desc='user supplied function to handle resizing bracket.  Form of function is: \
-#                                    lower_new, upper_new, continue = f_resize_bracket(lower, upper, iteration) \
-#                                    inputs include the current lower and upper bracket and the current iteration \
-#                                    count starting from 1.  Outputs include a new lower and upper bracket, and a \
-#                                    boolean flag on whether or not to terminate calling resize bracket')
-#
-#             self.add_param('invalid_bracket_return', val=-1,
-#                                            desc='user supplied value to handle what value should be returned \
-#                                                  when a suitable bracket cannot be found. sets the "zero" as a \
-#                                                  linear combination of the lower and upper brackets. \
-#                                                  Must be between 0 and 1 or an error will be thrown. \
-#                                                  root = lower + invalid_bracket_return*(upper-lower)')
-#     def _eval(self, x):
-#         """Callback function for evaluating f(x)"""
-#         self._param.set(x)
-#         self.run_iteration()
-#         return self.eval_eq_constraints(self.parent)[0]
-#
-#     def solv(self):
-#
-#         bracket_invalid = self._eval(self.lower_bound)*self._eval(self.upper_bound) > 0
-#
-#         # check if user supplied function to handle resizing bracket
-#         if bracket_invalid and self.f_resize_bracket:
-#
-#             # try to resize bracket to find a valid bracket.
-#             iteration = 1
-#             should_continue = True
-#             bracket_invalid = True
-#
-#             while bracket_invalid and should_continue:
-#                 self.lower_bound, self.upper_bound, should_continue = \
-#                     self.f_resize_bracket(self.lower_bound, self.upper_bound, iteration)
-#
-#                 bracket_invalid = self._eval(self.lower_bound)*self._eval(self.upper_bound) > 0
-#                 iteration += 1
-#
-#         if bracket_invalid:  # if bracket is still invalid, see if user has specified what to return
-#
-#             if self.invalid_bracket_return >= 0.0 and self.invalid_bracket_return <= 1.0:
-#                 xstar = self.lower_bound + self.invalid_bracket_return*(self.upper_bound-self.lower_bound)
-#                 brent_iterations = 'valid bracket not found.  returning user specified value'
-#
-#             else:
-#                 self.raise_exception('bounds (low=%s, high=%s) do not bracket a root' %
-#                                  (self.lower_bound, self.upper_bound))
-#
-#         else:
-#
-#             kwargs = {'maxiter': self.maxiter, 'a': self.lower_bound,
-#                       'b': self.upper_bound, 'full_output': True}
-#
-#             if self.xtol > 0:
-#                 kwargs['xtol'] = self.xtol
-#             if self.rtol > 0:
-#                 kwargs['rtol'] = self.rtol
-#
-#             # Brent's method
-#             xstar, r = brentq(self._eval, **kwargs)
-#             brent_iterations = r.iterations
-#
-#
-#         # Propagate solution back into the model
-#         self._param.set(xstar)
-#         self.run_iteration()
-#
-#         if self.iprint == 1:
-#             print 'iterations:', brent_iterations
-#             print 'residual:', self.eval_eq_constraints()
-#
-#     def check_config(self, strict=False):
-#         '''Make sure we have 1 parameter and 1 constraint'''
-#
-#         super(Brent, self).check_config(strict=strict)
-#
-#         params = self.get_parameters().values()
-#         if len(params) != 1:
-#             self.raise_exception("Brent driver must have 1 parameter, "
-#                                  "but instead it has %d" % len(params))
-#
-#         constraints = self.get_eq_constraints()
-#         if len(constraints) != 1:
-#             self.raise_exception("Brent driver must have 1 equality constraint, "
-#                                  "but instead it has %d" % len(constraints))
-#         self._param = params[0]
 
 class Brent(Component):
     """root finding using Brent's method."""
@@ -183,25 +82,25 @@ class PDFBase(Component):
 
 class GeometrySpline(Component):
     def __init__(self):
-        super(GeometrySpline).__init__()
-        self.add_param('r_af', units='m', desc='locations where airfoils are defined on unit radius')
+        super(GeometrySpline, self).__init__()
+        self.add_param('r_af', shape=17, units='m', desc='locations where airfoils are defined on unit radius')
 
-        self.add_param('idx_cylinder', desc='location where cylinder section ends on unit radius')
-        self.add_param('r_max_chord', desc='position of max chord on unit radius')
+        self.add_param('idx_cylinder', val=0, desc='location where cylinder section ends on unit radius')
+        self.add_param('r_max_chord', shape=1, desc='position of max chord on unit radius')
 
-        self.add_param('Rhub', units='m', desc='blade hub radius')
-        self.add_param('Rtip', units='m', desc='blade tip radius')
+        self.add_param('Rhub', shape=1, units='m', desc='blade hub radius')
+        self.add_param('Rtip', shape=1, units='m', desc='blade tip radius')
 
-        self.add_param('chord_sub', units='m', desc='chord at control points')
-        self.add_param('theta_sub', units='deg', desc='twist at control points')
+        self.add_param('chord_sub', shape=4, units='m', desc='chord at control points')
+        self.add_param('theta_sub', shape=4, units='deg', desc='twist at control points')
 
-        self.add_output('r', units='m', desc='chord at airfoil locations')
-        self.add_output('chord', units='m', desc='chord at airfoil locations')
-        self.add_output('theta', units='deg', desc='twist at airfoil locations')
-        self.add_output('precurve', units='m', desc='precurve at airfoil locations')
-        self.add_output('r_af_spacing')  # deprecated: not used anymore
+        self.add_output('r', shape=17, units='m', desc='chord at airfoil locations')
+        self.add_output('chord', shape=17, units='m', desc='chord at airfoil locations')
+        self.add_output('theta', shape=17, units='deg', desc='twist at airfoil locations')
+        self.add_output('precurve', shape=17, units='m', desc='precurve at airfoil locations')
+        self.add_output('r_af_spacing', shape=16)  # deprecated: not used anymore
 
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         chord_sub = params['chord_sub']
@@ -309,7 +208,7 @@ class GeometrySpline(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         return self.J
 
@@ -328,8 +227,8 @@ class CCBladeGeometry(Component):
         self.add_param('precurveTip', val=0.0, units='m', desc='tip radius')
         self.add_param('precone', val=0.0, desc='precone angle', units='deg')
         self.add_output('R', shape=1, units='m', desc='rotor radius')
-        self.add_output('diameter', shape=1)
-
+        self.add_output('diameter', shape=1, units='m')
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         self.Rtip = params['Rtip']
@@ -348,12 +247,19 @@ class CCBladeGeometry(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
-        J = np.array([[cosd(self.precone), sind(self.precone),
+        J_sub = np.array([[cosd(self.precone), sind(self.precone),
             (-self.Rtip*sind(self.precone) + self.precurveTip*sind(self.precone))*pi/180.0]])
-
+        J = {}
+        J['R', 'Rtip'] = J_sub[0][0]
+        J['R', 'precurveTip'] = J_sub[0][1]
+        J['R', 'precone'] = J_sub[0][2]
+        J['diameter', 'Rtip'] = 2.0*J_sub[0][0]
+        J['diameter', 'precurveTip'] = 2.0*J_sub[0][1]
+        J['diameter', 'precone'] = 2.0*J_sub[0][2]
         J['diameter', 'R'] = 2.0
+
 
         return J
 
@@ -381,21 +287,21 @@ class CCBlade(Component):
 
         # parameters
         self.add_param('airfoil_files', shape=17, desc='names of airfoil file', pass_by_obj=True)
-        self.add_param('B', val=3, desc='number of blades')
+        self.add_param('B', val=3, desc='number of blades', pass_by_obj=True)
         self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
         self.add_param('mu', val=1.81206e-5, units='kg/(m*s)', desc='dynamic viscosity of air')
         self.add_param('shearExp', val=0.2, desc='shear exponent')
-        self.add_param('nSector', val=4, desc='number of sectors to divide rotor face into in computing thrust and power')
-        self.add_param('tiploss', val=True, desc='include Prandtl tip loss model')
-        self.add_param('hubloss', val=True, desc='include Prandtl hub loss model')
-        self.add_param('wakerotation', val=True, desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)')
-        self.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors')
+        self.add_param('nSector', val=4, desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True)
+        self.add_param('tiploss', val=True, desc='include Prandtl tip loss model', pass_by_obj=True)
+        self.add_param('hubloss', val=True, desc='include Prandtl hub loss model', pass_by_obj=True)
+        self.add_param('wakerotation', val=True, desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)', pass_by_obj=True)
+        self.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors', pass_by_obj=True)
 
         missing_deriv_policy = 'assume_zero'
 
 
         # self.add_param('run_case', val=Enum('power', 'loads'))
-        self.add_param('run_case', val=Enum('power', 'loads'))
+        self.add_param('run_case', val=Enum('power', 'loads'), pass_by_obj=True)
 
 
         # --- use these if (run_case == 'power') ---
@@ -436,7 +342,7 @@ class CCBlade(Component):
         self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
 
         self.run_case = run_case
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         self.r = params['r']
@@ -497,8 +403,6 @@ class CCBlade(Component):
             unknowns['P'] = self.P
 
         elif self.run_case == 'loads':
-            if self.azimuth_load == 180.0:
-                pass
             # distributed loads
             Np, Tp, self.dNp, self.dTp \
                 = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
@@ -538,7 +442,7 @@ class CCBlade(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         if self.run_case == 'power':
 
@@ -555,8 +459,52 @@ class CCBlade(Component):
             jQ = hstack([dQ['dprecone'], dQ['dtilt'], dQ['dhubHt'], dQ['dRhub'], dQ['dRtip'],
                 dQ['dyaw'], dQ['dUinf'], dQ['dOmega'], dQ['dpitch'], dQ['dr'], dQ['dchord'], dQ['dtheta'],
                 dQ['dprecurve'], dQ['dprecurveTip']])
+            J = {}
+            J['P', 'precone'] = dP['dprecone']
+            J['P', 'tilt'] = dP['dtilt']
+            J['P', 'hubHt'] = dP['dhubHt']
+            J['P', 'Rhub'] = dP['dRhub']
+            J['P', 'Rtip'] = dP['dRtip']
+            J['P', 'yaw'] = dP['dyaw']
+            J['P', 'Uhub'] = dP['dUinf']
+            J['P', 'Omega'] = dP['dOmega']
+            J['P', 'pitch'] =  dP['dpitch']
+            J['P', 'r'] = dP['dr']
+            J['P', 'chord'] = dP['dchord']
+            J['P', 'theta'] = dP['dtheta']
+            J['P', 'precurve'] = dP['dprecurve']
+            J['P', 'precurveTip'] = dP['dprecurveTip']
 
-            J = vstack([jP, jT, jQ])
+            J['T', 'precone'] = dT['dprecone']
+            J['T', 'tilt'] = dT['dtilt']
+            J['T', 'hubHt'] = dT['dhubHt']
+            J['T', 'Rhub'] = dT['dRhub']
+            J['T', 'Rtip'] = dT['dRtip']
+            J['T', 'yaw'] = dT['dyaw']
+            J['T', 'Uhub'] = dT['dUinf']
+            J['T', 'Omega'] = dT['dOmega']
+            J['T', 'pitch'] =  dT['dpitch']
+            J['T', 'r'] = dT['dr']
+            J['T', 'chord'] = dT['dchord']
+            J['T', 'theta'] = dT['dtheta']
+            J['T', 'precurve'] = dT['dprecurve']
+            J['T', 'precurveTip'] = dT['dprecurveTip']
+
+            J['Q', 'precone'] = dQ['dprecone']
+            J['Q', 'tilt'] = dQ['dtilt']
+            J['Q', 'hubHt'] = dQ['dhubHt']
+            J['Q', 'Rhub'] = dQ['dRhub']
+            J['Q', 'Rtip'] = dQ['dRtip']
+            J['Q', 'yaw'] = dQ['dyaw']
+            J['Q', 'Uhub'] = dQ['dUinf']
+            J['Q', 'Omega'] = dQ['dOmega']
+            J['Q', 'pitch'] =  dQ['dpitch']
+            J['Q', 'r'] = dQ['dr']
+            J['Q', 'chord'] = dQ['dchord']
+            J['Q', 'theta'] = dQ['dtheta']
+            J['Q', 'precurve'] = dQ['dprecurve']
+            J['Q', 'precurveTip'] = dQ['dprecurveTip']
+
 
 
         elif self.run_case == 'loads':
@@ -590,30 +538,75 @@ class CCBlade(Component):
             dpitch[3*n+8] = 1.0
             dazimuth = np.zeros(4*n+10)
             dazimuth[3*n+9] = 1.0
+            J = {}
+            for i in range(len(dNp['dRhub'])):
+                dNp_dRhub = dNp['dRhub'][i][0]
+            dNp_dRhub2 = np.squeeze(dNp['dRhub'])
+             # = np.reshape(dNp['dRhub'], (len(dNp['dRhub']), 0))
+            zero = np.zeros(17)
+# np.concatenate([[0.0], dr_dr, [0.0]])
+            J['loads:r', 'r'] =  dr_dr
+            J['loads:r', 'Rhub'] = dr_dRhub
+            J['loads:r', 'Rtip'] = dr_dRtip
+            J['loads:Px', 'r'] = np.vstack([zero, dNp['dr'], zero])
+            J['loads:Px', 'chord'] = np.vstack([zero, dNp['dchord'], zero])
+            J['loads:Px', 'theta'] = np.vstack([zero, dNp['dtheta'], zero])
+            J['loads:Px', 'Rhub'] = np.concatenate([[0.0], np.squeeze(dNp['dRhub']), [0.0]])
+            J['loads:Px', 'Rtip'] = np.concatenate([[0.0], np.squeeze(dNp['dRtip']), [0.0]])
+            J['loads:Px', 'hubHt'] = np.concatenate([[0.0], np.squeeze(dNp['dhubHt']), [0.0]])
+            J['loads:Px', 'precone'] = np.concatenate([[0.0], np.squeeze(dNp['dprecone']), [0.0]])
+            J['loads:Px', 'tilt'] = np.concatenate([[0.0], np.squeeze(dNp['dtilt']), [0.0]])
+            J['loads:Px', 'yaw'] = np.concatenate([[0.0], np.squeeze(dNp['dyaw']), [0.0]])
+            J['loads:Px', 'Uhub'] = np.concatenate([[0.0], np.squeeze(dNp['dUinf']), [0.0]])
+            J['loads:Px', 'Omega'] = np.concatenate([[0.0], np.squeeze(dNp['dOmega']), [0.0]])
+            J['loads:Px', 'pitch'] = np.concatenate([[0.0], np.squeeze(dNp['dpitch']), [0.0]])
+            J['loads:Px', 'azimuth'] = np.concatenate([[0.0], np.squeeze(dNp['dazimuth']), [0.0]])
+            J['loads:Px', 'precurve'] = np.vstack([zero, dNp['dprecurve'], zero])
+            J['loads:Py', 'r'] = np.vstack([zero, -dTp['dr'], zero])
+            J['loads:Py', 'chord'] = np.vstack([zero, -dTp['dchord'], zero])
+            J['loads:Py', 'theta'] = np.vstack([zero, -dTp['dtheta'], zero])
+            J['loads:Py', 'Rhub'] = np.concatenate([[0.0], -np.squeeze(dTp['dRhub']), [0.0]])
+            J['loads:Py', 'Rtip'] = np.concatenate([[0.0], -np.squeeze(dTp['dRtip']), [0.0]])
+            J['loads:Py', 'hubHt'] = np.concatenate([[0.0], -np.squeeze(dTp['dhubHt']), [0.0]])
+            J['loads:Py', 'precone'] = np.concatenate([[0.0], -np.squeeze(dTp['dprecone']), [0.0]])
+            J['loads:Py', 'tilt'] = np.concatenate([[0.0], -np.squeeze(dTp['dtilt']), [0.0]])
+            J['loads:Py', 'yaw'] = np.concatenate([[0.0], -np.squeeze(dTp['dyaw']), [0.0]])
+            J['loads:Py', 'Uhub'] = np.concatenate([[0.0], -np.squeeze(dTp['dUinf']), [0.0]])
+            J['loads:Py', 'Omega'] = np.concatenate([[0.0], -np.squeeze(dTp['dOmega']), [0.0]])
+            J['loads:Py', 'pitch'] = np.concatenate([[0.0], -np.squeeze(dTp['dpitch']), [0.0]])
+            J['loads:Py', 'azimuth'] = np.concatenate([[0.0], -np.squeeze(dTp['dazimuth']), [0.0]])
+            J['loads:Py', 'precurve'] = np.vstack([zero, -dTp['dprecurve'], zero])
+            J['loads:V', 'V_load'] = 1.0
+            J['loads:Omega', 'Omega_load'] = 1.0
+            J['loads:pitch', 'pitch_load'] = 1.0
+            J['loads:azimuth', 'azimuth_load'] = 1.0
 
-            J = vstack([dr, dPx, dPy, dPz, dV, dOmega, dpitch, dazimuth])
-
+            # J = vstack([dr, dPx, dPy, dPz, dV, dOmega, dpitch, dazimuth])
+            # inputs = ('r', 'chord', 'theta', 'Rhub', 'Rtip', 'hubHt', 'precone',
+            #     'tilt', 'yaw', 'V_load', 'Omega_load', 'pitch_load', 'azimuth_load', 'precurve')
+            # outputs = ('loads.r', 'loads.Px', 'loads.Py', 'loads.Pz', 'loads.V',
+            #     'loads.Omega', 'loads.pitch', 'loads.azimuth')
 
         return J
 
 
 
 class CSMDrivetrain(Component):
-    def __init__(self):
+    def __init__(self, n):
         super(CSMDrivetrain, self).__init__()
         """drivetrain losses from NREL cost and scaling model"""
 
-        self.add_param('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'))
+        self.add_param('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True)
 
 
-        self.add_param('aeroPower', shape=20, units='W', desc='aerodynamic power')
-        self.add_param('aeroTorque', shape=20, units='N*m', desc='aerodynamic torque')
-        self.add_param('aeroThrust', shape=20, units='N', desc='aerodynamic thrust')
+        self.add_param('aeroPower', shape=n, units='W', desc='aerodynamic power')
+        self.add_param('aeroTorque', shape=n, units='N*m', desc='aerodynamic torque')
+        self.add_param('aeroThrust', shape=n, units='N', desc='aerodynamic thrust')
         self.add_param('ratedPower', shape=1, units='W', desc='rated power')
 
-        self.add_output('power', shape=20, units='W', desc='total power after drivetrain losses')
+        self.add_output('power', shape=n, units='W', desc='total power after drivetrain losses')
         # self.add_output('rpm', shape=1, units='rpm', desc='rpm curve after drivetrain losses')
-
+        self.fd_options['form'] = 'central'
         missing_deriv_policy = 'assume_zero'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -680,7 +673,7 @@ class CSMDrivetrain(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         return self.J
 
@@ -697,7 +690,7 @@ class WeibullCDF(Component):
         self.add_param('x')
 
         self.add_output('F')
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         unknowns['F'] = 1.0 - np.exp(-(params['x']/params['A'])**params['k'])
@@ -708,14 +701,14 @@ class WeibullCDF(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         x = params['x']
         A = params['A']
         k = params['k']
-        J = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
+        # J = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
         J = {}
-        # J['']
+        J['F', 'x'] = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
         return J
 
 
@@ -729,7 +722,7 @@ class WeibullWithMeanCDF(Component):
         self.add_param('x')
 
         self.add_output('F')
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         A = params['xbar'] / gamma(1.0 + 1.0/params['k'])
@@ -744,7 +737,7 @@ class WeibullWithMeanCDF(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         x = params['x']
         k = params['k']
@@ -768,7 +761,7 @@ class RayleighCDF(Component):
         self.add_param('x', shape=200)
 
         self.add_output('F', shape=20)
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         unknowns['F'] = 1.0 - np.exp(-pi/4.0*(params['x']/params['xbar'])**2)
@@ -802,13 +795,14 @@ class RayleighCDF2(Component):
 
         # out
         self.add_output('F', shape=200, units='m/s', desc='magnitude of wind speed at each z location')
-
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
         unknowns['F'] = 1.0 - np.exp(-pi/4.0*(params['x']/params['xbar'])**2)
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
+
         x = params['x']
         xbar = params['xbar']
         dx = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2.0*xbar**2))
@@ -816,6 +810,7 @@ class RayleighCDF2(Component):
         J = {}
         J['F', 'x'] = dx
         J['F', 'xbar'] = dxbar
+        return J
 
 def common_io_with_ccblade(assembly, varspeed, varpitch, cdf_type):
 

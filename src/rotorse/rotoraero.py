@@ -113,7 +113,7 @@ class Coefficients(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
         J = {}
 
         rho = params['rho']
@@ -155,7 +155,7 @@ class SetupRunFixedSpeed(Component):
         self.add_param('control.ratedPower', units='W', desc='rated power')
         self.add_param('control.Omega', units='rpm', desc='fixed rotor rotation speed')
         self.add_param('control.pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
-        self.add_param('control.npts', val=20, desc='number of points to evalute aero code to generate power curve')
+        self.add_param('control.npts', val=20, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
 
         # outputs
         self.add_output('Uhub', units='m/s', desc='freestream velocities to run')
@@ -188,12 +188,14 @@ class SetupRunVarSpeed(Component):
         self.add_param('control:pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
         self.add_param('R', shape=1, units='m', desc='rotor radius')
-        self.add_param('npts', shape=1, val=20, desc='number of points to evalute aero code to generate power curve')
+        self.add_param('npts', shape=1, val=20, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
 
         # outputs
         self.add_output('Uhub', shape=20, units='m/s', desc='freestream velocities to run')
         self.add_output('Omega', shape=20, units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', shape=20, units='deg', desc='pitch angles to run')
+
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -225,11 +227,18 @@ class SetupRunVarSpeed(Component):
         J = {}
         J['Omega', 'tsr'] = dOmega_dOmegad * V/R*RS2RPM
         J['Omega', 'R'] = dOmega_dOmegad * -params['control:tsr']*V/R**2*RS2RPM
-        J['Omega', 'control.maxOmega'] = dOmega_dmaxOmega
+        J['Omega', 'control:maxOmega'] = dOmega_dmaxOmega
 
         self.J = J
 
-    def jacobian(self, params, unknowns, resids):
+    def list_deriv_vars(self):
+
+        inputs = ('control:tsr', 'R', 'control:maxOmega')
+        outputs = ('Uhub', 'Omega', 'pitch')
+
+        return inputs, outputs
+
+    def linearize(self, params, unknowns, resids):
 
         return self.J
 
@@ -246,18 +255,19 @@ class UnregulatedPowerCurve(Component):
         self.add_param('control.ratedPower', units='W', desc='rated power')
         self.add_param('control.Omega', units='rpm', desc='fixed rotor rotation speed')
         self.add_param('control.pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
-        self.add_param('control.npts', val=20, desc='number of points to evalute aero code to generate power curve')
+        self.add_param('control.npts', val=20, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
 
         self.add_param('Vcoarse', shape=20, units='m/s', desc='wind speeds')
         self.add_param('Pcoarse', shape=20, units='W', desc='unregulated power curve (but after drivetrain losses)')
         self.add_param('Tcoarse', shape=20, units='N', desc='unregulated thrust curve')
-        self.add_param('npts', val=200, desc='number of points for splined power curve')
+        self.add_param('npts', val=200, desc='number of points for splined power curve', pass_by_obj=True)
 
 
         # outputs
         self.add_output('V', units='m/s', desc='wind speeds')
         self.add_output('P', units='W', desc='power')
 
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -275,7 +285,7 @@ class UnregulatedPowerCurve(Component):
         J['P', 'Pcoarse'] = dP_dPcoarse
         self.J = J
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         return self.J
 
@@ -304,7 +314,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('Pcoarse', shape=20, units='W', desc='unregulated power curve (but after drivetrain losses)')
         self.add_param('Tcoarse', shape=20, units='N', desc='unregulated thrust curve')
         self.add_param('R', shape=1, units='m', desc='rotor radius')
-        self.add_param('npts', val=200, desc='number of points for splined power curve')
+        self.add_param('npts', val=200, desc='number of points for splined power curve', pass_by_obj=True)
 
         # state
         self.add_state('Vrated', val=11.0, units='m/s', desc='rated wind speed', lower=-1e-15, upper=1e15)
@@ -324,6 +334,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('ratedConditions:Q', shape=1, units='N*m', desc='rotor aerodynamic torque at rated')
 
         self.add_output('azimuth', shape=1, units='deg', desc='azimuth load')
+
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
         pass
@@ -414,7 +426,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         self.J = J
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         return self.J
 
@@ -444,13 +456,15 @@ class AEP(Component):
         """integrate to find annual energy production"""
 
         # inputs
-        self.add_param('CDF_V', shape=200, desc='cumulative distribution function evaluated at each wind speed')
+        self.add_param('CDF_V', shape=200, units='m/s', desc='cumulative distribution function evaluated at each wind speed')
         self.add_param('P', shape=200, units='W', desc='power curve (power)')
         self.add_param('lossFactor', shape=1, desc='multiplicative factor for availability and other losses (soiling, array, etc.)')
 
         # outputs
         self.add_output('AEP', shape=1, units='kW*h', desc='annual energy production')
 
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_size'] = 1.0
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -464,7 +478,7 @@ class AEP(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         lossFactor = params['lossFactor']
         P = params['P']
@@ -477,8 +491,8 @@ class AEP(Component):
         dAEP_dlossFactor = np.array([unknowns['AEP']/lossFactor])
 
         J = {}
-        J['AEP', 'CDF_V'] = dAEP_dCDF
-        J['AEP', 'P'] = dAEP_dP
+        J['AEP', 'CDF_V'] = np.reshape(dAEP_dCDF, (1, len(dAEP_dCDF)))
+        J['AEP', 'P'] = np.reshape(dAEP_dP, (1, len(dAEP_dP)))
         J['AEP', 'lossFactor'] = dAEP_dlossFactor
 
         return J

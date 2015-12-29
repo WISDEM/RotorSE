@@ -30,65 +30,6 @@ from enum import Enum
 #######################
 
 
-# class StrucBase(Component):
-#
-#     def __init__(self):
-#         super(StrucBase, self).__init__()
-#         # all inputs/outputs in airfoil coordinate system
-#
-#         # inputs
-#         # beam = VarTree(BeamProperties(), iotype='in', desc='beam properties') # TODO: Import Beam
-#
-#         self.add_param('nF', val=5, desc='number of natural frequencies to return')
-#
-#         self.add_param('Px_defl', shape=1, desc='distributed load (force per unit length) in airfoil x-direction at max deflection condition')
-#         self.add_param('Py_defl', shape=1, desc='distributed load (force per unit length) in airfoil y-direction at max deflection condition')
-#         self.add_param('Pz_defl', shape=1, desc='distributed load (force per unit length) in airfoil z-direction at max deflection condition')
-#
-#         self.add_param('Px_strain', shape=1, desc='distributed load (force per unit length) in airfoil x-direction at max strain condition')
-#         self.add_param('Py_strain', shape=1, desc='distributed load (force per unit length) in airfoil y-direction at max strain condition')
-#         self.add_param('Pz_strain', shape=1, desc='distributed load (force per unit length) in airfoil z-direction at max strain condition')
-#
-#         self.add_param('Px_pc_defl', shape=1, desc='distributed load (force per unit length) in airfoil x-direction for deflection used in generated power curve')
-#         self.add_param('Py_pc_defl', shape=1, desc='distributed load (force per unit length) in airfoil y-direction for deflection used in generated power curve')
-#         self.add_param('Pz_pc_defl', shape=1, desc='distributed load (force per unit length) in airfoil z-direction for deflection used in generated power curve')
-#
-#         self.add_param('xu_strain_spar', shape=1, desc='x-position of midpoint of spar cap on upper surface for strain calculation')
-#         self.add_param('xl_strain_spar', shape=1, desc='x-position of midpoint of spar cap on lower surface for strain calculation')
-#         self.add_param('yu_strain_spar', shape=1, desc='y-position of midpoint of spar cap on upper surface for strain calculation')
-#         self.add_param('yl_strain_spar', shape=1, desc='y-position of midpoint of spar cap on lower surface for strain calculation')
-#         self.add_param('xu_strain_te', shape=1, desc='x-position of midpoint of trailing-edge panel on upper surface for strain calculation')
-#         self.add_param('xl_strain_te', shape=1, desc='x-position of midpoint of trailing-edge panel on lower surface for strain calculation')
-#         self.add_param('yu_strain_te', shape=1, desc='y-position of midpoint of trailing-edge panel on upper surface for strain calculation')
-#         self.add_param('yl_strain_te', shape=1, desc='y-position of midpoint of trailing-edge panel on lower surface for strain calculation')
-#
-#         self.add_param('Mx_damage', shape=18, units='N*m', desc='damage equivalent moments about airfoil x-direction')
-#         self.add_param('My_damage', shape=18, units='N*m', desc='damage equivalent moments about airfoil y-direction')
-#         self.add_param('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap')
-#         self.add_param('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels')
-#         self.add_param('eta_damage', val=1.755, desc='safety factor for fatigue')
-#         self.add_param('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis')
-#         self.add_param('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis')
-#
-#         # outputs
-#         self.add_output('blade_mass', shape=1, desc='mass of one blades')
-#         self.add_output('blade_moment_of_inertia', shape=1, desc='out of plane moment of inertia of a blade')
-#         self.add_output('freq', shape=1, units='Hz', desc='first nF natural frequencies of blade')
-#         self.add_output('dx_defl', shape=1, desc='deflection of blade section in airfoil x-direction under max deflection loading')
-#         self.add_output('dy_defl', shape=1, desc='deflection of blade section in airfoil y-direction under max deflection loading')
-#         self.add_output('dz_defl', shape=1, desc='deflection of blade section in airfoil z-direction under max deflection loading')
-#         self.add_output('dx_pc_defl', shape=1, desc='deflection of blade section in airfoil x-direction under power curve loading')
-#         self.add_output('dy_pc_defl', shape=1, desc='deflection of blade section in airfoil y-direction under power curve loading')
-#         self.add_output('dz_pc_defl', shape=1, desc='deflection of blade section in airfoil z-direction under power curve loading')
-#         self.add_output('strainU_spar', shape=1, desc='strain in spar cap on upper surface at location xu,yu_strain with loads P_strain')
-#         self.add_output('strainL_spar', shape=1, desc='strain in spar cap on lower surface at location xl,yl_strain with loads P_strain')
-#         self.add_output('strainU_te', shape=1, desc='strain in trailing-edge panels on upper surface at location xu,yu_te with loads P_te')
-#         self.add_output('strainL_te', shape=1, desc='strain in trailing-edge panels on lower surface at location xl,yl_te with loads P_te')
-#         self.add_output('damageU_spar', shape=1, desc='fatigue damage on upper surface in spar cap')
-#         self.add_output('damageL_spar', shape=1, desc='fatigue damage on lower surface in spar cap')
-#         self.add_output('damageU_te', shape=1, desc='fatigue damage on upper surface in trailing-edge panels')
-#         self.add_output('damageL_te', shape=1, desc='fatigue damage on lower surface in trailing-edge panels')
-
 class ResizeCompositeSection(Component):
     def __init__(self):
         super(ResizeCompositeSection, self).__init__()
@@ -100,8 +41,8 @@ class ResizeCompositeSection(Component):
         # TODO: remove fixed t/c assumption
         self.add_param('chord_str_ref', shape=38, units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)')
 
-        self.add_param('sector_idx_strain_spar', val=np.zeros(38, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)')
-        self.add_param('sector_idx_strain_te', val=np.zeros(38, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)')
+        self.add_param('sector_idx_strain_spar', val=np.zeros(38, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_te', val=np.zeros(38, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True)
 
         self.add_param('chord_str', shape=38, units='m', desc='structural chord distribution')
         self.add_param('sparT_str', shape=38, units='m', desc='structural spar cap thickness distribution')
@@ -111,6 +52,10 @@ class ResizeCompositeSection(Component):
         self.add_output('upperCSOut', shape=38, desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True)
         self.add_output('lowerCSOut', shape=38, desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True)
         self.add_output('websCSOut', shape=38, desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
+
+        self.add_output('dummy', val=0.0)
+        # self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -178,6 +123,13 @@ class ResizeCompositeSection(Component):
         unknowns['lowerCSOut'] = lowerCSOut
         unknowns['websCSOut'] = websCSOut
 
+        unknowns['dummy'] = 0.0
+
+    def linearize(self, params, unknowns, resids):
+        J = {}
+        J['dummy', 'chord_str_ref'] = np.zeros((1, len(params['chord_str_ref'])))
+        return J
+
 class PreCompSections(Component):
     def __init__(self):
         super(PreCompSections, self).__init__()
@@ -197,8 +149,8 @@ class PreCompSections(Component):
         self.add_param('lowerCS', shape=38, desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True)
         self.add_param('websCS', shape=38, desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
 
-        self.add_param('sector_idx_strain_spar', val=np.zeros(38, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)')
-        self.add_param('sector_idx_strain_te', val=np.zeros(38, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)')
+        self.add_param('sector_idx_strain_spar', val=np.zeros(38, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_te', val=np.zeros(38, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True)
 
 
         self.add_output('eps_crit_spar', shape=38, desc='critical strain in spar from panel buckling calculation')
@@ -226,7 +178,7 @@ class PreCompSections(Component):
         self.add_output('beam:y_ec_str', shape=38, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
 
         # self.add_output('beam:properties', shape=1, desc='beam properties')
-
+        self.fd_options['form'] = 'central'
     def criticalStrainLocations(self, sector_idx_strain, x_ec_nose, y_ec_nose):
 
         n = len(sector_idx_strain)
@@ -434,12 +386,18 @@ class PreCompSections(Component):
         unknowns['yu_strain_te'] = yu_strain_te
         unknowns['yl_strain_te'] = yl_strain_te
 
+    def linearize(self, params, unknowns, resids):
+        J = {}
+        J['beam:z', 'r'] = np.zeros((38, 38))
+
+        return J
+
 class RotorWithpBEAM(Component):
 
     def __init__(self):
         super(RotorWithpBEAM, self).__init__()
 
-        self.add_param('nF', val=5, desc='number of natural frequencies to return')
+        self.add_param('nF', val=5, desc='number of natural frequencies to return', pass_by_obj=True)
 
         self.add_param('Px_defl', shape=38, desc='distributed load (force per unit length) in airfoil x-direction at max deflection condition')
         self.add_param('Py_defl', shape=38, desc='distributed load (force per unit length) in airfoil y-direction at max deflection condition')
@@ -471,8 +429,8 @@ class RotorWithpBEAM(Component):
         self.add_param('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis')
 
         # outputs
-        self.add_output('blade_mass', shape=1, desc='mass of one blades')
-        self.add_output('blade_moment_of_inertia', shape=1, desc='out of plane moment of inertia of a blade')
+        self.add_output('blade_mass', shape=1, units='kg', desc='mass of one blades')
+        self.add_output('blade_moment_of_inertia', shape=1, units='kg*m**2', desc='out of plane moment of inertia of a blade')
         self.add_output('freq', shape=5, units='Hz', desc='first nF natural frequencies of blade')
         self.add_output('dx_defl', shape=38, desc='deflection of blade section in airfoil x-direction under max deflection loading')
         self.add_output('dy_defl', shape=38, desc='deflection of blade section in airfoil y-direction under max deflection loading')
@@ -501,7 +459,7 @@ class RotorWithpBEAM(Component):
         self.add_param('beam:x_ec_str', shape=38, units='m', desc='x-distance to elastic center from point about which above structural properties are computed (airfoil aligned coordinate system)')
         self.add_param('beam:y_ec_str', shape=38, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
 
-
+        self.fd_options['form'] = 'central'
     def principalCS(self, EIyy, EIxx, y_ec_str, x_ec_str, EA, EIxy):
 
         # rename (with swap of x, y for profile c.s.)
@@ -706,6 +664,10 @@ class RotorWithpBEAM(Component):
         unknowns['damageU_te'] = self.damageU_te
         unknowns['damageL_te'] = self.damageL_te
 
+    def linearize(self, params, unknowns, resids):
+        J = {}
+        J['blade_mass', 'Px_defl'] = np.zeros((1, len(params['Px_defl'])))
+        return J
 
 class CurveFEM(Component):
     def __init__(self):
@@ -729,10 +691,10 @@ class CurveFEM(Component):
         self.add_param('theta_str', shape=38, units='deg', desc='structural twist distribution')
         self.add_param('precurve_str', shape=38, units='m', desc='structural precuve (see FAST definition)')
         self.add_param('presweep_str', shape=38, units='m', desc='structural presweep (see FAST definition)')
-        self.add_param('nF', val=5, desc='number of frequencies to return')
+        self.add_param('nF', val=5, desc='number of frequencies to return', pass_by_obj=True)
 
         self.add_output('freq', shape=5, units='Hz', desc='first nF natural frequencies')
-
+        self.fd_options['form'] = 'central'
 
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -750,6 +712,10 @@ class CurveFEM(Component):
 
         unknowns['freq'] = freq[:params['nF']]
 
+    def linearize(self, params, unknowns, resids):
+        J = {}
+        J['freq', 'Omega'] = np.zeros(5)
+        return J
 
 class GridSetup(Component):
     def __init__(self):
@@ -763,8 +729,9 @@ class GridSetup(Component):
 
         # outputs are also constant during optimization
         self.add_output('fraction', shape=38, desc='fractional location of structural grid on aero grid')
-        self.add_output('idxj', val=np.zeros(38, dtype=np.int), desc='index of augmented aero grid corresponding to structural index')
-
+        self.add_output('idxj', val=np.zeros(38, dtype=np.int), desc='index of augmented aero grid corresponding to structural index', pass_by_obj=True)
+        # self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         r_aero = params['initial_aero_grid']
@@ -787,6 +754,10 @@ class GridSetup(Component):
             unknowns['idxj'][i] = j
             unknowns['fraction'][i] = (r_str[i] - r_aug[j]) / (r_aug[j+1] - r_aug[j])
 
+    def linearize(self, params, unknowns, resids):
+        J = {}
+        J['fraction', 'initial_aero_grid'] = np.zeros((38, 17))
+        return J
 
 
 class RGrid(Component):
@@ -801,7 +772,7 @@ class RGrid(Component):
 
         # outputs
         self.add_output('r_str', shape=38, desc='corresponding structural grid corresponding to new aerodynamic grid')
-
+        self.fd_options['form'] = 'central'
 
         missing_deriv_policy = 'assume_zero'
 
@@ -825,18 +796,20 @@ class RGrid(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
+        J = {}
         nstr = len(params['fraction'])
         naero = len(params['r_aero'])
-        J = np.zeros((nstr, naero))
+        J_sub = np.zeros((nstr, naero))
 
         for i in range(nstr):
             j = params['idxj'][i]
             if j > 0 and j < naero+1:
-                J[i, j-1] = 1 - params['fraction'][i]
+                J_sub[i, j-1] = 1 - params['fraction'][i]
             if j > -1 and j < naero:
-                J[i, j] = params['fraction'][i]
+                J_sub[i, j] = params['fraction'][i]
+        J['r_str', 'r_aero'] = J_sub
 
         return J
 
@@ -887,7 +860,7 @@ class GeometrySpline(Component):
         self.add_output('teT_str', shape=38, units='m', desc='dimensional trailing-edge panel thickness distribution')
         self.add_output('r_sub_precurve', shape=3, desc='precurve locations (used internally)')
 
-        self.add_output('diameter', shape=1) #TODO
+        self.add_output('diameter', shape=1, units='m')
 
         # self.add_output('A1_lower_aero', shape=1, units='m', desc='chord at airfoil locations')
         # self.add_output('A2_lower_aero', shape=1, units='m', desc='chord at airfoil locations')
@@ -897,7 +870,7 @@ class GeometrySpline(Component):
         # self.add_output('A2_upper_aero', shape=1, units='m', desc='chord at airfoil locations')
         # self.add_output('A3_upper_aero', shape=1, units='m', desc='chord at airfoil locations')
         # self.add_output('A4_upper_aero', shape=1, units='m', desc='chord at airfoil locations')
-
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -1028,6 +1001,11 @@ class GeometrySpline(Component):
         unknowns['sparT_str'], _, _, _ = sparT_spline.interp(unknowns['r_str'])
         unknowns['teT_str'], _, _, _ = teT_spline.interp(unknowns['r_str'])
 
+    def linearize(self, params, unknowns, resids):
+        J = {}
+        J['Rhub', 'hubFraction'] = params['bladeLength']
+        J['Rhub', 'bladeLength'] = params['hubFraction']
+        return J
 
 class BladeCurvature(Component):
     def __init__(self):
@@ -1042,7 +1020,7 @@ class BladeCurvature(Component):
         self.add_output('y_az', shape=38, units='m', desc='location of blade in azimuth y-coordinate system')
         self.add_output('z_az', shape=38, units='m', desc='location of blade in azimuth z-coordinate system')
         self.add_output('s', shape=38, units='m', desc='cumulative path length along blade')
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         # self.x_az, self.y_az, self.z_az, cone, s = \
@@ -1094,7 +1072,29 @@ class BladeCurvature(Component):
         ds_dpresweep = sd[2*n:, :].T
         ds = hstack([ds_dr, ds_dprecurve, ds_dpresweep, np.zeros(n)])
 
-        self.J = vstack([dx, dy, dz, dcone, ds])
+        J = {}
+        J['x_az', 'r'] = dxaz_dr
+        J['x_az', 'precurve'] = dxaz_dprecurve
+        J['x_az', 'presweep'] = dxaz_dpresweep
+        J['x_az', 'precone'] = np.zeros(n)
+        J['y_az', 'r'] = dyaz_dr
+        J['y_az', 'precurve'] = dyaz_dprecurve
+        J['y_az', 'presweep'] = dyaz_dpresweep
+        J['y_az', 'precone'] = np.zeros(n)
+        J['z_az', 'r'] = dzaz_dr
+        J['z_az', 'precurve'] = dzaz_dprecurve
+        J['z_az', 'presweep'] = dzaz_dpresweep
+        J['z_az', 'precone'] = np.zeros(n)
+        J['totalCone', 'r'] = dcone_dr
+        J['totalCone', 'precurve'] = dcone_dprecurve
+        J['totalCone', 'presweep'] = dcone_dpresweep
+        J['totalCone', 'precone'] = np.ones(n)
+        J['s', 'r'] = ds_dr
+        J['s', 'precurve'] = ds_dprecurve
+        J['s', 'presweep'] = ds_dpresweep
+        J['s', 'precone'] = np.zeros(n)
+
+        self.J = J # vstack([dx, dy, dz, dcone, ds])
 
 
     def list_deriv_vars(self):
@@ -1105,7 +1105,7 @@ class BladeCurvature(Component):
         return inputs, outputs
 
 
-    def provideJ(self):
+    def linearize(self, params, unknowns, resids):
 
         return self.J
 
@@ -1122,7 +1122,7 @@ class DamageLoads(Component):
 
         self.add_output('Mxa', shape=38, units='N*m', desc='damage equivalent moments about airfoil c.s. x-direction')
         self.add_output('Mya', shape=38, units='N*m', desc='damage equivalent moments about airfoil c.s. y-direction')
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
         self.rstar = params['rstar']
         self.Mxb = params['Mxb']
@@ -1152,7 +1152,8 @@ class DamageLoads(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
+        J = {}
 
         n = len(self.r)
         drstarstr_dr = np.zeros((n, n))
@@ -1187,7 +1188,18 @@ class DamageLoads(Component):
         dMxa = hstack([dMxa_drstar, dMxa_dMxb, dMxa_dMyb, dMxa_dtheta, dMxa_dr])
         dMya = hstack([dMya_drstar, dMya_dMxb, dMya_dMyb, dMya_dtheta, dMya_dr])
 
-        J = vstack([dMxa, dMya])
+        # J = vstack([dMxa, dMya])
+        J['Mxa', 'rstar'] = dMxa_drstar
+        J['Mxa', 'Mxb'] = dMxa_dMxb
+        J['Mxa', 'Myb'] = dMxa_dMyb
+        J['Mxa', 'theta'] = dMxa_dtheta
+        J['Mxa', 'r'] = dMxa_dr
+
+        J['Mya', 'rstar'] = dMya_drstar
+        J['Mya', 'Mxb'] = dMya_dMxb
+        J['Mya', 'Myb'] = dMya_dMyb
+        J['Mya', 'theta'] = dMya_dtheta
+        J['Mya', 'r'] = dMya_dr
 
         return J
 
@@ -1200,7 +1212,7 @@ class TotalLoads(Component):
         self.add_param('aeroLoads:Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
         self.add_param('aeroLoads:Py', units='N/m', desc='distributed loads in blade-aligned y-direction')
         self.add_param('aeroLoads:Pz', units='N/m', desc='distributed loads in blade-aligned z-direction')
-        self.add_param('aeroLoads:V', units='m/s', desc='hub height wind speed')
+        # self.add_param('aeroLoads:V', units='m/s', desc='hub height wind speed')
         self.add_param('aeroLoads:Omega', units='rpm', desc='rotor rotation speed')
         self.add_param('aeroLoads:pitch', units='deg', desc='pitch angle')
         self.add_param('aeroLoads:azimuth', units='deg', desc='azimuthal angle')
@@ -1220,7 +1232,7 @@ class TotalLoads(Component):
         self.add_output('Px_af', shape=38, desc='total distributed loads in airfoil x-direction')
         self.add_output('Py_af', shape=38, desc='total distributed loads in airfoil y-direction')
         self.add_output('Pz_af', shape=38, desc='total distributed loads in airfoil z-direction')
-
+        self.fd_options['form'] = 'central'
         missing_deriv_policy = 'assume_zero'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1295,12 +1307,12 @@ class TotalLoads(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         dPwx, dPwy, dPwz = self.P_w.dx, self.P_w.dy, self.P_w.dz
         dPcx, dPcy, dPcz = self.P_c.dx, self.P_c.dy, self.P_c.dz
         dPx, dPy, dPz = self.P.dx, self.P.dy, self.P.dz
-        Omega = self.aeroLoads.Omega*RPM2RS
+        Omega = params['aeroLoads:Omega']*RPM2RS
         z_az = self.z_az
 
 
@@ -1376,18 +1388,50 @@ class TotalLoads(Component):
         dPyaf_dzaz = dPy['dx']*dPx_dzaz + dPy['dy']*dPy_dzaz + dPy['dz']*dPz_dzaz
         dPzaf_dzaz = dPz['dx']*dPx_dzaz + dPz['dy']*dPy_dzaz + dPz['dz']*dPz_dzaz
 
-        dPx = hstack([dPxaf_daeror, dPxaf_dPxaero, dPxaf_dPyaero, dPxaf_dPzaero, dPxaf_dOmega, dPxaf_dpitch, dPxaf_dazimuth,
-            dPxaf_dr, dPxaf_dtheta, dPxaf_dtilt, dPxaf_dprecone, dPxaf_drhoA, dPxaf_dzaz])
-        dPy = hstack([dPyaf_daeror, dPyaf_dPxaero, dPyaf_dPyaero, dPyaf_dPzaero, dPyaf_dOmega, dPyaf_dpitch, dPyaf_dazimuth,
-            dPyaf_dr, dPyaf_dtheta, dPyaf_dtilt, dPyaf_dprecone, dPyaf_drhoA, dPyaf_dzaz])
-        dPz = hstack([dPzaf_daeror, dPzaf_dPxaero, dPzaf_dPyaero, dPzaf_dPzaero, dPzaf_dOmega, dPzaf_dpitch, dPzaf_dazimuth,
-            dPzaf_dr, dPzaf_dtheta, dPzaf_dtilt, dPzaf_dprecone, dPzaf_drhoA, dPzaf_dzaz])
+        J = {}
+        J['Px_af', 'aeroLoads:r'] = dPxaf_daeror
+        J['Px_af', 'aeroLoads:Px'] = dPxaf_dPxaero
+        J['Px_af', 'aeroLoads:Py'] = dPxaf_dPyaero
+        J['Px_af', 'aeroLoads:Pz'] = dPxaf_dPzaero
+        J['Px_af', 'aeroLoads:Omega'] = dPxaf_dOmega
+        J['Px_af', 'aeroLoads:pitch'] = dPxaf_dpitch
+        J['Px_af', 'aeroLoads:azimuth'] = dPxaf_dazimuth
+        J['Px_af', 'r'] = dPxaf_dr
+        J['Px_af', 'theta'] = dPxaf_dtheta
+        J['Px_af', 'tilt'] = dPxaf_dtilt
+        J['Px_af', 'totalCone'] = dPxaf_dprecone
+        J['Px_af', 'rhoA'] = dPxaf_drhoA
+        J['Px_af', 'z_az'] = dPxaf_dzaz
 
-        J = vstack([dPx, dPy, dPz])
+        J['Py_af', 'aeroLoads:r'] = dPyaf_daeror
+        J['Py_af', 'aeroLoads:Px'] = dPyaf_dPxaero
+        J['Py_af', 'aeroLoads:Py'] = dPyaf_dPyaero
+        J['Py_af', 'aeroLoads:Pz'] = dPyaf_dPzaero
+        J['Py_af', 'aeroLoads:Omega'] = dPyaf_dOmega
+        J['Py_af', 'aeroLoads:pitch'] = dPyaf_dpitch
+        J['Py_af', 'aeroLoads:azimuth'] = dPyaf_dazimuth
+        J['Py_af', 'r'] = dPyaf_dr
+        J['Py_af', 'theta'] = dPyaf_dtheta
+        J['Py_af', 'tilt'] = dPyaf_dtilt
+        J['Py_af', 'totalCone'] = dPyaf_dprecone
+        J['Py_af', 'rhoA'] = dPyaf_drhoA
+        J['Py_af', 'z_az'] = dPyaf_dzaz
+
+        J['Pz_af', 'aeroLoads:r'] = dPzaf_daeror
+        J['Pz_af', 'aeroLoads:Px'] = dPzaf_dPxaero
+        J['Pz_af', 'aeroLoads:Py'] = dPzaf_dPyaero
+        J['Pz_af', 'aeroLoads:Pz'] = dPzaf_dPzaero
+        J['Pz_af', 'aeroLoads:Omega'] = dPzaf_dOmega
+        J['Pz_af', 'aeroLoads:pitch'] = dPzaf_dpitch
+        J['Pz_af', 'aeroLoads:azimuth'] = dPzaf_dazimuth
+        J['Pz_af', 'r'] = dPzaf_dr
+        J['Pz_af', 'theta'] = dPzaf_dtheta
+        J['Pz_af', 'tilt'] = dPzaf_dtilt
+        J['Pz_af', 'totalCone'] = dPzaf_dprecone
+        J['Pz_af', 'rhoA'] = dPzaf_drhoA
+        J['Pz_af', 'z_az'] = dPzaf_dzaz
 
         return J
-
-
 
 
 
@@ -1408,8 +1452,8 @@ class TipDeflection(Component):
         self.add_param('dynamicFactor', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation')
 
         # outputs
-        self.add_output('tip_deflection', shape=1, desc='deflection at tip in yaw x-direction')
-
+        self.add_output('tip_deflection', shape=1, units='m', desc='deflection at tip in yaw x-direction')
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -1442,8 +1486,8 @@ class TipDeflection(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
-
+    def linearize(self, params, unknowns, resids):
+        J = {}
         dx = self.dynamicFactor * self.delta.dx['dx']
         dy = self.dynamicFactor * self.delta.dx['dy']
         dz = self.dynamicFactor * self.delta.dx['dz']
@@ -1453,7 +1497,14 @@ class TipDeflection(Component):
         dtilt = self.dynamicFactor * self.delta.dx['dtilt']
         dtotalConeTip = self.dynamicFactor * self.delta.dx['dprecone']
 
-        J = np.array([[dx, dy, dz, dtheta, dpitch, dazimuth, dtilt, dtotalConeTip]])
+        J['tip_deflection', 'dx'] = dx
+        J['tip_deflection', 'dy'] = dy
+        J['tip_deflection', 'dz'] = dz
+        J['tip_deflection', 'theta'] = dtheta
+        J['tip_deflection', 'pitch'] = dpitch
+        J['tip_deflection', 'azimuth'] = dazimuth
+        J['tip_deflection', 'tilt'] = dtilt
+        J['tip_deflection', 'totalConeTip'] = dtotalConeTip
 
         return J
 
@@ -1475,7 +1526,7 @@ class BladeDeflection(Component):
 
         self.add_output('delta_bladeLength', shape=1, units='m', desc='adjustment to blade length to account for curvature from loading')
         self.add_output('delta_precurve_sub', shape=3,  units='m', desc='adjustment to precurve to account for curvature from loading')
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         self.dx = params['dx']
@@ -1520,7 +1571,7 @@ class BladeDeflection(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         n = len(self.theta_str)
 
@@ -1608,8 +1659,29 @@ class BladeDeflection(Component):
         dpcs = hstack([dpcs_ddx, dpcs_ddy, dpcs_ddz, dpcs_dpitch, dpcs_dthetastr,
             self.dpcs_drsubpc0, np.zeros(m), self.dpcs_drstr0, np.zeros((m, n)), np.zeros(m)])
 
+        J = {}
 
-        J = vstack([dbl, dpcs])
+        J['delta_bladeLength', 'dx'] = np.reshape(dbl_ddx, (1, len(dbl_ddx)))
+        J['delta_bladeLength', 'dy'] = np.reshape(dbl_ddy, (1, len(dbl_ddy)))
+        J['delta_bladeLength', 'dz'] = np.reshape(dbl_ddz, (1, len(dbl_ddz)))
+        J['delta_bladeLength', 'pitch'] = dbl_dpitch
+        J['delta_bladeLength', 'theta_str'] = np.reshape(dbl_dthetastr, (1, len(dbl_dthetastr)))
+        J['delta_bladeLength', 'r_sub_precurve0'] = np.zeros((1, m))
+        J['delta_bladeLength', 'Rhub0'] = dbl_drhub0
+        J['delta_bladeLength', 'r_str0'] = np.reshape(dbl_drstr0, (1, len(dbl_drstr0)))
+        J['delta_bladeLength', 'precurve_str0'] = np.reshape(dbl_dprecurvestr0, (1, len(dbl_dprecurvestr0)))
+        J['delta_bladeLength', 'bladeLength0'] = dbl_dbl0
+
+        J['delta_precurve_sub', 'dx'] = dpcs_ddx
+        J['delta_precurve_sub', 'dy'] = dpcs_ddy
+        J['delta_precurve_sub', 'dz'] = dpcs_ddz
+        J['delta_precurve_sub', 'pitch'] = dpcs_dpitch
+        J['delta_precurve_sub', 'theta_str'] = dpcs_dthetastr
+        J['delta_precurve_sub', 'r_sub_precurve0'] = self.dpcs_drsubpc0
+        J['delta_precurve_sub', 'Rhub0'] = np.zeros(m)
+        J['delta_precurve_sub', 'r_str0'] = self.dpcs_drstr0
+        J['delta_precurve_sub', 'precurve_str0'] = np.zeros((m, n))
+        J['delta_precurve_sub', 'bladeLength0'] = np.zeros(m)
 
         return J
 
@@ -1618,17 +1690,17 @@ class RootMoment(Component):
     """blade root bending moment"""
     def __init__(self):
         super(RootMoment, self).__init__()
-        self.add_param('r_str', shape=38)
+        self.add_param('r_str', shape=38, units='m')
         self.add_param('aeroLoads:r', units='m', desc='radial positions along blade going toward tip')
         self.add_param('aeroLoads:Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
         self.add_param('aeroLoads:Py', units='N/m', desc='distributed loads in blade-aligned y-direction')
         self.add_param('aeroLoads:Pz', units='N/m', desc='distributed loads in blade-aligned z-direction')
 
-        # corresponding setting for loads
-        self.add_param('aeroLoads:V', units='m/s', desc='hub height wind speed')
-        self.add_param('aeroLoads:Omega', units='rpm', desc='rotor rotation speed')
-        self.add_param('aeroLoads:pitch',  units='deg', desc='pitch angle')
-        self.add_param('aeroLoads:azimuth', units='deg', desc='azimuthal angle')
+        # # corresponding setting for loads
+        # self.add_param('aeroLoads:V', units='m/s', desc='hub height wind speed')
+        # self.add_param('aeroLoads:Omega', units='rpm', desc='rotor rotation speed')
+        # self.add_param('aeroLoads:pitch',  units='deg', desc='pitch angle')
+        # self.add_param('aeroLoads:azimuth', units='deg', desc='azimuthal angle')
 
         self.add_param('totalCone', shape=38, units='deg', desc='total cone angle from precone and curvature')
         self.add_param('x_az', shape=38, units='m', desc='location of blade in azimuth x-coordinate system')
@@ -1637,7 +1709,7 @@ class RootMoment(Component):
         self.add_param('s', shape=38, units='m', desc='cumulative path length along blade')
 
         self.add_output('root_bending_moment', shape=1, units='N*m', desc='total magnitude of bending moment at root of blade')
-
+        self.fd_options['form'] = 'central'
         missing_deriv_policy = 'assume_zero'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1699,7 +1771,7 @@ class RootMoment(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
         # dx_dr = -sind(self.precone)
         # dz_dr = cosd(self.precone)
@@ -1814,8 +1886,17 @@ class RootMoment(Component):
         drbm_ds = (self.Mx*dMx_ds + self.My*dMy_ds + self.Mz*dMz_ds)/self.root_bending_moment
 
 
-        J = np.array([np.concatenate([drbm_dr, drbm_dalr, drbm_dalPx, drbm_dalPy, drbm_dalPz,
-            drbm_dtotalcone, drbm_dazx, drbm_dazy, drbm_dazz, drbm_ds])])
+        J = {}
+        J['root_bending_moment', 'r_str'] = np.reshape(drbm_dr, (1, len(drbm_dr)))
+        J['root_bending_moment', 'aeroLoads:r'] = np.reshape(drbm_dalr, (1, len(drbm_dalr)))
+        J['root_bending_moment', 'aeroLoads:Px'] = np.reshape(drbm_dalPx, (1, len(drbm_dalPx)))
+        J['root_bending_moment', 'aeroLoads:Py'] = np.reshape(drbm_dalPy, (1, len(drbm_dalPy)))
+        J['root_bending_moment', 'aeroLoads:Pz'] = np.reshape(drbm_dalPz, (1, len(drbm_dalPz)))
+        J['root_bending_moment', 'totalCone'] = np.reshape(drbm_dtotalcone, (1, len(drbm_dtotalcone)))
+        J['root_bending_moment', 'x_az'] = np.reshape(drbm_dazx, (1, len(drbm_dazx)))
+        J['root_bending_moment', 'y_az'] = np.reshape(drbm_dazy, (1, len(drbm_dazy)))
+        J['root_bending_moment', 'z_az'] = np.reshape(drbm_dazz, (1, len(drbm_dazz)))
+        J['root_bending_moment', 's'] = np.reshape(drbm_ds, (1, len(drbm_ds)))
 
         return J
 
@@ -1830,12 +1911,12 @@ class MassProperties(Component):
         self.add_param('tilt', shape=1, units='deg', desc='rotor tilt angle (used to translate moments of inertia from hub to yaw c.s.')
 
         # parameters
-        self.add_param('nBlades', val=3, desc='number of blades')
+        self.add_param('nBlades', val=3, desc='number of blades', pass_by_obj=True)
 
         # outputs
-        self.add_output('mass_all_blades', shape=1, desc='mass of all blades')
+        self.add_output('mass_all_blades', shape=1, units='kg', desc='mass of all blades')
         self.add_output('I_all_blades', shape=6, desc='mass moments of inertia of all blades in yaw c.s. order:Ixx, Iyy, Izz, Ixy, Ixz, Iyz')
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         self.blade_mass = params['blade_mass']
@@ -1870,7 +1951,7 @@ class MassProperties(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
         I = self.Ivec
 
         dIx_dmoi = self.nBlades*(I.dx['dx'] + I.dx['dy']/2.0 + I.dx['dz']/2.0)
@@ -1882,7 +1963,16 @@ class MassProperties(Component):
         dIyy = np.array([0.0, dIy_dmoi, I.dy['dtilt']])
         dIzz = np.array([0.0, dIz_dmoi, I.dz['dtilt']])
 
-        J = vstack([dm, dIxx, dIyy, dIzz, np.zeros((3, 3))])
+        J = {}
+        J['mass_all_blades', 'blade_mass'] = self.nBlades
+        J['mass_all_blades', 'blade_moment_of_inertia'] = 0.0
+        J['mass_all_blades', 'tilt'] = 0.0
+        J['I_all_blades', 'blade_mass'] = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        x = np.array([dIx_dmoi, dIy_dmoi, dIz_dmoi])
+        J['I_all_blades', 'blade_moment_of_inertia'] = np.array([dIx_dmoi, dIy_dmoi, dIz_dmoi, 0.0, 0.0, 0.0]) # np.array([dIx_dmoi, dIy_dmoi, dIz_dmoi])
+        J['I_all_blades', 'tilt'] = np.array([ I.dx['dtilt'],  I.dy['dtilt'],  I.dz['dtilt'], 0.0, 0.0, 0.0])
+
+        # J = vstack([dm, dIxx, dIyy, dIzz, np.zeros((3, 3))])
 
         return J
 
@@ -1891,13 +1981,14 @@ class TurbineClass(Component):
     def __init__(self):
         super(TurbineClass, self).__init__()
         # parameters
-        self.add_param('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class')
+        self.add_param('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True)
 
         # outputs should be constant
         self.add_output('V_mean', shape=1, units='m/s', desc='IEC mean wind speed for Rayleigh distribution')
         self.add_output('V_extreme', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
         self.add_output('V_extreme_full', shape=2, units='m/s', desc='IEC extreme wind speed at hub height')
-
+        self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
 
         self.turbine_class = params['turbine_class']
@@ -1914,6 +2005,12 @@ class TurbineClass(Component):
         unknowns['V_extreme_full'][0] = 1.4*Vref
         unknowns['V_extreme_full'][1] = 1.4*Vref
 
+    # def linearize(self, params, unknowns, resids):
+    #     J = {}
+    #
+    #     J['V_mean', 'turbine_class'] = np.array([[0], [0], [0]]).T
+    #
+    #     return J
 
 
 class ExtremeLoads(Component):
@@ -1926,7 +2023,7 @@ class ExtremeLoads(Component):
         # self.add_param('Q', val=0.0, units='N*m',  desc='rotor torque, index 0 is at worst-case, index 1 feathered')
 
         # parameters
-        self.add_param('nBlades', val=3, desc='number of blades')
+        self.add_param('nBlades', val=3, desc='number of blades', pass_by_obj=True)
 
         # outputs
         self.add_output('T_extreme', shape=1, units='N', desc='rotor thrust at survival wind condition')
@@ -1951,11 +2048,14 @@ class ExtremeLoads(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
-        n = float(self.nBlades)
+    def linearize(self, params, unknowns, resids):
+        n = float(params['nBlades'])
+        J = {}
+        J['T_extreme', 'T'] = np.reshape(np.array([[1.0/n], [(n-1)/n]]), (1, 2))
+        # J['Q_extreme', 'T'] =
+        # J['T_extreme', 'Q'] =
+        J['Q_extreme', 'Q'] = np.reshape(np.array([1.0/n, (n-1)/n]), (1, 2))
 
-        J = np.array([[1.0/n, (n-1)/n, 0.0, 0.0],
-                      [0.0, 0.0, 1.0/n, (n-1)/n]])
 
         return J
 
@@ -1970,12 +2070,12 @@ class GustETM(Component):
         self.add_param('V_hub', shape=1, units='m/s', desc='hub height wind speed')
 
         # parameters
-        self.add_param('turbulence_class', val=Enum('A', 'B', 'C'), desc='IEC turbulence class')
-        self.add_param('std', val=3, desc='number of standard deviations for strength of gust')
+        self.add_param('turbulence_class', val=Enum('A', 'B', 'C'), desc='IEC turbulence class', pass_by_obj=True)
+        self.add_param('std', val=3, desc='number of standard deviations for strength of gust', pass_by_obj=True)
 
         # out
         self.add_output('V_gust', shape=1, units='m/s', desc='gust wind speed')
-
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
         self.V_mean = params['V_mean']
@@ -2009,12 +2109,14 @@ class GustETM(Component):
         return inputs, outputs
 
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
         Iref = self.Iref
         c = self.c
-
-        J = np.array([[self.std*(c*Iref*0.072/c*(self.V_hub/c - 4)),
-            1.0 + self.std*(c*Iref*0.072*(self.V_mean/c + 3)/c)]])
+        J = {}
+        J['V_gust', 'V_mean'] = self.std*(c*Iref*0.072/c*(self.V_hub/c - 4))
+        J['V_gust', 'V_hub'] = 1.0 + self.std*(c*Iref*0.072*(self.V_mean/c + 3)/c)
+        # J = np.array([[self.std*(c*Iref*0.072/c*(self.V_hub/c - 4)),
+            # 1.0 + self.std*(c*Iref*0.072*(self.V_mean/c + 3)/c)]])
 
         return J
 
@@ -2024,11 +2126,11 @@ class GustETM(Component):
 class SetupPCModVarSpeed(Component):
     def __init__(self):
         super(SetupPCModVarSpeed, self).__init__()
-        self.add_param('control:Vin', units='m/s', desc='cut-in wind speed')
-        self.add_param('control:Vout', units='m/s', desc='cut-out wind speed')
-        self.add_param('control:ratedPower', units='W', desc='rated power')
-        self.add_param('control:minOmega', units='rpm', desc='minimum allowed rotor rotation speed')
-        self.add_param('control:maxOmega', units='rpm', desc='maximum allowed rotor rotation speed')
+        # self.add_param('control:Vin', units='m/s', desc='cut-in wind speed')
+        # self.add_param('control:Vout', units='m/s', desc='cut-out wind speed')
+        # self.add_param('control:ratedPower', units='W', desc='rated power')
+        # self.add_param('control:minOmega', units='rpm', desc='minimum allowed rotor rotation speed')
+        # self.add_param('control:maxOmega', units='rpm', desc='maximum allowed rotor rotation speed')
         self.add_param('control:tsr', desc='tip-speed ratio in Region 2 (should be optimized externally)')
         self.add_param('control:pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
@@ -2040,7 +2142,7 @@ class SetupPCModVarSpeed(Component):
         self.add_output('Omega', shape=1, units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', shape=1, units='deg', desc='pitch angles to run')
         self.add_output('azimuth', shape=1, units='deg')
-
+        self.fd_options['form'] = 'central'
         missing_deriv_policy = 'assume_zero'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -2066,16 +2168,25 @@ class SetupPCModVarSpeed(Component):
 
         return inputs, outputs
 
-    def jacobian(self, params, unknowns, resids):
+    def linearize(self, params, unknowns, resids):
 
-        dU = np.array([0.0, self.Vfactor, 0.0])
-        dOmega = np.array([self.Uhub/self.R*RS2RPM,
-            self.control.tsr*self.Vfactor/self.R*RS2RPM,
-            -self.control.tsr*self.Uhub/self.R**2*RS2RPM])
-        dpitch = np.zeros(3)
+        # dU = np.array([0.0, self.Vfactor, 0.0])
+        # dOmega = np.array([self.Uhub/self.R*RS2RPM,
+        #     self.control.tsr*self.Vfactor/self.R*RS2RPM,
+        #     -self.control.tsr*self.Uhub/self.R**2*RS2RPM])
+        # dpitch = np.zeros(3)
 
-        J = vstack([dU, dOmega, dpitch])
-
+        # J = vstack([dU, dOmega, dpitch])
+        J ={}
+        J['Uhub', 'control:tsr'] = 0.0
+        J['Uhub', 'Vrated'] = self.Vfactor
+        J['Uhub', 'R'] = 0.0
+        J['Omega', 'control:tsr'] = self.Uhub/self.R*RS2RPM
+        J['Omega', 'Vrated'] = params['control:tsr']*self.Vfactor/self.R*RS2RPM
+        J['Omega', 'R'] = -params['control:tsr']*self.Uhub/self.R**2*RS2RPM
+        J['pitch', 'control:tsr'] = 0.0
+        J['pitch', 'Vrated'] = 0.0
+        J['pitch', 'R'] = 0.0
         return J
 
 
@@ -2128,7 +2239,7 @@ class OutputsAero(Component):
         self.add_output('Rtip', shape=1, units='m', desc='tip location in z_b')
         self.add_output('precurveTip', shape=1, units='m', desc='tip location in x_b')
         self.add_output('presweepTip', val=0.0, units='m', desc='tip location in y_b')  # TODO: connect later
-
+        self.fd_options['form'] = 'central'
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['AEP'] = params['AEP_in']
         unknowns['V'] = params['V_in']
@@ -2147,6 +2258,27 @@ class OutputsAero(Component):
         unknowns['Rtip'] = params['Rtip_in']
         unknowns['precurveTip'] = params['precurveTip_in']
         unknowns['presweepTip'] = params['presweepTip_in']
+
+    def linearize(self, params, unknowns,resids):
+        J = {}
+        J['AEP', 'AEP_in'] = 1
+        J['V', 'V_in'] = np.diag(np.ones(len(params['V_in'])))
+        J['P', 'P_in'] = np.diag(np.ones(len(params['P_in'])))
+        J['Omega', 'Omega_in'] = 1
+        J['ratedConditions:V', 'ratedConditions:V_in'] = 1
+        J['ratedConditions:Omega', 'ratedConditions:Omega_in'] = 1
+        J['ratedConditions:pitch', 'ratedConditions:pitch_in'] = 1
+        J['ratedConditions:T', 'ratedConditions:T_in'] = 1
+        J['ratedConditions:Q', 'ratedConditions:Q_in'] = 1
+        J['hub_diameter', 'hub_diameter_in'] = 1
+        J['diameter', 'diameter_in'] = 1
+        J['V_extreme', 'V_extreme_in'] = 1
+        J['T_extreme', 'T_extreme_in'] = 1
+        J['Q_extreme', 'Q_extreme_in'] = 1
+        J['Rtip', 'Rtip_in'] = 1
+        J['precurveTip', 'precurveTip_in'] = 1
+        J['presweepTip', 'T_presweepTip_in'] = 1
+        return J
 
 class OutputsStructures(Component):
     def __init__(self):
@@ -2194,6 +2326,7 @@ class OutputsStructures(Component):
         self.add_output('damageL_te', shape=38, desc='fatigue damage on lower surface in trailing-edge panels')
         self.add_output('delta_bladeLength_out', shape=1, units='m', desc='adjustment to blade length to account for curvature from loading')
         self.add_output('delta_precurve_sub_out', shape=3, units='m', desc='adjustment to precurve to account for curvature from loading')
+        self.fd_options['form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['mass_one_blade'] = params['mass_one_blade_in']
@@ -2216,6 +2349,28 @@ class OutputsStructures(Component):
         unknowns['delta_bladeLength_out'] = params['delta_bladeLength_out_in']
         unknowns['delta_precurve_sub_out'] = params['delta_precurve_sub_out_in']
 
+    def linearize(self, params, unknowns,resids):
+        J = {}
+        J['mass_one_blade', 'mass_one_blade_in'] = 1
+        J['mass_all_blades', 'mass_all_blades_in'] = 1
+        J['I_all_blades', 'I_all_blades_in'] = np.diag(np.ones(len(params['I_all_blades_in'])))
+        J['freq', 'freq_in'] = np.diag(np.ones(len(params['freq_in'])))
+        J['freq_curvefem', 'freq_curvefem_in'] = np.diag(np.ones(len(params['freq_curvefem_in'])))
+        J['tip_deflection', 'tip_deflection_in'] = 1
+        J['strainU_spar', 'strainU_spar_in'] = np.diag(np.ones(len(params['strainU_spar_in'])))
+        J['strainL_spar', 'strainL_spar_in'] = np.diag(np.ones(len(params['strainL_spar_in'])))
+        J['strainL_te', 'strainL_te_in'] = np.diag(np.ones(len(params['strainL_te_in'])))
+        J['eps_crit_spar', 'eps_crit_spar_in'] = np.diag(np.ones(len(params['eps_crit_spar_in'])))
+        J['eps_crit_te', 'eps_crit_te_in'] = np.diag(np.ones(len(params['eps_crit_te_in'])))
+        J['root_bending_moment', 'root_bending_moment_in'] = 1
+        J['damageU_spar', 'damageU_spar_in'] = np.diag(np.ones(len(params['damageU_spar_in'])))
+        J['damageL_spar', 'damageL_spar_in'] = np.diag(np.ones(len(params['damageL_spar_in'])))
+        J['damageU_te', 'damageU_te_in'] = np.diag(np.ones(len(params['damageU_te_in'])))
+        J['damageL_te', 'damageL_te_in'] = np.diag(np.ones(len(params['damageL_te_in'])))
+        J['delta_bladeLength_out', 'delta_bladeLength_out_in'] = 1
+        J['delta_precurve_sub_out', 'delta_precurve_sub_out_in'] = np.diag(np.ones(len(params['delta_precurve_sub_out_in'])))
+        return J
+
 class RotorSE(Group):
     def __init__(self):
         super(RotorSE, self).__init__()
@@ -2224,8 +2379,7 @@ class RotorSE(Group):
         # self.add('structures', Structures(), promotes=['aep'])
         self.configure()
 
-
-        self.add('obj_cmp', ExecComp('obj = -AEP', AEP=1.0), promotes=['*'])
+        self.add('obj_cmp', ExecComp('obj = -AEP', AEP=1000000.0), promotes=['*'])
 
     def configure(self):
         n = 17
@@ -2239,11 +2393,11 @@ class RotorSE(Group):
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
         self.add('r_aero', IndepVarComp('r_aero', np.zeros(n)), promotes=['*'])
         self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
-        self.add('chord_sub', IndepVarComp('chord_sub', np.zeros(n3)), promotes=['*'])
-        self.add('theta_sub', IndepVarComp('theta_sub', np.zeros(n3)), promotes=['*'])
-        self.add('precurve_sub', IndepVarComp('precurve_sub', np.zeros(3)), promotes=['*'])
+        self.add('chord_sub', IndepVarComp('chord_sub', np.zeros(n3),units='m'), promotes=['*'])
+        self.add('theta_sub', IndepVarComp('theta_sub', np.zeros(n3), units='deg'), promotes=['*'])
+        self.add('precurve_sub', IndepVarComp('precurve_sub', np.zeros(3), units='m'), promotes=['*'])
         self.add('delta_precurve_sub', IndepVarComp('delta_precurve_sub', np.zeros(3)), promotes=['*'])
-        self.add('bladeLength', IndepVarComp('bladeLength', 0.0), promotes=['*'])
+        self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
         self.add('precone', IndepVarComp('precone', 0.0, units='deg'), promotes=['*'])
         self.add('tilt', IndepVarComp('tilt', 0.0, units='deg'), promotes=['*'])
         self.add('yaw', IndepVarComp('yaw', 0.0, units='deg'), promotes=['*'])
@@ -2251,12 +2405,12 @@ class RotorSE(Group):
         self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(n), pass_by_obj=True), promotes=['*'])
         self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
         self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
-        self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
+        self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent'), promotes=['*'])
         self.add('hubHt', IndepVarComp('hubHt', val=90.0, units='m', desc='hub height'), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
         self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
-        self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
+        self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
         self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation'), promotes=['*'])
 
         # --- composite sections ---
@@ -2277,8 +2431,8 @@ class RotorSE(Group):
             desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True), promotes=['*'])
         self.add('websCS', IndepVarComp('websCS', val=np.zeros(n2),
             desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True), promotes=['*'])
-        self.add('sector_idx_strain_spar', IndepVarComp('sector_idx_strain_spar', val=np.zeros(38,  dtype=np.int), desc='index of sector for spar (PreComp definition of sector)'), promotes=['*'])
-        self.add('sector_idx_strain_te', IndepVarComp('sector_idx_strain_te', val=np.zeros(38,  dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)'), promotes=['*'])
+        self.add('sector_idx_strain_spar', IndepVarComp('sector_idx_strain_spar', val=np.zeros(38,  dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
+        self.add('sector_idx_strain_te', IndepVarComp('sector_idx_strain_te', val=np.zeros(38,  dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
 
         # --- control ---
         self.add('control:Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
@@ -2309,12 +2463,12 @@ class RotorSE(Group):
 
 
         # --- options ---
-        self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power'), promotes=['*'])
-        self.add('npts_coarse_power_curve', IndepVarComp('npts_coarse_power_curve', val=20, desc='number of points to evaluate aero analysis at'), promotes=['*'])
-        self.add('npts_spline_power_curve', IndepVarComp('npts_spline_power_curve', val=200, desc='number of points to use in fitting spline to power curve'), promotes=['*'])
+        self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True), promotes=['*'])
+        self.add('npts_coarse_power_curve', IndepVarComp('npts_coarse_power_curve', val=20, desc='number of points to evaluate aero analysis at', pass_by_obj=True), promotes=['*'])
+        self.add('npts_spline_power_curve', IndepVarComp('npts_spline_power_curve', val=200, desc='number of points to use in fitting spline to power curve', pass_by_obj=True), promotes=['*'])
         self.add('AEP_loss_factor', IndepVarComp('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)'), promotes=['*'])
         self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
-        self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute'), promotes=['*'])
+        self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
 
         self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0), promotes=['*'])
         # run_cases = np.zeros(2, dtype=str)
@@ -2341,7 +2495,7 @@ class RotorSE(Group):
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed()) #, promotes=['*'])
         self.add('analysis', CCBlade('power', 20)) #, promotes=['*'])
-        self.add('dt', CSMDrivetrain()) #, promotes=['*'])
+        self.add('dt', CSMDrivetrain(20)) #, promotes=['*'])
         self.add('powercurve', RegulatedPowerCurveGroup()) #, promotes=['*'])
         # self.add('brent', Brent())
         self.add('wind', PowerWind()) #, promotes=['*'])

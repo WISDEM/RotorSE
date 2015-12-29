@@ -9,7 +9,8 @@ Copyright (c) NREL. All rights reserved.
 
 import numpy as np
 from scipy.linalg import solve_banded
-
+from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder
+from itertools import chain
 
 def cosd(value):
     """cosine of value where value is given in degrees"""
@@ -551,7 +552,7 @@ def check_for_missing_unit_tests(modules):
             print '!!! There does not appear to be a unit test for:', mod + '.' + test
 
 
-def check_gradient_unit_test(unittest, comp, fd='central', step_size=1e-6, tol=1e-6, display=False,
+def check_gradient_unit_test(unittest, prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
         show_missing_warnings=True, show_scaling_warnings=False, min_grad=1e-6, max_grad=1e6):
     """compare provided analytic gradients to finite-difference gradients with unit testing.
     Same as check_gradient, but provides a unit test for each gradient for convenience.
@@ -579,18 +580,31 @@ def check_gradient_unit_test(unittest, comp, fd='central', step_size=1e-6, tol=1
         quantifies what "very small" or "very large" means when using show_scaling_warnings
     """
 
-    names, errors = check_gradient(comp, fd, step_size, tol, display, show_missing_warnings,
+    J_fd, J_fwd, J_rev = check_gradient(prob, fd, step_size, tol, display, show_missing_warnings,
         show_scaling_warnings, min_grad, max_grad)
-
-    for name, err in zip(names, errors):
+    for comp in prob.root.components(recurse=True):
         try:
-            unittest.assertLessEqual(err, tol)
-        except AssertionError, e:
-            print '*** error in:', name
-            raise e
+            inputs, outputs = comp.list_deriv_vars()
+            print inputs
+            for output in outputs:
+                for input in inputs:
+                    try:
+                        np.testing.assert_allclose(J_fd[output, input], J_fwd[output, input], atol=tol )#rtol=tol)
+                        # unittest.assertLessEqual(err, tol)
+                    except AssertionError, e:
+                        print '*** error in:', output, input
+                        raise e
+        except:
+            for key, value in J_fd.iteritems():
+                try:
+                    np.testing.assert_allclose(J_fd[key], J_fwd[key], atol=tol )#rtol=tol)
+                    # unittest.assertLessEqual(err, tol)
+                except AssertionError, e:
+                    print '*** error in:', key
+                    raise e
 
 
-def check_gradient(comp, fd='central', step_size=1e-6, tol=1e-6, display=False,
+def check_gradient(prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
         show_missing_warnings=True, show_scaling_warnings=False, min_grad=1e-6, max_grad=1e6):
     """compare provided analytic gradients to finite-difference gradients
 
@@ -624,197 +638,346 @@ def check_gradient(comp, fd='central', step_size=1e-6, tol=1e-6, display=False,
         tol, then an absolute error is used, otherwise a relative error is used.
 
     """
+    # inputs = comp.list_deriv_vars
+    # inputs, outputs = comp.list_deriv_vars()
 
-    inputs, outputs = comp.list_deriv_vars()
+    # show_missing_warnings = False
 
+    # if show_missing_warnings:
+    #     all_inputs = _explodeall(comp, vtype='inputs')
+    #     all_outputs = _explodeall(comp, vtype='outputs')
+    #     reserved_inputs = ['missing_deriv_policy', 'directory', 'force_fd', 'force_execute', 'eval_only']
+    #     reserved_outputs = ['derivative_exec_count', 'itername', 'exec_count']
+    #     potential_missed_inputs = list(set(all_inputs) - set(reserved_inputs) - set(inputs))
+    #     potential_missed_outputs = list(set(all_outputs) - set(reserved_outputs) - set(outputs))
+    #
+    #     if len(potential_missed_inputs) > 0 or len(potential_missed_outputs) > 0:
+    #         print
+    #         print '*** Warning: ' + comp.__class__.__name__ + ' does not supply derivatives for the following'
+    #         print '\tinputs:', potential_missed_inputs
+    #         print '\toutputs:', potential_missed_outputs
+    #         print
 
+    # prob = Problem()
+    # prob.root = Group()
+    # prob.root.add('comp', comp, promotes=['*'])
+    # prob.setup()
+    #
+    # for i in range(len(inputs)):
+    #     prob[inputs[i]] = comp
 
-    if show_missing_warnings:
-        all_inputs = _explodeall(comp, vtype='inputs')
-        all_outputs = _explodeall(comp, vtype='outputs')
-        reserved_inputs = ['missing_deriv_policy', 'directory', 'force_fd', 'force_execute', 'eval_only']
-        reserved_outputs = ['derivative_exec_count', 'itername', 'exec_count']
-        potential_missed_inputs = list(set(all_inputs) - set(reserved_inputs) - set(inputs))
-        potential_missed_outputs = list(set(all_outputs) - set(reserved_outputs) - set(outputs))
+    prob.run()
+    root = prob.root
 
-        if len(potential_missed_inputs) > 0 or len(potential_missed_outputs) > 0:
-            print
-            print '*** Warning: ' + comp.__class__.__name__ + ' does not supply derivatives for the following'
-            print '\tinputs:', potential_missed_inputs
-            print '\toutputs:', potential_missed_outputs
-            print
+    # Linearize the model
+    root._sys_linearize(root.params, root.unknowns, root.resids)
 
+    data = {}
 
-    comp.run()
-    J = comp.provideJ()
+    # Derivatives should just be checked without parallel adjoint for now.
+    voi = None
 
-    # compute size of Jacobian
-    m = 0
-    mvec = []  # size of each output
-    cmvec = []  # cumulative size of outputs
-    nvec = []  # size of each input
-    cnvec = []  # cumulative size of inputs
-    for out in outputs:
-        f = _getvar(comp, out)
-        if np.array(f).shape == ():
-            msub = 1
+    # Check derivative calculations for all comps at every level of the
+    # system hierarchy.
+    for comp in root.components(recurse=True):
+        cname = comp.pathname
+
+        # No need to check comps that don't have any derivs.
+        if comp.fd_options['force_fd']:
+            continue
+
+        # IndepVarComps are just clutter too.
+        if isinstance(comp, IndepVarComp):
+            continue
+
+        data[cname] = {}
+        jac_fwd = {}
+        jac_rev = {}
+        jac_fd = {}
+
+        # try:
+
+        params = comp.params
+        unknowns = comp.unknowns
+        resids = comp.resids
+        dparams = comp.dpmat[voi]
+        dunknowns = comp.dumat[voi]
+        dresids = comp.drmat[voi]
+
+        # Skip if all of our inputs are unconnected.
+        # if len(dparams) == 0:
+        #     continue
+
+        # if out_stream is not None:
+        #     out_stream.write('-'*(len(cname)+15) + '\n')
+        #     out_stream.write("Component: '%s'\n" % cname)
+        #     out_stream.write('-'*(len(cname)+15) + '\n')
+
+        states = comp.states
+
+        # Create all our keys and allocate Jacs
+        for p_name in chain(dparams, states):
+
+            dinputs = dunknowns if p_name in states else dparams
+            p_size = np.size(dinputs[p_name])
+
+            # Check dimensions of user-supplied Jacobian
+            for u_name in unknowns:
+
+                u_size = np.size(dunknowns[u_name])
+                if comp._jacobian_cache:
+
+                    # We can perform some additional helpful checks.
+                    if (u_name, p_name) in comp._jacobian_cache:
+
+                        user = comp._jacobian_cache[(u_name, p_name)].shape
+
+                        # User may use floats for scalar jacobians
+                        if len(user) < 2:
+                            user = (user[0], 1)
+
+                        if user[0] != u_size or user[1] != p_size:
+                            msg = "derivative in component '{}' of '{}' wrt '{}' is the wrong size. " + \
+                                  "It should be {}, but got {}"
+                            msg = msg.format(cname, u_name, p_name, (u_size, p_size), user)
+                            raise ValueError(msg)
+
+                jac_fwd[(u_name, p_name)] = np.zeros((u_size, p_size))
+                jac_rev[(u_name, p_name)] = np.zeros((u_size, p_size))
+
+        # Reverse derivatives first
+        for u_name in dresids:
+            u_size = np.size(dunknowns[u_name])
+
+            # Send columns of identity
+            for idx in range(u_size):
+                dresids.vec[:] = 0.0
+                root.clear_dparams()
+                dunknowns.vec[:] = 0.0
+
+                dresids._dat[u_name].val[idx] = 1.0
+                try:
+                    comp.apply_linear(params, unknowns, dparams,
+                                      dunknowns, dresids, 'rev')
+                finally:
+                    dparams._apply_unit_derivatives()
+
+                for p_name in chain(dparams, states):
+
+                    dinputs = dunknowns if p_name in states else dparams
+                    # try:
+                    jac_rev[(u_name, p_name)][idx, :] = dinputs._dat[p_name].val
+                    # except:
+                    #     pass
+        # Forward derivatives second
+        for p_name in chain(dparams, states):
+
+            dinputs = dunknowns if p_name in states else dparams
+            p_size = np.size(dinputs[p_name])
+
+            # Send columns of identity
+            for idx in range(p_size):
+                dresids.vec[:] = 0.0
+                root.clear_dparams()
+                dunknowns.vec[:] = 0.0
+
+                dinputs._dat[p_name].val[idx] = 1.0
+                dparams._apply_unit_derivatives()
+                comp.apply_linear(params, unknowns, dparams,
+                                  dunknowns, dresids, 'fwd')
+
+                for u_name, u_val in dresids.vec_val_iter():
+                    jac_fwd[(u_name, p_name)][:, idx] = u_val
+
+        # Finite Difference goes last
+        dresids.vec[:] = 0.0
+        root.clear_dparams()
+        dunknowns.vec[:] = 0.0
+
+        # Component can request to use complex step.
+        if comp.fd_options['form'] == 'complex_step':
+            fd_func = comp.complex_step_jacobian
         else:
-            msub = len(f)
-        m += msub
-        mvec.append(msub)
-        cmvec.append(m)
-    n = 0
-    for inp in inputs:
-        x = _getvar(comp, inp)
-        if np.array(x).shape == ():
-            nsub = 1
-        else:
-            nsub = len(x)
-        n += nsub
-        nvec.append(nsub)
-        cnvec.append(n)
+            fd_func = comp.fd_jacobian
 
-    JFD = np.zeros((m, n))
+        jac_fd = fd_func(params, unknowns, resids)
 
-    if J.shape != JFD.shape:
-        raise TypeError('Incorrect Jacobian size. Your provided Jacobian is of shape {}, but it should be ({}, {})'.format(J.shape, m, n))
+        # # Assemble and Return all metrics.
+        # _assemble_deriv_data(chain(dparams, states), resids, data[cname],
+        #                      jac_fwd, jac_rev, jac_fd, out_stream,
+        #                      c_name=cname)
 
+    return jac_fd, jac_fwd, jac_rev
 
-    # fill out column of outputs
-    f = _getColumnOfOutputs(comp, outputs, m)
-
-    n1 = 0
-
-    for j, inp in enumerate(inputs):
-
-        # get x value at center (save location)
-        x = _getvar(comp, inp)
-        if np.array(x).shape == ():
-            x0 = x
-            lenx = 1
-        else:
-            x = np.copy(x)  # so not pointing to same memory address
-            x0 = np.copy(x)
-            lenx = len(x)
-
-        for k in range(lenx):
-
-            # take a step
-            if lenx == 1:
-                h = np.abs(step_size*x)
-                if h < step_size:
-                    h = step_size
-                x += h
-            else:
-                h = np.abs(step_size*x[k])
-                if h < step_size:
-                    h = step_size
-                x[k] += h
-            _setvar(comp, inp, x)
-            comp.run()
-
-            # fd
-            fp = _getColumnOfOutputs(comp, outputs, m)
-
-            if fd == 'central':
-
-                # step back
-                if lenx == 1:
-                    x -= 2*h
-                else:
-                    x[k] -= 2*h
-                _setvar(comp, inp, x)
-                comp.run()
-
-                fm = _getColumnOfOutputs(comp, outputs, m)
-
-                deriv = (fp - fm)/(2*h)
-
-            else:
-                deriv = (fp - f)/h
-
-
-            JFD[:, n1+k] = deriv
-
-            # reset state
-            x = np.copy(x0)
-            _setvar(comp, inp, x0)
-            comp.run()
-
-        n1 += lenx
-
-
-    # error checking
-    namevec = []
-    errorvec = []
-
-    if display:
-        print '{:<20} ({}) {:<10} ({}, {})'.format('error', 'errortype', 'name', 'analytic', 'fd')
-        print
-
-    for i in range(m):
-        for j in range(n):
-
-            # get corresonding variables names
-            for ii in range(len(mvec)):
-                if cmvec[ii] > i:
-                    oname = 'd_' + outputs[ii]
-
-                    if mvec[ii] > 1:  # need to print indices
-                        subtract = 0
-                        if ii > 0:
-                            subtract = cmvec[ii-1]
-                        idx = i - subtract
-                        oname += '[' + str(idx) + ']'
-
-                    break
-            for jj in range(len(nvec)):
-                if cnvec[jj] > j:
-                    iname = 'd_' + inputs[jj]
-
-                    if nvec[jj] > 1:  # need to print indices
-                        subtract = 0
-                        if jj > 0:
-                            subtract = cnvec[jj-1]
-                        idx = j - subtract
-                        iname += '[' + str(idx) + ']'
-
-                    break
-            name = oname + ' / ' + iname
-
-            # compute error
-            if np.abs(J[i, j]) <= tol:
-                errortype = 'absolute'
-                error = J[i, j] - JFD[i, j]
-            else:
-                errortype = 'relative'
-                error = 1.0 - JFD[i, j]/J[i, j]
-            error = np.abs(error)
-
-            # display
-            if error > tol:
-                star = ' ***** '
-            else:
-                star = ''
-
-            if display:
-                output = '{}{:<20} ({}) {}: ({}, {})'.format(star, error, errortype, name, J[i, j], JFD[i, j])
-                print output
-
-            if show_scaling_warnings and J[i, j] != 0 and np.abs(J[i, j]) < min_grad:
-                print '*** Warning: The following analytic gradient is very small and may need to be scaled:'
-                print '\t(' + comp.__class__.__name__ + ') ' + name + ':', J[i, j]
-
-            if show_scaling_warnings and np.abs(J[i, j]) > max_grad:
-                print '*** Warning: The following analytic gradient is very large and may need to be scaled:'
-                print '\t(' + comp.__class__.__name__ + ') ' + name + ':', J[i, j]
-
-
-            # save
-            namevec.append(name)
-            errorvec.append(error)
-
-    return namevec, errorvec
+    # J = prob.provideJ()
+    #
+    # # compute size of Jacobian
+    # m = 0
+    # mvec = []  # size of each output
+    # cmvec = []  # cumulative size of outputs
+    # nvec = []  # size of each input
+    # cnvec = []  # cumulative size of inputs
+    # for out in outputs:
+    #     f = _getvar(comp, out)
+    #     if np.array(f).shape == ():
+    #         msub = 1
+    #     else:
+    #         msub = len(f)
+    #     m += msub
+    #     mvec.append(msub)
+    #     cmvec.append(m)
+    # n = 0
+    # for inp in inputs:
+    #     x = _getvar(comp, inp)
+    #     if np.array(x).shape == ():
+    #         nsub = 1
+    #     else:
+    #         nsub = len(x)
+    #     n += nsub
+    #     nvec.append(nsub)
+    #     cnvec.append(n)
+    #
+    # JFD = np.zeros((m, n))
+    #
+    # if J.shape != JFD.shape:
+    #     raise TypeError('Incorrect Jacobian size. Your provided Jacobian is of shape {}, but it should be ({}, {})'.format(J.shape, m, n))
+    #
+    #
+    # # fill out column of outputs
+    # f = _getColumnOfOutputs(comp, outputs, m)
+    #
+    # n1 = 0
+    #
+    # for j, inp in enumerate(inputs):
+    #
+    #     # get x value at center (save location)
+    #     x = _getvar(comp, inp)
+    #     if np.array(x).shape == ():
+    #         x0 = x
+    #         lenx = 1
+    #     else:
+    #         x = np.copy(x)  # so not pointing to same memory address
+    #         x0 = np.copy(x)
+    #         lenx = len(x)
+    #
+    #     for k in range(lenx):
+    #
+    #         # take a step
+    #         if lenx == 1:
+    #             h = np.abs(step_size*x)
+    #             if h < step_size:
+    #                 h = step_size
+    #             x += h
+    #         else:
+    #             h = np.abs(step_size*x[k])
+    #             if h < step_size:
+    #                 h = step_size
+    #             x[k] += h
+    #         _setvar(comp, inp, x)
+    #         comp.run()
+    #
+    #         # fd
+    #         fp = _getColumnOfOutputs(comp, outputs, m)
+    #
+    #         if fd == 'central':
+    #
+    #             # step back
+    #             if lenx == 1:
+    #                 x -= 2*h
+    #             else:
+    #                 x[k] -= 2*h
+    #             _setvar(comp, inp, x)
+    #             comp.run()
+    #
+    #             fm = _getColumnOfOutputs(comp, outputs, m)
+    #
+    #             deriv = (fp - fm)/(2*h)
+    #
+    #         else:
+    #             deriv = (fp - f)/h
+    #
+    #
+    #         JFD[:, n1+k] = deriv
+    #
+    #         # reset state
+    #         x = np.copy(x0)
+    #         _setvar(comp, inp, x0)
+    #         comp.run()
+    #
+    #     n1 += lenx
+    #
+    #
+    # # error checking
+    # namevec = []
+    # errorvec = []
+    #
+    # if display:
+    #     print '{:<20} ({}) {:<10} ({}, {})'.format('error', 'errortype', 'name', 'analytic', 'fd')
+    #     print
+    #
+    # for i in range(m):
+    #     for j in range(n):
+    #
+    #         # get corresonding variables names
+    #         for ii in range(len(mvec)):
+    #             if cmvec[ii] > i:
+    #                 oname = 'd_' + outputs[ii]
+    #
+    #                 if mvec[ii] > 1:  # need to print indices
+    #                     subtract = 0
+    #                     if ii > 0:
+    #                         subtract = cmvec[ii-1]
+    #                     idx = i - subtract
+    #                     oname += '[' + str(idx) + ']'
+    #
+    #                 break
+    #         for jj in range(len(nvec)):
+    #             if cnvec[jj] > j:
+    #                 iname = 'd_' + inputs[jj]
+    #
+    #                 if nvec[jj] > 1:  # need to print indices
+    #                     subtract = 0
+    #                     if jj > 0:
+    #                         subtract = cnvec[jj-1]
+    #                     idx = j - subtract
+    #                     iname += '[' + str(idx) + ']'
+    #
+    #                 break
+    #         name = oname + ' / ' + iname
+    #
+    #         # compute error
+    #         if np.abs(J[i, j]) <= tol:
+    #             errortype = 'absolute'
+    #             error = J[i, j] - JFD[i, j]
+    #         else:
+    #             errortype = 'relative'
+    #             error = 1.0 - JFD[i, j]/J[i, j]
+    #         error = np.abs(error)
+    #
+    #         # display
+    #         if error > tol:
+    #             star = ' ***** '
+    #         else:
+    #             star = ''
+    #
+    #         if display:
+    #             output = '{}{:<20} ({}) {}: ({}, {})'.format(star, error, errortype, name, J[i, j], JFD[i, j])
+    #             print output
+    #
+    #         if show_scaling_warnings and J[i, j] != 0 and np.abs(J[i, j]) < min_grad:
+    #             print '*** Warning: The following analytic gradient is very small and may need to be scaled:'
+    #             print '\t(' + comp.__class__.__name__ + ') ' + name + ':', J[i, j]
+    #
+    #         if show_scaling_warnings and np.abs(J[i, j]) > max_grad:
+    #             print '*** Warning: The following analytic gradient is very large and may need to be scaled:'
+    #             print '\t(' + comp.__class__.__name__ + ') ' + name + ':', J[i, j]
+    #
+    #
+    #         # save
+    #         namevec.append(name)
+    #         errorvec.append(error)
+    #
+    # return namevec, errorvec
 
 
 

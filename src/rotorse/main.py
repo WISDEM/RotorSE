@@ -13,6 +13,20 @@ from akima import Akima
 rotor = Problem()
 rotor.root = RotorSE()
 
+### SETUP OPTIMIZATION
+rotor.driver = pyOptSparseDriver()
+rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+# ccblade.driver.options['tol'] = 1.0e-8
+
+rotor.driver.add_desvar('control:tsr', lower=1.5, upper=14.0)
+
+rotor.driver.add_objective('obj')
+#
+# recorder = SqliteRecorder('recorder')
+# recorder.options['record_params'] = True
+# recorder.options['record_metadata'] = True
+# rotor.driver.add_recorder(recorder)
+
 # rotor.driver = pyOptSparseDriver()
 # rotor.driver.options['optimizer'] = 'SNOPT'
 # rotor.driver.options['tol'] = 1.0e-8
@@ -187,6 +201,11 @@ rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigu
 
 # === run and outputs ===
 rotor.run()
+
+
+# test_grad = open('partial_test_grad.txt', 'w')
+# power_gradients = ccblade.check_total_derivatives_modified2(out_stream=test_grad)
+# power_partial = rotor.check_partial_derivatives(out_stream=test_grad)
 
 print 'AEP =', rotor['AEP']
 print 'diameter =', rotor['diameter']
