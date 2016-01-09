@@ -5,7 +5,7 @@ import math
 from openmdao.api import IndepVarComp, Component, ExecComp, Group
 from rotoraero import SetupRunVarSpeed, RegulatedPowerCurve, AEP, \
     RPM2RS, RS2RPM, RegulatedPowerCurveGroup
-from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF, RayleighCDF
+from rotoraerodefaults import CCBladeGeometry, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF, RayleighCDF #, CCBlade
 from scipy.interpolate import RectBivariateSpline
 from akima import Akima, akima_interp_with_derivs
 from csystem import DirectionVector
@@ -16,6 +16,7 @@ import _pBEAM
 import _curvefem
 import _bem  # TODO: move to rotoraero
 from enum import Enum
+from ccblade2 import CCBlade_to_RotorSE_connection as CCBlade
 
 
 #######################
@@ -2327,7 +2328,9 @@ class RotorSE(Group):
         self.add('tilt', IndepVarComp('tilt', 0.0, units='deg'), promotes=['*'])
         self.add('yaw', IndepVarComp('yaw', 0.0, units='deg'), promotes=['*'])
         self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
-        self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
+        # self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
+        self.add('airfoil_parameterization', IndepVarComp('airfoil_parameterization', val=np.zeros((naero, 8))), promotes=['*'])
+        self.add('airfoil_analysis_options', IndepVarComp('airfoil_analysis_options', {}, pass_by_obj=True), promotes=['*'])
         self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
         self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
         self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
@@ -2375,7 +2378,6 @@ class RotorSE(Group):
         # --- drivetrain efficiency ---
         self.add('drivetrainType', IndepVarComp('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
 
-
         # --- fatigue ---
         self.add('rstar_damage', IndepVarComp('rstar_damage', val=np.zeros(18), desc='nondimensional radial locations of damage equivalent moments'), promotes=['*'])
         self.add('Mxb_damage', IndepVarComp('Mxb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. x-direction'), promotes=['*'])
@@ -2385,7 +2387,6 @@ class RotorSE(Group):
         self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
         self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
         self.add('N_damage', IndepVarComp('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis'), promotes=['*'])
-
 
         # --- options ---
         self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True), promotes=['*'])
@@ -2405,7 +2406,7 @@ class RotorSE(Group):
         self.add('geom', CCBladeGeometry())
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed())
-        self.add('analysis', CCBlade('power', naero, n20))
+        self.add('analysis', CCBlade('power', 4, naero, 1)) #, n20)) #TODO
         self.add('dt', CSMDrivetrain(n20))
         self.add('powercurve', RegulatedPowerCurveGroup())
         self.add('wind', PowerWind())
@@ -2440,14 +2441,6 @@ class RotorSE(Group):
         self.connect('hubFraction', 'spline0.hubFraction')
         self.connect('sparT', 'spline0.sparT')
         self.connect('teT', 'spline0.teT')
-        # self.connect('A1_upper_sub', 'spline0.A1_upper_sub')
-        # self.connect('A2_upper_sub', 'spline0.A2_upper_sub')
-        # self.connect('A3_upper_sub', 'spline0.A3_upper_sub')
-        # self.connect('A4_upper_sub', 'spline0.A4_upper_sub')
-        # self.connect('A1_lower_sub', 'spline0.A1_lower_sub')
-        # self.connect('A2_lower_sub', 'spline0.A2_lower_sub')
-        # self.connect('A3_lower_sub', 'spline0.A3_lower_sub')
-        # self.connect('A4_lower_sub', 'spline0.A4_lower_sub')
         # self.connect('precurve_sub', 'spline0.precurve_sub')
 
         # connections to spline
@@ -2465,14 +2458,6 @@ class RotorSE(Group):
         self.connect('hubFraction', 'spline.hubFraction')
         self.connect('sparT', 'spline.sparT')
         self.connect('teT', 'spline.teT')
-        # self.connect('A1_upper_sub', 'spline.A1_upper_sub')
-        # self.connect('A2_upper_sub', 'spline.A2_upper_sub')
-        # self.connect('A3_upper_sub', 'spline.A3_upper_sub')
-        # self.connect('A4_upper_sub', 'spline.A4_upper_sub')
-        # self.connect('A1_lower_sub', 'spline.A1_lower_sub')
-        # self.connect('A2_lower_sub', 'spline.A2_lower_sub')
-        # self.connect('A3_lower_sub', 'spline.A3_lower_sub')
-        # self.connect('A4_lower_sub', 'spline.A4_lower_sub')
 
         # connections to geom
         # self.spline['precurve_str'] = np.zeros(1)
@@ -2509,7 +2494,9 @@ class RotorSE(Group):
         self.connect('precone', 'analysis.precone')
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
-        self.connect('airfoil_files', 'analysis.airfoil_files')
+        self.connect('airfoil_parameterization', 'analysis.airfoil_parameterization')
+        self.connect('airfoil_analysis_options', 'analysis.airfoil_analysis_options')
+
         self.connect('nBlades', 'analysis.B')
         self.connect('rho', 'analysis.rho')
         self.connect('mu', 'analysis.mu')
@@ -2594,10 +2581,10 @@ class RotorSE(Group):
         self.add('resize', ResizeCompositeSection(nstr))
         self.add('gust', GustETM())
         self.add('setuppc',  SetupPCModVarSpeed())
-        self.add('aero_rated', CCBlade('loads', naero, 1))
-        self.add('aero_extrm', CCBlade('loads', naero,  1))
-        self.add('aero_extrm_forces', CCBlade('power', naero, 2))
-        self.add('aero_defl_powercurve', CCBlade('loads', naero,  1))
+        self.add('aero_rated', CCBlade('loads', 4, naero, 1)) # 'loads', naero, 1))
+        self.add('aero_extrm', CCBlade('loads', 4, naero,  1))
+        self.add('aero_extrm_forces', CCBlade('power', 4, naero, 2))
+        self.add('aero_defl_powercurve', CCBlade('loads', 4, naero,  1))
         self.add('beam', PreCompSections(nstr))
         self.add('loads_defl', TotalLoads(nstr))
         self.add('loads_pc_defl', TotalLoads(nstr))
@@ -2655,7 +2642,9 @@ class RotorSE(Group):
         self.connect('precone', 'aero_rated.precone')
         self.connect('tilt', 'aero_rated.tilt')
         self.connect('yaw', 'aero_rated.yaw')
-        self.connect('airfoil_files', 'aero_rated.airfoil_files')
+        # self.connect('airfoil_files', 'aero_rated.airfoil_files')
+        self.connect('airfoil_parameterization', 'aero_rated.airfoil_parameterization')
+        self.connect('airfoil_analysis_options', 'aero_rated.airfoil_analysis_options')
         self.connect('nBlades', 'aero_rated.B')
         self.connect('rho', 'aero_rated.rho')
         self.connect('mu', 'aero_rated.mu')
@@ -2666,14 +2655,6 @@ class RotorSE(Group):
         self.connect('powercurve.ratedConditions:Omega', 'aero_rated.Omega_load')
         self.connect('powercurve.ratedConditions:pitch', 'aero_rated.pitch_load')
         self.connect('powercurve.azimuth', 'aero_rated.azimuth_load')
-        # self.connect('spline.A1_lower_aero', 'aero_rated.A1_lower')
-        # self.connect('spline.A2_lower_aero', 'aero_rated.A2_lower')
-        # self.connect('spline.A3_lower_aero', 'aero_rated.A3_lower')
-        # self.connect('spline.A4_lower_aero', 'aero_rated.A4_lower')
-        # self.connect('spline.A1_upper_aero', 'aero_rated.A1_upper')
-        # self.connect('spline.A2_upper_aero', 'aero_rated.A2_upper')
-        # self.connect('spline.A3_upper_aero', 'aero_rated.A3_upper')
-        # self.connect('spline.A4_upper_aero', 'aero_rated.A4_upper')
         self.aero_rated.azimuth_load = 180.0  # closest to tower
 
         # connections to aero_extrm (for max strain)
@@ -2688,7 +2669,9 @@ class RotorSE(Group):
         self.connect('precone', 'aero_extrm.precone')
         self.connect('tilt', 'aero_extrm.tilt')
         self.connect('yaw', 'aero_extrm.yaw')
-        self.connect('airfoil_files', 'aero_extrm.airfoil_files')
+        # self.connect('airfoil_files', 'aero_extrm.airfoil_files')
+        self.connect('airfoil_parameterization', 'aero_extrm.airfoil_parameterization')
+        self.connect('airfoil_analysis_options', 'aero_extrm.airfoil_analysis_options')
         self.connect('nBlades', 'aero_extrm.B')
         self.connect('rho', 'aero_extrm.rho')
         self.connect('mu', 'aero_extrm.mu')
@@ -2720,7 +2703,9 @@ class RotorSE(Group):
         self.connect('precone', 'aero_extrm_forces.precone')
         self.connect('tilt', 'aero_extrm_forces.tilt')
         self.connect('yaw', 'aero_extrm_forces.yaw')
-        self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
+        # self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
+        self.connect('airfoil_parameterization', 'aero_extrm_forces.airfoil_parameterization')
+        self.connect('airfoil_analysis_options', 'aero_extrm_forces.airfoil_analysis_options')
         self.connect('nBlades', 'aero_extrm_forces.B')
         self.connect('rho', 'aero_extrm_forces.rho')
         self.connect('mu', 'aero_extrm_forces.mu')
@@ -2755,7 +2740,9 @@ class RotorSE(Group):
         self.connect('precone', 'aero_defl_powercurve.precone')
         self.connect('tilt', 'aero_defl_powercurve.tilt')
         self.connect('yaw', 'aero_defl_powercurve.yaw')
-        self.connect('airfoil_files', 'aero_defl_powercurve.airfoil_files')
+        # self.connect('airfoil_files', 'aero_defl_powercurve.airfoil_files')
+        self.connect('airfoil_parameterization', 'aero_defl_powercurve.airfoil_parameterization')
+        self.connect('airfoil_analysis_options', 'aero_defl_powercurve.airfoil_analysis_options')
         self.connect('nBlades', 'aero_defl_powercurve.B')
         self.connect('rho', 'aero_defl_powercurve.rho')
         self.connect('mu', 'aero_defl_powercurve.mu')

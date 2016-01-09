@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from precomp import Orthotropic2DMaterial, CompositeSection, Profile
 from akima import Akima
 
+
 initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
     0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
     0.97777724])  # (Array): initial aerodynamic grid on unit radius
@@ -26,12 +27,12 @@ nstr = len(initial_str_grid)
 rotor.root = RotorSE(naero, nstr)
 
 ### SETUP OPTIMIZATION
-# rotor.driver = pyOptSparseDriver()
-# rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+rotor.driver = pyOptSparseDriver()
+rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
 # ccblade.driver.options['tol'] = 1.0e-8
 
-# rotor.driver.add_desvar('control:tsr', lower=1.5, upper=14.0)
-# rotor.driver.add_objective('obj')
+rotor.driver.add_desvar('control:tsr', lower=1.5, upper=14.0)
+rotor.driver.add_objective('obj')
 #
 # recorder = SqliteRecorder('recorder')
 # recorder.options['record_params'] = True
@@ -88,7 +89,57 @@ n = len(af_idx)
 af = [0]*n
 for i in range(n):
     af[i] = airfoil_types[af_idx[i]]
-rotor['airfoil_files'] = af  # (List): names of airfoil file
+
+w0 = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]
+wl_1 = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]
+wl_2 = [-0.19600050454371795, -0.28861738331958697, -0.20594891135118523, 0.19143138186871009, 0.22876347660120994, 0.39940768357615447, 0.28896745336793572, 0.29519782561050112]
+wl_3 = [-0.27413320446357803, -0.40701949670950271, -0.29237424992338562, 0.27867844397438357, 0.23582783854698663, 0.43718573158380936, 0.25389099250498309, 0.31090780344061775]
+wl_4 = [-0.29817561716727448, -0.67909473119918973, -0.15737231648880162, 0.12798260780188203, 0.2842322211249545, 0.46026650967959087, 0.21705062978922526, 0.33758303223369945]
+wl_5 = [-0.38027535114760153, -0.75920832612723133, -0.21834261746205941, 0.086359012110824224, 0.38364567865371835, 0.48445264573011815, 0.26999944648962521, 0.34675843509167931]
+wl_6 = [-0.49209940079930325, -0.72861624849999296, -0.38147646962813714, 0.13679205926397994, 0.50396496117640877, 0.54798355691567613, 0.37642896917099616, 0.37017796580840234]
+
+CST_full = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861,
+        -0.19600050454371795, -0.28861738331958697, -0.20594891135118523, 0.19143138186871009, 0.22876347660120994, 0.39940768357615447, 0.28896745336793572, 0.29519782561050112,
+        -0.27413320446357803, -0.40701949670950271, -0.29237424992338562, 0.27867844397438357, 0.23582783854698663, 0.43718573158380936, 0.25389099250498309, 0.31090780344061775,
+        -0.29817561716727448, -0.67909473119918973, -0.15737231648880162, 0.12798260780188203, 0.2842322211249545, 0.46026650967959087, 0.21705062978922526, 0.33758303223369945,
+        -0.38027535114760153, -0.75920832612723133, -0.21834261746205941, 0.086359012110824224, 0.38364567865371835, 0.48445264573011815, 0.26999944648962521, 0.34675843509167931,
+        -0.49209940079930325, -0.72861624849999296, -0.38147646962813714, 0.13679205926397994, 0.50396496117640877, 0.54798355691567613, 0.37642896917099616, 0.37017796580840234]
+
+CST = [[w0],[w0], [wl_6], [wl_5], [wl_4], [wl_3], [wl_2], [wl_1]]
+
+basepath = '5MW_AFFiles' + os.path.sep
+# afinit = CCAirfoil.initFromAerodynFile
+# afinit2 = CCAirfoil.initFromCST  # just for shorthand
+# load all airfoils
+# airfoil_types = [0]*8
+# airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
+# airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+
+# for i in range(len(airfoil_types)-2):
+#     airfoil_types[i+2] = afinit2(CST[i])
+
+# place at appropriate radial stations
+af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+
+# af = [0]*len(r)
+# for i in range(len(r)):
+#     af[i] = airfoil_types[af_idx[i]]
+
+# CST_full_2 = np.zeros(len(CST_full))
+# for i in range(len(CST_full_2)):
+#     CST_full_2[i] = CST_full[i]
+CST_full = np.zeros((naero, 8))
+for i in range(naero):
+    for j in range(8):
+        CST_full[i][j] = CST[af_idx[i]][0][j]
+CST = CST_full.reshape(naero, 1, 8)
+
+airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='FD', iterations=20, processors=0)
+
+
+# rotor['airfoil_files'] = af  # (List): names of airfoil file
+rotor['airfoil_parameterization'] = CST  # (List): names of airfoil file
+rotor['airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of airfoil file
 # ----------------------
 
 # === atmosphere ===
