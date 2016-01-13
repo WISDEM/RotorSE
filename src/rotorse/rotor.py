@@ -145,6 +145,11 @@ class PreCompSections(Component):
         self.add_param('sector_idx_strain_spar', val=np.zeros(nstr, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
         self.add_param('sector_idx_strain_te', val=np.zeros(nstr, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True)
 
+        naero = 17
+        self.add_param('airfoil_parameterization', val=np.zeros((naero, 8)))
+        self.add_param('initial_str_grid', val=np.zeros(nstr))
+        self.add_param('initial_aero_grid', val=np.zeros(naero))
+
         self.add_output('eps_crit_spar', shape=nstr, desc='critical strain in spar from panel buckling calculation')
         self.add_output('eps_crit_te', shape=nstr, desc='critical strain in trailing-edge panels from panel buckling calculation')
         self.add_output('xu_strain_spar', shape=nstr, desc='x-position of midpoint of spar cap on upper surface for strain calculation')
@@ -284,6 +289,45 @@ class PreCompSections(Component):
         y_ec_nose = np.zeros(nsec)
 
         profile = self.profile
+        nstr = self.nstr
+        initial_str_grid = params['initial_str_grid']
+        airfoil_parameterization = params['airfoil_parameterization']
+        initial_aero_grid = params['initial_aero_grid']
+
+        yl_grid = np.zeros((200, len(initial_aero_grid)))
+        yu_grid = np.zeros((200, len(initial_aero_grid)))
+        for i in range(len(initial_aero_grid)):
+            xl, xu, yl, yu = getCoordinates(airfoil_parameterization[i])
+            yl_grid[:, i] = yl
+            yu_grid[:, i] = yu
+
+        xl = 1.0 - xl
+        kx = min(len(xu)-1, 3)
+        ky = min(len(initial_aero_grid)-1, 3)
+
+        yu_spline = RectBivariateSpline(xu, initial_aero_grid, yu_grid, kx=kx, ky=ky) #, s=0.001)
+        yl_spline = RectBivariateSpline(xl, initial_aero_grid, yl_grid, kx=kx, ky=ky) #, s=0.001)
+
+        xu1 = np.zeros(len(xu))
+        xl1 = np.zeros(len(xu))
+        yu1 = np.zeros(len(xu))
+        yl1 = np.zeros(len(xu))
+
+        profile = [0]*nstr
+        for j in range(nstr):
+            yu_new = yu_spline.ev(xu, initial_str_grid[j])
+            yl_new = yl_spline.ev(xl, initial_str_grid[j])
+
+            for k in range(len(xu)):
+                xu1[k] = float(xu[k])
+                xl1[k] = float(xl[k])
+                yu1[k] = float(yu_new[k])
+                yl1[k] = float(yl_new[k])
+            x = np.append(xu1, 1-xl1)
+            y = np.append(yu1, yl1)
+            profile[j] = Profile.initFromCoordinates(x, y)
+
+
         mat = self.materials
         csU = self.upperCS
         csL = self.lowerCS

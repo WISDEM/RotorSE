@@ -917,7 +917,17 @@ class Profile:
             return Profile.initWithTEtoTEdata(x, y)
 
 
+    @staticmethod
+    def initFromCoordinates(x, y, LEtoLE = True):
+        x = x.tolist()
+        y = y.tolist()
+        if LEtoLE:
+            x.append(x[0])
+            y.append(y[0])
+            return Profile.initWithLEtoLEdata(x, y)
 
+        else:
+            return Profile.initWithTEtoTEdata(x, y)
 
     def _preCompFormat(self):
         """

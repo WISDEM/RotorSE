@@ -10,10 +10,6 @@ Copyright (c) NREL. All rights reserved.
 import numpy as np
 from math import pi, gamma
 from openmdao.api import Component, Group
-
-from ccblade2 import CCBlade as CCBladeGroup
-
-# from ccblade import CCAirfoil, CCBlade as CCBlade_PY
 from utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import common_configure
 from akima import Akima
