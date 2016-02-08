@@ -106,7 +106,7 @@ class PowerWind(Component):
         self.add_param('z0', val=0.0, units='m', desc='bottom of wind profile (height of ground/sea)')
 
         # out
-        self.add_output('U', val=np.zeros(1), units='m/s', desc='magnitude of wind speed at each z location')
+        self.add_output('U', shape=1, units='m/s', desc='magnitude of wind speed at each z location')
         self.add_output('beta', shape=1, units='deg', desc='corresponding wind angles relative to inertial coordinate system')
 
         """power-law profile wind.  any nodes must not cross z0, and if a node is at z0
@@ -132,8 +132,9 @@ class PowerWind(Component):
         n = len(z)
         self.n = n
         unknowns['U'] = np.zeros(n)
+        # [idx]
         # unknowns['U'][idx] = params['Uref']*((z[idx] - z0)/(zref - z0))**params['shearExp']
-        unknowns['U'][idx] = params['Uref']*((z[idx] - z0)/(zref - z0))**params['shearExp']
+        unknowns['U'] = params['Uref']*((z[idx] - z0)/(zref - z0))**params['shearExp']
         unknowns['beta'] = params['betaWind']*np.ones_like(z)
 
         # # add small cubic spline to allow continuity in gradient
@@ -175,14 +176,15 @@ class PowerWind(Component):
 
         # gradients
         n = self.n
-        dU_dUref = np.zeros(n)
-        dU_dz = np.zeros(n)
-        dU_dzref = np.zeros(n)
+        # dU_dUref = np.zeros(n)
+        # dU_dz = np.zeros(n)
+        # dU_dzref = np.zeros(n)
 
         idx = z > z0
-        dU_dUref[idx] = U[idx]/Uref
-        dU_dz[idx] = U[idx]*shearExp/(z[idx] - z0)
-        dU_dzref[idx] = -U[idx]*shearExp/(zref - z0)
+        # [idx]
+        dU_dUref = U/Uref
+        dU_dz = U*shearExp/(z - z0)
+        dU_dzref = -U*shearExp/(zref - z0)
 
         J = {}
         J['U', 'Uref'] = dU_dUref

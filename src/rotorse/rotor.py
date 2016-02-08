@@ -5,7 +5,7 @@ import math
 from openmdao.api import IndepVarComp, Component, ExecComp, Group
 from rotoraero import SetupRunVarSpeed, RegulatedPowerCurve, AEP, \
     RPM2RS, RS2RPM, RegulatedPowerCurveGroup
-from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF, RayleighCDF
+from rotoraerodefaults import CCBladeGeometry, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF, RayleighCDF #, CCBlade,
 from scipy.interpolate import RectBivariateSpline
 from akima import Akima, akima_interp_with_derivs
 from csystem import DirectionVector
@@ -16,6 +16,7 @@ import _pBEAM
 import _curvefem
 import _bem  # TODO: move to rotoraero
 from enum import Enum
+from ccblade2 import CCBlade_to_RotorSE_connection as CCBlade
 
 
 #######################
@@ -2396,7 +2397,7 @@ class RotorSE(Group):
         self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
 
         self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0), promotes=['*'])
-
+        nSector = 4
         self.add('turbineclass', TurbineClass())
         self.add('gridsetup', GridSetup(naero, nstr))
         self.add('grid', RGrid(naero, nstr))
@@ -2405,7 +2406,7 @@ class RotorSE(Group):
         self.add('geom', CCBladeGeometry())
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed())
-        self.add('analysis', CCBlade('power', naero, n20))
+        self.add('analysis', CCBlade('power', nSector, naero, n20))
         self.add('dt', CSMDrivetrain(n20))
         self.add('powercurve', RegulatedPowerCurveGroup())
         self.add('wind', PowerWind())
@@ -2440,14 +2441,6 @@ class RotorSE(Group):
         self.connect('hubFraction', 'spline0.hubFraction')
         self.connect('sparT', 'spline0.sparT')
         self.connect('teT', 'spline0.teT')
-        # self.connect('A1_upper_sub', 'spline0.A1_upper_sub')
-        # self.connect('A2_upper_sub', 'spline0.A2_upper_sub')
-        # self.connect('A3_upper_sub', 'spline0.A3_upper_sub')
-        # self.connect('A4_upper_sub', 'spline0.A4_upper_sub')
-        # self.connect('A1_lower_sub', 'spline0.A1_lower_sub')
-        # self.connect('A2_lower_sub', 'spline0.A2_lower_sub')
-        # self.connect('A3_lower_sub', 'spline0.A3_lower_sub')
-        # self.connect('A4_lower_sub', 'spline0.A4_lower_sub')
         # self.connect('precurve_sub', 'spline0.precurve_sub')
 
         # connections to spline
@@ -2465,14 +2458,6 @@ class RotorSE(Group):
         self.connect('hubFraction', 'spline.hubFraction')
         self.connect('sparT', 'spline.sparT')
         self.connect('teT', 'spline.teT')
-        # self.connect('A1_upper_sub', 'spline.A1_upper_sub')
-        # self.connect('A2_upper_sub', 'spline.A2_upper_sub')
-        # self.connect('A3_upper_sub', 'spline.A3_upper_sub')
-        # self.connect('A4_upper_sub', 'spline.A4_upper_sub')
-        # self.connect('A1_lower_sub', 'spline.A1_lower_sub')
-        # self.connect('A2_lower_sub', 'spline.A2_lower_sub')
-        # self.connect('A3_lower_sub', 'spline.A3_lower_sub')
-        # self.connect('A4_lower_sub', 'spline.A4_lower_sub')
 
         # connections to geom
         # self.spline['precurve_str'] = np.zeros(1)
@@ -2509,23 +2494,18 @@ class RotorSE(Group):
         self.connect('precone', 'analysis.precone')
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
-        self.connect('airfoil_files', 'analysis.airfoil_files')
+        self.connect('airfoil_files', 'analysis.af')
+        # self.connect('airfoil_parameterization', 'analysis.airfoil_parameterization')
+        # self.connect('airfoil_analysis_options', 'analysis.airfoil_analysis_options')
+
         self.connect('nBlades', 'analysis.B')
         self.connect('rho', 'analysis.rho')
         self.connect('mu', 'analysis.mu')
         self.connect('shearExp', 'analysis.shearExp')
         self.connect('nSector', 'analysis.nSector')
-        self.connect('setup.Uhub', 'analysis.Uhub')
-        self.connect('setup.Omega', 'analysis.Omega')
-        self.connect('setup.pitch', 'analysis.pitch')
-        # self.connect('spline.A1_lower_aero', 'analysis.A1_lower')
-        # self.connect('spline.A2_lower_aero', 'analysis.A2_lower')
-        # self.connect('spline.A3_lower_aero', 'analysis.A3_lower')
-        # self.connect('spline.A4_lower_aero', 'analysis.A4_lower')
-        # self.connect('spline.A1_upper_aero', 'analysis.A1_upper')
-        # self.connect('spline.A2_upper_aero', 'analysis.A2_upper')
-        # self.connect('spline.A3_upper_aero', 'analysis.A3_upper')
-        # self.connect('spline.A4_upper_aero', 'analysis.A4_upper')
+        self.connect('setup.Uhub', 'analysis.Uinf_in')  #Uhub')
+        self.connect('setup.Omega', 'analysis.Omega_in')
+        self.connect('setup.pitch', 'analysis.pitch_in')
 
         # connections to drivetrain
         self.connect('analysis.P', 'dt.aeroPower')
@@ -2556,12 +2536,12 @@ class RotorSE(Group):
         # self.brent.invalid_bracket_return = 1.0
 
         # connections to wind
-        self.wind.z = np.zeros(1)
-        self.wind.U = np.zeros(1)
+        # self.wind.z = np.zeros(1)
+        # self.wind.U = np.zeros(1)
         # self.connect('cdf_reference_mean_wind_speed', 'wind.Uref')
         self.connect('turbineclass.V_mean', 'wind.Uref')
         self.connect('cdf_reference_height_wind_speed', 'wind.zref')
-        # self.connect('hubHt', 'wind.z') # , src_indices=[0]) # TODO
+        self.connect('hubHt', 'wind.z') # , src_indices=[0]) # TODO
         self.connect('shearExp', 'wind.shearExp')
 
         # connections to cdf
@@ -2594,10 +2574,10 @@ class RotorSE(Group):
         self.add('resize', ResizeCompositeSection(nstr))
         self.add('gust', GustETM())
         self.add('setuppc',  SetupPCModVarSpeed())
-        self.add('aero_rated', CCBlade('loads', naero, 1))
-        self.add('aero_extrm', CCBlade('loads', naero,  1))
-        self.add('aero_extrm_forces', CCBlade('power', naero, 2))
-        self.add('aero_defl_powercurve', CCBlade('loads', naero,  1))
+        self.add('aero_rated', CCBlade('loads', 4, naero, 1)) # 'loads', naero, 1))
+        self.add('aero_extrm', CCBlade('loads', 4, naero,  1))
+        self.add('aero_extrm_forces', CCBlade('power', 4, naero, 2))
+        self.add('aero_defl_powercurve', CCBlade('loads', 4, naero,  1))
         self.add('beam', PreCompSections(nstr))
         self.add('loads_defl', TotalLoads(nstr))
         self.add('loads_pc_defl', TotalLoads(nstr))
@@ -2655,25 +2635,19 @@ class RotorSE(Group):
         self.connect('precone', 'aero_rated.precone')
         self.connect('tilt', 'aero_rated.tilt')
         self.connect('yaw', 'aero_rated.yaw')
-        self.connect('airfoil_files', 'aero_rated.airfoil_files')
+        self.connect('airfoil_files', 'aero_rated.af')
+        # self.connect('airfoil_parameterization', 'aero_rated.airfoil_parameterization')
+        # self.connect('airfoil_analysis_options', 'aero_rated.airfoil_analysis_options')
         self.connect('nBlades', 'aero_rated.B')
         self.connect('rho', 'aero_rated.rho')
         self.connect('mu', 'aero_rated.mu')
         self.connect('shearExp', 'aero_rated.shearExp')
-        self.connect('nSector', 'aero_rated.nSector')
+        # self.connect('nSector', 'aero_rated.nSector') # TODO: Check effect
         # self.connect('powercurve.ratedConditions:V + 3*gust.sigma', 'aero_rated.V_load')  # OpenMDAO bug
-        self.connect('gust.V_gust', 'aero_rated.V_load')
-        self.connect('powercurve.ratedConditions:Omega', 'aero_rated.Omega_load')
-        self.connect('powercurve.ratedConditions:pitch', 'aero_rated.pitch_load')
-        self.connect('powercurve.azimuth', 'aero_rated.azimuth_load')
-        # self.connect('spline.A1_lower_aero', 'aero_rated.A1_lower')
-        # self.connect('spline.A2_lower_aero', 'aero_rated.A2_lower')
-        # self.connect('spline.A3_lower_aero', 'aero_rated.A3_lower')
-        # self.connect('spline.A4_lower_aero', 'aero_rated.A4_lower')
-        # self.connect('spline.A1_upper_aero', 'aero_rated.A1_upper')
-        # self.connect('spline.A2_upper_aero', 'aero_rated.A2_upper')
-        # self.connect('spline.A3_upper_aero', 'aero_rated.A3_upper')
-        # self.connect('spline.A4_upper_aero', 'aero_rated.A4_upper')
+        self.connect('gust.V_gust', 'aero_rated.Uinf_in') #V_load')
+        self.connect('powercurve.ratedConditions:Omega', 'aero_rated.Omega_in') #_load')
+        self.connect('powercurve.ratedConditions:pitch', 'aero_rated.pitch_in') #_load')
+        self.connect('powercurve.azimuth', 'aero_rated.azimuth') #_load')
         self.aero_rated.azimuth_load = 180.0  # closest to tower
 
         # connections to aero_extrm (for max strain)
@@ -2688,24 +2662,18 @@ class RotorSE(Group):
         self.connect('precone', 'aero_extrm.precone')
         self.connect('tilt', 'aero_extrm.tilt')
         self.connect('yaw', 'aero_extrm.yaw')
-        self.connect('airfoil_files', 'aero_extrm.airfoil_files')
+        self.connect('airfoil_files', 'aero_extrm.af')
+        # self.connect('airfoil_parameterization', 'aero_extrm.airfoil_parameterization')
+        # self.connect('airfoil_analysis_options', 'aero_extrm.airfoil_analysis_options')
         self.connect('nBlades', 'aero_extrm.B')
         self.connect('rho', 'aero_extrm.rho')
         self.connect('mu', 'aero_extrm.mu')
         self.connect('shearExp', 'aero_extrm.shearExp')
-        self.connect('nSector', 'aero_extrm.nSector')
-        self.connect('turbineclass.V_extreme', 'aero_extrm.V_load')
-        self.connect('pitch_extreme', 'aero_extrm.pitch_load')
-        self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
-        self.connect('Omega_load', 'aero_extrm.Omega_load')
-        # self.connect('spline.A1_lower_aero', 'aero_extrm.A1_lower')
-        # self.connect('spline.A2_lower_aero', 'aero_extrm.A2_lower')
-        # self.connect('spline.A3_lower_aero', 'aero_extrm.A3_lower')
-        # self.connect('spline.A4_lower_aero', 'aero_extrm.A4_lower')
-        # self.connect('spline.A1_upper_aero', 'aero_extrm.A1_upper')
-        # self.connect('spline.A2_upper_aero', 'aero_extrm.A2_upper')
-        # self.connect('spline.A3_upper_aero', 'aero_extrm.A3_upper')
-        # self.connect('spline.A4_upper_aero', 'aero_extrm.A4_upper')
+        # self.connect('nSector', 'aero_extrm.nSector') ## CHECK EFFECT
+        self.connect('turbineclass.V_extreme', 'aero_extrm.Uinf_in') #V_load')
+        self.connect('pitch_extreme', 'aero_extrm.pitch_in')  #_load')
+        self.connect('azimuth_extreme', 'aero_extrm.azimuth')  #_load')
+        self.connect('Omega_load', 'aero_extrm.Omega_in')  #_load')
         self.aero_extrm.Omega_load = 0.0  # parked case
 
         # connections to aero_extrm_forces (for tower thrust)
@@ -2720,7 +2688,9 @@ class RotorSE(Group):
         self.connect('precone', 'aero_extrm_forces.precone')
         self.connect('tilt', 'aero_extrm_forces.tilt')
         self.connect('yaw', 'aero_extrm_forces.yaw')
-        self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
+        self.connect('airfoil_files', 'aero_extrm_forces.af')
+        # self.connect('airfoil_parameterization', 'aero_extrm_forces.airfoil_parameterization')
+        # self.connect('airfoil_analysis_options', 'aero_extrm_forces.airfoil_analysis_options')
         self.connect('nBlades', 'aero_extrm_forces.B')
         self.connect('rho', 'aero_extrm_forces.rho')
         self.connect('mu', 'aero_extrm_forces.mu')
@@ -2729,8 +2699,8 @@ class RotorSE(Group):
         self.aero_extrm_forces.Uhub = np.zeros(2)
         self.aero_extrm_forces.Omega = np.zeros(2)  # parked case
         self.aero_extrm_forces.pitch = np.zeros(2)
-        self.connect('turbineclass.V_extreme_full', 'aero_extrm_forces.Uhub')
-        self.connect('pitch_extreme_full', 'aero_extrm_forces.pitch')
+        self.connect('turbineclass.V_extreme_full', 'aero_extrm_forces.Uinf_in')  #Uhub')
+        self.connect('pitch_extreme_full', 'aero_extrm_forces.pitch_in')
         self.aero_extrm_forces.pitch[1] = 90  # feathered
         self.aero_extrm_forces.T = np.zeros(2)
         self.aero_extrm_forces.Q = np.zeros(2)
@@ -2755,24 +2725,18 @@ class RotorSE(Group):
         self.connect('precone', 'aero_defl_powercurve.precone')
         self.connect('tilt', 'aero_defl_powercurve.tilt')
         self.connect('yaw', 'aero_defl_powercurve.yaw')
-        self.connect('airfoil_files', 'aero_defl_powercurve.airfoil_files')
+        self.connect('airfoil_files', 'aero_defl_powercurve.af')
+        # self.connect('airfoil_parameterization', 'aero_defl_powercurve.airfoil_parameterization')
+        # self.connect('airfoil_analysis_options', 'aero_defl_powercurve.airfoil_analysis_options')
         self.connect('nBlades', 'aero_defl_powercurve.B')
         self.connect('rho', 'aero_defl_powercurve.rho')
         self.connect('mu', 'aero_defl_powercurve.mu')
         self.connect('shearExp', 'aero_defl_powercurve.shearExp')
-        self.connect('nSector', 'aero_defl_powercurve.nSector')
-        self.connect('setuppc.Uhub', 'aero_defl_powercurve.V_load')
-        self.connect('setuppc.Omega', 'aero_defl_powercurve.Omega_load')
-        self.connect('setuppc.pitch', 'aero_defl_powercurve.pitch_load')
-        self.connect('setuppc.azimuth', 'aero_defl_powercurve.azimuth_load')
-        # self.connect('spline.A1_lower_aero', 'aero_defl_powercurve.A1_lower')
-        # self.connect('spline.A2_lower_aero', 'aero_defl_powercurve.A2_lower')
-        # self.connect('spline.A3_lower_aero', 'aero_defl_powercurve.A3_lower')
-        # # self.connect('spline.A4_lower_aero', 'aero_defl_powercurve.A4_lower')
-        # self.connect('spline.A1_upper_aero', 'aero_defl_powercurve.A1_upper')
-        # self.connect('spline.A2_upper_aero', 'aero_defl_powercurve.A2_upper')
-        # self.connect('spline.A3_upper_aero', 'aero_defl_powercurve.A3_upper')
-        # self.connect('spline.A4_upper_aero', 'aero_defl_powercurve.A4_upper')
+        # self.connect('nSector', 'aero_defl_powercurve.nSector') # CHECK EFFECT
+        self.connect('setuppc.Uhub', 'aero_defl_powercurve.Uinf_in')  #V_load')
+        self.connect('setuppc.Omega', 'aero_defl_powercurve.Omega_in') #_load')
+        self.connect('setuppc.pitch', 'aero_defl_powercurve.pitch_in') #_load')
+        self.connect('setuppc.azimuth', 'aero_defl_powercurve.azimuth') #_load')
         self.aero_defl_powercurve.azimuth_load = 0.0
 
         # connections to beam
@@ -2796,6 +2760,14 @@ class RotorSE(Group):
         self.connect('aero_rated.loads:azimuth', 'loads_defl.aeroLoads:azimuth')
         self.connect('aero_rated.loads:pitch', 'loads_defl.aeroLoads:pitch')
         self.connect('aero_rated.loads:r', 'loads_defl.aeroLoads:r')
+
+        # self.connect('aero_rated.loads:Omega', 'loads_defl.aeroLoads:Omega')
+        # self.connect('aero_rated.loads:Px', 'loads_defl.aeroLoads:Px')
+        # self.connect('aero_rated.loads:Py', 'loads_defl.aeroLoads:Py')
+        # self.connect('aero_rated.loads:Pz', 'loads_defl.aeroLoads:Pz')
+        # self.connect('aero_rated.loads:azimuth', 'loads_defl.aeroLoads:azimuth')
+        # self.connect('aero_rated.loads:pitch', 'loads_defl.aeroLoads:pitch')
+        # self.connect('aero_rated.loads:r', 'loads_defl.aeroLoads:r')
 
         self.connect('beam.beam:z', 'loads_defl.r')
         self.connect('spline.theta_str', 'loads_defl.theta')
@@ -2977,4 +2949,4 @@ class RotorSE(Group):
         self.connect('spline.Rtip', 'Rtip_in')
         self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[nstr-1])
 
-        self.add('obj_cmp', ExecComp('obj = -AEP', AEP=1000000.0), promotes=['*'])
+        self.add('obj_cmp', ExecComp('obj = (mass_all_blades + 643829.16)*100 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])

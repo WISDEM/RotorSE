@@ -11,8 +11,9 @@ import unittest
 import numpy as np
 from utilities import check_gradient_unit_test, check_for_missing_unit_tests
 from rotoraero import Coefficients, SetupRunVarSpeed, RegulatedPowerCurve, AEP, RegulatedPowerCurveGroup
-from rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, \
+from rotoraerodefaults import GeometrySpline, CCBladeGeometry, CSMDrivetrain, \
     WeibullCDF, WeibullWithMeanCDF, RayleighCDF
+from ccblade2 import CCBlade_to_RotorSE_connection as CCBlade
 from enum import Enum
 from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder
 from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
