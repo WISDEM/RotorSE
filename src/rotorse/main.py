@@ -244,7 +244,7 @@ print 'tip_deflection =', rotor['tip_deflection']
 print 'root_bending_moment =', rotor['root_bending_moment']
 
 test = open('Text.txt', 'w')
-total = rotor.check_total_derivatives(out_stream=test, unknown_list=['obj', 'mass_all_blades', 'AEP'])
+# total = rotor.check_total_derivatives(out_stream=test, unknown_list=['obj', 'mass_all_blades', 'AEP'])
 # plt.figure()
 # plt.plot(rotor['V'], rotor['P']/1e6)
 # plt.xlabel('wind speed (m/s)')

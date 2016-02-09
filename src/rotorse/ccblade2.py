@@ -29,6 +29,7 @@ class CCInit(Component):
         # self.fd_options['force_fd'] = True
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['rotorR'] = params['Rtip']*cos(np.radians(params['precone'])) + params['precurveTip']*sin(np.radians(params['precone']))
+
     def linearize(self, params, unknowns, resids):
         J = {}
         J['rotorR', 'precone'] = -params['Rtip']*sin(np.radians(params['precone'])) + params['precurveTip']*cos(np.radians(params['precone']))
@@ -49,7 +50,7 @@ class WindComponents(Component):
         self.add_param('presweep', shape=n)
         self.add_param('Uinf', shape=1)
         self.add_param('precone', shape=1, units='deg')
-        self.add_param('azimuth', shape=1, units='rad')
+        self.add_param('azimuth', shape=1, units='deg')
         self.add_param('tilt', shape=1, units='deg')
         self.add_param('yaw', shape=1, units='deg')
         self.add_param('Omega', shape=1)
@@ -63,7 +64,7 @@ class WindComponents(Component):
         self.n = n
 
     def solve_nonlinear(self, params, unknowns, resids):
-        unknowns['Vx'], unknowns['Vy'] = _bem.windcomponents(params['r'], params['precurve'], params['presweep'], np.radians(params['precone']), np.radians(params['yaw']), np.radians(params['tilt']), params['azimuth'], params['Uinf'], params['Omega'], params['hubHt'], params['shearExp'])
+        unknowns['Vx'], unknowns['Vy'] = _bem.windcomponents(params['r'], params['precurve'], params['presweep'], np.radians(params['precone']), np.radians(params['yaw']), np.radians(params['tilt']), np.radians(params['azimuth']), params['Uinf'], params['Omega'], params['hubHt'], params['shearExp'])
     # def list_deriv_vars(self):
     #     inputs = ('r', 'precurve', 'presweep', 'Uinf', 'precone', 'azimuth', 'tilt', 'yaw', 'Omega', 'hubHt')
     #     outputs = ('Vx', 'Vy')
@@ -273,8 +274,8 @@ class BEM(Component):
         self.add_param('dcl_dRe', shape=n)
         self.add_param('dcd_dRe', shape=n)
         self.add_param('dRe_dx', val=np.zeros((n,9)))
-        self.add_output('a', shape=n, val=np.ones(n)*0.3)
-        self.add_output('ap', shape=n, val=np.ones(n)*-0.3)
+        self.add_output('a', shape=n, val=np.zeros(n))#ones(n)*0.3)
+        self.add_output('ap', shape=n, val=np.zeros(n))#ones(n)*-0.3)
         self.add_output('da_dx', val=np.zeros((n,9)))
         self.add_output('dap_dx', val=np.zeros((n,9)))
         self.add_state('phi', shape=n, val=np.ones(n)*1.0e-7, units='rad')
@@ -303,7 +304,7 @@ class BEM(Component):
                 unknowns['ap'][i] = ap
                 unknowns['da_dx'][i] = da_dx
                 unknowns['dap_dx'][i] = dap_dx
-            self.dR_dx[i], self.da_dx[i],self.dap_dx[i] = dR_dx, da_dx, dap_dx
+            self.dR_dx[i], self.da_dx[i], self.dap_dx[i] = dR_dx, da_dx, dap_dx
     def apply_nonlinear(self, params, unknowns, resids):
         n = self.size
         self.dR_dx = np.zeros((n,9))
@@ -421,54 +422,6 @@ class BEM(Component):
 
         return J
 
-
-
-
-class MUX(Component):
-    """
-    MUX - Combines all the sections into single variables of arrays
-
-    Inputs: n - Number of sections analyzed across blade
-
-    Outputs: phi, cl, cd, W
-
-    """
-    def __init__(self, n):
-        super(MUX, self).__init__()
-        for i in range(n):
-            self.add_param('phi'+str(i+1), val=0.0)
-            self.add_param('cl'+str(i+1), val=0.0)
-            self.add_param('cd'+str(i+1), val=0.0)
-            self.add_param('W'+str(i+1), val=0.0)
-
-        self.add_output('phi', val=np.zeros(n))
-        self.add_output('cl', val=np.zeros(n))
-        self.add_output('cd', val=np.zeros(n))
-        self.add_output('W', val=np.zeros(n))
-
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
-        self.n = n
-
-    def solve_nonlinear(self, params, unknowns, resids):
-        for i in range(self.n):
-            unknowns['phi'][i] = params['phi'+str(i+1)]
-            unknowns['cl'][i] = params['cl'+str(i+1)]
-            unknowns['cd'][i] = params['cd'+str(i+1)]
-            unknowns['W'][i] = params['W'+str(i+1)]
-
-    def linearize(self, params, unknowns, resids):
-        n = self.n
-        J = {}
-        for i in range(n):
-            zeros = np.zeros(n)
-            zeros[i] = 1
-            J['phi', 'phi'+str(i+1)] = zeros
-            J['cl', 'cl'+str(i+1)] = zeros
-            J['cd', 'cd'+str(i+1)] = zeros
-            J['W', 'W'+str(i+1)] = zeros
-        return J
-
 class MUX_POWER(Component):
     """
     MUX_POWER - Combines all the sections into single variables of arrays
@@ -552,6 +505,7 @@ class DistributedAeroLoads(Component):
         phi = params['phi']
         cl = params['cl']
         cd = params['cd']
+
         W = params['W']
         n = self.n
         Np = np.zeros(n)
@@ -951,8 +905,7 @@ class Loads(Group):
         self.add('bemoptions', IndepVarComp('bemoptions', {}, pass_by_obj=True), promotes=['*'])
         self.add('init', CCInit(), promotes=['*'])
         self.add('wind', WindComponents(n), promotes=['*'])
-        self.add('mux', MUX(n), promotes=['*'])
-        self.add('brent', BrentGroup(n), promotes=['Rhub', 'Rtip', 'rho', 'mu', 'Omega', 'B', 'pitch', 'af', 'bemoptions'])
+        self.add('brent', BrentGroup(n), promotes=['Rhub', 'Rtip', 'rho', 'mu', 'Omega', 'B', 'pitch', 'bemoptions', 'af', 'theta', 'r', 'chord', 'phi', 'cl', 'cd', 'W', 'theta', 'Vx', 'Vy'])
         self.add('loads', DistributedAeroLoads(n), promotes=['*'])
         self.add('obj_cmp', ExecComp('obj = -max(Np)', Np=np.zeros(n)), promotes=['*'])
 
@@ -1012,7 +965,7 @@ class CCBlade(Group):
         self.add('bemoptions', IndepVarComp('bemoptions', {}, pass_by_obj=True), promotes=['*'])
         azimuth = np.zeros(nSector)
         for i in range(nSector):
-            azimuth[i] = pi/180.0*360.0*float(i)/nSector
+            azimuth[i] = 360.0*float(i)/nSector #*pi/180.0
         self.add('azimuth', IndepVarComp('azimuth', azimuth), promotes=['*'])
         self.add('mux_power', MUX_POWER(n2), promotes=['*'])
 
@@ -1122,6 +1075,7 @@ class PassThrough(Component):
         unknowns['Uinf'] = params['Uinf_in']
         unknowns['pitch'] = params['pitch_in']
         unknowns['Omega'] = params['Omega_in']
+
     def linearize(self, params, unknowns, resids):
         J = {}
         if self.n2 == 1:
@@ -1215,6 +1169,10 @@ class CCBlade_to_RotorSE_connection(Group):
         super(CCBlade_to_RotorSE_connection, self).__init__()
         self.add('pass_through', PassThrough(n2), promotes=['*'])
         if run_case == 'power':
+            azimuth = np.zeros(nSector)
+            for i in range(nSector):
+                azimuth[i] = 360.0*float(i)/nSector #*pi/180.0
+            self.add('azimuth', IndepVarComp('azimuth', azimuth), promotes=['*'])
             self.add('mux_power', MUX_POWER(n2), promotes=['*'])
             pg = self.add('parallel', ParallelGroup(), promotes=['*'])
             for i in range(n2):
@@ -1228,6 +1186,9 @@ class CCBlade_to_RotorSE_connection(Group):
                 self.connect('results'+str(i)+'.T', 'T'+str(i+1))
                 self.connect('results'+str(i)+'.Q', 'Q'+str(i+1))
                 self.connect('results'+str(i)+'.P', 'P'+str(i+1))
+                for j in range(nSector):
+                    self.connect('azimuth', 'results'+str(i)+'.load_group.group'+str(j+1)+'.azimuth', src_indices=[j])
+
         elif run_case == 'loads':
             self.add('init', CCInit(), promotes=['*'])
             self.add('wind', WindComponents(n), promotes=['*'])
@@ -1443,9 +1404,9 @@ if __name__ == "__main__":
     hubHt = 80.0
     nSector = 8
     # set conditions
-    Uinf = 10.0
+    Uinf = np.array([10.0])
     tsr = 7.55
-    pitch = 0.0
+    pitch = np.array([0.0])
     Omega = Uinf*tsr/Rtip * 30.0/pi  # convert to RPM
     azimuth = 90.
     n = len(r)
@@ -1459,17 +1420,17 @@ if __name__ == "__main__":
     # loads['Rtip'] = Rtip
     # loads['r'] = r
     # loads['chord'] = chord
-    # loads['theta'] = np.radians(theta)
+    # loads['theta'] = theta
     # loads['rho'] = rho
     # loads['mu'] = mu
-    # loads['tilt'] = np.radians(tilt)
-    # loads['precone'] = np.radians(precone)
-    # loads['yaw'] = np.radians(yaw)
+    # loads['tilt'] = tilt
+    # loads['precone'] = precone
+    # loads['yaw'] = yaw
     # loads['shearExp'] = shearExp
     # loads['hubHt'] = hubHt
     # loads['Uinf'] = Uinf
     # loads['Omega'] = Omega
-    # loads['pitch'] = np.radians(pitch)
+    # loads['pitch'] = pitch
     # loads['azimuth'] = np.radians(azimuth)
     # loads['af'] = af
     # loads['bemoptions'] = bemoptions
@@ -1485,10 +1446,10 @@ if __name__ == "__main__":
     pitch = np.array([0.0])
     Omega = Uinf*tsr/Rtip * 30.0/pi  # convert to RPM
 
-    # tsr = np.linspace(2, 14, 20)
-    # Omega = 10.0 * np.ones_like(tsr)
-    # Uinf = Omega*pi/30.0 * Rtip/tsr
-    # pitch = np.zeros_like(tsr)
+    tsr = np.linspace(2, 14, 20)
+    Omega = 10.0 * np.ones_like(tsr)
+    Uinf = Omega*pi/30.0 * Rtip/tsr
+    pitch = np.zeros_like(tsr)
 
     n2 = len(Uinf)
 
@@ -1534,10 +1495,14 @@ if __name__ == "__main__":
     ccblade.run()
     t = time.time()
     print t - t0
+    # t0 = time.time()
+    # # grad = ccblade.calc_gradient(['Omega'], ['P'], mode='auto')
+    # t = time.time()
+    # print t - t0
 
-    partial = open("partial.txt", 'w')
+    # partial = open("partial.txt", 'w')
     # test = ccblade.check_partial_derivatives(out_stream=partial)
-    test2 = ccblade.check_total_derivatives(out_stream=partial, unknown_list=['P'])
+    # test2 = ccblade.check_total_derivatives(out_stream=partial, unknown_list=['P'])
 
     print 'CP', ccblade['CP']
     print 'CT', ccblade['CT']

@@ -53,7 +53,8 @@ def brentq(f, a, b, args={}, xtol=1e-12, rtol=4e-16, maxiter=100, full_output=Tr
         # check for convergence
         tol = xtol + rtol*np.abs(xcur)
         sbis = (xblk - xcur)/2.0
-        if (np.all(fcur == 0) or np.all(np.abs(sbis) < tol)):
+        converged = np.logical_or(fcur == 0, np.abs(sbis) < tol)
+        if (np.all(converged)):
             return xcur, None
 
         quadratic_interp = np.logical_and(np.abs(spre) > tol,  np.abs(fcur) < np.abs(fpre))
@@ -64,7 +65,7 @@ def brentq(f, a, b, args={}, xtol=1e-12, rtol=4e-16, maxiter=100, full_output=Tr
         stry[interp] = -fcur[interp]*(xcur[interp] - xpre[interp])/(fcur[interp] - fpre[interp])
            
         # if not interpolate, then extrapolate
-        extrap = np.logical_not(interp)
+        extrap = np.logical_and(np.logical_not(interp), converged)
         if extrap[0] == True:
             pass
         dpre[extrap] = (fpre[extrap] - fcur[extrap])/(xpre[extrap] - xcur[extrap])
