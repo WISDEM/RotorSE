@@ -7,6 +7,7 @@ from rotor import RotorSE
 import os
 import matplotlib.pyplot as plt
 from precomp import Orthotropic2DMaterial, CompositeSection, Profile
+from ccblade2 import CCAirfoil
 from akima import Akima
 
 
@@ -27,21 +28,42 @@ nstr = len(initial_str_grid)
 rotor.root = RotorSE(naero, nstr)
 
 ### SETUP OPTIMIZATION
-# rotor.driver = pyOptSparseDriver()
-# rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
-# # ccblade.driver.options['tol'] = 1.0e-8
+rotor.driver = pyOptSparseDriver()
+rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+# ccblade.driver.options['tol'] = 1.0e-8
+
+rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+rotor.driver.add_desvar('chord_sub', lower=0.9, upper=5.3)
+rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
+# rotor.driver.add_parameter('sparT', low=0.0001, high=0.2) # (Array, m): spar cap thickness parameters
+# rotor.driver.add_parameter('teT', low=0.001, high=0.2) # (Array, m): trailing-edge thickness parameters
+scale_contraints_1 = 10.0
+# rotor.driver.add_constraint('strainU_spar[[0, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_spar', lower=-1.0, upper=1.0) # rotor strain sparL
+# rotor.driver.add_constraint('strainU_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', lower=-1.0, upper=1.0) # rotor strain teL
+# rotor.driver.add_constraint('strainL_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', upper= 1.0)
+# rotor.driver.add_constraint('(eps_crit_spar[[10, 12, 14, 20, 23, 27, 31, 33]] - strainU_spar[[10, 12, 14, 20, 23, 27, 31, 33]]) / strain_ult_spar', upper= 0.0)  # rotor buckling spar
+# rotor.driver.add_constraint('(eps_crit_te[[10, 12, 13, 14, 21, 28, 33]] - strainU_te[[10, 12, 13, 14, 21, 28, 33]]) / strain_ult_te', upper=0.0)  # rotor buckling te
+# rotor.driver.add_constraint('freq_curvefem[0:2] - nBlades*ratedConditions.Omega/60.0*1.1', lower=0.0)  # flap/edge freq
+# rotor.driver.add_constraint('-aero_extrm_forces.T / 1e6 + [2422241.0342469/1e6, 189545.50087248/1e6]', lower=0.0)
 #
-# rotor.driver.add_desvar('control:tsr', lower=1.5, upper=14.0)
-# rotor.driver.add_objective('obj')
-#
+rotor.driver.add_objective('obj')
+# mass_hub_system = 37118.36
+# mass_nacelle = 193805.65
+# mass_tower = 358230.15
+# fixed_mass = mass_hub_system + mass_nacelle + mass_tower
+
+# print 54675.0 + fixed_mass
 # recorder = SqliteRecorder('recorder')
 # recorder.options['record_params'] = True
 # recorder.options['record_metadata'] = True
 # rotor.driver.add_recorder(recorder)
 
-print "Start setup"
-rotor.setup() #check=False)
-print "End setup"
+import cProfile
+import time
+time0 = time.time()
+rotor.setup(check=False)
+print time.time() - time0
 
 # === blade grid ===
 rotor['initial_aero_grid'] = initial_aero_grid  # (Array): initial aerodynamic grid on unit radius
@@ -71,7 +93,7 @@ rotor['nBlades'] = 3  # (Int): number of blades
 # ------------------
 
 # === airfoil files ===
-basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles')
+basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles/')
 
 # load all airfoils
 airfoil_types = [0]*8
@@ -86,6 +108,18 @@ airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
 
 # place at appropriate radial stations
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+afinit = CCAirfoil.initFromAerodynFile  # just for shorthand
+
+# load all airfoils
+airfoil_types = [0]*8
+airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
+airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+airfoil_types[2] = afinit(basepath + 'DU40_A17.dat')
+airfoil_types[3] = afinit(basepath + 'DU35_A17.dat')
+airfoil_types[4] = afinit(basepath + 'DU30_A17.dat')
+airfoil_types[5] = afinit(basepath + 'DU25_A17.dat')
+airfoil_types[6] = afinit(basepath + 'DU21_A17.dat')
+airfoil_types[7] = afinit(basepath + 'NACA64_A17.dat')
 
 n = len(af_idx)
 af = [0]*n
@@ -142,16 +176,17 @@ airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL
 # rotor['airfoil_files'] = af  # (List): names of airfoil file
 rotor['airfoil_parameterization'] = CST  # (List): names of airfoil file
 rotor['airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of airfoil file
+rotor['airfoil_files'] = np.array(af)  # (List): names of airfoil file
 # ----------------------
 
 # === atmosphere ===
 rotor['rho'] = 1.225  # (Float, kg/m**3): density of air
 rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
-rotor['shearExp'] = 0.25  # (Float): shear exponent
-rotor['hubHt'] = 90.0  # (Float, m): hub height
+rotor['shearExp'] = 0.2  # (Float): shear exponent
+rotor['hubHt'] = np.array([90.0])  # (Float, m): hub height
 rotor['turbine_class'] = 'I'  # (Enum): IEC turbine class
 rotor['turbulence_class'] = 'B'  # (Enum): IEC turbulence class class
-rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
+rotor['cdf_reference_height_wind_speed'] = np.array([90.0])  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
 rotor['g'] = 9.81  # (Float, m/s**2): acceleration of gravity
 # ----------------------
 
@@ -244,8 +279,9 @@ rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigu
 # from myutilities import plt
 
 # === run and outputs ===
+time0 = time.time()
 rotor.run()
-
+print time.time() - time0
 print 'AEP =', rotor['AEP']
 print 'diameter =', rotor['diameter']
 print 'ratedConditions.V =', rotor['ratedConditions:V']
@@ -260,32 +296,36 @@ print 'freq =', rotor['freq']
 print 'tip_deflection =', rotor['tip_deflection']
 print 'root_bending_moment =', rotor['root_bending_moment']
 
-plt.figure()
-plt.plot(rotor['V'], rotor['P']/1e6)
-plt.xlabel('wind speed (m/s)')
-plt.xlabel('power (W)')
-
-plt.figure()
-plt.plot(rotor['spline.r_str'], rotor['strainU_spar'], label='suction')
-plt.plot(rotor['spline.r_str'], rotor['strainL_spar'], label='pressure')
-plt.plot(rotor['spline.r_str'], rotor['eps_crit_spar'], label='critical')
-plt.ylim([-5e-3, 5e-3])
-plt.xlabel('r')
-plt.ylabel('strain')
-plt.legend()
-# plt.save('/Users/sning/Desktop/strain_spar.pdf')
-# plt.save('/Users/sning/Desktop/strain_spar.png')
-
-plt.figure()
-plt.plot(rotor['spline.r_str'], rotor['strainU_te'], label='suction')
-plt.plot(rotor['spline.r_str'], rotor['strainL_te'], label='pressure')
-plt.plot(rotor['spline.r_str'], rotor['eps_crit_te'], label='critical')
-plt.ylim([-5e-3, 5e-3])
-plt.xlabel('r')
-plt.ylabel('strain')
-plt.legend()
-# plt.save('/Users/sning/Desktop/strain_te.pdf')
-# plt.save('/Users/sning/Desktop/strain_te.png')
-
-plt.show()
+test = open('Text.txt', 'w')
+partial= rotor.check_partial_derivatives(out_stream=test)
+# total = rotor.check_total_derivatives(out_stream=test, unknown_list=['obj', 'mass_all_blades', 'AEP'])
+# plt.figure()
+# plt.plot(rotor['V'], rotor['P']/1e6)
+# plt.xlabel('wind speed (m/s)')
+# plt.xlabel('power (W)')
+#
+# plt.figure()
+# plt.plot(rotor['spline.r_str'], rotor['strainU_spar'], label='suction')
+# plt.plot(rotor['spline.r_str'], rotor['strainL_spar'], label='pressure')
+# plt.plot(rotor['spline.r_str'], rotor['eps_crit_spar'], label='critical')
+# plt.ylim([-5e-3, 5e-3])
+# plt.xlabel('r')
+# plt.ylabel('strain')
+# plt.legend()
+# # plt.save('/Users/sning/Desktop/strain_spar.pdf')
+# # plt.save('/Users/sning/Desktop/strain_spar.png')
+#
+# plt.figure()
+# plt.plot(rotor['spline.r_str'], rotor['strainU_te'], label='suction')
+# plt.plot(rotor['spline.r_str'], rotor['strainL_te'], label='pressure')
+# plt.plot(rotor['spline.r_str'], rotor['eps_crit_te'], label='critical')
+# plt.ylim([-5e-3, 5e-3])
+# plt.xlabel('r')
+# plt.ylabel('strain')
+# plt.legend()
+# # plt.save('/Users/sning/Desktop/strain_te.pdf')
+# # plt.save('/Users/sning/Desktop/strain_te.png')
+#
+# plt.show()
 # ----------------
+print "Done"

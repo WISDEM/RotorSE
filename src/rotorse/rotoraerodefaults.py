@@ -10,6 +10,8 @@ Copyright (c) NREL. All rights reserved.
 import numpy as np
 from math import pi, gamma
 from openmdao.api import Component, Group
+from ccblade import CCAirfoil, CCBlade as CCBlade_PY
+
 from utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import common_configure
 from akima import Akima
@@ -202,303 +204,302 @@ class CCBladeGeometry(Component):
         J['diameter', 'Rtip'] = 2.0*J_sub[0][0]
         J['diameter', 'precurveTip'] = 2.0*J_sub[0][1]
         J['diameter', 'precone'] = 2.0*J_sub[0][2]
-        J['diameter', 'R'] = 2.0
 
         return J
 
 
-# ## TODO
-# class CCBlade(Component):
-#     def __init__(self, run_case, n, n2):
-#         super(CCBlade, self).__init__()
-#         """blade element momentum code"""
-#
-#         # (potential) variables
-#         self.add_param('r', shape=n, units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
-#         self.add_param('chord', shape=n, units='m', desc='chord length at each section')
-#         self.add_param('theta', shape=n,  units='deg', desc='twist angle at each section (positive decreases angle of attack)')
-#         self.add_param('Rhub', shape=1, units='m', desc='hub radius')
-#         self.add_param('Rtip', shape=1, units='m', desc='tip radius')
-#         self.add_param('hubHt', shape=1, units='m', desc='hub height')
-#         self.add_param('precone', shape=1, desc='precone angle', units='deg')
-#         self.add_param('tilt', shape=1, desc='shaft tilt', units='deg')
-#         self.add_param('yaw', shape=1, desc='yaw error', units='deg')
-#
-#         # TODO: I've not hooked up the gradients for these ones yet.
-#         self.add_param('precurve', shape=n, units='m', desc='precurve at each section')
-#         self.add_param('precurveTip', val=0.0, units='m', desc='precurve at tip')
-#
-#         # parameters
-#         # self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
-#         self.add_param('airfoil_parameterization', val=np.zeros((n, 8)))
-#         self.add_param('airfoil_analysis_options', val={})
-#         self.add_param('B', val=3, desc='number of blades', pass_by_obj=True)
-#         self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
-#         self.add_param('mu', val=1.81206e-5, units='kg/(m*s)', desc='dynamic viscosity of air')
-#         self.add_param('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True)
-#         self.add_param('nSector', val=4, desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True)
-#         self.add_param('tiploss', val=True, desc='include Prandtl tip loss model', pass_by_obj=True)
-#         self.add_param('hubloss', val=True, desc='include Prandtl hub loss model', pass_by_obj=True)
-#         self.add_param('wakerotation', val=True, desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)', pass_by_obj=True)
-#         self.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors', pass_by_obj=True)
-#
-#         self.add_param('run_case', val=Enum('power', 'loads'), pass_by_obj=True)
-#
-#
-#         # --- use these if (run_case == 'power') ---
-#
-#         # inputs
-#         self.add_param('Uhub', shape=n2, units='m/s', desc='hub height wind speed')
-#         self.add_param('Omega', shape=n2, units='rpm', desc='rotor rotation speed')
-#         self.add_param('pitch', shape=n2, units='deg', desc='blade pitch setting')
-#
-#         # outputs
-#         self.add_output('T', shape=n2, units='N', desc='rotor aerodynamic thrust')
-#         self.add_output('Q', shape=n2, units='N*m', desc='rotor aerodynamic torque')
-#         self.add_output('P', shape=n2, units='W', desc='rotor aerodynamic power')
-#
-#
-#         # --- use these if (run_case == 'loads') ---
-#         # if you only use rotoraero.py and not rotor.py
-#         # (i.e., only care about power curves, and not structural loads)
-#         # then these second set of inputs/outputs are not needed
-#
-#         # inputs
-#         self.add_param('V_load', shape=1, units='m/s', desc='hub height wind speed')
-#         self.add_param('Omega_load', shape=1, units='rpm', desc='rotor rotation speed')
-#         self.add_param('pitch_load', shape=1, units='deg', desc='blade pitch setting')
-#         self.add_param('azimuth_load', shape=1, units='deg', desc='blade azimuthal location')
-#
-#         # outputs
-#         self.add_output('loads:r', shape=19, units='m', desc='radial positions along blade going toward tip')
-#         self.add_output('loads:Px', shape=19, units='N/m', desc='distributed loads in blade-aligned x-direction')
-#         self.add_output('loads:Py', shape=19, units='N/m', desc='distributed loads in blade-aligned y-direction')
-#         self.add_output('loads:Pz', shape=19, units='N/m', desc='distributed loads in blade-aligned z-direction')
-#
-#         # corresponding setting for loads
-#         self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
-#         self.add_output('loads:Omega', shape=1, units='rpm', desc='rotor rotation speed')
-#         self.add_output('loads:pitch', shape=1, units='deg', desc='pitch angle')
-#         self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
-#
-#         self.run_case = run_case
-#         self.fd_options['form'] = 'central'
-#         self.fd_options['step_type'] = 'relative'
-#
-#     def solve_nonlinear(self, params, unknowns, resids):
-#
-#         self.r = params['r']
-#         self.chord = params['chord']
-#         self.theta = params['theta']
-#         self.Rhub = params['Rhub']
-#         self.Rtip = params['Rtip']
-#         self.hubHt = params['hubHt']
-#         self.precone = params['precone']
-#         self.tilt = params['tilt']
-#         self.yaw = params['yaw']
-#         self.precurve = params['precurve']
-#         self.precurveTip = params['precurveTip']
-#         # self.airfoil_files = params['airfoil_files']
-#         self.airfoil_parameterization = params['airfoil_parameterization']
-#         self.airfoil_analysis_options = params['airfoil_analysis_options']
-#         self.B = params['B']
-#         self.rho = params['rho']
-#         self.mu = params['mu']
-#         self.shearExp = params['shearExp']
-#         self.nSector = params['nSector']
-#         self.tiploss = params['tiploss']
-#         self.hubloss = params['hubloss']
-#         self.wakerotation = params['wakerotation']
-#         self.usecd = params['usecd']
-#         self.Uhub = params['Uhub']
-#         self.Omega = params['Omega']
-#         self.pitch = params['pitch']
-#         self.V_load = params['V_load']
-#         self.Omega_load = params['Omega_load']
-#         self.pitch_load = params['pitch_load']
-#         self.azimuth_load = params['azimuth_load']
-#
-#
-#         if len(self.precurve) == 0:
-#             self.precurve = np.zeros_like(self.r)
-#
-#         # airfoil files
-#         n = len(self.airfoil_files)
-#         af = [0]*n
-#         afinit = CCAirfoil.initFromAerodynFile
-#         for i in range(n):
-#             af[i] = afinit(self.airfoil_files[i])
-#
-#         self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, af, self.Rhub, self.Rtip, self.B,
-#             self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
-#             self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-#             wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
-#
-#
-#         if self.run_case == 'power':
-#
-#             # power, thrust, torque
-#
-#             self.P, self.T, self.Q, self.dP, self.dT, self.dQ \
-#                 = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
-#             unknowns['T'] = self.T
-#             unknowns['Q'] = self.Q
-#             unknowns['P'] = self.P
-#
-#         elif self.run_case == 'loads':
-#             # distributed loads
-#             Np, Tp, self.dNp, self.dTp \
-#                 = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
-#
-#             # concatenate loads at root/tip
-#             unknowns['loads:r'] = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
-#             Np = np.concatenate([[0.0], Np, [0.0]])
-#             Tp = np.concatenate([[0.0], Tp, [0.0]])
-#
-#             # conform to blade-aligned coordinate system
-#             unknowns['loads:Px'] = Np
-#             unknowns['loads:Py'] = -Tp
-#             unknowns['loads:Pz'] = 0*Np
-#
-#             # return other outputs needed
-#             unknowns['loads:V'] = self.V_load
-#             unknowns['loads:Omega'] = self.Omega_load
-#             unknowns['loads:pitch'] = self.pitch_load
-#             unknowns['loads:azimuth'] = self.azimuth_load
-#
-#
-#
-#     def list_deriv_vars(self):
-#
-#         if self.run_case == 'power':
-#             inputs = ('precone', 'tilt', 'hubHt', 'Rhub', 'Rtip', 'yaw',
-#                 'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta', 'precurve', 'precurveTip')
-#             outputs = ('P', 'T', 'Q')
-#
-#         elif self.run_case == 'loads':
-#
-#             inputs = ('r', 'chord', 'theta', 'Rhub', 'Rtip', 'hubHt', 'precone',
-#                 'tilt', 'yaw', 'V_load', 'Omega_load', 'pitch_load', 'azimuth_load', 'precurve')
-#             outputs = ('loads:r', 'loads:Px', 'loads:Py', 'loads:Pz', 'loads:V',
-#                 'loads:Omega', 'loads:pitch', 'loads:azimuth')
-#
-#         return inputs, outputs
-#
-#
-#     def linearize(self, params, unknowns, resids):
-#
-#         if self.run_case == 'power':
-#
-#             dP = self.dP
-#             dT = self.dT
-#             dQ = self.dQ
-#
-#             J = {}
-#             J['P', 'precone'] = dP['dprecone']
-#             J['P', 'tilt'] = dP['dtilt']
-#             J['P', 'hubHt'] = dP['dhubHt']
-#             J['P', 'Rhub'] = dP['dRhub']
-#             J['P', 'Rtip'] = dP['dRtip']
-#             J['P', 'yaw'] = dP['dyaw']
-#             J['P', 'Uhub'] = dP['dUinf']
-#             J['P', 'Omega'] = dP['dOmega']
-#             J['P', 'pitch'] =  dP['dpitch']
-#             J['P', 'r'] = dP['dr']
-#             J['P', 'chord'] = dP['dchord']
-#             J['P', 'theta'] = dP['dtheta']
-#             J['P', 'precurve'] = dP['dprecurve']
-#             J['P', 'precurveTip'] = dP['dprecurveTip']
-#
-#             J['T', 'precone'] = dT['dprecone']
-#             J['T', 'tilt'] = dT['dtilt']
-#             J['T', 'hubHt'] = dT['dhubHt']
-#             J['T', 'Rhub'] = dT['dRhub']
-#             J['T', 'Rtip'] = dT['dRtip']
-#             J['T', 'yaw'] = dT['dyaw']
-#             J['T', 'Uhub'] = dT['dUinf']
-#             J['T', 'Omega'] = dT['dOmega']
-#             J['T', 'pitch'] =  dT['dpitch']
-#             J['T', 'r'] = dT['dr']
-#             J['T', 'chord'] = dT['dchord']
-#             J['T', 'theta'] = dT['dtheta']
-#             J['T', 'precurve'] = dT['dprecurve']
-#             J['T', 'precurveTip'] = dT['dprecurveTip']
-#
-#             J['Q', 'precone'] = dQ['dprecone']
-#             J['Q', 'tilt'] = dQ['dtilt']
-#             J['Q', 'hubHt'] = dQ['dhubHt']
-#             J['Q', 'Rhub'] = dQ['dRhub']
-#             J['Q', 'Rtip'] = dQ['dRtip']
-#             J['Q', 'yaw'] = dQ['dyaw']
-#             J['Q', 'Uhub'] = dQ['dUinf']
-#             J['Q', 'Omega'] = dQ['dOmega']
-#             J['Q', 'pitch'] =  dQ['dpitch']
-#             J['Q', 'r'] = dQ['dr']
-#             J['Q', 'chord'] = dQ['dchord']
-#             J['Q', 'theta'] = dQ['dtheta']
-#             J['Q', 'precurve'] = dQ['dprecurve']
-#             J['Q', 'precurveTip'] = dQ['dprecurveTip']
-#
-#         elif self.run_case == 'loads':
-#
-#             dNp = self.dNp
-#             dTp = self.dTp
-#             n = len(self.r)
-#
-#             dr_dr = vstack([np.zeros(n), np.eye(n), np.zeros(n)])
-#             dr_dRhub = np.zeros(n+2)
-#             dr_dRtip = np.zeros(n+2)
-#             dr_dRhub[0] = 1.0
-#             dr_dRtip[-1] = 1.0
-#
-#             dV = np.zeros(4*n+10)
-#             dV[3*n+6] = 1.0
-#             dOmega = np.zeros(4*n+10)
-#             dOmega[3*n+7] = 1.0
-#             dpitch = np.zeros(4*n+10)
-#             dpitch[3*n+8] = 1.0
-#             dazimuth = np.zeros(4*n+10)
-#             dazimuth[3*n+9] = 1.0
-#
-#             J = {}
-#             zero = np.zeros(17)
-#             J['loads:r', 'r'] = dr_dr
-#             J['loads:r', 'Rhub'] = dr_dRhub
-#             J['loads:r', 'Rtip'] = dr_dRtip
-#             J['loads:Px', 'r'] = np.vstack([zero, dNp['dr'], zero])
-#             J['loads:Px', 'chord'] = np.vstack([zero, dNp['dchord'], zero])
-#             J['loads:Px', 'theta'] = np.vstack([zero, dNp['dtheta'], zero])
-#             J['loads:Px', 'Rhub'] = np.concatenate([[0.0], np.squeeze(dNp['dRhub']), [0.0]])
-#             J['loads:Px', 'Rtip'] = np.concatenate([[0.0], np.squeeze(dNp['dRtip']), [0.0]])
-#             J['loads:Px', 'hubHt'] = np.concatenate([[0.0], np.squeeze(dNp['dhubHt']), [0.0]])
-#             J['loads:Px', 'precone'] = np.concatenate([[0.0], np.squeeze(dNp['dprecone']), [0.0]])
-#             J['loads:Px', 'tilt'] = np.concatenate([[0.0], np.squeeze(dNp['dtilt']), [0.0]])
-#             J['loads:Px', 'yaw'] = np.concatenate([[0.0], np.squeeze(dNp['dyaw']), [0.0]])
-#             J['loads:Px', 'V_load'] = np.concatenate([[0.0], np.squeeze(dNp['dUinf']), [0.0]])
-#             J['loads:Px', 'Omega_load'] = np.concatenate([[0.0], np.squeeze(dNp['dOmega']), [0.0]])
-#             J['loads:Px', 'pitch_load'] = np.concatenate([[0.0], np.squeeze(dNp['dpitch']), [0.0]])
-#             J['loads:Px', 'azimuth_load'] = np.concatenate([[0.0], np.squeeze(dNp['dazimuth']), [0.0]])
-#             J['loads:Px', 'precurve'] = np.vstack([zero, dNp['dprecurve'], zero])
-#             J['loads:Py', 'r'] = np.vstack([zero, -dTp['dr'], zero])
-#             J['loads:Py', 'chord'] = np.vstack([zero, -dTp['dchord'], zero])
-#             J['loads:Py', 'theta'] = np.vstack([zero, -dTp['dtheta'], zero])
-#             J['loads:Py', 'Rhub'] = np.concatenate([[0.0], -np.squeeze(dTp['dRhub']), [0.0]])
-#             J['loads:Py', 'Rtip'] = np.concatenate([[0.0], -np.squeeze(dTp['dRtip']), [0.0]])
-#             J['loads:Py', 'hubHt'] = np.concatenate([[0.0], -np.squeeze(dTp['dhubHt']), [0.0]])
-#             J['loads:Py', 'precone'] = np.concatenate([[0.0], -np.squeeze(dTp['dprecone']), [0.0]])
-#             J['loads:Py', 'tilt'] = np.concatenate([[0.0], -np.squeeze(dTp['dtilt']), [0.0]])
-#             J['loads:Py', 'yaw'] = np.concatenate([[0.0], -np.squeeze(dTp['dyaw']), [0.0]])
-#             J['loads:Py', 'V_load'] = np.concatenate([[0.0], -np.squeeze(dTp['dUinf']), [0.0]])
-#             J['loads:Py', 'Omega_load'] = np.concatenate([[0.0], -np.squeeze(dTp['dOmega']), [0.0]])
-#             J['loads:Py', 'pitch_load'] = np.concatenate([[0.0], -np.squeeze(dTp['dpitch']), [0.0]])
-#             J['loads:Py', 'azimuth_load'] = np.concatenate([[0.0], -np.squeeze(dTp['dazimuth']), [0.0]])
-#             J['loads:Py', 'precurve'] = np.vstack([zero, -dTp['dprecurve'], zero])
-#             J['loads:V', 'V_load'] = 1.0
-#             J['loads:Omega', 'Omega_load'] = 1.0
-#             J['loads:pitch', 'pitch_load'] = 1.0
-#             J['loads:azimuth', 'azimuth_load'] = 1.0
-#
-#         return J
+class CCBlade(Component):
+    def __init__(self, run_case, n, n2):
+        super(CCBlade, self).__init__()
+        """blade element momentum code"""
+
+        # (potential) variables
+        self.add_param('r', shape=n, units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
+        self.add_param('chord', shape=n, units='m', desc='chord length at each section')
+        self.add_param('theta', shape=n,  units='deg', desc='twist angle at each section (positive decreases angle of attack)')
+        self.add_param('Rhub', shape=1, units='m', desc='hub radius')
+        self.add_param('Rtip', shape=1, units='m', desc='tip radius')
+        self.add_param('hubHt', shape=1, units='m', desc='hub height')
+        self.add_param('precone', shape=1, desc='precone angle', units='deg')
+        self.add_param('tilt', shape=1, desc='shaft tilt', units='deg')
+        self.add_param('yaw', shape=1, desc='yaw error', units='deg')
+
+        # TODO: I've not hooked up the gradients for these ones yet.
+        self.add_param('precurve', shape=n, units='m', desc='precurve at each section')
+        self.add_param('precurveTip', val=0.0, units='m', desc='precurve at tip')
+
+        # parameters
+        # self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
+        self.add_param('airfoil_parameterization', val=np.zeros((n, 8)))
+        self.add_param('airfoil_analysis_options', val={})
+        self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
+        self.add_param('B', val=3, desc='number of blades', pass_by_obj=True)
+        self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
+        self.add_param('mu', val=1.81206e-5, units='kg/(m*s)', desc='dynamic viscosity of air')
+        self.add_param('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True)
+        self.add_param('nSector', val=4, desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True)
+        self.add_param('tiploss', val=True, desc='include Prandtl tip loss model', pass_by_obj=True)
+        self.add_param('hubloss', val=True, desc='include Prandtl hub loss model', pass_by_obj=True)
+        self.add_param('wakerotation', val=True, desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)', pass_by_obj=True)
+        self.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors', pass_by_obj=True)
+
+        self.add_param('run_case', val=Enum('power', 'loads'), pass_by_obj=True)
+
+
+        # --- use these if (run_case == 'power') ---
+
+        # inputs
+        self.add_param('Uhub', shape=n2, units='m/s', desc='hub height wind speed')
+        self.add_param('Omega', shape=n2, units='rpm', desc='rotor rotation speed')
+        self.add_param('pitch', shape=n2, units='deg', desc='blade pitch setting')
+
+        # outputs
+        self.add_output('T', shape=n2, units='N', desc='rotor aerodynamic thrust')
+        self.add_output('Q', shape=n2, units='N*m', desc='rotor aerodynamic torque')
+        self.add_output('P', shape=n2, units='W', desc='rotor aerodynamic power')
+
+
+        # --- use these if (run_case == 'loads') ---
+        # if you only use rotoraero.py and not rotor.py
+        # (i.e., only care about power curves, and not structural loads)
+        # then these second set of inputs/outputs are not needed
+
+        # inputs
+        self.add_param('V_load', shape=1, units='m/s', desc='hub height wind speed')
+        self.add_param('Omega_load', shape=1, units='rpm', desc='rotor rotation speed')
+        self.add_param('pitch_load', shape=1, units='deg', desc='blade pitch setting')
+        self.add_param('azimuth_load', shape=1, units='deg', desc='blade azimuthal location')
+
+        # outputs
+        self.add_output('loads:r', shape=19, units='m', desc='radial positions along blade going toward tip')
+        self.add_output('loads:Px', shape=19, units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_output('loads:Py', shape=19, units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_output('loads:Pz', shape=19, units='N/m', desc='distributed loads in blade-aligned z-direction')
+
+        # corresponding setting for loads
+        self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
+        self.add_output('loads:Omega', shape=1, units='rpm', desc='rotor rotation speed')
+        self.add_output('loads:pitch', shape=1, units='deg', desc='pitch angle')
+        self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
+
+        self.run_case = run_case
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
+
+    def solve_nonlinear(self, params, unknowns, resids):
+
+        self.r = params['r']
+        self.chord = params['chord']
+        self.theta = params['theta']
+        self.Rhub = params['Rhub']
+        self.Rtip = params['Rtip']
+        self.hubHt = params['hubHt']
+        self.precone = params['precone']
+        self.tilt = params['tilt']
+        self.yaw = params['yaw']
+        self.precurve = params['precurve']
+        self.precurveTip = params['precurveTip']
+        self.airfoil_files = params['airfoil_files']
+        self.airfoil_parameterization = params['airfoil_parameterization']
+        self.airfoil_analysis_options = params['airfoil_analysis_options']
+        self.B = params['B']
+        self.rho = params['rho']
+        self.mu = params['mu']
+        self.shearExp = params['shearExp']
+        self.nSector = params['nSector']
+        self.tiploss = params['tiploss']
+        self.hubloss = params['hubloss']
+        self.wakerotation = params['wakerotation']
+        self.usecd = params['usecd']
+        self.Uhub = params['Uhub']
+        self.Omega = params['Omega']
+        self.pitch = params['pitch']
+        self.V_load = params['V_load']
+        self.Omega_load = params['Omega_load']
+        self.pitch_load = params['pitch_load']
+        self.azimuth_load = params['azimuth_load']
+
+
+        if len(self.precurve) == 0:
+            self.precurve = np.zeros_like(self.r)
+
+        # airfoil files
+        n = len(self.airfoil_files)
+        af = [0]*n
+        afinit = CCAirfoil.initFromAerodynFile
+        for i in range(n):
+            af[i] = afinit(self.airfoil_files[i])
+
+        self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, af, self.Rhub, self.Rtip, self.B,
+            self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
+            self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
+            wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
+
+
+        if self.run_case == 'power':
+
+            # power, thrust, torque
+
+            self.P, self.T, self.Q, self.dP, self.dT, self.dQ \
+                = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+            unknowns['T'] = self.T
+            unknowns['Q'] = self.Q
+            unknowns['P'] = self.P
+
+        elif self.run_case == 'loads':
+            # distributed loads
+            Np, Tp, self.dNp, self.dTp \
+                = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+
+            # concatenate loads at root/tip
+            unknowns['loads:r'] = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
+            Np = np.concatenate([[0.0], Np, [0.0]])
+            Tp = np.concatenate([[0.0], Tp, [0.0]])
+
+            # conform to blade-aligned coordinate system
+            unknowns['loads:Px'] = Np
+            unknowns['loads:Py'] = -Tp
+            unknowns['loads:Pz'] = 0*Np
+
+            # return other outputs needed
+            unknowns['loads:V'] = self.V_load
+            unknowns['loads:Omega'] = self.Omega_load
+            unknowns['loads:pitch'] = self.pitch_load
+            unknowns['loads:azimuth'] = self.azimuth_load
+
+
+
+    def list_deriv_vars(self):
+
+        if self.run_case == 'power':
+            inputs = ('precone', 'tilt', 'hubHt', 'Rhub', 'Rtip', 'yaw',
+                'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta', 'precurve', 'precurveTip')
+            outputs = ('P', 'T', 'Q')
+
+        elif self.run_case == 'loads':
+
+            inputs = ('r', 'chord', 'theta', 'Rhub', 'Rtip', 'hubHt', 'precone',
+                'tilt', 'yaw', 'V_load', 'Omega_load', 'pitch_load', 'azimuth_load', 'precurve')
+            outputs = ('loads:r', 'loads:Px', 'loads:Py', 'loads:Pz', 'loads:V',
+                'loads:Omega', 'loads:pitch', 'loads:azimuth')
+
+        return inputs, outputs
+
+
+    def linearize(self, params, unknowns, resids):
+
+        if self.run_case == 'power':
+
+            dP = self.dP
+            dT = self.dT
+            dQ = self.dQ
+
+            J = {}
+            J['P', 'precone'] = dP['dprecone']
+            J['P', 'tilt'] = dP['dtilt']
+            J['P', 'hubHt'] = dP['dhubHt']
+            J['P', 'Rhub'] = dP['dRhub']
+            J['P', 'Rtip'] = dP['dRtip']
+            J['P', 'yaw'] = dP['dyaw']
+            J['P', 'Uhub'] = dP['dUinf']
+            J['P', 'Omega'] = dP['dOmega']
+            J['P', 'pitch'] =  dP['dpitch']
+            J['P', 'r'] = dP['dr']
+            J['P', 'chord'] = dP['dchord']
+            J['P', 'theta'] = dP['dtheta']
+            J['P', 'precurve'] = dP['dprecurve']
+            J['P', 'precurveTip'] = dP['dprecurveTip']
+
+            J['T', 'precone'] = dT['dprecone']
+            J['T', 'tilt'] = dT['dtilt']
+            J['T', 'hubHt'] = dT['dhubHt']
+            J['T', 'Rhub'] = dT['dRhub']
+            J['T', 'Rtip'] = dT['dRtip']
+            J['T', 'yaw'] = dT['dyaw']
+            J['T', 'Uhub'] = dT['dUinf']
+            J['T', 'Omega'] = dT['dOmega']
+            J['T', 'pitch'] =  dT['dpitch']
+            J['T', 'r'] = dT['dr']
+            J['T', 'chord'] = dT['dchord']
+            J['T', 'theta'] = dT['dtheta']
+            J['T', 'precurve'] = dT['dprecurve']
+            J['T', 'precurveTip'] = dT['dprecurveTip']
+
+            J['Q', 'precone'] = dQ['dprecone']
+            J['Q', 'tilt'] = dQ['dtilt']
+            J['Q', 'hubHt'] = dQ['dhubHt']
+            J['Q', 'Rhub'] = dQ['dRhub']
+            J['Q', 'Rtip'] = dQ['dRtip']
+            J['Q', 'yaw'] = dQ['dyaw']
+            J['Q', 'Uhub'] = dQ['dUinf']
+            J['Q', 'Omega'] = dQ['dOmega']
+            J['Q', 'pitch'] =  dQ['dpitch']
+            J['Q', 'r'] = dQ['dr']
+            J['Q', 'chord'] = dQ['dchord']
+            J['Q', 'theta'] = dQ['dtheta']
+            J['Q', 'precurve'] = dQ['dprecurve']
+            J['Q', 'precurveTip'] = dQ['dprecurveTip']
+
+        elif self.run_case == 'loads':
+
+            dNp = self.dNp
+            dTp = self.dTp
+            n = len(self.r)
+
+            dr_dr = vstack([np.zeros(n), np.eye(n), np.zeros(n)])
+            dr_dRhub = np.zeros(n+2)
+            dr_dRtip = np.zeros(n+2)
+            dr_dRhub[0] = 1.0
+            dr_dRtip[-1] = 1.0
+
+            dV = np.zeros(4*n+10)
+            dV[3*n+6] = 1.0
+            dOmega = np.zeros(4*n+10)
+            dOmega[3*n+7] = 1.0
+            dpitch = np.zeros(4*n+10)
+            dpitch[3*n+8] = 1.0
+            dazimuth = np.zeros(4*n+10)
+            dazimuth[3*n+9] = 1.0
+
+            J = {}
+            zero = np.zeros(17)
+            J['loads:r', 'r'] = dr_dr
+            J['loads:r', 'Rhub'] = dr_dRhub
+            J['loads:r', 'Rtip'] = dr_dRtip
+            J['loads:Px', 'r'] = np.vstack([zero, dNp['dr'], zero])
+            J['loads:Px', 'chord'] = np.vstack([zero, dNp['dchord'], zero])
+            J['loads:Px', 'theta'] = np.vstack([zero, dNp['dtheta'], zero])
+            J['loads:Px', 'Rhub'] = np.concatenate([[0.0], np.squeeze(dNp['dRhub']), [0.0]])
+            J['loads:Px', 'Rtip'] = np.concatenate([[0.0], np.squeeze(dNp['dRtip']), [0.0]])
+            J['loads:Px', 'hubHt'] = np.concatenate([[0.0], np.squeeze(dNp['dhubHt']), [0.0]])
+            J['loads:Px', 'precone'] = np.concatenate([[0.0], np.squeeze(dNp['dprecone']), [0.0]])
+            J['loads:Px', 'tilt'] = np.concatenate([[0.0], np.squeeze(dNp['dtilt']), [0.0]])
+            J['loads:Px', 'yaw'] = np.concatenate([[0.0], np.squeeze(dNp['dyaw']), [0.0]])
+            J['loads:Px', 'V_load'] = np.concatenate([[0.0], np.squeeze(dNp['dUinf']), [0.0]])
+            J['loads:Px', 'Omega_load'] = np.concatenate([[0.0], np.squeeze(dNp['dOmega']), [0.0]])
+            J['loads:Px', 'pitch_load'] = np.concatenate([[0.0], np.squeeze(dNp['dpitch']), [0.0]])
+            J['loads:Px', 'azimuth_load'] = np.concatenate([[0.0], np.squeeze(dNp['dazimuth']), [0.0]])
+            J['loads:Px', 'precurve'] = np.vstack([zero, dNp['dprecurve'], zero])
+            J['loads:Py', 'r'] = np.vstack([zero, -dTp['dr'], zero])
+            J['loads:Py', 'chord'] = np.vstack([zero, -dTp['dchord'], zero])
+            J['loads:Py', 'theta'] = np.vstack([zero, -dTp['dtheta'], zero])
+            J['loads:Py', 'Rhub'] = np.concatenate([[0.0], -np.squeeze(dTp['dRhub']), [0.0]])
+            J['loads:Py', 'Rtip'] = np.concatenate([[0.0], -np.squeeze(dTp['dRtip']), [0.0]])
+            J['loads:Py', 'hubHt'] = np.concatenate([[0.0], -np.squeeze(dTp['dhubHt']), [0.0]])
+            J['loads:Py', 'precone'] = np.concatenate([[0.0], -np.squeeze(dTp['dprecone']), [0.0]])
+            J['loads:Py', 'tilt'] = np.concatenate([[0.0], -np.squeeze(dTp['dtilt']), [0.0]])
+            J['loads:Py', 'yaw'] = np.concatenate([[0.0], -np.squeeze(dTp['dyaw']), [0.0]])
+            J['loads:Py', 'V_load'] = np.concatenate([[0.0], -np.squeeze(dTp['dUinf']), [0.0]])
+            J['loads:Py', 'Omega_load'] = np.concatenate([[0.0], -np.squeeze(dTp['dOmega']), [0.0]])
+            J['loads:Py', 'pitch_load'] = np.concatenate([[0.0], -np.squeeze(dTp['dpitch']), [0.0]])
+            J['loads:Py', 'azimuth_load'] = np.concatenate([[0.0], -np.squeeze(dTp['dazimuth']), [0.0]])
+            J['loads:Py', 'precurve'] = np.vstack([zero, -dTp['dprecurve'], zero])
+            J['loads:V', 'V_load'] = 1.0
+            J['loads:Omega', 'Omega_load'] = 1.0
+            J['loads:pitch', 'pitch_load'] = 1.0
+            J['loads:azimuth', 'azimuth_load'] = 1.0
+
+        return J
 
 
 

@@ -99,14 +99,14 @@ class PowerWind(Component):
 
         # variables
         self.add_param('Uref', shape=1, units='m/s', desc='reference wind speed (usually at hub height)')
-        self.add_param('zref', shape=1,  units='m', desc='corresponding reference height')
-        self.add_param('z',  val=90.0, units='m', desc='heights where wind speed should be computed')
+        self.add_param('zref', val=np.ones(1),  units='m', desc='corresponding reference height')
+        self.add_param('z',  val=np.ones(1), units='m', desc='heights where wind speed should be computed')
 
         # parameters
         self.add_param('z0', val=0.0, units='m', desc='bottom of wind profile (height of ground/sea)')
 
         # out
-        self.add_output('U', val=np.zeros(1), units='m/s', desc='magnitude of wind speed at each z location')
+        self.add_output('U', val=np.ones(1), units='m/s', desc='magnitude of wind speed at each z location')
         self.add_output('beta', shape=1, units='deg', desc='corresponding wind angles relative to inertial coordinate system')
 
         """power-law profile wind.  any nodes must not cross z0, and if a node is at z0
@@ -116,23 +116,20 @@ class PowerWind(Component):
         self.add_param('shearExp', val=0.2, desc='shear exponent')
         self.add_param('betaWind', val=0.0, units='deg', desc='wind angle relative to inertial coordinate system')
 
-        missing_deriv_policy = 'assume_zero'
-
 
     def solve_nonlinear(self, params, unknowns, resids):
 
         # rename
-        z = np.zeros(1)
-        z[0] = params['z']
+        z = params['z']
         zref = params['zref']
         z0 = params['z0']
-        zref = 90.0
+
         # velocity
         idx = z > z0
         n = len(z)
         self.n = n
         unknowns['U'] = np.zeros(n)
-        # unknowns['U'][idx] = params['Uref']*((z[idx] - z0)/(zref - z0))**params['shearExp']
+        # [idx]
         unknowns['U'][idx] = params['Uref']*((z[idx] - z0)/(zref - z0))**params['shearExp']
         unknowns['beta'] = params['betaWind']*np.ones_like(z)
 
@@ -161,17 +158,12 @@ class PowerWind(Component):
     def linearize(self, params, unknowns, resids):
 
         # rename
-        # z = params['z']
-        # zref = params['zref']
-        # z0 = params['z0']
+        z = params['z']
+        zref = params['zref']
+        z0 = params['z0']
         shearExp = params['shearExp']
         U = unknowns['U']
         Uref = params['Uref']
-        z = np.zeros(1)
-        z[0] = params['z']
-        zref = params['zref']
-        z0 = params['z0']
-        zref = 90.0
 
         # gradients
         n = self.n
@@ -180,13 +172,14 @@ class PowerWind(Component):
         dU_dzref = np.zeros(n)
 
         idx = z > z0
+        # ]
         dU_dUref[idx] = U[idx]/Uref
         dU_dz[idx] = U[idx]*shearExp/(z[idx] - z0)
         dU_dzref[idx] = -U[idx]*shearExp/(zref - z0)
 
         J = {}
         J['U', 'Uref'] = dU_dUref
-        J['U', 'z'] = dU_dz
+        J['U', 'z'] = np.diag(dU_dz)
         J['U', 'zref'] = dU_dzref
         # # cubic spline region
         # idx = np.logical_and(z > z0, z < zsmall)

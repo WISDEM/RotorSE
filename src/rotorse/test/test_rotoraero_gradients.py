@@ -11,8 +11,9 @@ import unittest
 import numpy as np
 from utilities import check_gradient_unit_test, check_for_missing_unit_tests
 from rotoraero import Coefficients, SetupRunVarSpeed, RegulatedPowerCurve, AEP, RegulatedPowerCurveGroup
-from rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, \
+from rotoraerodefaults import GeometrySpline, CCBladeGeometry, CSMDrivetrain, \
     WeibullCDF, WeibullWithMeanCDF, RayleighCDF
+from ccblade2 import CCBlade_to_RotorSE_connection as CCBlade
 from enum import Enum
 from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder
 from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
@@ -77,10 +78,10 @@ class TestSetupRunVarSpeed(unittest.TestCase):
         prob = Problem()
         prob.root = Group()
         prob.root.add('comp', SetupRunVarSpeed(), promotes=['*'])
-        prob.root.add('control:Vin', IndepVarComp('control:Vin', control_Vin), promotes=['*'])
-        prob.root.add('control:Vout', IndepVarComp('control:Vout', control_Vout), promotes=['*'])
-        prob.root.add('control:tsr', IndepVarComp('control:tsr', control_tsr), promotes=['*'])
-        prob.root.add('control:maxOmega', IndepVarComp('control:maxOmega', control_maxOmega), promotes=['*'])
+        prob.root.add('control_Vin', IndepVarComp('control:Vin', control_Vin), promotes=['*'])
+        prob.root.add('control_Vout', IndepVarComp('control:Vout', control_Vout), promotes=['*'])
+        prob.root.add('control_tsr', IndepVarComp('control:tsr', control_tsr), promotes=['*'])
+        prob.root.add('control_maxOmega', IndepVarComp('control:maxOmega', control_maxOmega), promotes=['*'])
         prob.root.add('R', IndepVarComp('R', 0.0), promotes=['*'])
         prob.root.add('rho', IndepVarComp('rho', 0.0), promotes=['*'])
         prob.setup(check=False)
@@ -113,12 +114,12 @@ class TestRegulatedPowerCurve(unittest.TestCase):
         prob = Problem()
         prob.root = Group()
         prob.root.add('powercurve', RegulatedPowerCurveGroup())
-        prob.root.add('control:Vin', IndepVarComp('control:Vin', control_Vin), promotes=['*'])
-        prob.root.add('control:Vout', IndepVarComp('control:Vout', control_Vout), promotes=['*'])
-        prob.root.add('control:ratedPower', IndepVarComp('control:ratedPower', control_ratedPower), promotes=['*'])
-        prob.root.add('control:tsr', IndepVarComp('control:tsr', control_tsr), promotes=['*'])
-        prob.root.add('control:pitch', IndepVarComp('control:pitch', control_pitch), promotes=['*'])
-        prob.root.add('control:maxOmega', IndepVarComp('control:maxOmega', control_maxOmega), promotes=['*'])
+        prob.root.add('control_Vin', IndepVarComp('control:Vin', control_Vin), promotes=['*'])
+        prob.root.add('control_Vout', IndepVarComp('control:Vout', control_Vout), promotes=['*'])
+        prob.root.add('control_ratedPower', IndepVarComp('control:ratedPower', control_ratedPower), promotes=['*'])
+        prob.root.add('control_tsr', IndepVarComp('control:tsr', control_tsr), promotes=['*'])
+        prob.root.add('control_pitch', IndepVarComp('control:pitch', control_pitch), promotes=['*'])
+        prob.root.add('control_maxOmega', IndepVarComp('control:maxOmega', control_maxOmega), promotes=['*'])
         prob.root.add('Vcoarse', IndepVarComp('Vcoarse', np.zeros(len(Vcoarse))), promotes=['*'])
         prob.root.add('Pcoarse', IndepVarComp('Pcoarse', np.zeros(len(Pcoarse))), promotes=['*'])
         prob.root.add('Tcoarse', IndepVarComp('Tcoarse', np.zeros(len(Tcoarse))), promotes=['*'])
