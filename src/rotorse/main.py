@@ -27,19 +27,21 @@ nstr = len(initial_str_grid)
 rotor.root = RotorSE(naero, nstr)
 
 ### SETUP OPTIMIZATION
-rotor.driver = pyOptSparseDriver()
-rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
-# ccblade.driver.options['tol'] = 1.0e-8
-
-rotor.driver.add_desvar('control:tsr', lower=1.5, upper=14.0)
-rotor.driver.add_objective('obj')
+# rotor.driver = pyOptSparseDriver()
+# rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+# # ccblade.driver.options['tol'] = 1.0e-8
+#
+# rotor.driver.add_desvar('control:tsr', lower=1.5, upper=14.0)
+# rotor.driver.add_objective('obj')
 #
 # recorder = SqliteRecorder('recorder')
 # recorder.options['record_params'] = True
 # recorder.options['record_metadata'] = True
 # rotor.driver.add_recorder(recorder)
 
-rotor.setup(check=False)
+print "Start setup"
+rotor.setup() #check=False)
+print "End setup"
 
 # === blade grid ===
 rotor['initial_aero_grid'] = initial_aero_grid  # (Array): initial aerodynamic grid on unit radius
@@ -134,7 +136,7 @@ for i in range(naero):
         CST_full[i][j] = CST[af_idx[i]][0][j]
 CST = CST_full.reshape(naero, 1, 8)
 
-airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='FD', iterations=20, processors=0)
+airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
 
 
 # rotor['airfoil_files'] = af  # (List): names of airfoil file

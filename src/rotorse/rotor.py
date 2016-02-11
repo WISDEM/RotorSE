@@ -17,6 +17,7 @@ import _curvefem
 import _bem  # TODO: move to rotoraero
 from enum import Enum
 from ccblade2 import CCBlade_to_RotorSE_connection as CCBlade
+from airfoilprep_free import getCoordinates
 
 
 #######################
@@ -2442,7 +2443,7 @@ class RotorSE(Group):
         self.add('geom', CCBladeGeometry())
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed())
-        self.add('analysis', CCBlade('power', 4, naero, n20)) #TODO
+        self.add('analysis', CCBlade('power', 4, naero, n20, af=np.zeros(naero))) #TODO
         self.add('dt', CSMDrivetrain(n20))
         self.add('powercurve', RegulatedPowerCurveGroup())
         self.add('wind', PowerWind())
@@ -2609,10 +2610,10 @@ class RotorSE(Group):
         self.add('resize', ResizeCompositeSection(nstr))
         self.add('gust', GustETM())
         self.add('setuppc',  SetupPCModVarSpeed())
-        self.add('aero_rated', CCBlade('loads', 4, naero, 1)) # 'loads', naero, 1))
-        self.add('aero_extrm', CCBlade('loads', 4, naero,  1))
-        self.add('aero_extrm_forces', CCBlade('power', 4, naero, 2))
-        self.add('aero_defl_powercurve', CCBlade('loads', 4, naero,  1))
+        self.add('aero_rated', CCBlade('loads', 4, naero, 1, af=np.zeros(naero))) # 'loads', naero, 1))
+        self.add('aero_extrm', CCBlade('loads', 4, naero,  1, af=np.zeros(naero)))
+        self.add('aero_extrm_forces', CCBlade('power', 4, naero, 2, af=np.zeros(naero)))
+        self.add('aero_defl_powercurve', CCBlade('loads', 4, naero,  1, af=np.zeros(naero)))
         self.add('beam', PreCompSections(nstr))
         self.add('loads_defl', TotalLoads(nstr))
         self.add('loads_pc_defl', TotalLoads(nstr))
