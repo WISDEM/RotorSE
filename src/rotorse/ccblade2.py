@@ -55,7 +55,7 @@ class WindComponents(Component):
         self.add_param('yaw', shape=1, units='deg')
         self.add_param('Omega', shape=1)
         self.add_param('shearExp', shape=1)
-        self.add_param('hubHt', shape=1)
+        self.add_param('hubHt', val=np.zeros(1))
         self.add_output('Vx', shape=n)
         self.add_output('Vy', shape=n)
         self.fd_options['form'] = 'central'

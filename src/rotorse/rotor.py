@@ -724,7 +724,8 @@ class GridSetup(Component):
         # then find the fraction the structural value is between the two bounding indices
         unknowns['fraction'] = np.zeros(nstr)
         unknowns['idxj'] = np.zeros(nstr, dtype=np.int)
-
+        if r_str[-1] > 1.0: ## For bug when doing finite difference test
+            r_str[-1] = 1.0
         for i in range(nstr):
             for j in range(1, naug):
                 if r_aug[j] >= r_str[i]:
@@ -732,7 +733,6 @@ class GridSetup(Component):
                     break
             unknowns['idxj'][i] = j
             unknowns['fraction'][i] = (r_str[i] - r_aug[j]) / (r_aug[j+1] - r_aug[j])
-
     def linearize(self, params, unknowns, resids):
         J = {}
         J['fraction', 'initial_aero_grid'] = np.zeros((self.nstr, self.naero))
@@ -2332,11 +2332,11 @@ class RotorSE(Group):
         self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
         self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
         self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
-        self.add('hubHt', IndepVarComp('hubHt', val=90.0, units='m', desc='hub height'), promotes=['*'])
+        self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
         self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
-        self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
+        self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=np.zeros(1), units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
         self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation'), promotes=['*'])
 
         # --- composite sections ---
@@ -2949,4 +2949,4 @@ class RotorSE(Group):
         self.connect('spline.Rtip', 'Rtip_in')
         self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[nstr-1])
 
-        self.add('obj_cmp', ExecComp('obj = (mass_all_blades + 643829.16)*100 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
+        self.add('obj_cmp', ExecComp('obj = (mass_all_blades + 589154)*100 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
