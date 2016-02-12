@@ -33,20 +33,20 @@ rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
 # ccblade.driver.options['tol'] = 1.0e-8
 
 rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-rotor.driver.add_desvar('chord_sub', lower=0.9, upper=5.3)
+rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
 rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
 rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
 # rotor.driver.add_parameter('sparT', low=0.0001, high=0.2) # (Array, m): spar cap thickness parameters
 # rotor.driver.add_parameter('teT', low=0.001, high=0.2) # (Array, m): trailing-edge thickness parameters
 scale_contraints_1 = 10.0
-# rotor.driver.add_constraint('strainU_spar[[0, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_spar', lower=-1.0, upper=1.0) # rotor strain sparL
-# rotor.driver.add_constraint('strainU_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', lower=-1.0, upper=1.0) # rotor strain teL
-# rotor.driver.add_constraint('strainL_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', upper= 1.0)
-# rotor.driver.add_constraint('(eps_crit_spar[[10, 12, 14, 20, 23, 27, 31, 33]] - strainU_spar[[10, 12, 14, 20, 23, 27, 31, 33]]) / strain_ult_spar', upper= 0.0)  # rotor buckling spar
-# rotor.driver.add_constraint('(eps_crit_te[[10, 12, 13, 14, 21, 28, 33]] - strainU_te[[10, 12, 13, 14, 21, 28, 33]]) / strain_ult_te', upper=0.0)  # rotor buckling te
-# rotor.driver.add_constraint('freq_curvefem[0:2] - nBlades*ratedConditions.Omega/60.0*1.1', lower=0.0)  # flap/edge freq
-# rotor.driver.add_constraint('-aero_extrm_forces.T / 1e6 + [2422241.0342469/1e6, 189545.50087248/1e6]', lower=0.0)
-#
+rotor.driver.add_constraint('con1', lower=-1.0, upper=1.0) # rotor strain sparL
+rotor.driver.add_constraint('con2', lower=-1.0, upper=1.0) # rotor strain teL
+rotor.driver.add_constraint('con3', upper= 1.0)
+rotor.driver.add_constraint('con4', upper= 0.0)  # rotor buckling spar
+rotor.driver.add_constraint('con5', upper=0.0)  # rotor buckling te
+rotor.driver.add_constraint('con6', lower=0.0)  # flap/edge freq
+rotor.driver.add_constraint('con7', lower=0.0)
+# #
 rotor.driver.add_objective('obj')
 # mass_hub_system = 37118.36
 # mass_nacelle = 193805.65
@@ -105,9 +105,14 @@ airfoil_types[4] = os.path.join(basepath, 'DU30_A17.dat')
 airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
 airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
 airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
+af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+n = len(af_idx)
+af2 = [0]*n
+for i in range(n):
+    af2[i] = airfoil_types[af_idx[i]]
 
 # place at appropriate radial stations
-af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+
 afinit = CCAirfoil.initFromAerodynFile  # just for shorthand
 
 # load all airfoils
@@ -169,14 +174,13 @@ for i in range(naero):
     for j in range(8):
         CST_full[i][j] = CST[af_idx[i]][0][j]
 CST = CST_full.reshape(naero, 1, 8)
-
-airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
-
+# airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
+airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='Files', FDorCS='CS', iterations=20, processors=0)
 
 # rotor['airfoil_files'] = af  # (List): names of airfoil file
 rotor['airfoil_parameterization'] = CST  # (List): names of airfoil file
 rotor['airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of airfoil file
-rotor['airfoil_files'] = np.array(af)  # (List): names of airfoil file
+rotor['airfoil_files'] = np.array(af2) # np.array(af)  # (List): names of airfoil file
 # ----------------------
 
 # === atmosphere ===
@@ -276,6 +280,11 @@ rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
 rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
 # ----------------
 
+# TEST NEW INPUTS
+# rotor['chord_sub'] = np.array([ 1.3 ,        3.14850006 , 2.71236245 , 2.057331  ])
+# rotor['control:tsr'] = 8.34767939089
+# rotor['r_max_chord'] = 0.374932900033
+# rotor['theta_sub'] = np.array([ 11.38729938  , 3.98744815  , 2.85248822 ,  1.91070877])
 # from myutilities import plt
 
 # === run and outputs ===
@@ -295,10 +304,18 @@ print 'I_all_blades =', rotor['I_all_blades']
 print 'freq =', rotor['freq']
 print 'tip_deflection =', rotor['tip_deflection']
 print 'root_bending_moment =', rotor['root_bending_moment']
+print 'r_max_chord =', rotor['r_max_chord']
+print 'chord_sub =', rotor['chord_sub']
+print 'theta_sub =', rotor['theta_sub']
+print 'control:tsr =', rotor['control:tsr']
 
+# print rotor.root.list_connections()
 test = open('Text.txt', 'w')
-partial= rotor.check_partial_derivatives(out_stream=test)
-# total = rotor.check_total_derivatives(out_stream=test, unknown_list=['obj', 'mass_all_blades', 'AEP'])
+# partial= rotor.check_partial_derivatives(out_stream=test)
+
+total = rotor.check_total_derivatives(out_stream=test, unknown_list=['mass_all_blades', 'obj', 'struc.blade_mass'])
+
+
 # plt.figure()
 # plt.plot(rotor['V'], rotor['P']/1e6)
 # plt.xlabel('wind speed (m/s)')

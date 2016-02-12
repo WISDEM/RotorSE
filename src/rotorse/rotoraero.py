@@ -159,6 +159,7 @@ class SetupRunFixedSpeed(Component):
 
         self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
+        self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
         ctrl = params['control']
@@ -335,14 +336,11 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         self.add_output('azimuth', shape=1, units='deg', desc='azimuth load')
 
-        self.fd_options['form'] = 'central'
+        self.fd_options['form'] = 'forward'
         self.fd_options['step_type'] = 'relative'
+        self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
-        pass
-
-    def apply_nonlinear(self, params, unknowns, resids):
-
         n = params['npts']
         Vrated = unknowns['Vrated']
 
@@ -350,7 +348,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         spline = Akima(params['Vcoarse'], params['Pcoarse'])
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
         # resids['residual'] = P - ctrl.ratedPower
-        resids['Vrated'] = P - params['control:ratedPower']
+        # resids['Vrated'] = P - params['control:ratedPower']
         # functional
 
         # place half of points in region 2, half in region 3
@@ -387,6 +385,92 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['ratedConditions:T'] = Trated
         unknowns['ratedConditions:Q'] = params['control:ratedPower'] / (OmegaRated * RPM2RS)
         unknowns['azimuth'] = 180.0
+
+        # gradients
+        ncoarse = len(params['Vcoarse'])
+
+        dV_dVrated = np.concatenate([dV2_dVrated, dV3_dVrated])
+
+        dP_dVcoarse = vstack([dP2_dVcoarse, np.zeros((n/2, ncoarse))])
+        dP_dPcoarse = vstack([dP2_dPcoarse, np.zeros((n/2, ncoarse))])
+        dP_dVrated = np.concatenate([dP2_dV2*dV2_dVrated, np.zeros(n/2)])
+
+        drOmega = np.concatenate([[dOmegaRated_dOmegad*Vrated/R*RS2RPM], np.zeros(3*ncoarse),
+            [dOmegaRated_dOmegad*params['control:tsr']/R*RS2RPM, -dOmegaRated_dOmegad*params['control:tsr']*Vrated/R**2*RS2RPM,
+            dOmegaRated_dmaxOmega]])
+        drQ = -params['control:ratedPower'] / (OmegaRated**2 * RPM2RS) * drOmega
+
+        J = {}
+        J['Vrated', 'Vcoarse'] = np.reshape(dres_dVcoarse, (1, len(dres_dVcoarse)))
+        J['Vrated', 'Pcoarse'] = np.reshape(dres_dPcoarse, (1, len(dres_dPcoarse)))
+        J['Vrated', 'Vrated'] = dres_dVrated
+
+        # J['V', 'Vrated'] = dV_dVrated
+        # J['P', 'Vrated'] = dP_dVrated
+        # J['P', 'Vcoarse'] = dP_dVcoarse
+        # J['P', 'Pcoarse'] = dP_dPcoarse
+        # J['ratedConditions:V', 'Vrated'] = 1
+        J['ratedConditions:Omega', 'control:tsr'] = dOmegaRated_dOmegad*Vrated/R*RS2RPM
+        J['ratedConditions:Omega', 'Vrated'] = dOmegaRated_dOmegad*params['control:tsr']/R*RS2RPM
+        J['ratedConditions:Omega', 'R'] = -dOmegaRated_dOmegad*params['control:tsr']*Vrated/R**2*RS2RPM
+        # J['ratedConditions:Omega', 'control:maxOmega'] = dOmegaRated_dmaxOmega
+        # J['ratedConditions:T', 'Vcoarse'] = np.reshape(dT_dVcoarse, (1, len(dT_dVcoarse)))
+        # J['ratedConditions:T', 'Tcoarse'] = np.reshape(dT_dTcoarse, (1, len(dT_dTcoarse)))
+        # J['ratedConditions:T', 'Vrated'] = dT_dVrated
+        J['ratedConditions:Q', 'control:tsr'] = drQ[0]
+        J['ratedConditions:Q', 'Vrated'] = drQ[-3]
+        J['ratedConditions:Q', 'R'] = drQ[-2]
+        # J['ratedConditions:Q', 'control:maxOmega'] = drQ[-1]
+
+    def apply_nonlinear(self, params, unknowns, resids):
+
+        n = params['npts']
+        Vrated = unknowns['Vrated']
+
+        # residual
+        spline = Akima(params['Vcoarse'], params['Pcoarse'])
+        P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
+        # resids['residual'] = P - ctrl.ratedPower
+        resids['Vrated'] = P - params['control:ratedPower']
+        # functional
+
+        # place half of points in region 2, half in region 3
+        # even though region 3 is constant we still need lots of points there
+        # because we will be integrating against a discretized wind
+        # speed distribution
+
+        # region 2
+        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, n/2)
+        P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
+
+        # region 3
+        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], n/2+1)
+        V3 = V3[1:]  # remove duplicate point
+        dV3_dVrated = dV3_dVrated[1:]
+        P3 = params['control:ratedPower']*np.ones_like(V3)
+
+        # concatenate
+        V = np.concatenate([V2, V3])
+        P = np.concatenate([P2, P3])
+
+        resids['V'] = V - unknowns['V']
+        resids['P'] = P - unknowns['P']
+
+        R = params['R']
+        # rated speed conditions
+        Omega_d = params['control:tsr']*Vrated/R*RS2RPM
+        OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
+            = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
+
+        splineT = Akima(params['Vcoarse'], params['Tcoarse'])
+        Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
+
+        resids['ratedConditions:V'] = Vrated - unknowns['ratedConditions:V']
+        resids['ratedConditions:Omega'] = OmegaRated - unknowns['ratedConditions:Omega']
+        resids['ratedConditions:pitch'] = params['control:pitch'] - unknowns['ratedConditions:pitch']
+        resids['ratedConditions:T'] = Trated - unknowns['ratedConditions:T']
+        resids['ratedConditions:Q'] = (params['control:ratedPower'] / (OmegaRated * RPM2RS)) - unknowns['ratedConditions:Q']
+        resids['azimuth'] = 180.0 - unknowns['azimuth']
 
         # gradients
         ncoarse = len(params['Vcoarse'])
@@ -464,12 +548,13 @@ class AEP(Component):
         self.add_output('AEP', shape=1, units='kW*h', desc='annual energy production')
 
         self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
+        # self.fd_options['step_type'] = 'relative'
         self.fd_options['step_size'] = 1.0
 
     def solve_nonlinear(self, params, unknowns, resids):
 
         unknowns['AEP'] = params['lossFactor']*np.trapz(params['P'], params['CDF_V'])/1e3*365.0*24.0  # in kWh
+        print unknowns['AEP']
 
     def list_deriv_vars(self):
 
