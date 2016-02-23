@@ -298,7 +298,7 @@ class CCBlade:
             self.freeform = True
         else:
             self.freeform = False
-
+        self.freeform = False
         # check if no precurve / presweep
         if precurve is None:
             precurve = np.zeros(len(r))
@@ -416,6 +416,7 @@ class CCBlade:
 
         cphi = cos(phi)
         sphi = sin(phi)
+
 
         if rotating:
             _, a, ap = self.__runBEM(phi, r, chord, theta, af, Vx, Vy)
@@ -1109,7 +1110,7 @@ if __name__ == '__main__':
     shearExp = 0.2
     hubHt = 80.0
     nSector = 8
-    airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=250, processors=0)
+    airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='CFD', FDorCS='CS', iterations=20000, processors=32)
     import os
     w0 = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]
     wl_1 = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]
@@ -1127,7 +1128,8 @@ if __name__ == '__main__':
             -0.49209940079930325, -0.72861624849999296, -0.38147646962813714, 0.13679205926397994, 0.50396496117640877, 0.54798355691567613, 0.37642896917099616, 0.37017796580840234]
 
     CST = [[wl_6],[wl_6], [wl_6], [wl_5], [wl_4], [wl_3], [wl_2], [wl_1]]
-    CST2 = np.array([[wl_6], [wl_5], [wl_4], [wl_3], [wl_2], [wl_1]])
+    # CST = [[wl_6], [wl_5], [wl_4], [wl_3], [wl_2], [wl_1]]
+    CST2 = np.array([[wl_1], [wl_6], [wl_5], [wl_4], [wl_3], [wl_2]]) #, [wl_1]])
     basepath = '5MW_AFFiles' + os.path.sep
     afinit = CCAirfoil.initFromAerodynFile
     afinit2 = CCAirfoil.initFromCST  # just for shorthand
@@ -1160,18 +1162,23 @@ if __name__ == '__main__':
             CST_full[i][j] = CST[af_idx[i]][0][j]
     CST = CST_full.reshape(17, 1, 8)
     CST2 = CST2.reshape(6,1,8)
-
+    from copy import deepcopy
+    airfoil_types_xfoil = deepcopy(airfoil_types)
 
     print "Generating airfoil data"
     for i in range(len(airfoil_types)-2):
-        airfoil_types[i+2] = afinit2(CST[i+2], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
+        airfoil_types[i+2] = afinit2(CST2[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
+        airfoil_types_xfoil[i+2] = afinit2(CST2[i], 'XFOIL', airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
     print "Finished generating airfoil data"
+
+
     af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 
     af = [0]*len(r)
+    af_xfoil = [0]*len(r)
     for i in range(len(r)):
         af[i] = airfoil_types[af_idx[i]]
-
+        af_xfoil[i] = airfoil_types_xfoil[af_idx[i]]
     # CST_full_2 = np.zeros(len(CST_full))
     # for i in range(len(CST_full_2)):
     #     CST_full_2[i] = CST_full[i]
@@ -1183,7 +1190,10 @@ if __name__ == '__main__':
     CST2 = CST2.reshape(6,1,8)
     # create CCBlade object
     aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
-                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=True)
+                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
+
+    aeroanalysis_xfoil = CCBlade(r, chord, theta, af_xfoil, Rhub, Rtip, B, rho, mu,
+                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
 
     # set conditions
     Uinf = 10.0
@@ -1198,7 +1208,7 @@ if __name__ == '__main__':
 #     Np, Tp = aeroanalysis.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
 #
 #     # plot
-#     import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
 #     # rstar = (rload - rload[0]) / (rload[-1] - rload[0])
 #     plt.plot(r, Tp/1e3, 'k', label='lead-lag')
 #     plt.plot(r, Np/1e3, 'r', label='flapwise')
@@ -1206,30 +1216,34 @@ if __name__ == '__main__':
 #     plt.ylabel('distributed aerodynamic loads (kN)')
 #     plt.legend(loc='upper left')
 #
-#     CP, CT, CQ = aeroanalysis.evaluate([Uinf], [Omega], [pitch], coefficient=True)
+    # CP, CT, CQ = aeroanalysis.evaluate([Uinf], [Omega], [pitch], coefficient=True)
+    #
+    # print CP, CT, CQ
+
+
+    tsr = np.linspace(2, 14, 20)
+    Omega = 10.0 * np.ones_like(tsr)
+    Uinf = Omega*pi/30.0 * Rtip/tsr
+    pitch = np.zeros_like(tsr)
+
+    CP, CT, CQ = aeroanalysis.evaluate(Uinf, Omega, pitch, coefficient=True)
+    CP_xfoil, CT_xfoil, CQ_xfoil = aeroanalysis_xfoil.evaluate(Uinf, Omega, pitch, coefficient=True)
+    print CP
+    print CT
+    print CQ
+    tsr2 = np.linspace(2, 14, 20)
+    wind_tunnel_CP_origin = [ 0.02344119,  0.0653068,   0.12733272,  0.19768979,  0.275223,    0.35764107,
+0.41604225,  0.44387852,  0.45630932,  0.45969981,  0.45627368,  0.44741262,
+0.43461535,  0.4190967,   0.40101026,  0.38017748,  0.35642367,  0.32954743,
+0.29939923,  0.26601073]
+
+    plt.figure()
+    plt.plot(tsr, CP, 'xk-', label='CFD')
+    plt.plot(tsr2, wind_tunnel_CP_origin, '^r-', label='WT')
+    plt.plot(tsr, CP_xfoil, 'b*-', label='XFOIL')
+    plt.legend(loc='best')
+    plt.xlabel('$\lambda$')
+    plt.ylabel('$c_p$')
 #
-#     print CP, CT, CQ
-#
-#
-#     tsr = np.linspace(2, 14, 50)
-#     Omega = 10.0 * np.ones_like(tsr)
-#     Uinf = Omega*pi/30.0 * Rtip/tsr
-#     pitch = np.zeros_like(tsr)
-#
-#     CP, CT, CQ = aeroanalysis.evaluate(Uinf, Omega, pitch, coefficient=True)
-#
-#     tsr2 = np.linspace(2, 14, 20)
-#     wind_tunnel_CP_origin = [ 0.02344119,  0.0653068,   0.12733272,  0.19768979,  0.275223,    0.35764107,
-# 0.41604225,  0.44387852,  0.45630932,  0.45969981,  0.45627368,  0.44741262,
-# 0.43461535,  0.4190967,   0.40101026,  0.38017748,  0.35642367,  0.32954743,
-# 0.29939923,  0.26601073]
-#
-#     plt.figure()
-#     plt.plot(tsr, CP, 'k', label='XFOIL')
-#     plt.plot(tsr2, wind_tunnel_CP_origin, 'r', label='WT')
-#     plt.legend(loc='best')
-#     plt.xlabel('$\lambda$')
-#     plt.ylabel('$c_p$')
-#
-#     plt.show()
+    plt.show()
     print "DONE"

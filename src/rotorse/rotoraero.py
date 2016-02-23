@@ -554,7 +554,7 @@ class AEP(Component):
     def solve_nonlinear(self, params, unknowns, resids):
 
         unknowns['AEP'] = params['lossFactor']*np.trapz(params['P'], params['CDF_V'])/1e3*365.0*24.0  # in kWh
-        print unknowns['AEP']
+        #print unknowns['AEP']
 
     def list_deriv_vars(self):
 

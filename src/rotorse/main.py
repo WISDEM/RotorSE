@@ -7,7 +7,7 @@ from rotor import RotorSE
 import os
 import matplotlib.pyplot as plt
 from precomp import Orthotropic2DMaterial, CompositeSection, Profile
-from ccblade2 import CCAirfoil
+from ccblade import CCAirfoil
 from akima import Akima
 
 
@@ -28,26 +28,26 @@ nstr = len(initial_str_grid)
 rotor.root = RotorSE(naero, nstr)
 
 ### SETUP OPTIMIZATION
-rotor.driver = pyOptSparseDriver()
-rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
-# ccblade.driver.options['tol'] = 1.0e-8
+#rotor.driver = pyOptSparseDriver()
+#rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+## ccblade.driver.options['tol'] = 1.0e-8
 
-rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
-rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
-rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
+#rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+#rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
+#rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+#rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
 # rotor.driver.add_parameter('sparT', low=0.0001, high=0.2) # (Array, m): spar cap thickness parameters
 # rotor.driver.add_parameter('teT', low=0.001, high=0.2) # (Array, m): trailing-edge thickness parameters
-scale_contraints_1 = 10.0
-rotor.driver.add_constraint('con1', lower=-1.0, upper=1.0) # rotor strain sparL
-rotor.driver.add_constraint('con2', lower=-1.0, upper=1.0) # rotor strain teL
-rotor.driver.add_constraint('con3', upper= 1.0)
-rotor.driver.add_constraint('con4', upper= 0.0)  # rotor buckling spar
-rotor.driver.add_constraint('con5', upper=0.0)  # rotor buckling te
-rotor.driver.add_constraint('con6', lower=0.0)  # flap/edge freq
-rotor.driver.add_constraint('con7', lower=0.0)
+#scale_contraints_1 = 10.0
+#rotor.driver.add_constraint('con1', lower=-1.0, upper=1.0) # rotor strain sparL
+#rotor.driver.add_constraint('con2', lower=-1.0, upper=1.0) # rotor strain teL
+#rotor.driver.add_constraint('con3', upper= 1.0)
+#rotor.driver.add_constraint('con4', upper= 0.0)  # rotor buckling spar
+#rotor.driver.add_constraint('con5', upper=0.0)  # rotor buckling te
+#rotor.driver.add_constraint('con6', lower=0.0)  # flap/edge freq
+#rotor.driver.add_constraint('con7', lower=0.0)
 # #
-rotor.driver.add_objective('obj')
+#rotor.driver.add_objective('obj')
 # mass_hub_system = 37118.36
 # mass_nacelle = 193805.65
 # mass_tower = 358230.15
@@ -149,6 +149,12 @@ CST_full = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.
 CST = [[w0],[w0], [wl_6], [wl_5], [wl_4], [wl_3], [wl_2], [wl_1]]
 
 basepath = '5MW_AFFiles' + os.path.sep
+
+# [0.0698478725 0.1539638508]
+# 0.4655650903 0.0925869611
+# 0.7934264659 0.0548655175
+# 0.2826711866 0.0607062522
+# 0.517768895 0.1425374017
 # afinit = CCAirfoil.initFromAerodynFile
 # afinit2 = CCAirfoil.initFromCST  # just for shorthand
 # load all airfoils
@@ -175,7 +181,7 @@ for i in range(naero):
         CST_full[i][j] = CST[af_idx[i]][0][j]
 CST = CST_full.reshape(naero, 1, 8)
 # airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
-airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='Files', FDorCS='CS', iterations=20, processors=0)
+airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='CFD', FDorCS='CS', iterations=20000, processors=32)
 
 # rotor['airfoil_files'] = af  # (List): names of airfoil file
 rotor['airfoil_parameterization'] = CST  # (List): names of airfoil file
@@ -218,7 +224,7 @@ rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplifi
 # ----------------------
 
 # === materials and composite layup  ===
-basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PrecompFiles')
+basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
 
 materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
 
@@ -310,10 +316,10 @@ print 'theta_sub =', rotor['theta_sub']
 print 'control:tsr =', rotor['control:tsr']
 
 # print rotor.root.list_connections()
-test = open('Text.txt', 'w')
+#test = open('Text.txt', 'w')
 # partial= rotor.check_partial_derivatives(out_stream=test)
 
-total = rotor.check_total_derivatives(out_stream=test, unknown_list=['mass_all_blades', 'obj', 'struc.blade_mass'])
+#total = rotor.check_total_derivatives(out_stream=test)#, unknown_list=['mass_all_blades', 'obj', 'struc.blade_mass'])
 
 
 # plt.figure()

@@ -830,7 +830,7 @@ class Airfoil(object):
                 cl = np.delete(cl, to_delete)
                 cd = np.delete(cd, to_delete)
                 alphas = np.delete(alphas, to_delete)
-
+                print alphas, cl, cd
                 polars.append(polarType(Re, alphas, cl, cd, cm))
 
             else:
@@ -843,6 +843,7 @@ class Airfoil(object):
                     else:
                         mesh = False
                     cl[j], cd[j],  = Airfoil.cfdGradients(CST[0], alphas[j], Re, iterations, processors, 'CS', Uinf=10.0, ComputeGradients=False, GenerateMESH=mesh)
+                    print cl[j], cd[j]
                 polars.append(polarType(Re, alphas, cl, cd, cm))
 
 
@@ -1449,6 +1450,7 @@ class Airfoil(object):
 
         import os, sys, shutil, copy
         sys.path.append(os.environ['SU2_RUN'])
+        # sys.path.append("/usr/local/bin")
         import SU2
 
         wl, wu, N, dz = CST_to_kulfan(CST)
@@ -1541,6 +1543,8 @@ class Airfoil(object):
         config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
         config.MACH_NUMBER = Ma
         config.REYNOLDS_NUMBER = Re
+
+
         # find solution files if they exist
         # state.find_files(config)
         ffdtag = []
@@ -1558,8 +1562,28 @@ class Airfoil(object):
                 param.append([1.0, x[i]])
             scale.append(1.0)
         config.DEFINITION_DV = dict(FFDTAG=ffdtag, KIND=kind, MARKER=marker, PARAM=param, SCALE=scale)
-        state.FILES.MESH = config.MESH_FILENAME
 
+        restart = True
+
+        if restart:
+            print "restart"
+            config.RESTART_SOL = 'YES'
+            basepath2 = os.path.dirname(os.path.realpath(__file__))
+            restart_file = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
+            if os.path.isfile(restart_file):
+                config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
+                config.EXT_ITER = iterations #/ 20
+            else:
+                config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat'
+            config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
+            state.find_files(config)
+        else:
+            basepath2 = os.path.dirname(os.path.realpath(__file__))
+            # restart_file = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
+            # config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat'
+            config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
+            state.find_files(config)
+            state.FILES.MESH = config.MESH_FILENAME
 
         cd = SU2.eval.func('DRAG', config, state)
         cl = SU2.eval.func('LIFT', config, state)
@@ -2256,7 +2280,12 @@ class CCAirfoil:
             a constructed CCAirfoil object
 
         """
-        alphas = np.linspace(-20, 20, 40)
+
+        alphas = np.linspace(-15, 15, 5)
+        alphas = np.insert(alphas, 2, -4.5)
+        alphas = np.insert(alphas, 4, 4.5)
+        alphas = np.insert(alphas, 3, -2.)
+        alphas = np.insert(alphas, 5, 2.)
         Re = 1e7 #1e6
         af = Airfoil.initFromCST(CST, alphas, [Re], CFDorXFOIL, processors=processors, iterations=iterations)
         r_over_R = 0.5
@@ -2424,6 +2453,13 @@ def cfdGradients(CST, alpha, Re, iterations, processors, FDorCS, Uinf, ComputeGr
     config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
     config.MACH_NUMBER = Ma
     config.REYNOLDS_NUMBER = Re
+    restart = True
+    if restart:
+        config.RESTART_SOL = 'YES'
+        basepath2 = os.path.dirname(os.path.realpath(__file__))
+        config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat' #_' + str(int(wu[0]) + '_' + str(alpha) + '.dat'
+        config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
+	
     # find solution files if they exist
     # state.find_files(config)
     ffdtag = []
