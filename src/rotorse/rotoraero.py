@@ -9,9 +9,9 @@ Copyright (c) NREL. All rights reserved.
 
 import numpy as np
 from math import pi
-from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder
+from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder, Brent
 from openmdao.api import ScipyGMRES
-from brent import Brent
+# from brent import Brent
 
 from utilities import hstack, vstack, linspace_with_deriv, smooth_min, trapz_deriv
 from akima import Akima
@@ -73,10 +73,6 @@ class Coefficients(Component):
         self.add_output('CT', shape=n, desc='rotor aerodynamic thrust')
         self.add_output('CQ', shape=n, desc='rotor aerodynamic torque')
         self.add_output('CP', shape=n, desc='rotor aerodynamic power')
-
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
-
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -157,11 +153,12 @@ class SetupRunFixedSpeed(Component):
         self.add_output('Omega', units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', units='deg', desc='pitch angles to run')
 
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
+        self.fd_options['form'] = 'forward'
+        self.fd_options['step_type'] = 'absolute'
         self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
+        # print "SEtupRunFixedSpeed"
         ctrl = params['control']
         n = ctrl.n
 
@@ -193,9 +190,6 @@ class SetupRunVarSpeed(Component):
         self.add_output('Uhub', shape=20, units='m/s', desc='freestream velocities to run')
         self.add_output('Omega', shape=20, units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', shape=20, units='deg', desc='pitch angles to run')
-
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -267,11 +261,8 @@ class UnregulatedPowerCurve(Component):
         self.add_output('V', units='m/s', desc='wind speeds')
         self.add_output('P', units='W', desc='power')
 
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
-
     def solve_nonlinear(self, params, unknowns, resids):
-
+        # print "Unregulated power curve"
         ctrl = params['control']
         n = ctrl.n
 
@@ -336,11 +327,12 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         self.add_output('azimuth', shape=1, units='deg', desc='azimuth load')
 
-        self.fd_options['form'] = 'forward'
+        self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
         self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
+        # print "Regulated power curve"
         n = params['npts']
         Vrated = unknowns['Vrated']
 
@@ -525,6 +517,9 @@ class RegulatedPowerCurveGroup(Group):
         self.nl_solver.options['var_lower_bound'] = 'powercurve.control:Vin'
         self.nl_solver.options['var_upper_bound'] = 'powercurve.control:Vout'
         self.nl_solver.options['state_var'] = 'Vrated'
+        # self.fd_options['form'] = 'central'
+        # self.fd_options['step_type'] = 'relative'
+        # self.fd_options['force_fd'] = True
 
     def list_deriv_vars(self):
 
@@ -547,12 +542,10 @@ class AEP(Component):
         # outputs
         self.add_output('AEP', shape=1, units='kW*h', desc='annual energy production')
 
-        self.fd_options['form'] = 'central'
-        # self.fd_options['step_type'] = 'relative'
         self.fd_options['step_size'] = 1.0
 
     def solve_nonlinear(self, params, unknowns, resids):
-
+        # print "AEP"
         unknowns['AEP'] = params['lossFactor']*np.trapz(params['P'], params['CDF_V'])/1e3*365.0*24.0  # in kWh
         #print unknowns['AEP']
 

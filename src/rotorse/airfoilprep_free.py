@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # encoding: utf-8
+
 """
 airfoilprep_free.py
 
@@ -772,17 +773,15 @@ class Airfoil(object):
         try:
             n1 = len(CST[0])/2
             n2 = len(CST)
+            CST = CST[0]
         except:
             n2 = 1
             n1 = len(CST)/2
-            CST = np.array([CST])
-
-
 
         for i in range(n2):
 
             if CFDorXFOIL == 'XFOIL':
-                wl, wu, N, dz = CST_to_kulfan(CST[0])
+                wl, wu, N, dz = CST_to_kulfan(CST)
 
                 [x, y] = cst_to_coordinates_from_kulfan(wl, wu, N, dz)
 
@@ -842,8 +841,9 @@ class Airfoil(object):
                         mesh = True
                     else:
                         mesh = False
-                    cl[j], cd[j],  = Airfoil.cfdGradients(CST[0], alphas[j], Re, iterations, processors, 'CS', Uinf=10.0, ComputeGradients=False, GenerateMESH=mesh)
-                    print cl[j], cd[j]
+
+                    cl[j], cd[j],  = Airfoil.cfdGradients(CST, alphas[j], Re, iterations, processors, 'CS', Uinf=10.0, ComputeGradients=False, GenerateMESH=mesh)
+
                 polars.append(polarType(Re, alphas, cl, cd, cm))
 
 
@@ -2296,7 +2296,7 @@ class CCAirfoil:
         af_extrap1 = af3D.extrapolate(cd_max)
         alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
 
-        return cls(alpha, Re, cl, cd, cm, CST=CST[0])
+        return cls(alpha, Re, cl, cd, cm, CST=CST)
 
 
     def evaluate(self, alpha, Re):
@@ -2737,30 +2737,28 @@ def xfoilGradients(CST, alpha, Re, FDorCS):
 
 
     n2 = 1
-    n1 = len(CST)/2
-    CST = np.array([CST])
-    for i in range(n2):
-        wu = np.zeros(n1, dtype=complex)
-        wl = np.zeros(n1, dtype=complex)
-        for j in range(n1):
-            wu[j] = CST[i][j]
-            wl[j] = CST[i][j + n1]
-        # wu, wl = np.split(af_parameters[i], 2)
-        w1 = np.average(wl)
-        w2 = np.average(wu)
-        if w1 < w2:
-            pass
-        else:
-            higher = wl
-            lower = wu
-            wl = lower
-            wu = higher
-        N = 120
-        dz = 0.
-    wl = wl
-    wu = wu
-    N = N
-    dz = dz
+    try:
+        n1 = len(CST)/2
+    except:
+        n1 = 4
+    wu = np.zeros(n1, dtype=complex)
+    wl = np.zeros(n1, dtype=complex)
+    for j in range(n1):
+        wu[j] = CST[j]
+        wl[j] = CST[j + n1]
+    # wu, wl = np.split(af_parameters[i], 2)
+    w1 = np.average(wl)
+    w2 = np.average(wu)
+    if w1 < w2:
+        pass
+    else:
+        higher = wl
+        lower = wu
+        wl = lower
+        wu = higher
+    N = 120
+    dz = 0.
+
 
 
     dcl_dcst, dcd_dcst = np.zeros(8), np.zeros(8)
