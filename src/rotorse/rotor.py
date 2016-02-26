@@ -291,7 +291,7 @@ class PreCompSections(Component):
 
         profile = self.profile
         nstr = self.nstr
-        params['airfoil_analysis_options']['CFDorXFOIL'] = 'Files'
+        # params['airfoil_analysis_options']['CFDorXFOIL'] = 'Files'
         if params['airfoil_analysis_options']['CFDorXFOIL'] != 'Files' and False:
             initial_str_grid = params['initial_str_grid']
             airfoil_parameterization = params['airfoil_parameterization']

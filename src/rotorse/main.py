@@ -158,22 +158,23 @@ basepath = '5MW_AFFiles' + os.path.sep
 # 0.7934264659 0.0548655175
 # 0.2826711866 0.0607062522
 # 0.517768895 0.1425374017
-# afinit = CCAirfoil.initFromAerodynFile
-# afinit2 = CCAirfoil.initFromCST  # just for shorthand
+afinit = CCAirfoil.initFromAerodynFile
+afinit2 = CCAirfoil.initFromCST  # just for shorthand
 # load all airfoils
-# airfoil_types = [0]*8
-# airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-# airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+airfoil_types = [0]*8
+airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
+airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0, FreeFormDesign=True)
 
-# for i in range(len(airfoil_types)-2):
-#     airfoil_types[i+2] = afinit2(CST[i])
+for i in range(len(airfoil_types)-2):
+    airfoil_types[i+2] = afinit2(CST[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
 
 # place at appropriate radial stations
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 
-# af = [0]*len(r)
-# for i in range(len(r)):
-#     af[i] = airfoil_types[af_idx[i]]
+af = [0]*17
+for i in range(17):
+    af[i] = airfoil_types[af_idx[i]]
 
 # CST_full_2 = np.zeros(len(CST_full))
 # for i in range(len(CST_full_2)):
@@ -184,14 +185,13 @@ af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 #     for j in range(8):
 #         CST_full[i][j] = CST[af_idx[i]][0][j]
 # CST = CST_full.reshape(naero, 1, 8)
-airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
 # airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='Files', FDorCS='CS', iterations=20, processors=0)
 # airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='CFD', FDorCS='CS', iterations=20000, processors=32)
 
 # rotor['rotor.airfoil_files'] = af  # (List): names of airfoil file
 rotor['rotor.airfoil_parameterization'] = np.array(CST)  # (List): names of airfoil file
 rotor['rotor.airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of airfoil file
-rotor['rotor.airfoil_files'] = np.array(af2) # np.array(af)  # (List): names of airfoil file
+rotor['rotor.airfoil_files'] = np.array(af) # np.array(af)  # (List): names of airfoil file
 
 # ----------------------
 
@@ -322,15 +322,15 @@ print 'theta_sub =', rotor['theta_sub']
 print 'control:tsr =', rotor['control:tsr']
 
 # print rotor.root.list_connections()
-time0 = time.time()
-ww = rotor.calc_gradient(['r_max_chord', 'chord_sub', 'theta_sub', 'control:tsr'], ['obj'])
-print "Grad time", time.time() - time0
-
-test = open('Text.txt', 'w')
-testPartial = open('TextPartial.txt', 'w')
+# time0 = time.time()
+# ww = rotor.calc_gradient(['r_max_chord', 'chord_sub', 'theta_sub', 'control:tsr'], ['obj'])
+# print "Grad time", time.time() - time0
+#
+# test = open('Text.txt', 'w')
+# testPartial = open('TextPartial.txt', 'w')
 # partial= rotor.check_partial_derivatives(out_stream=testPartial)
 
-total = rotor.check_total_derivatives(out_stream=test, unknown_list=['AEP', 'obj'])
+# total = rotor.check_total_derivatives(out_stream=test, unknown_list=['AEP', 'obj'])
 
 
 # plt.figure()

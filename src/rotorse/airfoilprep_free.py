@@ -829,7 +829,7 @@ class Airfoil(object):
                 cl = np.delete(cl, to_delete)
                 cd = np.delete(cd, to_delete)
                 alphas = np.delete(alphas, to_delete)
-                print alphas, cl, cd
+                print CST
                 polars.append(polarType(Re, alphas, cl, cd, cm))
 
             else:
@@ -1282,7 +1282,7 @@ class Airfoil(object):
             airfoil.mach = 0.0 # Uinf / 340.29
             airfoil.iter = 100
 
-            angle = alpha
+            angle = deepcopy(alpha)
             cl, cd, cm, lexitflag = airfoil.solveAlphaComplex(angle)
             if lexitflag:
                 cl = -10.0
@@ -1423,7 +1423,7 @@ class Airfoil(object):
                 dcl_dcst[i+4] = np.imag(cl_complex)/np.imag(cs_step)
                 dcd_dcst[i+4] = np.imag(cd_complex)/np.imag(cs_step)
         else:
-            step_size = 1e-2
+            step_size = 1e-6
             fd_step = step_size
             for i in range(len(wl)):
                 wl_fd1 = np.real(deepcopy(wl))
@@ -1431,7 +1431,9 @@ class Airfoil(object):
                 wl_fd1[i] -= fd_step
                 wl_fd2[i] += fd_step
                 cl_fd1, cd_fd1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
+                cl_fd1, cd_fd1 = deepcopy(cl_fd1), deepcopy(cd_fd1)
                 cl_fd2, cd_fd2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
+                cl_fd2, cd_fd2 = deepcopy(cl_fd2), deepcopy(cd_fd2)
                 dcl_dcst[i] = (cl_fd2 - cl_fd1)/(2.*fd_step)
                 dcd_dcst[i] = (cd_fd2 - cd_fd1)/(2.*fd_step)
                 wu_fd1 = np.real(deepcopy(wu))
@@ -1439,7 +1441,9 @@ class Airfoil(object):
                 wu_fd1[i] -= fd_step
                 wu_fd2[i] += fd_step
                 cl_fd1, cd_fd1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
+                cl_fd1, cd_fd1 = deepcopy(cl_fd1), deepcopy(cd_fd1)
                 cl_fd2, cd_fd2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
+                cl_fd2, cd_fd2 = deepcopy(cl_fd2), deepcopy(cd_fd2)
                 dcl_dcst[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
                 dcd_dcst[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
 
@@ -2286,7 +2290,7 @@ class CCAirfoil:
         alphas = np.insert(alphas, 4, 4.5)
         alphas = np.insert(alphas, 3, -2.)
         alphas = np.insert(alphas, 5, 2.)
-        Re = 1e7 #1e6
+        Re = 1e6
         af = Airfoil.initFromCST(CST, alphas, [Re], CFDorXFOIL, processors=processors, iterations=iterations)
         r_over_R = 0.5
         chord_over_r = 0.15
@@ -2354,7 +2358,7 @@ class CCAirfoil:
         else:
             cl, cd, dcl_dCST, dcd_dCST = cfdGradients(CST, alpha, Re, airfoil_analysis_options['iterations'], airfoil_analysis_options['processors'], airfoil_analysis_options['FDorCS'], Uinf, ComputeGradients, GenerateMESH=True)
 
-        return dcl_dCST, dcl_dCST
+        return dcl_dCST, dcd_dCST
 
 
 def cfdGradients(CST, alpha, Re, iterations, processors, FDorCS, Uinf, ComputeGradients, GenerateMESH=True):
@@ -2741,6 +2745,9 @@ def xfoilGradients(CST, alpha, Re, FDorCS):
         n1 = len(CST)/2
     except:
         n1 = 4
+    if n1 == 0:
+        n1 = 4
+        CST = CST[0]
     wu = np.zeros(n1, dtype=complex)
     wl = np.zeros(n1, dtype=complex)
     for j in range(n1):
@@ -2758,9 +2765,6 @@ def xfoilGradients(CST, alpha, Re, FDorCS):
         wu = higher
     N = 120
     dz = 0.
-
-
-
     dcl_dcst, dcd_dcst = np.zeros(8), np.zeros(8)
     cl, cd = cstReal(alpha, Re, np.real(wl), np.real(wu), N, dz, Uinf=10.0)
 
@@ -2780,7 +2784,7 @@ def xfoilGradients(CST, alpha, Re, FDorCS):
             dcl_dcst[i+4] = np.imag(cl_complex)/np.imag(cs_step)
             dcd_dcst[i+4] = np.imag(cd_complex)/np.imag(cs_step)
     else:
-        step_size = 1e-2
+        step_size = 1e-6
         fd_step = step_size
         for i in range(len(wl)):
             wl_fd1 = np.real(deepcopy(wl))
@@ -2788,7 +2792,9 @@ def xfoilGradients(CST, alpha, Re, FDorCS):
             wl_fd1[i] -= fd_step
             wl_fd2[i] += fd_step
             cl_fd1, cd_fd1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
+            cl_fd1, cd_fd1 = deepcopy(cl_fd1), deepcopy(cd_fd1)
             cl_fd2, cd_fd2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
+            cl_fd2, cd_fd2 = deepcopy(cl_fd2), deepcopy(cd_fd2)
             dcl_dcst[i] = (cl_fd2 - cl_fd1)/(2.*fd_step)
             dcd_dcst[i] = (cd_fd2 - cd_fd1)/(2.*fd_step)
             wu_fd1 = np.real(deepcopy(wu))
@@ -2796,7 +2802,9 @@ def xfoilGradients(CST, alpha, Re, FDorCS):
             wu_fd1[i] -= fd_step
             wu_fd2[i] += fd_step
             cl_fd1, cd_fd1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
+            cl_fd1, cd_fd1 = deepcopy(cl_fd1), deepcopy(cd_fd1)
             cl_fd2, cd_fd2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
+            cl_fd2, cd_fd2 = deepcopy(cl_fd2), deepcopy(cd_fd2)
             dcl_dcst[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
             dcd_dcst[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
 

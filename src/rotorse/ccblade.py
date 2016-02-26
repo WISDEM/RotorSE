@@ -292,13 +292,13 @@ class CCBlade:
         self.iterRe = iterRe
         self.derivatives = derivatives
 
-        if airfoil_parameterization is not None and airfoil_options is not None:
+        if airfoil_parameterization is not None and airfoil_options is not None and derivatives:
             self.airfoil_parameterization = airfoil_parameterization
             self.airfoil_analysis_options = airfoil_options
             self.freeform = True
         else:
             self.freeform = False
-        self.freeform = False
+        # self.freeform = False
         # check if no precurve / presweep
         if precurve is None:
             precurve = np.zeros(len(r))
@@ -387,7 +387,7 @@ class CCBlade:
             dx_dx[0, :], dcl_dx, dcd_dx, dx_dx[3, :], dx_dx[4, :], **self.bemoptions)
 
 
-        if self.freeform:
+        if self.freeform and self.freeform_gradient:
             fzero_cl, dR_dcl, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
@@ -430,7 +430,7 @@ class CCBlade:
             return Np, Tp, 0.0, 0.0, 0.0
         # derivative of residual function
         if rotating:
-            if self.freeform:
+            if self.freeform and self.freeform_gradient:
                 dR_dx, da_dx, dap_dx, dR_dcst, dcl_dcst, dcd_dcst = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy, airfoil_parameterization)
             else:
                 dR_dx, da_dx, dap_dx = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy)
@@ -470,19 +470,15 @@ class CCBlade:
         dNp_dx = Np*(1.0/cn*dcn_dx + 2.0/W*dW_dx + 1.0/chord*dchord_dx)
         dTp_dx = Tp*(1.0/ct*dct_dx + 2.0/W*dW_dx + 1.0/chord*dchord_dx)
 
-        if self.freeform and self.derivatives:
-            dphi_dcst = 0.0
-            dchord_dcst = 0.0
-            dW_dcst = 0.0
+        if self.freeform and self.freeform_gradient:
+            dphi_dcst = dcl_dalpha**-1*dcl_dcst + dcd_dalpha**-1*dcd_dcst
             dcn_dcst = dcl_dcst*cphi - cl*sphi*dphi_dcst + dcd_dcst*sphi + cd*cphi*dphi_dcst
             dct_dcst = dcl_dcst*sphi + cl*cphi*dphi_dcst - dcd_dcst*cphi + cd*sphi*dphi_dcst
-            dNp_dcst = Np*(1.0/cn*dcn_dcst + 2.0/W*dW_dcst + 1.0/chord*dchord_dcst)
-            dTp_dcst = Tp*(1.0/ct*dct_dcst + 2.0/W*dW_dcst + 1.0/chord*dchord_dcst)
+            dNp_dcst = Np*(1.0/cn*dcn_dcst)
+            dTp_dcst = Tp*(1.0/ct*dct_dcst)
             return Np, Tp, dNp_dx, dTp_dx, dR_dx, dNp_dcst, dTp_dcst, dR_dcst
 
         return Np, Tp, dNp_dx, dTp_dx, dR_dx
-
-
 
 
     def __windComponents(self, Uinf, Omega, azimuth):
@@ -578,8 +574,8 @@ class CCBlade:
         dTp_dVy = np.zeros(n)
         dNp_dz = np.zeros((6, n))
         dTp_dz = np.zeros((6, n))
-        DNp_Dcst = np.zeros((n, 8))
-        DTp_Dcst = np.zeros((n, 8))
+        DNp_Dcst = np.zeros((6, 8))
+        DTp_Dcst = np.zeros((6, 8))
 
         errf = self.__errorFunction
         rotating = (Omega != 0)
@@ -622,8 +618,15 @@ class CCBlade:
                 # ----------------------------------------------------------------
 
             # derivatives of residual
-            if self.freeform and self.derivatives:
-                Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dcst, dTp_dcst, dR_dcst = self.__loads(phi_star, rotating, *args, airfoil_parameterization=self.airfoil_parameterization[i])
+            af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+            airfoils = [False, False, False, True, True, False, True, True, False, True, False, True, False, False, False, False, False]
+            if self.freeform:
+                if airfoils[i]:
+                    self.freeform_gradient = True
+                    Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dcst, dTp_dcst, dR_dcst = self.__loads(phi_star, rotating, *args, airfoil_parameterization=self.airfoil_parameterization[af_idx[i-3]])
+                else:
+                    self.freeform_gradient = False
+                    Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
             else:
                 Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
 
@@ -641,9 +644,9 @@ class CCBlade:
                 DNp_Dx = dNp_dx - dNp_dy/dR_dy*dR_dx
                 DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
 
-                if self.freeform:
-                    DNp_Dcst[i, :] = dNp_dcst - dNp_dy/dR_dy*dR_dcst
-                    DTp_Dcst[i, :] = dTp_dcst - dTp_dy/dR_dy*dR_dcst
+                if self.freeform and self.freeform_gradient:
+                    DNp_Dcst[af_idx[i-3], :] = dNp_dcst - dNp_dy/dR_dy*dR_dcst
+                    DTp_Dcst[af_idx[i-3], :] = dTp_dcst - dTp_dy/dR_dy*dR_dcst
 
                 # parse components
                 # z = [r, chord, theta, Rhub, Rtip, pitch]
@@ -734,13 +737,16 @@ class CCBlade:
             dTp['dpitch'] = dTp_dX[13, :].reshape(n, 1)
 
             if self.freeform:
-                dNp['dcst'] = np.zeros((17, 17*8))
-                dTp['dcst'] = np.zeros((17, 17*8))
-                for z in range(17):
-                    dNp_zeros = np.zeros((17,8))
-                    dTp_zeros = np.zeros((17,8))
-                    dNp_zeros[z, :] = DNp_Dcst[z]
-                    dTp_zeros[z, :] = DTp_Dcst[z]
+                dNp['dcst'] = np.zeros((n, 6*8))
+                dTp['dcst'] = np.zeros((n, 6*8))
+                k = 0
+                af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+                for z in range(n):
+                    dNp_zeros = np.zeros((6,8))
+                    dTp_zeros = np.zeros((6,8))
+                    if z > 2:
+                        dNp_zeros[af_idx[z]-2, :] = DNp_Dcst[af_idx[z]-2]
+                        dTp_zeros[af_idx[z]-2, :] = DTp_Dcst[af_idx[z]-2]
                     dNp['dcst'][z] = dNp_zeros.flatten()
                     dTp['dcst'][z] = dTp_zeros.flatten()
 
@@ -825,8 +831,8 @@ class CCBlade:
             dQ_ds = np.zeros((npts, 11))
             dT_dv = np.zeros((npts, 5, len(self.r)))
             dQ_dv = np.zeros((npts, 5, len(self.r)))
-            dT_dcst = np.zeros((npts, len(self.r), 8))
-            dQ_dcst = np.zeros((npts, len(self.r), 8))
+            dT_dcst = np.zeros((npts, 6*8))
+            dQ_dcst = np.zeros((npts, 6*8))
 
         for i in range(npts):  # iterate across conditions
 
@@ -840,12 +846,12 @@ class CCBlade:
                 else:
 
                     Np, Tp, dNp, dTp = self.distributedAeroLoads(Uinf[i], Omega[i], pitch[i], azimuth)
-                    self.freeform = False
+
                     if self.freeform:
                         dT_ds_sub, dQ_ds_sub, dT_dv_sub, dQ_dv_sub, dT_dcst_sub, dQ_dcst_sub = self.__thrustTorqueDeriv(
                             Np, Tp, self._dNp_dX, self._dTp_dX, self._dNp_dprecurve, self._dTp_dprecurve, *args, dNp_dcst=dNp['dcst'], dTp_dcst=dTp['dcst'])
-                        dT_dcst[i, :, :] += self.B * dT_dcst_sub.T / nsec
-                        dQ_dcst[i, :, :] += self.B * dQ_dcst_sub.T / nsec
+                        dT_dcst[i, :] += self.B * dT_dcst_sub.T / nsec
+                        dQ_dcst[i, :] += self.B * dQ_dcst_sub.T / nsec
                     else:
                         dT_ds_sub, dQ_ds_sub, dT_dv_sub, dQ_dv_sub = self.__thrustTorqueDeriv(
                             Np, Tp, self._dNp_dX, self._dTp_dX, self._dNp_dprecurve, self._dTp_dprecurve, *args)
