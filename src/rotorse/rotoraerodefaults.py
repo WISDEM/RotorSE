@@ -286,7 +286,7 @@ class CCBlade(Component):
         # parameters
         # self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
         self.add_param('airfoil_parameterization', val=np.zeros((6, 8)))
-        self.add_param('airfoil_analysis_options', val={})
+        self.add_param('airfoil_analysis_options', val={}, pass_by_obj=True)
         self.add_param('af', shape=n, desc='names of airfoil file', pass_by_obj=True)
         self.add_param('B', val=3, desc='number of blades', pass_by_obj=True)
         self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')

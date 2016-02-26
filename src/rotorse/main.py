@@ -164,7 +164,8 @@ afinit2 = CCAirfoil.initFromCST  # just for shorthand
 airfoil_types = [0]*8
 airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
 airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='CFD', FDorCS='CS', iterations=20000, processors=32)
+airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='CFD', FDorCS='FD', iterations=20000, processors=32, FreeFormDesign=True)
+
 for i in range(len(airfoil_types)-2):
     airfoil_types[i+2] = afinit2(CST[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
 
@@ -184,7 +185,10 @@ for i in range(17):
 #     for j in range(8):
 #         CST_full[i][j] = CST[af_idx[i]][0][j]
 # CST = CST_full.reshape(naero, 1, 8)
+<<<<<<< HEAD
 # airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
+=======
+>>>>>>> a637d224da01e52cc4766ffc67a455b6d4ea8ac2
 # airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='Files', FDorCS='CS', iterations=20, processors=0)
 
 
@@ -322,15 +326,15 @@ print 'theta_sub =', rotor['theta_sub']
 print 'control:tsr =', rotor['control:tsr']
 
 # print rotor.root.list_connections()
-time0 = time.time()
-ww = rotor.calc_gradient(['r_max_chord', 'chord_sub', 'theta_sub', 'control:tsr'], ['obj'])
-print "Grad time", time.time() - time0
-
-test = open('Text.txt', 'w')
-testPartial = open('TextPartial.txt', 'w')
+# time0 = time.time()
+# ww = rotor.calc_gradient(['r_max_chord', 'chord_sub', 'theta_sub', 'control:tsr'], ['obj'])
+# print "Grad time", time.time() - time0
+#
+# test = open('Text.txt', 'w')
+# testPartial = open('TextPartial.txt', 'w')
 # partial= rotor.check_partial_derivatives(out_stream=testPartial)
 
-total = rotor.check_total_derivatives(out_stream=test, unknown_list=['AEP', 'obj'])
+# total = rotor.check_total_derivatives(out_stream=test, unknown_list=['AEP', 'obj'])
 
 
 # plt.figure()
