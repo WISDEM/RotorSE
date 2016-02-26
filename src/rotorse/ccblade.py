@@ -1224,32 +1224,8 @@ if __name__ == '__main__':
     Omega = Uinf*tsr/Rtip * 30.0/pi  # convert to RPM
     azimuth = 90
 
-    delta = 1e-6
-    dNp_dcst_fd = np.zeros((17, 17, 8))
-    dTp_dcst_fd = np.zeros((17, 17,8))
-    rotor = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
-               precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
-    Np, Tp, = rotor.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
-    from copy import deepcopy
+    # Np, Tp = aeroanalysis.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
 
-    for i in range(17):
-        for j in range(8):
-            CST_new = deepcopy(CST)
-            af_new = deepcopy(af)
-            CST_new[i][0][j] += delta
-            af[i] = afinit2(CST_new[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
-
-            rotor = CCBlade(r, chord, theta, af_new, Rhub, Rtip, B, rho, mu,
-                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST_new, airfoil_options=airfoil_analysis_options, derivatives=False)
-
-            Npd, Tpd = rotor.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
-
-            dNp_dcst_fd[:, i, j] = (Npd - Np) / delta
-            dTp_dcst_fd[:, i, j] = (Tpd - Tp) / delta
-
-    aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
-                   precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=True)
-    Np, Tp, dNp, dTp = aeroanalysis.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
 
     import matplotlib.pyplot as plt
 #     # rstar = (rload - rload[0]) / (rload[-1] - rload[0])

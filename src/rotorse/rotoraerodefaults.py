@@ -221,40 +221,43 @@ class CCBladeAirfoils(Component):
         self.airfoil_files = params['airfoil_files'] #airfoil_files']
         self.airfoil_parameterization = params['airfoil_parameterization']
         self.airfoil_analysis_options = params['airfoil_analysis_options']
-
-        n = self.n
-        af = [0]*n
-        afinit = CCAirfoil.initFromAerodynFile
-
-        # self.airfoil_analysis_options['CFDorXFOIL'] = 'Files'
-        if self.airfoil_analysis_options['CFDorXFOIL'] == 'Files':
-            for i in range(n):
-                af[i] = afinit(self.airfoil_files[i])
-            self.airfoil_parameterization = None
-            self.airfoil_analysis_options = None
-        else:
-            import os
-            basepath = '5MW_AFFiles' + os.path.sep
-            # airfoil files
-
-            afinit2 = CCAirfoil.initFromCST
-            airfoil_types = [0]*8
-            airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-            airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-            # for i in range(n):
-            #     af[i] = afinit(self.airfoil_files[i])
-            af_idx = np.asarray([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
-            CST = params['airfoil_parameterization']
-            print "Generating airfoil data"
-            for i in range(len(airfoil_types)-2):
-                airfoil_types[i+2] = afinit2(CST[i], self.airfoil_analysis_options['CFDorXFOIL'], self.airfoil_analysis_options['processors'], self.airfoil_analysis_options['iterations'])
-            print "Finished generating airfoil data"
-
-            n = len(af_idx)
+        if False:
+            n = self.n
             af = [0]*n
-            for i in range(n):
-                af[i] = airfoil_types[af_idx[i]]
-        unknowns['af'] = af
+            afinit = CCAirfoil.initFromAerodynFile
+
+            # self.airfoil_analysis_options['CFDorXFOIL'] = 'Files'
+            if self.airfoil_analysis_options['CFDorXFOIL'] == 'Files':
+                for i in range(n):
+                    af[i] = afinit(self.airfoil_files[i])
+                self.airfoil_parameterization = None
+                self.airfoil_analysis_options = None
+            else:
+                import os
+                basepath = '5MW_AFFiles' + os.path.sep
+                # airfoil files
+
+                afinit2 = CCAirfoil.initFromCST
+                airfoil_types = [0]*8
+                airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
+                airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+                # for i in range(n):
+                #     af[i] = afinit(self.airfoil_files[i])
+                af_idx = np.asarray([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
+                CST = params['airfoil_parameterization']
+                print "Generating airfoil data"
+                for i in range(len(airfoil_types)-2):
+                    airfoil_types[i+2] = afinit2(CST[i], self.airfoil_analysis_options['CFDorXFOIL'], self.airfoil_analysis_options['processors'], self.airfoil_analysis_options['iterations'])
+                print "Finished generating airfoil data"
+
+                n = len(af_idx)
+                af = [0]*n
+                for i in range(n):
+                    af[i] = airfoil_types[af_idx[i]]
+            unknowns['af'] = af
+            params['airfoil_files'] = af
+        else:
+            unknowns['af'] = params['airfoil_files']
     def linearize(self, params, unknowns, resids):
         J = {}
         J['dummy', 'airfoil_parameterization'] = np.zeros((1, 6*8))
