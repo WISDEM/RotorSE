@@ -6,7 +6,7 @@ from openmdao.api import IndepVarComp, Component, ExecComp, Group, ScipyGMRES
 from rotoraero import SetupRunVarSpeed, RegulatedPowerCurve, AEP, \
     RPM2RS, RS2RPM, RegulatedPowerCurveGroup
 
-from rotoraerodefaults import CCBladeGeometry, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF, RayleighCDF, CCBlade, CCBladeAirfoils
+from rotoraerodefaults import CCBladeGeometry, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF, RayleighCDF, CCBlade, CCBladeAirfoils, AirfoilSpline
 
 from scipy.interpolate import RectBivariateSpline
 from akima import Akima, akima_interp_with_derivs
@@ -291,46 +291,79 @@ class PreCompSections(Component):
 
         profile = self.profile
         nstr = self.nstr
-        # params['airfoil_analysis_options']['CFDorXFOIL'] = 'Files'
-        if params['airfoil_analysis_options']['CFDorXFOIL'] != 'Files' and False:
-            initial_str_grid = params['initial_str_grid']
+
+        if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files':
             airfoil_parameterization = params['airfoil_parameterization']
             initial_aero_grid = params['initial_aero_grid']
+            af_str = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
+            af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+            initial_aero_grid = np.array([0.02222276, 0.06666667, .11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
+    0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
+    0.97777724])  # (Array): initial aerodynamic grid on unit radius
+            initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
+    0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
+    0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
+    0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
+    0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
+    1.0])
 
-            yl_grid = np.zeros((60, len(initial_aero_grid)))
-            yu_grid = np.zeros((60, len(initial_aero_grid)))
-            for i in range(len(initial_aero_grid)):
-                xl, xu, yl, yu = getCoordinates([airfoil_parameterization[i]])
-                yl_grid[:, i] = yl
-                yu_grid[:, i] = yu
+            # yl_grid = np.zeros((60, len(initial_aero_grid)))
+            # yu_grid = np.zeros((60, len(initial_aero_grid)))
+            # for i in range(len(initial_aero_grid)):
+            #     xl, xu, yl, yu = getCoordinates([airfoil_parameterization[i]])
+                # yl_grid[:, i] = yl
+                # yu_grid[:, i] = yu
 
-            xl = 1.0 - xl
-            kx = min(len(xu)-1, 3)
-            ky = min(len(initial_aero_grid)-1, 3)
+            # xl = 1.0 - xl
+            # kx = min(len(xu)-1, 3)
+            # ky = min(len(initial_aero_grid)-1, 3)
+            #
+            # yu_spline = RectBivariateSpline(xu, initial_aero_grid, yu_grid, kx=kx, ky=ky) #, s=0.001)
+            # yl_spline = RectBivariateSpline(xl, initial_aero_grid, yl_grid, kx=kx, ky=ky) #, s=0.001)
+            #
+            # xu1 = np.zeros(len(xu))
+            # xl1 = np.zeros(len(xu))
+            # yu1 = np.zeros(len(xu))
+            # yl1 = np.zeros(len(xu))
+            #
+            #     yu_new = yu_spline.ev(xu, initial_str_grid[j])
+            #     yl_new = yl_spline.ev(xl, initial_str_grid[j])
+            #
+            #     for k in range(len(xu)):
+            #         xu1[k] = float(xu[k])
+            #         xl1[k] = float(xl[k])
+            #         yu1[k] = float(yu_new[k])
+            #         yl1[k] = float(yl_new[k])
+            #     x = np.append(xu1, 1-xl1)
+            #     y = np.append(yu1, yl1)
+            #     profile[j] = Profile.initFromCoordinates(x, y)
+            airfoil_types_str = np.zeros((8, 8))
+            for z in range(6):
+                airfoil_types_str[z+2, :] = airfoil_parameterization[z]
+            import os
+            basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
 
-            yu_spline = RectBivariateSpline(xu, initial_aero_grid, yu_grid, kx=kx, ky=ky) #, s=0.001)
-            yl_spline = RectBivariateSpline(xl, initial_aero_grid, yl_grid, kx=kx, ky=ky) #, s=0.001)
-
-            xu1 = np.zeros(len(xu))
-            xl1 = np.zeros(len(xu))
-            yu1 = np.zeros(len(xu))
-            yl1 = np.zeros(len(xu))
-
+            pro_str = [0]*nstr
+            for i in range(nstr):
+                pro_str[i] = airfoil_types_str[af_str[i]]
             profile = [0]*nstr
             for j in range(nstr):
-                yu_new = yu_spline.ev(xu, initial_str_grid[j])
-                yl_new = yl_spline.ev(xl, initial_str_grid[j])
-
-                for k in range(len(xu)):
-                    xu1[k] = float(xu[k])
-                    xl1[k] = float(xl[k])
-                    yu1[k] = float(yu_new[k])
-                    yl1[k] = float(yl_new[k])
-                x = np.append(xu1, 1-xl1)
-                y = np.append(yu1, yl1)
-                profile[j] = Profile.initFromCoordinates(x, y)
-
-
+                if pro_str[j][0] == 0.0:
+                    profile[j] = Profile.initFromPreCompFile(os.path.join(basepath, 'shape_' + str(j+1) + '.inp'))
+                else:
+                    xl, xu, yl, yu = getCoordinates([pro_str[j]])
+                    xu1 = np.zeros(len(xu))
+                    xl1 = np.zeros(len(xu))
+                    yu1 = np.zeros(len(xu))
+                    yl1 = np.zeros(len(xu))
+                    for k in range(len(xu)):
+                        xu1[k] = float(xu[k])
+                        xl1[k] = float(xl[k])
+                        yu1[k] = float(yu[k])
+                        yl1[k] = float(yl[k])
+                    x = np.append(xu1, 1-xl1)
+                    y = np.append(yu1, yl1)
+                    profile[j] = Profile.initFromCoordinates(x, y)
         mat = self.materials
         csU = self.upperCS
         csL = self.lowerCS
@@ -2177,6 +2210,7 @@ class OutputsStructures(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['mass_one_blade'] = params['mass_one_blade_in']
+        print "mass_all_blades", params['mass_all_blades_in']
         unknowns['mass_all_blades'] = params['mass_all_blades_in']
         unknowns['I_all_blades'] = params['I_all_blades_in']
         unknowns['freq'] = params['freq_in']
@@ -2249,7 +2283,7 @@ class StructureGroup(Group):
 class OptimizeRotorSE(Group):
     def __init__(self, naero, nstr):
         super(OptimizeRotorSE, self).__init__()
-        self.add('rotor', RotorSE(naero, nstr, False), promotes=['r_max_chord', 'chord_sub', 'theta_sub', 'control:tsr', 'mass_all_blades', 'AEP', 'obj', 'powercurve.control:Vin', 'powercurve.control:Vout', 'con1', 'con2', 'con3', 'con4', 'con5', 'con6'])
+        self.add('rotor', RotorSE(naero, nstr, False), promotes=['r_max_chord', 'chord_sub', 'theta_sub', 'control:tsr', 'mass_all_blades', 'AEP', 'obj', 'powercurve.control:Vin', 'powercurve.control:Vout', 'con1', 'con2', 'con3', 'con4', 'con5', 'con6', 'airfoil_parameterization', 'con_freeform', 'concon'])
 
 class RotorSE(Group):
     def __init__(self, naero, nstr, vars=True):
@@ -2440,6 +2474,7 @@ class RotorSE(Group):
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed())
         self.add('airfoil_analysis', CCBladeAirfoils(naero))
+        self.add('airfoil_spline', AirfoilSpline(naero))
         self.add('analysis', CCBlade('power', naero, n20))
 
         self.add('dt', CSMDrivetrain(n20))
@@ -2532,11 +2567,12 @@ class RotorSE(Group):
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
 
+        self.connect('airfoil_parameterization', 'airfoil_spline.airfoil_parameterization')
         self.connect('airfoil_parameterization', 'airfoil_analysis.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'airfoil_analysis.airfoil_analysis_options')
         self.connect('airfoil_files', 'airfoil_analysis.airfoil_files')
 
-        self.connect('airfoil_parameterization', 'analysis.airfoil_parameterization')
+        self.connect('airfoil_spline.airfoil_parameterization_full', 'analysis.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'analysis.airfoil_analysis_options')
 
         self.connect('airfoil_analysis.af', 'analysis.af')
@@ -2687,7 +2723,7 @@ class RotorSE(Group):
         self.connect('yaw', 'aero_rated.yaw')
 
         # self.connect('airfoil_files', 'aero_rated.airfoil_files')
-        self.connect('airfoil_parameterization', 'aero_rated.airfoil_parameterization')
+        self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_rated.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'aero_rated.airfoil_analysis_options')
 
         self.connect('airfoil_analysis.af', 'aero_rated.af')
@@ -2719,7 +2755,7 @@ class RotorSE(Group):
         self.connect('tilt', 'aero_extrm.tilt')
         self.connect('yaw', 'aero_extrm.yaw')
         # self.connect('airfoil_files', 'aero_extrm.airfoil_files')
-        self.connect('airfoil_parameterization', 'aero_extrm.airfoil_parameterization')
+        self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_extrm.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'aero_extrm.airfoil_analysis_options')
         self.connect('airfoil_analysis.af', 'aero_extrm.af')
         # self.connect('airfoil_parameterization', 'aero_extrm.airfoil_parameterization')
@@ -2748,7 +2784,7 @@ class RotorSE(Group):
         self.connect('tilt', 'aero_extrm_forces.tilt')
         self.connect('yaw', 'aero_extrm_forces.yaw')
         # self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
-        self.connect('airfoil_parameterization', 'aero_extrm_forces.airfoil_parameterization')
+        self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_extrm_forces.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'aero_extrm_forces.airfoil_analysis_options')
         self.connect('airfoil_analysis.af', 'aero_extrm_forces.af')
         # self.connect('airfoil_parameterization', 'aero_extrm_forces.airfoil_parameterization')
@@ -2780,7 +2816,7 @@ class RotorSE(Group):
         self.connect('tilt', 'aero_defl_powercurve.tilt')
         self.connect('yaw', 'aero_defl_powercurve.yaw')
         # self.connect('airfoil_files', 'aero_defl_powercurve.airfoil_files')
-        self.connect('airfoil_parameterization', 'aero_defl_powercurve.airfoil_parameterization')
+        self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_defl_powercurve.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'aero_defl_powercurve.airfoil_analysis_options')
         self.connect('airfoil_analysis.af', 'aero_defl_powercurve.af')
         # self.connect('airfoil_parameterization', 'aero_defl_powercurve.airfoil_parameterization')
@@ -3018,7 +3054,8 @@ class RotorSE(Group):
         self.add('obj_con4', ExecComp('con4 = (eps_crit_spar[[10, 12, 14, 20, 23, 27, 31, 33]] - strainU_spar[[10, 12, 14, 20, 23, 27, 31, 33]]) / strain_ult_spar', eps_crit_spar=np.zeros(nstr), strainU_spar=np.zeros(nstr), strain_ult_spar=0.0, con4=np.zeros(8)), promotes=['*'])
         self.add('obj_con5', ExecComp('con5 = (eps_crit_te[[10, 12, 13, 14, 21, 28, 33]] - strainU_te[[10, 12, 13, 14, 21, 28, 33]]) / strain_ult_te', eps_crit_te=np.zeros(nstr), strainU_te=np.zeros(nstr), strain_ult_te=0.0, con5=np.zeros(7)), promotes=['*'])
         self.add('obj_con6', ExecComp('con6 = freq_curvefem[0:2] - nBlades*ratedConditions_Omega/60.0*1.1', freq_curvefem=np.zeros(5), nBlades=3, ratedConditions_Omega=0.0, con6=np.zeros(2)), promotes=['*'])
-
+        self.add('obj_con_freeform', ExecComp('con_freeform = airfoil_parameterization[:, [4, 5, 6, 7]] - airfoil_parameterization[:, [0, 1, 2, 3]]', airfoil_parameterization=np.zeros((6,8)), con_freeform=np.zeros((6,4))), promotes=['*'])
+        self.add('obj_concon', ExecComp('concon = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
         # self.add('obj_con7', ExecComp('con7 = -aero_extrm_forces_T / 1e6 + [2422241.0342469/1e6, 189545.50087248/1e6]', aero_extrm_forces_T=np.zeros(2), con7=np.zeros(2)), promotes=['*'])
         # self.connect('aero_extrm_forces.T', 'aero_extrm_forces_T')
         self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
