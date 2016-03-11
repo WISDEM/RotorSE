@@ -236,37 +236,37 @@ class CCBladeAirfoils(Component):
                 unknowns['af'] = af
         else:
             af_idx = np.asarray([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
-            change = np.zeros(n)
-            for j in range(n-3):
-                change[j+3] = max(self.airfoil_files[j+3].CST - self.airfoil_parameterization[af_idx[j+3]-2])
+            change = np.zeros(6)
+            for j in range(6):
+                index = np.where(af_idx >= j+2)[0][0]
+                change[j] = max(abs(self.airfoil_files[index].CST - self.airfoil_parameterization[j]))
 
-            if np.any(change > 1e8):
-                basepath = '5MW_AFFiles' + os.path.sep
-                af_freeform_init = CCAirfoil.initFromCST
-                airfoil_types = [0]*8
-                airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-                airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+            basepath = '5MW_AFFiles' + os.path.sep
+            af_freeform_init = CCAirfoil.initFromCST
+            airfoil_types = [0]*8
+            airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
+            airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
 
-                alphas = np.linspace(-15, 15, 100)
-                Re = 1e6
-                for i in range(len(airfoil_types)-2):
-                    index = np.where(af_idx >= i+2)[0][0]
-                    if change[index]>1e8:
-                        time0 = time.time()
-                        airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], alphas, Re, self.airfoil_analysis_options, ComputeGradient=False)
-                        print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
-                    else:
-                        airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
-                n = len(af_idx)
-                af = [0]*n
+            alphas = np.linspace(-15, 15, 100)
+            Re = 1e6
+            for i in range(len(airfoil_types)-2):
+                index = np.where(af_idx >= i+2)[0][0]
+                if change[i] > 1e-10:
+                    time0 = time.time()
+                    airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], alphas, Re, self.airfoil_analysis_options, ComputeGradient=False)
+                    print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
+                else:
+                    airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
+            n = len(af_idx)
+            af = [0]*n
 
-                for i in range(n):
-                    af[i] = airfoil_types[af_idx[i]]
+            for i in range(n):
+                af[i] = airfoil_types[af_idx[i]]
 
-                unknowns['af'] = af
-                params['airfoil_files'] = af
-            else:
-                unknowns['af'] = params['airfoil_files']
+            unknowns['af'] = af
+            params['airfoil_files'] = af
+            # else:
+            #     unknowns['af'] = params['airfoil_files']
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -278,17 +278,22 @@ class AirfoilSpline(Component):
         super(AirfoilSpline, self).__init__()
         self.add_param('airfoil_parameterization', val=np.zeros((6, 8)))
         self.add_output('airfoil_parameterization_full', val=np.zeros((17, 8)))
-        self.fd_options['force_fd'] = True
         self.n = n
     def solve_nonlinear(self, params, unknowns, resids):
         self.airfoil_parameterization = params['airfoil_parameterization']
         n = self.n
         CST = np.zeros((17,8))
         af_idx = np.asarray([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
+        self.daf_daf = np.zeros((136,48))
         for i in range(n-3):
             for j in range(8):
                 CST[i+3][j] = self.airfoil_parameterization[af_idx[i+3]-2][j]
+            self.daf_daf[np.ix_(range((i+3)*8, (i+3)*8+8), range((af_idx[i+3]-2)*8,((af_idx[i+3]-2)*8)+8))] += np.diag(np.ones(8))
         unknowns['airfoil_parameterization_full'] = CST
+    def linearize(self, params, unknowns, resids):
+        J = {}
+        J['airfoil_parameterization_full', 'airfoil_parameterization'] = self.daf_daf
+        return J
 
 class CCBlade(Component):
     def __init__(self, run_case, n, n2):
@@ -531,9 +536,9 @@ class CCBlade(Component):
             J['Q', 'precurveTip'] = dQ['dprecurveTip']
 
             if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files':
-                J['P', 'airfoil_parameterization'] = dP['dcst']
-                J['T', 'airfoil_parameterization'] = dT['dcst']
-                J['Q', 'airfoil_parameterization'] = dQ['dcst']
+                J['P', 'airfoil_parameterization'] = dP['dafp']
+                J['T', 'airfoil_parameterization'] = dT['dafp']
+                J['Q', 'airfoil_parameterization'] = dQ['dafp']
 
         elif self.run_case == 'loads':
 
@@ -594,9 +599,9 @@ class CCBlade(Component):
             J['loads:azimuth', 'azimuth_load'] = 1.0
 
             if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files':
-                zero_cst = np.zeros((17*8))
-                J['loads:Px', 'airfoil_parameterization'] = np.vstack([zero_cst, dNp['dcst'], zero_cst])
-                J['loads:Py', 'airfoil_parameterization'] = np.vstack([zero_cst, -dTp['dcst'], zero_cst])
+                zero_afp = np.zeros((17*8))
+                J['loads:Px', 'airfoil_parameterization'] = np.vstack([zero_afp, dNp['dafp'], zero_afp])
+                J['loads:Py', 'airfoil_parameterization'] = np.vstack([zero_afp, -dTp['dafp'], zero_afp])
 
         return J
 

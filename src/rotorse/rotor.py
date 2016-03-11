@@ -2464,6 +2464,7 @@ class RotorSE(Group):
             self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
 
             self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0, pass_by_obj=True), promotes=['*'])
+        self.add('af_idx', IndepVarComp('af_idx', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
         nSector = 4
         self.add('turbineclass', TurbineClass())
         self.add('gridsetup', GridSetup(naero, nstr))

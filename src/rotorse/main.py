@@ -20,16 +20,14 @@ initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095
     0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
     1.0])  # (Array): initial structural grid on unit radius
 
-af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 rotor = Problem()
 naero = len(initial_aero_grid)
 nstr = len(initial_str_grid)
-rotor.root = RotorSE(naero, nstr) # RotorSE(naero, nstr)
+rotor.root = RotorSE(naero, nstr)
 
 ### SETUP OPTIMIZATION
 # rotor.driver = pyOptSparseDriver()
 # rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
-# rotor.driver.options['tol'] = 1.0e-8
 rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
 rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
 rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
@@ -51,7 +49,8 @@ rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
 rotor.driver.add_constraint('con_freeform', lower=0.025)
 rotor.driver.add_constraint('concon', lower=1.0)
 rotor.driver.add_objective('obj')
-"Setting up RotorSE..."
+
+print "Setting up RotorSE..."
 rotor.setup(check=False)
 
 # === blade grid ===
@@ -82,15 +81,12 @@ rotor['nBlades'] = 3  # (Int): number of blades
 # ------------------
 
 # === free form airfoil parameters ===
-airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True)
-# airfoil_analysis_options = dict(AnalysisMethod='Files', AirfoilParameterization='None', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True)
-# airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', GradientType='FD', CFDiterations=20000, CFDprocessors=32, FreeFormDesign=True)
-
+airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
+af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+rotor['af_idx'] = af_idx
 if airfoil_analysis_options['AnalysisMethod'] == 'Files':
     # === airfoil files ===
     basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles/')
-
-    # load all airfoils
     airfoil_types = [0]*8
     airfoil_types[0] = os.path.join(basepath, 'Cylinder1.dat')
     airfoil_types[1] = os.path.join(basepath, 'Cylinder2.dat')
@@ -100,69 +96,54 @@ if airfoil_analysis_options['AnalysisMethod'] == 'Files':
     airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
     airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
     airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
-    af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-    n = len(af_idx)
-    af2 = [0]*n
-    for i in range(n):
-        af2[i] = airfoil_types[af_idx[i]]
 
     # place at appropriate radial stations
-
-    afinit = CCAirfoil.initFromAerodynFile  # just for shorthand
-
-    # load all airfoils
-    airfoil_types = [0]*8
-    airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-    airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-    airfoil_types[2] = afinit(basepath + 'DU40_A17.dat')
-    airfoil_types[3] = afinit(basepath + 'DU35_A17.dat')
-    airfoil_types[4] = afinit(basepath + 'DU30_A17.dat')
-    airfoil_types[5] = afinit(basepath + 'DU25_A17.dat')
-    airfoil_types[6] = afinit(basepath + 'DU21_A17.dat')
-    airfoil_types[7] = afinit(basepath + 'NACA64_A17.dat')
-
     n = len(af_idx)
     af = [0]*n
     for i in range(n):
         af[i] = airfoil_types[af_idx[i]]
     rotor['airfoil_parameterization'] = np.zeros((6,8))
-    rotor['airfoil_files'] = np.array(af2) # np.array(af)  # (List): names of airfoil file
+    rotor['airfoil_files'] = np.array(af) # (List): names of airfoil file
 else:
-    w0 = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]
-    wl_1 = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]
-    wl_2 = [-0.19600050454371795, -0.28861738331958697, -0.20594891135118523, 0.19143138186871009, 0.22876347660120994, 0.39940768357615447, 0.28896745336793572, 0.29519782561050112]
-    wl_3 = [-0.27413320446357803, -0.40701949670950271, -0.29237424992338562, 0.27867844397438357, 0.23582783854698663, 0.43718573158380936, 0.25389099250498309, 0.31090780344061775]
-    wl_4 = [-0.29817561716727448, -0.67909473119918973, -0.15737231648880162, 0.12798260780188203, 0.2842322211249545, 0.46026650967959087, 0.21705062978922526, 0.33758303223369945]
-    wl_5 = [-0.38027535114760153, -0.75920832612723133, -0.21834261746205941, 0.086359012110824224, 0.38364567865371835, 0.48445264573011815, 0.26999944648962521, 0.34675843509167931]
-    wl_6 = [-0.49209940079930325, -0.72861624849999296, -0.38147646962813714, 0.13679205926397994, 0.50396496117640877, 0.54798355691567613, 0.37642896917099616, 0.37017796580840234]
+    # Specify airfoil parameters
+    airfoil_parameterization = np.asarray([[-0.49209940079930325, -0.72861624849999296, -0.38147646962813714, 0.13679205926397994, 0.50396496117640877, 0.54798355691567613, 0.37642896917099616, 0.37017796580840234],
+                                           [-0.38027535114760153, -0.75920832612723133, -0.21834261746205941, 0.086359012110824224, 0.38364567865371835, 0.48445264573011815, 0.26999944648962521, 0.34675843509167931],
+                                           [-0.29817561716727448, -0.67909473119918973, -0.15737231648880162, 0.12798260780188203, 0.2842322211249545, 0.46026650967959087, 0.21705062978922526, 0.33758303223369945],
+                                           [-0.27413320446357803, -0.40701949670950271, -0.29237424992338562, 0.27867844397438357, 0.23582783854698663, 0.43718573158380936, 0.25389099250498309, 0.31090780344061775],
+                                           [-0.19600050454371795, -0.28861738331958697, -0.20594891135118523, 0.19143138186871009, 0.22876347660120994, 0.39940768357615447, 0.28896745336793572, 0.29519782561050112],
+                                           [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]])
+    af_input_init = CCAirfoil.initFromInput
+    if airfoil_analysis_options['AirfoilParameterization'] == 'CST':
+        af_freeform_init = CCAirfoil.initFromCST
+    elif airfoil_analysis_options['AirfoilParameterization'] == 'NACA':
+        af_freeform_init = CCAirfoil.initFromNACA
+    else:
+        af_freeform_init = CCAirfoil.initFromInput
 
-    CST = np.asarray([[wl_6], [wl_5], [wl_4], [wl_3], [wl_2], [wl_1]])
-    CST = CST.reshape(6,8)
-    basepath = '5MW_AFFiles' + os.path.sep
-    afinit = CCAirfoil.initFromAerodynFile
-    af_freeform_init = CCAirfoil.initFromCST  # just for shorthand
     # load all airfoils
+    non_airfoils_idx = 2
     airfoil_types = [0]*8
-    airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-    airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-
     alphas = np.linspace(-15, 15, 100)
     Re = 1e6
+    non_airfoils_alphas = [-180.0, 0.0, 180.0]
+    non_airfoils_cls = [0.0, 0.0, 0.0]
+    non_airfoils_cds = [[0.5, 0.5, 0.5],[0.35, 0.35, 0.35]]
     print "Generating airfoil data..."
-    for i in range(len(airfoil_types)-2):
-        time0 = time.time()
-        airfoil_types[i+2] = af_freeform_init(CST[i], alphas, Re, airfoil_analysis_options, ComputeGradient=False)
-        print "Airfoil ", str(i+1), " data generation complete in ", time.time() - time0, " seconds."
+    for i in range(len(airfoil_types)):
+        if i < non_airfoils_idx:
+            airfoil_types[i] = af_input_init(non_airfoils_alphas, Re, non_airfoils_cls, non_airfoils_cds[i], non_airfoils_cls)
+        else:
+            time0 = time.time()
+            airfoil_types[i] = af_freeform_init(airfoil_parameterization[i-2], alphas, Re, airfoil_analysis_options, ComputeGradient=False)
+            print "Airfoil ", str(i+1-2), " data generation complete in ", time.time() - time0, " seconds."
     print "Finished generating airfoil data"
-    # place at appropriate radial stations
-    af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 
-    af = [0]*17
-    for i in range(17):
+    af = [0]*naero
+    for i in range(len(af)):
         af[i] = airfoil_types[af_idx[i]]
 
-    rotor['airfoil_parameterization'] = np.array(CST)
-    rotor['airfoil_files'] = np.array(af) # np.array(af)  # (List): names of airfoil file
+    rotor['airfoil_parameterization'] = airfoil_parameterization
+    rotor['airfoil_files'] = np.array(af) # (List): names of airfoil file
 rotor['airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of airfoil file
 # ----------------------
 
@@ -202,15 +183,12 @@ rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplifi
 
 # === materials and composite layup  ===
 basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
-
 materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
-
 ncomp = len(rotor['initial_str_grid'])
 upper = [0]*ncomp
 lower = [0]*ncomp
 webs = [0]*ncomp
 profile = [0]*ncomp
-
 rotor['leLoc'] = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.498, 0.497, 0.465, 0.447, 0.43, 0.411,
     0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4,
     0.4, 0.4, 0.4, 0.4])    # (Array): array of leading-edge positions from a reference blade axis (usually blade pitch axis). locations are normalized by the local chord length. e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.  positive in -x direction for airfoil-aligned coordinate system
@@ -263,14 +241,8 @@ rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
 rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
 # ----------------
 
-# WARMSTART INPUTS
-# rotor['chord_sub'] = np.array([ 1.3 ,        3.14850006 , 2.71236245 , 2.057331  ])
-# rotor['control:tsr'] = 8.34767939089
-# rotor['r_max_chord'] = 0.374932900033
-# rotor['theta_sub'] = np.array([ 11.38729938  , 3.98744815  , 2.85248822 ,  1.91070877])
-# from myutilities import plt
-
 # === run and outputs ===
+"Running RotorSE..."
 time0 = time.time()
 rotor.run()
 time1 = time.time() - time0
@@ -300,10 +272,10 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
 
 ## Gradient checks
-grad_total = open('total_gradient_check.txt', 'w')
+grad_total = open('total_gradient_check2.txt', 'w')
 grad_partial = open('partial_gradient_check.txt', 'w')
-# total = rotor.check_total_derivatives(out_stream=grad_total)
-partial= rotor.check_partial_derivatives(out_stream=grad_partial)
+total = rotor.check_total_derivatives(out_stream=grad_total)
+# partial= rotor.check_partial_derivatives(out_stream=grad_partial)
 # grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'])
 
 plt.figure()
