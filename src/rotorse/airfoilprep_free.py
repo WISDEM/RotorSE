@@ -2066,6 +2066,7 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
     if not flag_original:
         cl, cd = deepcopy(cl_fd_cur), deepcopy(cd_fd_cur)
         # cl_fd_cur, cd_fd_cur = deepcopy(cl), deepcopy(cd)
+    global lexitflag_counter
     if FDorCS == 'CS':
         step_size = 1e-20
         cs_step = complex(0, step_size)
@@ -2075,19 +2076,23 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
 
             wl_complex = deepcopy(wl)
             wl_complex[i] += cs_step
-            cl_complex, cd_complex = cstComplex(alpha, Re, wl_complex, wu, N, dz, Uinf=10.0)
+            cl_complex, cd_complex, flag = cstComplex(alpha, Re, wl_complex, wu, N, dz, Uinf=10.0)
+            if flag:
+                lexitflag_counter += 1
             dcl_dafp[i] = np.imag(cl_complex)/np.imag(cs_step)
             dcd_dafp[i] = np.imag(cd_complex)/np.imag(cs_step)
             wu_complex = deepcopy(wu)
             wu_complex[i] += cs_step
-            cl_complex, cd_complex = cstComplex(alpha, Re, wl, wu_complex, N, dz, Uinf=10.0)
+            cl_complex, cd_complex, flag = cstComplex(alpha, Re, wl, wu_complex, N, dz, Uinf=10.0)
+            if flag:
+                lexitflag_counter += 1
             dcl_dafp[i+4] = np.imag(cl_complex)/np.imag(cs_step)
             dcd_dafp[i+4] = np.imag(cd_complex)/np.imag(cs_step)
     else:
         step_size = 1e-6
         fd_step = step_size
         exit_flag = np.zeros(8)
-        global lexitflag_counter
+
         for i in range(len(wl)):
             wl_fd1 = np.real(deepcopy(wl))
             wl_fd2 = np.real(deepcopy(wl))
@@ -2177,7 +2182,7 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
                     dcd_dafp[i] = (cd_fd_new - cd_fd_cur) / fd_step
             # for i in range(8):
 
-        # print lexitflag_counter
+    print lexitflag_counter
     return cl, cd, dcl_dafp, dcd_dafp
 
 def cstComplex(alpha, Re, wl, wu, N, dz, Uinf):
@@ -2248,7 +2253,7 @@ def cstComplex(alpha, Re, wl, wu, N, dz, Uinf):
         cl = -10.0
         cd = 0.0
         print "XFOIL FAILURE"
-    return cl, cd
+    return cl, cd, lexitflag
 
 def cstReal(alpha, Re, wl, wu, N, dz, Uinf):
 

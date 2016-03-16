@@ -294,49 +294,9 @@ class PreCompSections(Component):
 
         if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files':
             airfoil_parameterization = params['airfoil_parameterization']
-            initial_aero_grid = params['initial_aero_grid']
+
             af_str = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
             af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-            initial_aero_grid = np.array([0.02222276, 0.06666667, .11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
-    0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
-    0.97777724])  # (Array): initial aerodynamic grid on unit radius
-            initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
-    0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
-    0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
-    0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
-    0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
-    1.0])
-
-            # yl_grid = np.zeros((60, len(initial_aero_grid)))
-            # yu_grid = np.zeros((60, len(initial_aero_grid)))
-            # for i in range(len(initial_aero_grid)):
-            #     xl, xu, yl, yu = getCoordinates([airfoil_parameterization[i]])
-                # yl_grid[:, i] = yl
-                # yu_grid[:, i] = yu
-
-            # xl = 1.0 - xl
-            # kx = min(len(xu)-1, 3)
-            # ky = min(len(initial_aero_grid)-1, 3)
-            #
-            # yu_spline = RectBivariateSpline(xu, initial_aero_grid, yu_grid, kx=kx, ky=ky) #, s=0.001)
-            # yl_spline = RectBivariateSpline(xl, initial_aero_grid, yl_grid, kx=kx, ky=ky) #, s=0.001)
-            #
-            # xu1 = np.zeros(len(xu))
-            # xl1 = np.zeros(len(xu))
-            # yu1 = np.zeros(len(xu))
-            # yl1 = np.zeros(len(xu))
-            #
-            #     yu_new = yu_spline.ev(xu, initial_str_grid[j])
-            #     yl_new = yl_spline.ev(xl, initial_str_grid[j])
-            #
-            #     for k in range(len(xu)):
-            #         xu1[k] = float(xu[k])
-            #         xl1[k] = float(xl[k])
-            #         yu1[k] = float(yu_new[k])
-            #         yl1[k] = float(yl_new[k])
-            #     x = np.append(xu1, 1-xl1)
-            #     y = np.append(yu1, yl1)
-            #     profile[j] = Profile.initFromCoordinates(x, y)
             airfoil_types_str = np.zeros((8, 8))
             for z in range(6):
                 airfoil_types_str[z+2, :] = airfoil_parameterization[z]
@@ -361,7 +321,7 @@ class PreCompSections(Component):
                         xl1[k] = float(xl[k])
                         yu1[k] = float(yu[k])
                         yl1[k] = float(yl[k])
-                    x = np.append(xu1, 1-xl1)
+                    x = np.append(xu1, xl1)
                     y = np.append(yu1, yl1)
                     profile[j] = Profile.initFromCoordinates(x, y)
         mat = self.materials
