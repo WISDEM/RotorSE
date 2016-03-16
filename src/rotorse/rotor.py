@@ -3061,3 +3061,6 @@ class RotorSE(Group):
         # self.connect('aero_extrm_forces.T', 'aero_extrm_forces_T')
         self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
+        self.fd_options['form'] = 'central'
+        # self.fd_options['relative'] =
+

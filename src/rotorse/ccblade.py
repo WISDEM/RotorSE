@@ -392,11 +392,10 @@ class CCBlade:
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-            t0 = time.time()
-            if False:
+            if self.airfoil_analysis_options['FreeFormDesign']:
                 dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha)
             else:
-                dcl_dafp, dcd_dafp = af.airfoil_parameterization_derivatives(alpha, Re, af.CST, self.airfoil_analysis_options)
+                dcl_dafp, dcd_dafp = af.airfoil_parameterization_derivatives(alpha, [1e6], af.CST, self.airfoil_analysis_options)
             dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
 
             return dR_dx, da_dx, dap_dx, dR_dafp, dcl_dafp, dcd_dafp
