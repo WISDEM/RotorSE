@@ -84,7 +84,7 @@ rotor['nBlades'] = 3  # (Int): number of blades
 # ------------------
 
 # === free form airfoil parameters ===
-airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
+airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 
 rotor['af_idx'] = af_idx
@@ -148,7 +148,6 @@ else:
 
     rotor['airfoil_parameterization'] = airfoil_parameterization
     rotor['airfoil_files'] = np.array(af) # (List): names of airfoil file
-airfoil_analysis_options['FreeFormDesign'] = True
 rotor['airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of airfoil file
 
 # airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
@@ -284,7 +283,7 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 # grad_partial = open('partial_gradient_check.txt', 'w')
 # total = rotor.check_total_derivatives(out_stream=grad_total)
 # partial= rotor.check_partial_derivatives(out_stream=grad_partial)
-grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
+grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
 print grad
 
 plt.figure()

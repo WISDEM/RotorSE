@@ -240,8 +240,6 @@ class CCBladeAirfoils(Component):
             for j in range(6):
                 index = np.where(af_idx >= j+2)[0][0]
                 change[j] = max(abs(self.airfoil_files[index].CST - self.airfoil_parameterization[j]))
-            # print change
-            # if np.any(change > 1e8):
             basepath = '5MW_AFFiles' + os.path.sep
             af_freeform_init = CCAirfoil.initFromCST
             airfoil_types = [0]*8
@@ -251,17 +249,15 @@ class CCBladeAirfoils(Component):
             alphas = np.linspace(-10, 20, 100)
             Re = 1e6
             for i in range(len(airfoil_types)-2):
-                # time0 = time.time()
-                # airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], alphas, Re, self.airfoil_analysis_options, ComputeGradient=False)
-                # if change[i] > 0:
-                time0 = time.time()
-                airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], alphas, Re, self.airfoil_analysis_options)
-                print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
-                print params['airfoil_parameterization'][i]
-                # else:
-                #     index = np.where(af_idx >= i+2)[0][0]
-                #     airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
-                    # print "Airfoil ", str(i+1), " parameterization has not changed.", self.airfoil_parameterization[i]
+                if change[i] > 0:
+                    time0 = time.time()
+                    airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], alphas, Re, self.airfoil_analysis_options)
+                    print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
+                    print params['airfoil_parameterization'][i]
+                else:
+                    index = np.where(af_idx >= i+2)[0][0]
+                    airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
+                    print "Airfoil ", str(i+1), " parameterization has not changed."
             n = len(af_idx)
             af = [0]*n
 
@@ -412,38 +408,27 @@ class CCBlade(Component):
         self.azimuth_load = params['azimuth_load']
 
         if self.airfoil_analysis_options['AnalysisMethod'] != 'Files':
-            if self.airfoil_analysis_options['FreeFormDesign']:
-                der = True
-            else:
-                der = False
             self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
                 self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                 self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=der, airfoil_parameterization=self.airfoil_parameterization, airfoil_options=self.airfoil_analysis_options)
+                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=False, airfoil_parameterization=self.airfoil_parameterization, airfoil_options=self.airfoil_analysis_options)
         else:
-            der = True
             self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
                 self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                 self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=der)
+                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
 
         if self.run_case == 'power':
             # print "CCblade power"
             # power, thrust, torque
-            if der:
-                self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
-            else:
-                self.P, self.T, self.Q, = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+            self.P, self.T, self.Q, = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
             unknowns['T'] = self.T
             unknowns['Q'] = self.Q
             unknowns['P'] = self.P
         elif self.run_case == 'loads':
             # print "CCblade loads"
             # distributed loads
-            if der:
-                Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
-            else:
-                Np, Tp, = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+            Np, Tp, = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
             # concatenate loads at root/tip
             unknowns['loads:r'] = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
@@ -479,24 +464,24 @@ class CCBlade(Component):
 
 
     def linearize(self, params, unknowns, resids):
-        if not self.airfoil_analysis_options['FreeFormDesign']:
-            self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
-                    self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
-                    self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                    wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=self.airfoil_parameterization, airfoil_options=self.airfoil_analysis_options)
+        # if not self.airfoil_analysis_options['FreeFormDesign']:
+        self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
+                self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
+                self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
+                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=self.airfoil_parameterization, airfoil_options=self.airfoil_analysis_options)
 
-            if self.run_case == 'power':
-                # print "CCblade power"
-                # power, thrust, torque
+        if self.run_case == 'power':
+            # print "CCblade power"
+            # power, thrust, torque
 
-                self.P, self.T, self.Q, self.dP, self.dT, self.dQ \
-                    = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+            self.P, self.T, self.Q, self.dP, self.dT, self.dQ \
+                = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
 
-            elif self.run_case == 'loads':
-                # print "CCblade loads"
-                # distributed loads
-                Np, Tp, self.dNp, self.dTp \
-                    = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+        elif self.run_case == 'loads':
+            # print "CCblade loads"
+            # distributed loads
+            Np, Tp, self.dNp, self.dTp \
+                = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
         J = {}
         if self.run_case == 'power':

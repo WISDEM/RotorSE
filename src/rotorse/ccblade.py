@@ -392,10 +392,10 @@ class CCBlade:
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-            if self.airfoil_analysis_options['FreeFormDesign']:
-                dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha)
-            else:
-                dcl_dafp, dcd_dafp = af.airfoil_parameterization_derivatives(alpha, [1e6], af.CST, self.airfoil_analysis_options)
+            # if self.airfoil_analysis_options['FreeFormDesign']:
+                # dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha)
+            # else:
+            dcl_dafp, dcd_dafp = af.airfoil_parameterization_derivatives(alpha, [1e6], af.CST, self.airfoil_analysis_options)
             dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
 
             return dR_dx, da_dx, dap_dx, dR_dafp, dcl_dafp, dcd_dafp
@@ -622,8 +622,6 @@ class CCBlade:
                 # ----------------------------------------------------------------
 
             # derivatives of residual
-            af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-            airfoils = [False, False, False, True, True, False, True, True, False, True, False, True, False, False, False, False, False]
             airfoils = [False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
             if self.freeform:
                 if airfoils[i]:
@@ -753,6 +751,7 @@ class CCBlade:
                     dTp_zeros[z, :] = DTp_Dafp[z]
                     dNp['dafp'][z] = dNp_zeros.flatten()
                     dTp['dafp'][z] = dTp_zeros.flatten()
+                print "loads gradient complete"
 
             return Np, Tp, dNp, dTp
 
