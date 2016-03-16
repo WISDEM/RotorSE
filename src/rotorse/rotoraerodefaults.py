@@ -257,7 +257,7 @@ class CCBladeAirfoils(Component):
                 else:
                     index = np.where(af_idx >= i+2)[0][0]
                     airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
-                    print "Airfoil ", str(i+1), " parameterization has not changed."
+                    # print "Airfoil ", str(i+1), " parameterization has not changed."
             n = len(af_idx)
             af = [0]*n
 

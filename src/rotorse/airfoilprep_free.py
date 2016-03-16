@@ -2062,11 +2062,15 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
     wl, wu, N, dz = CST_to_kulfan(CST)
 
     dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8)
-    cl, cd, flag = cstReal(alpha, Re, np.real(wl), np.real(wu), N, dz, Uinf=10.0)
-
+    cl, cd, flag_original = cstReal(alpha, Re, np.real(wl), np.real(wu), N, dz, Uinf=10.0)
+    if not flag_original:
+        cl, cd = deepcopy(cl_fd_cur), deepcopy(cd_fd_cur)
+        # cl_fd_cur, cd_fd_cur = deepcopy(cl), deepcopy(cd)
     if FDorCS == 'CS':
         step_size = 1e-20
         cs_step = complex(0, step_size)
+        wl = wl.astype(complex)
+        wu = wu.astype(complex)
         for i in range(len(wl)):
 
             wl_complex = deepcopy(wl)
@@ -2080,41 +2084,72 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
             dcl_dafp[i+4] = np.imag(cl_complex)/np.imag(cs_step)
             dcd_dafp[i+4] = np.imag(cd_complex)/np.imag(cs_step)
     else:
-        step_size = 1e-7
+        step_size = 1e-6
         fd_step = step_size
         exit_flag = np.zeros(8)
         global lexitflag_counter
         for i in range(len(wl)):
             wl_fd1 = np.real(deepcopy(wl))
             wl_fd2 = np.real(deepcopy(wl))
-            wl_fd1[i] -= fd_step
-            wl_fd2[i] += fd_step
+            wl_fd1[i] += fd_step
+            # wl_fd2[i] += fd_step
             cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
             cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
             if flag1:
                 lexitflag_counter += 1
-            cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
-            cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-            if flag2:
-                lexitflag_counter += 1
-            exit_flag[i] = np.logical_or(flag1, flag2)
-            dcl_dafp[i] = (cl_fd2 - cl_fd1)/(2.*fd_step)
-            dcd_dafp[i] = (cd_fd2 - cd_fd1)/(2.*fd_step)
+            # cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
+            # cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
+            # if flag2:
+            #     lexitflag_counter += 1
+            exit_flag[i] = flag1 #np.logical_or(flag1, flag2)
+            dcl_dafp[i] = (cl_fd1 - cl)/(fd_step)
+            dcd_dafp[i] = (cd_fd1 - cd)/(fd_step)
             wu_fd1 = np.real(deepcopy(wu))
             wu_fd2 = np.real(deepcopy(wu))
-            wu_fd1[i] -= fd_step
-            wu_fd2[i] += fd_step
+            wu_fd1[i] += fd_step
+            # wu_fd2[i] += fd_step
             cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
             cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
             if flag1:
                 lexitflag_counter += 1
-            cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
-            cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-            if flag2:
-                lexitflag_counter += 1
-            dcl_dafp[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
-            dcd_dafp[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
-            exit_flag[i+4] = np.logical_or(flag1, flag2)
+            # cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
+            # cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
+            # if flag2:
+            #     lexitflag_counter += 1
+            dcl_dafp[i+4] = (cl_fd1 - cl)/(fd_step)
+            dcd_dafp[i+4] = (cd_fd1 - cd)/(fd_step)
+            exit_flag[i+4] = flag1 #np.logical_or(flag1, flag2)
+        # for i in range(len(wl)):
+        #     wl_fd1 = np.real(deepcopy(wl))
+        #     wl_fd2 = np.real(deepcopy(wl))
+        #     wl_fd1[i] -= fd_step
+        #     wl_fd2[i] += fd_step
+        #     cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
+        #     cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
+        #     if flag1:
+        #         lexitflag_counter += 1
+        #     cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
+        #     cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
+        #     if flag2:
+        #         lexitflag_counter += 1
+        #     exit_flag[i] = np.logical_or(flag1, flag2)
+        #     dcl_dafp[i] = (cl_fd2 - cl_fd1)/(2.*fd_step)
+        #     dcd_dafp[i] = (cd_fd2 - cd_fd1)/(2.*fd_step)
+        #     wu_fd1 = np.real(deepcopy(wu))
+        #     wu_fd2 = np.real(deepcopy(wu))
+        #     wu_fd1[i] -= fd_step
+        #     wu_fd2[i] += fd_step
+        #     cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
+        #     cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
+        #     if flag1:
+        #         lexitflag_counter += 1
+        #     cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
+        #     cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
+        #     if flag2:
+        #         lexitflag_counter += 1
+        #     dcl_dafp[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
+        #     dcd_dafp[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
+        #     exit_flag[i+4] = np.logical_or(flag1, flag2)
         if np.any(abs(dcl_dafp) > 2.0) or np.any(abs(dcd_dafp) > 2.0) or np.any(exit_flag):
             for i in range(8):
                 if abs(dcl_dafp[i]) > 2.0 or abs(dcd_dafp[i]) > 2.0 or exit_flag[i]:
@@ -2142,7 +2177,7 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
                     dcd_dafp[i] = (cd_fd_new - cd_fd_cur) / fd_step
             # for i in range(8):
 
-
+        # print lexitflag_counter
     return cl, cd, dcl_dafp, dcd_dafp
 
 def cstComplex(alpha, Re, wl, wu, N, dz, Uinf):
