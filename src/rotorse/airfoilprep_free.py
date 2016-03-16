@@ -39,6 +39,34 @@ from akima import Akima
 global lexitflag_counter
 lexitflag_counter = 0
 
+def run_command( Command ):
+    """ runs os command with subprocess
+        checks for errors from command
+    """
+
+    sys.stdout.flush()
+
+    proc = subprocess.Popen( Command, shell=True    ,
+                             stdout=sys.stdout      ,
+                             stderr=subprocess.PIPE  )
+    return_code = proc.wait()
+    message = proc.stderr.read()
+
+    if return_code < 0:
+        message = "SU2 process was terminated by signal '%s'\n%s" % (-return_code,message)
+        raise SystemExit , message
+    elif return_code > 0:
+        message = "Path = %s\nCommand = %s\nSU2 process returned error '%s'\n%s" % (os.path.abspath(','),Command,return_code,message)
+        if return_code in return_code_map.keys():
+            exception = return_code_map[return_code]
+        else:
+            exception = RuntimeError
+        raise exception , message
+    else:
+        sys.stdout.write(message)
+
+    return return_code
+
 class Polar(object):
     """
     Defines section lift, drag, and pitching moment coefficients as a
@@ -1241,15 +1269,16 @@ class Airfoil(object):
 
         coord_file.close()
 
-        if GenerateMESH:
-            ## Update mesh for specific airfoil (mesh deformation in SU2_EDU)
-            basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
-            su2_file_execute = basepath + os.path.sep + 'SU2_EDU'
-
-            savedPath = os.getcwd()
-            os.chdir(basepath)
-            subprocess.call([su2_file_execute])
-            os.chdir(savedPath)
+        # if GenerateMESH:
+        #
+        #     ## Update mesh for specific airfoil (mesh deformation in SU2_EDU)
+        #     basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
+        #     su2_file_execute = basepath + os.path.sep + 'SU2_EDU'
+        #
+        #     savedPath = os.getcwd()
+        #     os.chdir(basepath)
+        #     subprocess.call([su2_file_execute])
+        #     os.chdir(savedPath)
 
         partitions = processors
         compute = True
@@ -1259,19 +1288,74 @@ class Airfoil(object):
         # Config and state
         basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
         # filename = basepath + os.path.sep + 'inv_NACA0012.cfg'
-        filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
+        # filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
         # filename = basepath + os.path.sep + 'turb_nasa.cfg'
+        filename = basepath + os.path.sep + 'su2_incomp_rans.cfg'
 
         config = SU2.io.Config(filename)
         state  = SU2.io.State()
-        config.NUMBER_PART = partitions
+        config.NUMBER_PART = 0
         config.EXT_ITER    = iterations
-
         basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
         mesh_filename = basepath + os.path.sep + 'mesh_AIRFOIL.su2'
-
-        config.WRT_CSV_SOL = 'YES'
         config.MESH_FILENAME = mesh_filename
+        if GenerateMESH:
+            import os
+
+            konfig = copy.deepcopy(config)
+
+            tempname = 'config_DEF.cfg'
+            konfig.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            # must run with rank 1
+            processes = konfig['NUMBER_PART']
+            base_Command = os.path.join(SU2_RUN,'%s')
+            the_Command = 'SU2_DEF ' + tempname
+            the_Command = base_Command % the_Command
+            # the_Command = build_command( the_Command , processes )
+
+            sys.stdout.flush()
+
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                             stdout=sys.stdout      ,
+                             stderr=subprocess.PIPE,
+                             stdin=subprocess.PIPE)
+            proc.stderr.close()
+            proc.stdin.write('airfoil_shape.dat\n')
+            proc.stdin.write('Selig\n')
+            proc.stdin.write('1.0\n')
+            proc.stdin.write('Yes\n')
+            proc.stdin.write('clockwise\n')
+
+            # return_code = proc.wait()
+            # message = proc.stderr.read()
+            proc.stdin.close()
+            # proc.stdout.close()
+            return_code = proc.wait()
+            # run_command( the_Command )
+
+            # config.DV_VALUE_NEW = config.DV_VALUE
+            from subprocess import Popen, PIPE, STDOUT
+            # p = Popen(['myapp'], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+            # konfig = copy.deepcopy(config)
+            # tempname = 'config_DEF.cfg'
+            # konfig.dump(tempname)
+            # su2_file_execute = 'SU2_DEF ' + filename
+            # subprocess.call(su2_file_execute)
+            #
+            # # info = SU2.run.DEF(config)
+            #
+            # stdout_data = p.communicate(input='data_to_write')[0]
+            # sys.stdout.write('airfoil_shape.dat')
+            # sys.stdout.write('Selig')
+            # sys.stdout.write('1.0')
+            # sys.stdout.write('Yes')
+            # sys.stdout.write('clockwise')
+            # state.update(info)
+
+        config.NUMBER_PART = partitions
+        config.WRT_CSV_SOL = 'YES'
+
         config.AoA = alpha #np.degrees(alpha)
         Ma = Uinf / 340.29  # Speed of sound at sea level
         x_vel = Uinf * cos(np.radians(alpha))
@@ -1279,6 +1363,8 @@ class Airfoil(object):
         config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
         config.MACH_NUMBER = Ma
         config.REYNOLDS_NUMBER = Re
+        config.FREESTREAM_DENSITY = 1.225
+        config.FREESTREAM_VISCOSITY = 1.81206e-5
 
 
         # find solution files if they exist
@@ -1305,10 +1391,11 @@ class Airfoil(object):
             print "restart"
             config.RESTART_SOL = 'YES'
             basepath2 = os.path.dirname(os.path.realpath(__file__))
+            config.VOLUME_FLOW_FILENAME = basepath2 + os.path.sep + 'DIRECT/flow_' + str(wu[0]) + '_' + str(alpha)
             restart_file = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
             if os.path.isfile(restart_file):
                 config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
-                config.EXT_ITER = iterations #/ 20
+                config.EXT_ITER = iterations / 200
             else:
                 config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat'
             config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
@@ -1317,8 +1404,8 @@ class Airfoil(object):
             basepath2 = os.path.dirname(os.path.realpath(__file__))
             # restart_file = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
             # config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat'
-            config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
-            state.find_files(config)
+            #config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
+            #state.find_files(config)
             state.FILES.MESH = config.MESH_FILENAME
 
         cd = SU2.eval.func('DRAG', config, state)
@@ -2570,8 +2657,8 @@ def getCoordinates(CST):
     for k in range(len(x)):
         x1[k] = x[k][0]
     x = x1
-    return xl, xu, yl, yu
 
+    return xl, xu, yl, yu
 
 
 if __name__ == '__main__':

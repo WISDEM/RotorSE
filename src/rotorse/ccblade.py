@@ -1471,6 +1471,7 @@ if __name__ == '__main__':
     Omega = Uinf*tsr/Rtip * 30.0/pi  # convert to RPM
     azimuth = 90
 
+
     delta = 1e-6
     dNp_dcst_fd = np.zeros((17, 17, 8))
     dTp_dcst_fd = np.zeros((17, 17,8))
@@ -1498,6 +1499,7 @@ if __name__ == '__main__':
     #                precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=True)
     Np, Tp = aeroanalysis_xfoil.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
     print Np, Tp
+
     import matplotlib.pyplot as plt
 #     # rstar = (rload - rload[0]) / (rload[-1] - rload[0])
 #     plt.plot(r, Tp/1e3, 'k', label='lead-lag')

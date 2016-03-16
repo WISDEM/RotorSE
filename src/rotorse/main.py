@@ -86,6 +86,7 @@ rotor['nBlades'] = 3  # (Int): number of blades
 # === free form airfoil parameters ===
 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+
 rotor['af_idx'] = af_idx
 if airfoil_analysis_options['AnalysisMethod'] == 'Files':
     # === airfoil files ===
@@ -149,6 +150,9 @@ else:
     rotor['airfoil_files'] = np.array(af) # (List): names of airfoil file
 airfoil_analysis_options['FreeFormDesign'] = True
 rotor['airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of airfoil file
+
+# airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
+
 # ----------------------
 
 # === atmosphere ===
