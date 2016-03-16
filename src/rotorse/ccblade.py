@@ -35,7 +35,7 @@ from scipy.optimize import brentq
 from scipy.interpolate import RectBivariateSpline, bisplev
 from zope.interface import Interface, implements
 import warnings
-
+import time
 # from airfoilprep import Airfoil
 from airfoilprep_free import Airfoil, CCAirfoil
 import _bem
@@ -338,7 +338,7 @@ class CCBlade:
             alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                              chord, theta, self.rho, self.mu)
             cl, cd = af.evaluate(alpha, Re)
-
+            # print np.degrees(alpha)
             fzero, a, ap = _bem.inductionfactors(r, chord, self.Rhub, self.Rtip, phi,
                                                  cl, cd, self.B, Vx, Vy, **self.bemoptions)
 
@@ -370,7 +370,7 @@ class CCBlade:
 
         dalpha_dx = np.array([1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
         dRe_dx = np.array([0.0, Re/chord, 0.0, Re*Vx/W**2, Re*Vy/W**2, 0.0, 0.0, 0.0, 0.0])
-
+        # print np.degrees(alpha)
         # cl, cd (spline derivatives)
         cl, cd = af.evaluate(alpha, Re)
         dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
@@ -392,10 +392,13 @@ class CCBlade:
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-            dcl_dcst, dcd_dcst = af.cstderivatives(alpha, Re, airfoil_parameterization, self.airfoil_analysis_options)
-            dR_dcst = dR_dcl*dcl_dcst + dR_dcd*dcd_dcst
+            if self.airfoil_analysis_options['FreeFormDesign']:
+                dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha)
+            else:
+                dcl_dafp, dcd_dafp = af.airfoil_parameterization_derivatives(alpha, [1e6], af.CST, self.airfoil_analysis_options)
+            dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
 
-            return dR_dx, da_dx, dap_dx, dR_dcst, dcl_dcst, dcd_dcst
+            return dR_dx, da_dx, dap_dx, dR_dafp, dcl_dafp, dcd_dafp
 
         return dR_dx, da_dx, dap_dx
 
@@ -431,7 +434,7 @@ class CCBlade:
         # derivative of residual function
         if rotating:
             if self.freeform and self.freeform_gradient:
-                dR_dx, da_dx, dap_dx, dR_dcst, dcl_dcst, dcd_dcst = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy, airfoil_parameterization)
+                dR_dx, da_dx, dap_dx, dR_dafp, dcl_dafp, dcd_dafp = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy, airfoil_parameterization)
             else:
                 dR_dx, da_dx, dap_dx = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy)
             dphi_dx = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -441,7 +444,7 @@ class CCBlade:
             da_dx = np.zeros(9)
             dap_dx = np.zeros(9)
             dphi_dx = np.zeros(9)
-            dR_dcst, dcl_dcst, dcd_dcst = 0.0, 0.0, 0.0
+            dR_dafp, dcl_dafp, dcd_dafp = 0.0, 0.0, 0.0
 
         # x = [phi, chord, theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
         dx_dx = np.eye(9)
@@ -453,7 +456,7 @@ class CCBlade:
             a, da_dx, ap, dap_dx, Vx, dx_dx[3, :], Vy, dx_dx[4, :],
             self.pitch, dx_dx[8, :], chord, dx_dx[1, :], theta, dx_dx[2, :],
             self.rho, self.mu)
-
+        # print "ALPHA", np.degrees(alpha)
         # cl, cd (spline derivatives)
         dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
 
@@ -471,12 +474,13 @@ class CCBlade:
         dTp_dx = Tp*(1.0/ct*dct_dx + 2.0/W*dW_dx + 1.0/chord*dchord_dx)
 
         if self.freeform and self.freeform_gradient:
-            dphi_dcst = dcl_dalpha**-1*dcl_dcst + dcd_dalpha**-1*dcd_dcst
-            dcn_dcst = dcl_dcst*cphi - cl*sphi*dphi_dcst + dcd_dcst*sphi + cd*cphi*dphi_dcst
-            dct_dcst = dcl_dcst*sphi + cl*cphi*dphi_dcst - dcd_dcst*cphi + cd*sphi*dphi_dcst
-            dNp_dcst = Np*(1.0/cn*dcn_dcst)
-            dTp_dcst = Tp*(1.0/ct*dct_dcst)
-            return Np, Tp, dNp_dx, dTp_dx, dR_dx, dNp_dcst, dTp_dcst, dR_dcst
+            dphi_dafp = 0.0
+            dcn_dafp = dcl_dafp*cphi - cl*sphi*dphi_dafp + dcd_dafp*sphi + cd*cphi*dphi_dafp
+            dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
+            dNp_dafp = Np*(1.0/cn*dcn_dafp)
+            dTp_dafp = Tp*(1.0/ct*dct_dafp)
+
+            return Np, Tp, dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp
 
         return Np, Tp, dNp_dx, dTp_dx, dR_dx
 
@@ -574,8 +578,8 @@ class CCBlade:
         dTp_dVy = np.zeros(n)
         dNp_dz = np.zeros((6, n))
         dTp_dz = np.zeros((6, n))
-        DNp_Dcst = np.zeros((6, 8))
-        DTp_Dcst = np.zeros((6, 8))
+        DNp_Dafp = np.zeros((17, 8))
+        DTp_Dafp = np.zeros((17, 8))
 
         errf = self.__errorFunction
         rotating = (Omega != 0)
@@ -620,13 +624,15 @@ class CCBlade:
             # derivatives of residual
             af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
             airfoils = [False, False, False, True, True, False, True, True, False, True, False, True, False, False, False, False, False]
+            airfoils = [False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
             if self.freeform:
                 if airfoils[i]:
                     self.freeform_gradient = True
-                    Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dcst, dTp_dcst, dR_dcst = self.__loads(phi_star, rotating, *args, airfoil_parameterization=self.airfoil_parameterization[af_idx[i-3]])
+                    Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp = self.__loads(phi_star, rotating, *args, airfoil_parameterization=self.airfoil_parameterization[i])
                 else:
                     self.freeform_gradient = False
                     Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
+                    dNp_dafp, dTp_dafp, dR_dafp = 0.0, 0.0, 0.0
             else:
                 Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
 
@@ -644,9 +650,9 @@ class CCBlade:
                 DNp_Dx = dNp_dx - dNp_dy/dR_dy*dR_dx
                 DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
 
-                if self.freeform and self.freeform_gradient:
-                    DNp_Dcst[af_idx[i-3], :] = dNp_dcst - dNp_dy/dR_dy*dR_dcst
-                    DTp_Dcst[af_idx[i-3], :] = dTp_dcst - dTp_dy/dR_dy*dR_dcst
+                if self.freeform:# and self.freeform_gradient:
+                    DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
+                    DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
 
                 # parse components
                 # z = [r, chord, theta, Rhub, Rtip, pitch]
@@ -737,22 +743,257 @@ class CCBlade:
             dTp['dpitch'] = dTp_dX[13, :].reshape(n, 1)
 
             if self.freeform:
-                dNp['dcst'] = np.zeros((n, 6*8))
-                dTp['dcst'] = np.zeros((n, 6*8))
-                k = 0
+                dNp['dafp'] = np.zeros((n, 17*8))
+                dTp['dafp'] = np.zeros((n, 17*8))
                 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
                 for z in range(n):
-                    dNp_zeros = np.zeros((6,8))
-                    dTp_zeros = np.zeros((6,8))
-                    if z > 2:
-                        dNp_zeros[af_idx[z]-2, :] = DNp_Dcst[af_idx[z]-2]
-                        dTp_zeros[af_idx[z]-2, :] = DTp_Dcst[af_idx[z]-2]
-                    dNp['dcst'][z] = dNp_zeros.flatten()
-                    dTp['dcst'][z] = dTp_zeros.flatten()
+                    dNp_zeros = np.zeros((17,8))
+                    dTp_zeros = np.zeros((17,8))
+                    dNp_zeros[z, :] = DNp_Dafp[z]
+                    dTp_zeros[z, :] = DTp_Dafp[z]
+                    dNp['dafp'][z] = dNp_zeros.flatten()
+                    dTp['dafp'][z] = dTp_zeros.flatten()
 
             return Np, Tp, dNp, dTp
 
 
+    def TEST(self, Uinf, Omega, pitch, azimuth, i):
+        """Compute distributed aerodynamic loads along blade.
+
+        Parameters
+        ----------
+        Uinf : float or array_like (m/s)
+            hub height wind speed (float).  If desired, an array can be input which specifies
+            the velocity at each radial location along the blade (useful for analyzing loads
+            behind tower shadow for example).  In either case shear corrections will be applied.
+        Omega : float (RPM)
+            rotor rotation speed
+        pitch : float (deg)
+            blade pitch in same direction as :ref:`twist <blade_airfoil_coord>`
+            (positive decreases angle of attack)
+        azimuth : float (deg)
+            the :ref:`azimuth angle <hub_azimuth_coord>` where aerodynamic loads should be computed at
+
+        Returns
+        -------
+        Np : ndarray (N/m)
+            force per unit length normal to the section on downwind side
+        Tp : ndarray (N/m)
+            force per unit length tangential to the section in the direction of rotation
+        dNp : dictionary containing arrays (present if ``self.derivatives = True``)
+            derivatives of normal loads.  Each item in the dictionary a 2D Jacobian.
+            The array sizes and keys are (where n = number of stations along blade):
+
+            n x n (diagonal): 'dr', 'dchord', 'dtheta', 'dpresweep'
+
+            n x n (tridiagonal): 'dprecurve'
+
+            n x 1: 'dRhub', 'dRtip', 'dprecone', 'dtilt', 'dhubHt', 'dyaw', 'dazimuth', 'dUinf', 'dOmega', 'dpitch'
+
+            for example dNp_dr = dNp['dr']  (where dNp_dr is an n x n array)
+            and dNp_dr[i, j] = dNp_i / dr_j
+        dTp : dictionary (present if ``self.derivatives = True``)
+            derivatives of tangential loads.  Same keys as dNp.
+        """
+
+        self.pitch = radians(pitch)
+        azimuth = radians(azimuth)
+
+        # component of velocity at each radial station
+        Vx, Vy, dVx_dw, dVy_dw, dVx_dcurve, dVy_dcurve = self.__windComponents(Uinf, Omega, azimuth)
+
+
+        # initialize
+        n = len(self.r)
+        Np = np.zeros(n)
+        Tp = np.zeros(n)
+
+        dNp_dVx = np.zeros(n)
+        dTp_dVx = np.zeros(n)
+        dNp_dVy = np.zeros(n)
+        dTp_dVy = np.zeros(n)
+        dNp_dz = np.zeros((6, n))
+        dTp_dz = np.zeros((6, n))
+        DNp_Dafp = np.zeros((6, 8))
+        DTp_Dafp = np.zeros((6, 8))
+
+        errf = self.__errorFunction
+        rotating = (Omega != 0)
+
+        # ---------------- loop across blade ------------------
+        # for i in range(n):
+
+        # index dependent arguments
+        args = (self.r[i], self.chord[i], self.theta[i], self.af[i], Vx[i], Vy[i])
+        if not rotating:  # non-rotating
+
+            phi_star = pi/2.0
+
+        else:
+
+            # ------ BEM solution method see (Ning, doi:10.1002/we.1636) ------
+
+            # set standard limits
+            epsilon = 1e-6
+            phi_lower = epsilon
+            phi_upper = pi/2
+
+            if errf(phi_lower, *args)*errf(phi_upper, *args) > 0:  # an uncommon but possible case
+
+                if errf(-pi/4, *args) < 0 and errf(-epsilon, *args) > 0:
+                    phi_lower = -pi/4
+                    phi_upper = -epsilon
+                else:
+                    phi_lower = pi/2
+                    phi_upper = pi - epsilon
+
+            try:
+                phi_star = brentq(errf, phi_lower, phi_upper, args=args)
+
+            except ValueError:
+
+                warnings.warn('error.  check input values.')
+                phi_star = 0.0
+
+                # ----------------------------------------------------------------
+
+            # derivatives of residual
+            af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+        #     airfoils = [False, False, False, True, True, False, True, True, False, True, False, True, False, False, False, False, False]
+            if self.freeform:
+                if True:
+                    self.freeform_gradient = True
+                    fzero, a, ap = self.__runBEM(phi_star, *args)
+                    Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp = self.__loads(phi_star, rotating, *args, airfoil_parameterization=self.airfoil_parameterization[af_idx[i-3]])
+
+
+                else:
+                    self.freeform_gradient = False
+                    Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
+            else:
+                Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
+
+            if self.derivatives:
+                # separate state vars from design vars
+                # x = [phi, chord, theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
+                dNp_dy = dNp_dx[0]
+                dNp_dx = dNp_dx[1:]
+                dTp_dy = dTp_dx[0]
+                dTp_dx = dTp_dx[1:]
+                dR_dy = dR_dx[0]
+                dR_dx = dR_dx[1:]
+
+                # direct (or adjoint) total derivatives
+                DNp_Dx = dNp_dx - dNp_dy/dR_dy*dR_dx
+                DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
+
+                if self.freeform:# and self.freeform_gradient:
+                    DNp_Dafp[af_idx[i-3], :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
+                    DTp_Dafp[af_idx[i-3], :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
+
+                # parse components
+                # z = [r, chord, theta, Rhub, Rtip, pitch]
+        #         zidx = [4, 0, 1, 5, 6, 7]
+        #         dNp_dz[:, i] = DNp_Dx[zidx]
+        #         dTp_dz[:, i] = DTp_Dx[zidx]
+        #
+        #         dNp_dVx[i] = DNp_Dx[2]
+        #         dTp_dVx[i] = DTp_Dx[2]
+        #
+        #         dNp_dVy[i] = DNp_Dx[3]
+        #         dTp_dVy[i] = DTp_Dx[3]
+        #
+        #
+        #
+        # if not self.derivatives:
+        #     return Np, Tp
+        #
+        # else:
+        #
+        #     # chain rule
+        #     dNp_dw = dNp_dVx*dVx_dw + dNp_dVy*dVy_dw
+        #     dTp_dw = dTp_dVx*dVx_dw + dTp_dVy*dVy_dw
+        #
+        #     dNp_dprecurve = dNp_dVx*dVx_dcurve + dNp_dVy*dVy_dcurve
+        #     dTp_dprecurve = dTp_dVx*dVx_dcurve + dTp_dVy*dVy_dcurve
+        #
+        #     # stack
+        #     # z = [r, chord, theta, Rhub, Rtip, pitch]
+        #     # w = [r, presweep, precone, tilt, hubHt, yaw, azimuth, Uinf, Omega]
+        #     # X = [r, chord, theta, Rhub, Rtip, presweep, precone, tilt, hubHt, yaw, azimuth, Uinf, Omega, pitch]
+        #     dNp_dz[0, :] += dNp_dw[0, :]  # add partial w.r.t. r
+        #     dTp_dz[0, :] += dTp_dw[0, :]
+        #
+        #     dNp_dX = np.vstack((dNp_dz[:-1, :], dNp_dw[1:, :], dNp_dz[-1, :]))
+        #     dTp_dX = np.vstack((dTp_dz[:-1, :], dTp_dw[1:, :], dTp_dz[-1, :]))
+        #
+        #     # add chain rule for conversion to radians
+        #     ridx = [2, 6, 7, 9, 10, 13]
+        #     dNp_dX[ridx, :] *= pi/180.0
+        #     dTp_dX[ridx, :] *= pi/180.0
+        #
+        #     # save these values as the packing in one matrix is convenient for evaluate
+        #     # (intended for internal use only.  not to be accessed by user)
+        #     self._dNp_dX = dNp_dX
+        #     self._dTp_dX = dTp_dX
+        #     self._dNp_dprecurve = dNp_dprecurve
+        #     self._dTp_dprecurve = dTp_dprecurve
+        #
+        #     # pack derivatives into dictionary
+        #     dNp = {}
+        #     dTp = {}
+        #
+        #     # n x n (diagonal)
+        #     dNp['dr'] = np.diag(dNp_dX[0, :])
+        #     dTp['dr'] = np.diag(dTp_dX[0, :])
+        #     dNp['dchord'] = np.diag(dNp_dX[1, :])
+        #     dTp['dchord'] = np.diag(dTp_dX[1, :])
+        #     dNp['dtheta'] = np.diag(dNp_dX[2, :])
+        #     dTp['dtheta'] = np.diag(dTp_dX[2, :])
+        #     dNp['dpresweep'] = np.diag(dNp_dX[5, :])
+        #     dTp['dpresweep'] = np.diag(dTp_dX[5, :])
+        #
+        #     # n x n (tridiagonal)
+        #     dNp['dprecurve'] = dNp_dprecurve.T
+        #     dTp['dprecurve'] = dTp_dprecurve.T
+        #
+        #     # n x 1
+        #     dNp['dRhub'] = dNp_dX[3, :].reshape(n, 1)
+        #     dTp['dRhub'] = dTp_dX[3, :].reshape(n, 1)
+        #     dNp['dRtip'] = dNp_dX[4, :].reshape(n, 1)
+        #     dTp['dRtip'] = dTp_dX[4, :].reshape(n, 1)
+        #     dNp['dprecone'] = dNp_dX[6, :].reshape(n, 1)
+        #     dTp['dprecone'] = dTp_dX[6, :].reshape(n, 1)
+        #     dNp['dtilt'] = dNp_dX[7, :].reshape(n, 1)
+        #     dTp['dtilt'] = dTp_dX[7, :].reshape(n, 1)
+        #     dNp['dhubHt'] = dNp_dX[8, :].reshape(n, 1)
+        #     dTp['dhubHt'] = dTp_dX[8, :].reshape(n, 1)
+        #     dNp['dyaw'] = dNp_dX[9, :].reshape(n, 1)
+        #     dTp['dyaw'] = dTp_dX[9, :].reshape(n, 1)
+        #     dNp['dazimuth'] = dNp_dX[10, :].reshape(n, 1)
+        #     dTp['dazimuth'] = dTp_dX[10, :].reshape(n, 1)
+        #     dNp['dUinf'] = dNp_dX[11, :].reshape(n, 1)
+        #     dTp['dUinf'] = dTp_dX[11, :].reshape(n, 1)
+        #     dNp['dOmega'] = dNp_dX[12, :].reshape(n, 1)
+        #     dTp['dOmega'] = dTp_dX[12, :].reshape(n, 1)
+        #     dNp['dpitch'] = dNp_dX[13, :].reshape(n, 1)
+        #     dTp['dpitch'] = dTp_dX[13, :].reshape(n, 1)
+        #
+        #     if self.freeform:
+        #         dNp['dcst'] = np.zeros((n, 6*8))
+        #         dTp['dcst'] = np.zeros((n, 6*8))
+        #         k = 0
+        #         af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+        #         for z in range(n):
+        #             dNp_zeros = np.zeros((6,8))
+        #             dTp_zeros = np.zeros((6,8))
+        #             if z > 2:
+        #                 dNp_zeros[af_idx[z]-2, :] = DNp_Dcst[af_idx[z]-2]
+        #                 dTp_zeros[af_idx[z]-2, :] = DTp_Dcst[af_idx[z]-2]
+        #             dNp['dcst'][z] = dNp_zeros.flatten()
+        #             dTp['dcst'][z] = dTp_zeros.flatten()
+
+        return Np[i] #phi_star
 
 
     def evaluate(self, Uinf, Omega, pitch, coefficient=False):
@@ -831,8 +1072,8 @@ class CCBlade:
             dQ_ds = np.zeros((npts, 11))
             dT_dv = np.zeros((npts, 5, len(self.r)))
             dQ_dv = np.zeros((npts, 5, len(self.r)))
-            dT_dcst = np.zeros((npts, 6*8))
-            dQ_dcst = np.zeros((npts, 6*8))
+            dT_dafp = np.zeros((npts, 17*8))
+            dQ_dafp = np.zeros((npts, 17*8))
 
         for i in range(npts):  # iterate across conditions
 
@@ -848,10 +1089,10 @@ class CCBlade:
                     Np, Tp, dNp, dTp = self.distributedAeroLoads(Uinf[i], Omega[i], pitch[i], azimuth)
 
                     if self.freeform:
-                        dT_ds_sub, dQ_ds_sub, dT_dv_sub, dQ_dv_sub, dT_dcst_sub, dQ_dcst_sub = self.__thrustTorqueDeriv(
-                            Np, Tp, self._dNp_dX, self._dTp_dX, self._dNp_dprecurve, self._dTp_dprecurve, *args, dNp_dcst=dNp['dcst'], dTp_dcst=dTp['dcst'])
-                        dT_dcst[i, :] += self.B * dT_dcst_sub.T / nsec
-                        dQ_dcst[i, :] += self.B * dQ_dcst_sub.T / nsec
+                        dT_ds_sub, dQ_ds_sub, dT_dv_sub, dQ_dv_sub, dT_dafp_sub, dQ_dafp_sub = self.__thrustTorqueDeriv(
+                            Np, Tp, self._dNp_dX, self._dTp_dX, self._dNp_dprecurve, self._dTp_dprecurve, *args, dNp_dafp=dNp['dafp'], dTp_dafp=dTp['dafp'])
+                        dT_dafp[i, :] += self.B * dT_dafp_sub.reshape(17*8) / nsec
+                        dQ_dafp[i, :] += self.B * dQ_dafp_sub.reshape(17*8) / nsec
                     else:
                         dT_ds_sub, dQ_ds_sub, dT_dv_sub, dQ_dv_sub = self.__thrustTorqueDeriv(
                             Np, Tp, self._dNp_dX, self._dTp_dX, self._dNp_dprecurve, self._dTp_dprecurve, *args)
@@ -908,10 +1149,10 @@ class CCBlade:
                 dCP_dv = (dQ_dv.T * CP/Q).T
 
                 if self.freeform:
-                    dCT_dcst = (dT_dcst.T / (q*A)).T
-                    dCQ_dcst = (dQ_dcst.T / (q*self.rotorR*A)).T
-                    dCP_dcst = (dQ_dcst.T * CP/Q).T
-                    dCT, dCQ, dCP = self.__thrustTorqueDictionary(dCT_ds, dCQ_ds, dCP_ds, dCT_dv, dCQ_dv, dCP_dv, npts, dCT_dcst, dCQ_dcst, dCP_dcst)
+                    dCT_dafp = (dT_dafp.T / (q*A)).T
+                    dCQ_dafp = (dQ_dafp.T / (q*self.rotorR*A)).T
+                    dCP_dafp = (dQ_dafp.T * CP/Q).T
+                    dCT, dCQ, dCP = self.__thrustTorqueDictionary(dCT_ds, dCQ_ds, dCP_ds, dCT_dv, dCQ_dv, dCP_dv, npts, dCT_dafp, dCQ_dafp, dCP_dafp)
                 # pack derivatives into dictionary
                 else:
                     dCT, dCQ, dCP = self.__thrustTorqueDictionary(dCT_ds, dCQ_ds, dCP_ds, dCT_dv, dCQ_dv, dCP_dv, npts)
@@ -933,8 +1174,8 @@ class CCBlade:
 
             # pack derivatives into dictionary
             if self.freeform:
-                dP_dcst = (dQ_dcst.T * Omega*pi/30.0).T
-                dT, dQ, dP = self.__thrustTorqueDictionary(dT_ds, dQ_ds, dP_ds, dT_dv, dQ_dv, dP_dv, npts, dT_dcst, dQ_dcst, dP_dcst)
+                dP_dafp = (dQ_dafp.T * Omega*pi/30.0).T
+                dT, dQ, dP = self.__thrustTorqueDictionary(dT_ds, dQ_ds, dP_ds, dT_dv, dQ_dv, dP_dv, npts, dT_dafp, dQ_dafp, dP_dafp)
             else:
                 dT, dQ, dP = self.__thrustTorqueDictionary(dT_ds, dQ_ds, dP_ds, dT_dv, dQ_dv, dP_dv, npts)
             return P, T, Q, dP, dT, dQ
@@ -945,7 +1186,7 @@ class CCBlade:
 
 
     def __thrustTorqueDeriv(self, Np, Tp, dNp_dX, dTp_dX, dNp_dprecurve, dTp_dprecurve,
-            r, precurve, presweep, precone, Rhub, Rtip, precurveTip, presweepTip, dNp_dcst=None, dTp_dcst=None):
+            r, precurve, presweep, precone, Rhub, Rtip, precurveTip, presweepTip, dNp_dafp=None, dTp_dafp=None):
         """derivatives of thrust and torque"""
 
         Tb = np.array([1, 0])
@@ -1010,15 +1251,15 @@ class CCBlade:
         dQ_dv = np.vstack((dQ_dr, dQ_dchord, dQ_dtheta, dQ_dprecurve, dQ_dpresweep))
 
         if self.freeform:
-            dT_dcst = dT_dNp*dNp_dcst.T + dT_dTp*dTp_dcst.T
-            dQ_dcst = dQ_dNp*dNp_dcst.T + dQ_dTp*dTp_dcst.T
-            return dT_ds, dQ_ds, dT_dv, dQ_dv, dT_dcst, dQ_dcst
+            dT_dafp = np.dot(dT_dNp.reshape(1, 17), dNp_dafp) + np.dot(dT_dTp.reshape(1, 17), dTp_dafp)
+            dQ_dafp = np.dot(dQ_dNp.reshape(1, 17), dNp_dafp) + np.dot(dQ_dTp.reshape(1, 17), dTp_dafp)
+            return dT_ds, dQ_ds, dT_dv, dQ_dv, dT_dafp, dQ_dafp
 
         return dT_ds, dQ_ds, dT_dv, dQ_dv
 
 
 
-    def __thrustTorqueDictionary(self, dT_ds, dQ_ds, dP_ds, dT_dv, dQ_dv, dP_dv, npts, dCT_dcst=None, dCQ_dcst=None, dCP_dcst=None):
+    def __thrustTorqueDictionary(self, dT_ds, dQ_ds, dP_ds, dT_dv, dQ_dv, dP_dv, npts, dT_dafp=None, dQ_dafp=None, dP_dafp=None):
 
 
         # pack derivatives into dictionary
@@ -1083,9 +1324,9 @@ class CCBlade:
         dP['dpresweep'] = dP_dv[:, 4, :]
 
         if self.freeform:
-            dT['dcst'] = dCT_dcst
-            dQ['dcst'] = dCQ_dcst
-            dP['dcst'] = dCP_dcst
+            dT['dafp'] = dT_dafp
+            dQ['dafp'] = dQ_dafp
+            dP['dafp'] = dP_dafp
 
         return dT, dQ, dP
 
@@ -1194,7 +1435,7 @@ if __name__ == '__main__':
 
     print "Generating airfoil data"
     for i in range(len(airfoil_types)-2):
-        airfoil_types[i+2] = afinit2(CST2[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
+        # airfoil_types[i+2] = afinit2(CST2[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
         airfoil_types_xfoil[i+2] = afinit2(CST2[i], 'XFOIL', airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
     print "Finished generating airfoil data"
 
@@ -1216,8 +1457,8 @@ if __name__ == '__main__':
     CST = CST_full.reshape(17, 1, 8)
     CST2 = CST2.reshape(6,1,8)
     # create CCBlade object
-    aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
-                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
+    # aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
+    #                        precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
 
     aeroanalysis_xfoil = CCBlade(r, chord, theta, af_xfoil, Rhub, Rtip, B, rho, mu,
                            precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
@@ -1230,8 +1471,34 @@ if __name__ == '__main__':
     Omega = Uinf*tsr/Rtip * 30.0/pi  # convert to RPM
     azimuth = 90
 
-    # Np, Tp = aeroanalysis.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
 
+    delta = 1e-6
+    dNp_dcst_fd = np.zeros((17, 17, 8))
+    dTp_dcst_fd = np.zeros((17, 17,8))
+    # rotor = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
+    #            precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
+    # Np, Tp, = rotor.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
+    # from copy import deepcopy
+    #
+    # for i in range(17):
+    #     for j in range(8):
+    #         CST_new = deepcopy(CST)
+    #         af_new = deepcopy(af)
+    #         CST_new[i][0][j] += delta
+    #         af[i] = afinit2(CST_new[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
+    #
+    #         rotor = CCBlade(r, chord, theta, af_new, Rhub, Rtip, B, rho, mu,
+    #                        precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST_new, airfoil_options=airfoil_analysis_options, derivatives=False)
+    #
+    #         Npd, Tpd = rotor.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
+    #
+    #         dNp_dcst_fd[:, i, j] = (Npd - Np) / delta
+    #         dTp_dcst_fd[:, i, j] = (Tpd - Tp) / delta
+    #
+    # aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
+    #                precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=True)
+    Np, Tp = aeroanalysis_xfoil.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
+    print Np, Tp
 
     import matplotlib.pyplot as plt
 #     # rstar = (rload - rload[0]) / (rload[-1] - rload[0])
