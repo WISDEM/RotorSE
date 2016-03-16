@@ -1641,16 +1641,16 @@ class Airfoil(object):
         marker = []
         param = []
         scale = []
-        for i in range(len(x)):
-            ffdtag.append([])
-            kind.append('HICKS_HENNE')
-            marker.append(['airfoil'])
-            if i < len(x) / 2.0:
-                param.append([0.0, x[i]])
-            else:
-                param.append([1.0, x[i]])
-            scale.append(1.0)
-        config.DEFINITION_DV = dict(FFDTAG=ffdtag, KIND=kind, MARKER=marker, PARAM=param, SCALE=scale)
+        # for i in range(len(x)):
+        #     ffdtag.append([])
+        #     kind.append('HICKS_HENNE')
+        #     marker.append(['airfoil'])
+        #     if i < len(x) / 2.0:
+        #         param.append([0.0, x[i]])
+        #     else:
+        #         param.append([1.0, x[i]])
+        #     scale.append(1.0)
+        # config.DEFINITION_DV = dict(FFDTAG=ffdtag, KIND=kind, MARKER=marker, PARAM=param, SCALE=scale)
 
         restart = True
 
@@ -2558,16 +2558,16 @@ def cfdGradients(CST, alpha, Re, iterations, processors, FDorCS, Uinf, ComputeGr
     marker = []
     param = []
     scale = []
-    for i in range(len(x)):
-        ffdtag.append([])
-        kind.append('HICKS_HENNE')
-        marker.append(['airfoil'])
-        if i < len(x) / 2.0:
-            param.append([0.0, x[i]])
-        else:
-            param.append([1.0, x[i]])
-        scale.append(1.0)
-    config.DEFINITION_DV = dict(FFDTAG=ffdtag, KIND=kind, MARKER=marker, PARAM=param, SCALE=scale)
+    # for i in range(len(x)):
+    #     ffdtag.append([])
+    #     kind.append('HICKS_HENNE')
+    #     marker.append(['airfoil'])
+    #     if i < len(x) / 2.0:
+    #         param.append([0.0, x[i]])
+    #     else:
+    #         param.append([1.0, x[i]])
+    #     scale.append(1.0)
+    # config.DEFINITION_DV = dict(FFDTAG=ffdtag, KIND=kind, MARKER=marker, PARAM=param, SCALE=scale)
     state.FILES.MESH = config.MESH_FILENAME
 
 

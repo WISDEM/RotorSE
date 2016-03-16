@@ -185,10 +185,7 @@ for i in range(17):
 #     for j in range(8):
 #         CST_full[i][j] = CST[af_idx[i]][0][j]
 # CST = CST_full.reshape(naero, 1, 8)
-<<<<<<< HEAD
 # airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
-=======
->>>>>>> a637d224da01e52cc4766ffc67a455b6d4ea8ac2
 # airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='Files', FDorCS='CS', iterations=20, processors=0)
 
 
