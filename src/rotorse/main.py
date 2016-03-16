@@ -149,9 +149,6 @@ else:
     rotor['airfoil_parameterization'] = airfoil_parameterization
     rotor['airfoil_files'] = np.array(af) # (List): names of airfoil file
 rotor['airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of airfoil file
-
-# airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='XFOIL', FDorCS='CS', iterations=20, processors=0)
-
 # ----------------------
 
 # === atmosphere ===
