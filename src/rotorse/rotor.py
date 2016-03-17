@@ -36,8 +36,9 @@ class ResizeCompositeSection(Component):
         self.add_param('lowerCSIn', shape=nstr, desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True)
         self.add_param('websCSIn', shape=nstr, desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
 
-        # TODO: remove fixed t/c assumption
         self.add_param('chord_str_ref', shape=nstr, units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)')
+        self.add_param('thick_str_ref', shape=nstr, units='m', desc='airfoil thickness distribution for reference section, thickness of structural layup scaled with reference thickness')
+        self.add_param('afp_str', val=np.zeros((nstr, 8)))
 
         self.add_param('sector_idx_strain_spar', val=np.zeros(nstr, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
         self.add_param('sector_idx_strain_te', val=np.zeros(nstr, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True)
@@ -56,6 +57,7 @@ class ResizeCompositeSection(Component):
     def solve_nonlinear(self, params, unknowns, resids):
         # print "ResizeCompositeSection"
         chord_str_ref = params['chord_str_ref']
+        thick_str_ref = params['thick_str_ref']
         upperCSIn = params['upperCSIn']
         lowerCSIn = params['lowerCSIn']
         websCSIn = params['websCSIn']
@@ -85,7 +87,13 @@ class ResizeCompositeSection(Component):
             webs = websCSOut[i]
 
             # factor = t_str[i]/tref[i]
-            factor = chord_str[i]/chord_str_ref[i]  # same as thickness ratio for constant t/c
+            if i < 14:
+                factor = chord_str[i]/chord_str_ref[i]  # same as thickness ratio for constant t/c
+            else:
+                from airfoilprep_free import getCoordinates
+                xl, xu, yl, yu = getCoordinates(params['afp_str'][i])
+                t_str = max(abs(yl)) + max(abs(yu))
+                factor = t_str/thick_str_ref[i]
 
             for j in range(len(upper.t)):
                 upper.t[j] *= factor
@@ -146,11 +154,10 @@ class PreCompSections(Component):
         self.add_param('sector_idx_strain_spar', val=np.zeros(nstr, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
         self.add_param('sector_idx_strain_te', val=np.zeros(nstr, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True)
 
-        naero = 17
         self.add_param('airfoil_parameterization', val=np.zeros((6, 8)))
-        self.add_param('initial_str_grid', val=np.zeros(nstr))
-        self.add_param('initial_aero_grid', val=np.zeros(naero))
+        self.add_param('af_str_idx', val=np.zeros(nstr), pass_by_obj=True)
         self.add_param('airfoil_analysis_options', val={}, pass_by_obj=True)
+
 
         self.add_output('eps_crit_spar', shape=nstr, desc='critical strain in spar from panel buckling calculation')
         self.add_output('eps_crit_te', shape=nstr, desc='critical strain in trailing-edge panels from panel buckling calculation')
@@ -294,9 +301,7 @@ class PreCompSections(Component):
 
         if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files':
             airfoil_parameterization = params['airfoil_parameterization']
-
-            af_str = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
-            af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+            af_str_idx = params['af_str_idx']
             airfoil_types_str = np.zeros((8, 8))
             for z in range(6):
                 airfoil_types_str[z+2, :] = airfoil_parameterization[z]
@@ -305,7 +310,7 @@ class PreCompSections(Component):
 
             pro_str = [0]*nstr
             for i in range(nstr):
-                pro_str[i] = airfoil_types_str[af_str[i]]
+                pro_str[i] = airfoil_types_str[af_str_idx[i]]
             profile = [0]*nstr
             for j in range(nstr):
                 if pro_str[j][0] == 0.0:
@@ -2424,7 +2429,9 @@ class RotorSE(Group):
             self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
 
             self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0, pass_by_obj=True), promotes=['*'])
+        self.add('thick_str_ref', IndepVarComp('thick_str_ref', val=np.zeros(nstr), units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)', pass_by_obj=True), promotes=['*'])
         self.add('af_idx', IndepVarComp('af_idx', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
+        self.add('af_str_idx', IndepVarComp('af_str_idx', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
         nSector = 4
         self.add('turbineclass', TurbineClass())
         self.add('gridsetup', GridSetup(naero, nstr))
@@ -2435,7 +2442,7 @@ class RotorSE(Group):
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed())
         self.add('airfoil_analysis', CCBladeAirfoils(naero))
-        self.add('airfoil_spline', AirfoilSpline(naero))
+        self.add('airfoil_spline', AirfoilSpline(naero, nstr))
         self.add('analysis', CCBlade('power', naero, n20))
 
         self.add('dt', CSMDrivetrain(n20))
@@ -2527,6 +2534,12 @@ class RotorSE(Group):
         self.connect('precone', 'analysis.precone')
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
+
+        self.connect('af_idx', 'airfoil_spline.af_idx')
+        self.connect('af_str_idx', 'airfoil_spline.af_str_idx')
+        self.connect('af_idx', 'airfoil_analysis.af_idx')
+        self.connect('af_str_idx', 'beam.af_str_idx')
+        self.connect('thick_str_ref', 'resize.thick_str_ref')
 
         self.connect('airfoil_parameterization', 'airfoil_spline.airfoil_parameterization')
         self.connect('airfoil_parameterization', 'airfoil_analysis.airfoil_parameterization')
@@ -2641,6 +2654,8 @@ class RotorSE(Group):
 
         self.add('output_struc', OutputsStructures(nstr), promotes=['*'])
 
+
+
         # connections to curvature
         self.connect('spline.r_str', 'curvature.r')
         self.connect('spline.precurve_str', 'curvature.precurve')
@@ -2657,6 +2672,7 @@ class RotorSE(Group):
         self.connect('spline.chord_str', 'resize.chord_str')
         self.connect('spline.sparT_str', 'resize.sparT_str')
         self.connect('spline.teT_str', 'resize.teT_str')
+        self.connect('airfoil_spline.airfoil_str_parameterization_full', 'resize.afp_str')
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')
@@ -2807,8 +2823,7 @@ class RotorSE(Group):
         self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
         self.connect('airfoil_parameterization', 'beam.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'beam.airfoil_analysis_options')
-        self.connect('initial_str_grid', 'beam.initial_str_grid')
-        self.connect('initial_aero_grid', 'beam.initial_aero_grid')
+
 
         # connections to loads_defl
         self.connect('aero_rated.loads:Omega', 'loads_defl.aeroLoads:Omega')
@@ -3017,10 +3032,10 @@ class RotorSE(Group):
         self.add('obj_con6', ExecComp('con6 = freq_curvefem[0:2] - nBlades*ratedConditions_Omega/60.0*1.1', freq_curvefem=np.zeros(5), nBlades=3, ratedConditions_Omega=0.0, con6=np.zeros(2)), promotes=['*'])
         self.add('obj_con_freeform', ExecComp('con_freeform = airfoil_parameterization[:, [4, 5, 6, 7]] - airfoil_parameterization[:, [0, 1, 2, 3]]', airfoil_parameterization=np.zeros((6,8)), con_freeform=np.zeros((6,4))), promotes=['*'])
         self.add('obj_concon', ExecComp('concon = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
-        # self.add('obj_con7', ExecComp('con7 = -aero_extrm_forces_T / 1e6 + [2422241.0342469/1e6, 189545.50087248/1e6]', aero_extrm_forces_T=np.zeros(2), con7=np.zeros(2)), promotes=['*'])
-        # self.connect('aero_extrm_forces.T', 'aero_extrm_forces_T')
+        self.add('obj_con7', ExecComp('con7 = ratedConditions_T / 1e6 - 700000./1e6', ratedConditions_T=1.0, promotes=['*']))
+        self.connect('ratedConditions.T', 'ratedConditions_T')
         self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
-        # self.fd_options['form'] = 'central'
+        self.fd_options['form'] = 'central'
         # self.fd_options['relative'] =
 

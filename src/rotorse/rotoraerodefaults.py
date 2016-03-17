@@ -215,6 +215,7 @@ class CCBladeAirfoils(Component):
         self.add_param('airfoil_parameterization', val=np.zeros((6, 8)))
         self.add_param('airfoil_analysis_options', val={}, pass_by_obj=True)
         self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
+        self.add_param('af_idx', val=np.zeros(n), pass_by_obj=True)
         self.add_output('af', shape=n, desc='names of airfoil file', pass_by_obj=True)
         self.add_output('dummy', shape=1)
 
@@ -235,7 +236,7 @@ class CCBladeAirfoils(Component):
                 self.airfoil_analysis_options = None
                 unknowns['af'] = af
         else:
-            af_idx = np.asarray([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
+            af_idx = params['af_idx']
             change = np.zeros(6)
             for j in range(6):
                 index = np.where(af_idx >= j+2)[0][0]
@@ -248,16 +249,20 @@ class CCBladeAirfoils(Component):
 
             alphas = np.linspace(-10, 20, 100)
             Re = 1e6
+            cst_file = open("cst_file_tracker", "a")
             for i in range(len(airfoil_types)-2):
                 if change[i] > 0:
                     time0 = time.time()
                     airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], alphas, Re, self.airfoil_analysis_options)
                     print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
                     print params['airfoil_parameterization'][i]
+                    print >> cst_file, 'Airfoil ', str(i+1), " changed. ", params['airfoil_parameterization'][i]
+
                 else:
                     index = np.where(af_idx >= i+2)[0][0]
                     airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
                     # print "Airfoil ", str(i+1), " parameterization has not changed."
+            cst_file.close()
             n = len(af_idx)
             af = [0]*n
 
@@ -275,25 +280,45 @@ class CCBladeAirfoils(Component):
         return J
 
 class AirfoilSpline(Component):
-    def __init__(self, n):
+    def __init__(self, n, nstr):
         super(AirfoilSpline, self).__init__()
         self.add_param('airfoil_parameterization', val=np.zeros((6, 8)))
-        self.add_output('airfoil_parameterization_full', val=np.zeros((17, 8)))
+        self.add_param('af_idx', val=np.zeros(n), pass_by_obj=True)
+        self.add_param('af_str_idx', val=np.zeros(nstr), pass_by_obj=True)
+        self.add_output('airfoil_parameterization_full', val=np.zeros((n, 8)))
+        self.add_output('airfoil_str_parameterization_full', val=np.zeros((nstr, 8)))
         self.n = n
+        self.nstr = nstr
     def solve_nonlinear(self, params, unknowns, resids):
         self.airfoil_parameterization = params['airfoil_parameterization']
         n = self.n
-        CST = np.zeros((17,8))
-        af_idx = np.asarray([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
-        self.daf_daf = np.zeros((136,48))
+        nstr = self.nstr
+        CST = np.zeros((n,8))
+        af_idx = params['af_idx']
+        self.daf_daf = np.zeros((n*8,48))
+        self.daf_daf_str = np.zeros((nstr*8,48))
         for i in range(n-3):
             for j in range(8):
                 CST[i+3][j] = self.airfoil_parameterization[af_idx[i+3]-2][j]
             self.daf_daf[np.ix_(range((i+3)*8, (i+3)*8+8), range((af_idx[i+3]-2)*8,((af_idx[i+3]-2)*8)+8))] += np.diag(np.ones(8))
         unknowns['airfoil_parameterization_full'] = CST
+
+        airfoil_types_str = np.zeros((8,8))
+        for z in range(6):
+            airfoil_types_str[z+2, :] = self.airfoil_parameterization[z]
+        pro_str = [0]*nstr
+        af_str_idx = params['af_str_idx']
+        for i in range(nstr):
+            pro_str[i] = airfoil_types_str[af_str_idx[i]]
+        str_idx = 14
+        for i in range(nstr-str_idx):
+            self.daf_daf_str[np.ix_(range((i+str_idx)*8, (i+str_idx)*8+8), range((af_str_idx[i+str_idx]-2)*8,((af_str_idx[i+str_idx]-2)*8)+8))] += np.diag(np.ones(8))
+        unknowns['airfoil_str_parameterization_full'] = np.asarray(pro_str)
+
     def linearize(self, params, unknowns, resids):
         J = {}
         J['airfoil_parameterization_full', 'airfoil_parameterization'] = self.daf_daf
+        J['airfoil_str_parameterization_full', 'airfoil_parameterization'] = self.daf_daf_str
         return J
 
 class CCBlade(Component):

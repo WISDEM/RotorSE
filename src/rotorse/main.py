@@ -46,7 +46,7 @@ rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
 # rotor.driver.add_constraint('con4', upper=0.0)  # rotor buckling spar
 # rotor.driver.add_constraint('con5', upper=0.0)  # rotor buckling te
 # rotor.driver.add_constraint('con6', lower=0.0)  # flap/edge freq
-# rotor.driver.add_constraint('con7', lower=0.0)
+# rotor.driver.add_constraint('con7', upper=0.0)
 rotor.driver.add_constraint('con_freeform', lower=0.05)
 rotor.driver.add_constraint('concon', lower=1.0)
 rotor.driver.add_objective('obj')
@@ -86,8 +86,9 @@ rotor['nBlades'] = 3  # (Int): number of blades
 # === free form airfoil parameters ===
 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-
-rotor['af_idx'] = af_idx
+af_str_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
+rotor['af_idx'] = np.asarray(af_idx)
+rotor['af_str_idx'] = np.asarray(af_str_idx)
 if airfoil_analysis_options['AnalysisMethod'] == 'Files':
     # === airfoil files ===
     basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles/')
@@ -116,6 +117,7 @@ else:
                                            [-0.27413320446357803, -0.40701949670950271, -0.29237424992338562, 0.27867844397438357, 0.23582783854698663, 0.43718573158380936, 0.25389099250498309, 0.31090780344061775],
                                            [-0.19600050454371795, -0.28861738331958697, -0.20594891135118523, 0.19143138186871009, 0.22876347660120994, 0.39940768357615447, 0.28896745336793572, 0.29519782561050112],
                                            [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]])
+
     af_input_init = CCAirfoil.initFromInput
     if airfoil_analysis_options['AirfoilParameterization'] == 'CST':
         af_freeform_init = CCAirfoil.initFromCST
@@ -127,7 +129,7 @@ else:
     # load all airfoils
     non_airfoils_idx = 2
     airfoil_types = [0]*8
-    alphas = np.linspace(-15, 15, 100)
+    alphas = np.linspace(-10, 25, 100)
     Re = 1e6
     non_airfoils_alphas = [-180.0, 0.0, 180.0]
     non_airfoils_cls = [0.0, 0.0, 0.0]
@@ -206,7 +208,11 @@ rotor['chord_str_ref'] = np.array([3.2612, 3.3100915356, 3.32587052924, 3.341593
      4.47641008477, 4.55844487985, 4.57383098262, 4.57285771934, 4.51914315648, 4.47677655262, 4.40075650022,
      4.31069949379, 4.20483735936, 4.08985563932, 3.82931757126, 3.74220276467, 3.54415796922, 3.38732428502,
      3.24931446473, 3.23421422609, 3.22701537997, 3.21972125648, 3.08979310611, 2.95152261813, 2.330753331,
-     2.05553464181, 1.82577817774, 1.5860853279, 1.4621])  # (Array, m): chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)
+     2.05553464181, 1.82577817774, 1.5860853279, 1.4621])  # (Array, m): chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c not true for this case)
+rotor['thick_str_ref'] = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0.404457084248, 0.404457084248,
+                                   0.349012780126, 0.349012780126, 0.349012780126, 0.349012780126, 0.29892003076, 0.29892003076, 0.25110545018, 0.25110545018, 0.25110545018, 0.25110545018,
+                                   0.211298863564, 0.211298863564, 0.211298863564, 0.211298863564, 0.17933792591, 0.17933792591, 0.17933792591, 0.17933792591, 0.17933792591, 0.17933792591,
+                                   0.17933792591, 0.17933792591])  # (Array, m): airfoil thickness distribution for reference section, thickness of structural layup scaled with reference thickness
 
 for i in range(ncomp):
 
@@ -276,12 +282,12 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
 
 ## Gradient checks
-# grad_total = open('total_gradient_check5.txt', 'w')
+# grad_total = open('total_gradient_check6.txt', 'w')
 # grad_partial = open('partial_gradient_check.txt', 'w')
 # total = rotor.check_total_derivatives(out_stream=grad_total)
 # partial= rotor.check_partial_derivatives(out_stream=grad_partial)
 grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
-print grad
+# print grad
 
 plt.figure()
 plt.plot(rotor['V'], rotor['P']/1e6)

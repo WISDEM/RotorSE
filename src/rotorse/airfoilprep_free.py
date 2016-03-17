@@ -1599,6 +1599,10 @@ class CCAirfoil:
             self.cd_2D_origin = cd_2D
             self.alpha_2D_origin = alpha_2D
             self.airfoil_analysis_options = airfoil_analysis_options
+            self.dcl_dafp_storage = []
+            self.dcd_dafp_storage = []
+            self.freeform_alpha_storage = []
+
 
 
     @classmethod
@@ -1745,7 +1749,16 @@ class CCAirfoil:
         Uinf = 10.0
         cl, cd = self.evaluate(alpha, Re)
         if airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
-            cl, cd, dcl_dafp, dcd_dafp = xfoilGradients(CST, alpha, Re, airfoil_analysis_options['GradientType'], cl, cd)
+            if alpha in self.freeform_alpha_storage:
+                index = self.freeform_alpha_storage.index(alpha)
+                dcl_dafp = self.dcl_dafp_storage[index]
+                dcd_dafp = self.dcd_dafp_storage[index]
+            else:
+                cl, cd, dcl_dafp, dcd_dafp = xfoilGradients(CST, alpha, Re, airfoil_analysis_options['GradientType'], cl, cd)
+
+            self.dcl_dafp_storage.append(dcl_dafp)
+            self.dcd_dafp_storage.append(dcd_dafp)
+            self.freeform_alpha_storage.append(alpha)
         else:
             ComputeGradients = True
             cl, cd, dcl_dafp, dcd_dafp = cfdGradients(CST, alpha, Re, airfoil_analysis_options['CFDiterations'], airfoil_analysis_options['CFDprocessors'], airfoil_analysis_options['GradientType'], Uinf, ComputeGradients, GenerateMESH=True)
@@ -2063,7 +2076,8 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
 
     dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8)
     cl, cd, flag_original = cstReal(alpha, Re, np.real(wl), np.real(wu), N, dz, Uinf=10.0)
-    if not flag_original:
+    cl, cd = deepcopy(cl), deepcopy(cd)
+    if flag_original:
         cl, cd = deepcopy(cl_fd_cur), deepcopy(cd_fd_cur)
         # cl_fd_cur, cd_fd_cur = deepcopy(cl), deepcopy(cd)
     global lexitflag_counter
@@ -2093,96 +2107,95 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
         fd_step = step_size
         exit_flag = np.zeros(8)
 
-        for i in range(len(wl)):
-            wl_fd1 = np.real(deepcopy(wl))
-            wl_fd2 = np.real(deepcopy(wl))
-            wl_fd1[i] += fd_step
-            # wl_fd2[i] += fd_step
-            cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
-            cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
-            if flag1:
-                lexitflag_counter += 1
-            # cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
-            # cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-            # if flag2:
-            #     lexitflag_counter += 1
-            exit_flag[i] = flag1 #np.logical_or(flag1, flag2)
-            dcl_dafp[i] = (cl_fd1 - cl)/(fd_step)
-            dcd_dafp[i] = (cd_fd1 - cd)/(fd_step)
-            wu_fd1 = np.real(deepcopy(wu))
-            wu_fd2 = np.real(deepcopy(wu))
-            wu_fd1[i] += fd_step
-            # wu_fd2[i] += fd_step
-            cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
-            cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
-            if flag1:
-                lexitflag_counter += 1
-            # cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
-            # cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-            # if flag2:
-            #     lexitflag_counter += 1
-            dcl_dafp[i+4] = (cl_fd1 - cl)/(fd_step)
-            dcd_dafp[i+4] = (cd_fd1 - cd)/(fd_step)
-            exit_flag[i+4] = flag1 #np.logical_or(flag1, flag2)
         # for i in range(len(wl)):
         #     wl_fd1 = np.real(deepcopy(wl))
         #     wl_fd2 = np.real(deepcopy(wl))
-        #     wl_fd1[i] -= fd_step
-        #     wl_fd2[i] += fd_step
+        #     wl_fd1[i] += fd_step
+        #     # wl_fd2[i] += fd_step
         #     cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
         #     cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
         #     if flag1:
         #         lexitflag_counter += 1
-        #     cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
-        #     cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-        #     if flag2:
-        #         lexitflag_counter += 1
-        #     exit_flag[i] = np.logical_or(flag1, flag2)
-        #     dcl_dafp[i] = (cl_fd2 - cl_fd1)/(2.*fd_step)
-        #     dcd_dafp[i] = (cd_fd2 - cd_fd1)/(2.*fd_step)
+        #     # cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
+        #     # cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
+        #     # if flag2:
+        #     #     lexitflag_counter += 1
+        #     exit_flag[i] = flag1 #np.logical_or(flag1, flag2)
+        #     dcl_dafp[i] = (cl_fd1 - cl)/(fd_step)
+        #     dcd_dafp[i] = (cd_fd1 - cd)/(fd_step)
         #     wu_fd1 = np.real(deepcopy(wu))
         #     wu_fd2 = np.real(deepcopy(wu))
-        #     wu_fd1[i] -= fd_step
-        #     wu_fd2[i] += fd_step
+        #     wu_fd1[i] += fd_step
+        #     # wu_fd2[i] += fd_step
         #     cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
         #     cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
         #     if flag1:
         #         lexitflag_counter += 1
-        #     cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
-        #     cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-        #     if flag2:
-        #         lexitflag_counter += 1
-        #     dcl_dafp[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
-        #     dcd_dafp[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
-        #     exit_flag[i+4] = np.logical_or(flag1, flag2)
-        if np.any(abs(dcl_dafp) > 2.0) or np.any(abs(dcd_dafp) > 2.0) or np.any(exit_flag):
-            for i in range(8):
-                if abs(dcl_dafp[i]) > 2.0 or abs(dcd_dafp[i]) > 2.0 or exit_flag[i]:
-                    # tolerance
-                    alphas = np.linspace(-5, 20, 25)
-                    Re = 1e6
-                    airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False)
-                    # af1 = Airfoil.initFromCST(CST, alphas, [Re], airfoil_analysis_options)
-                    # af_extrap11 = af1.extrapolate(1.5)
-                    # alphas_cur, Re_cur, cl_cur, cd_cur, cm_cur = af_extrap11.createDataGrid()
-                    # cl_spline_cur = Akima(alphas_cur, cl_cur)
-                    # cd_spline_cur = Akima(alphas_cur, cd_cur)
-                    # cl_fd_cur, _, _, _ = cl_spline_cur.interp(alpha)
-                    # cd_fd_cur, _, _, _ = cd_spline_cur.interp(alpha)
-                    CST_new = deepcopy(CST)
-                    CST_new[i] += fd_step
-                    af = Airfoil.initFromCST(CST_new, alphas, [Re], airfoil_analysis_options)
-                    af_extrap1 = af.extrapolate(1.5)
-                    alphas_new, Re_new, cl_new, cd_new, cm_new = af_extrap1.createDataGrid()
-                    cl_spline = Akima(alphas_new, cl_new)
-                    cd_spline = Akima(alphas_new, cd_new)
-                    cl_fd_new, _, _, _ = cl_spline.interp(alpha)
-                    cd_fd_new, _, _, _ = cd_spline.interp(alpha)
-                    dcl_dafp[i] = (cl_fd_new - cl_fd_cur) / fd_step
-                    dcd_dafp[i] = (cd_fd_new - cd_fd_cur) / fd_step
+        #     # cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
+        #     # cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
+        #     # if flag2:
+        #     #     lexitflag_counter += 1
+        #     dcl_dafp[i+4] = (cl_fd1 - cl)/(fd_step)
+        #     dcd_dafp[i+4] = (cd_fd1 - cd)/(fd_step)
+        #     exit_flag[i+4] = flag1 #np.logical_or(flag1, flag2)
+        for i in range(len(wl)):
+            wl_fd1 = np.real(deepcopy(wl))
+            wl_fd2 = np.real(deepcopy(wl))
+            wl_fd1[i] -= fd_step
+            wl_fd2[i] += fd_step
+            cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
+            cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
+            if flag1:
+                lexitflag_counter += 1
+            cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
+            cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
+            if flag2:
+                lexitflag_counter += 1
+            exit_flag[i] = np.logical_or(flag1, flag2)
+            dcl_dafp[i] = (cl_fd2 - cl_fd1)/(2.*fd_step)
+            dcd_dafp[i] = (cd_fd2 - cd_fd1)/(2.*fd_step)
+            wu_fd1 = np.real(deepcopy(wu))
+            wu_fd2 = np.real(deepcopy(wu))
+            wu_fd1[i] -= fd_step
+            wu_fd2[i] += fd_step
+            cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
+            cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
+            if flag1:
+                lexitflag_counter += 1
+            cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
+            cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
+            if flag2:
+                lexitflag_counter += 1
+            dcl_dafp[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
+            dcd_dafp[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
+            exit_flag[i+4] = np.logical_or(flag1, flag2)
+        for i in range(8):
+            if abs(dcl_dafp[i]) > 2.0 or abs(dcd_dafp[i]) > 2.0 or exit_flag[i]:
+                # tolerance
+                alphas = np.linspace(-15, 15, 150)
+                Re = 1e6
+                airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False)
+                # af1 = Airfoil.initFromCST(CST, alphas, [Re], airfoil_analysis_options)
+                # af_extrap11 = af1.extrapolate(1.5)
+                # alphas_cur, Re_cur, cl_cur, cd_cur, cm_cur = af_extrap11.createDataGrid()
+                # cl_spline_cur = Akima(alphas_cur, cl_cur)
+                # cd_spline_cur = Akima(alphas_cur, cd_cur)
+                # cl_fd_cur, _, _, _ = cl_spline_cur.interp(alpha)
+                # cd_fd_cur, _, _, _ = cd_spline_cur.interp(alpha)
+                CST_new = deepcopy(CST)
+                CST_new[i] += fd_step
+                af = Airfoil.initFromCST(CST_new, alphas, [Re], airfoil_analysis_options)
+                af_extrap1 = af.extrapolate(1.5)
+                alphas_new, Re_new, cl_new, cd_new, cm_new = af_extrap1.createDataGrid()
+                cl_spline = Akima(alphas_new, cl_new)
+                cd_spline = Akima(alphas_new, cd_new)
+                cl_fd_new, _, _, _ = cl_spline.interp(alpha)
+                cd_fd_new, _, _, _ = cd_spline.interp(alpha)
+                dcl_dafp[i] = (cl_fd_new - cl_fd_cur) / fd_step
+                dcd_dafp[i] = (cd_fd_new - cd_fd_cur) / fd_step
             # for i in range(8):
 
-    print lexitflag_counter
+    # print lexitflag_counter
     return cl, cd, dcl_dafp, dcd_dafp
 
 def cstComplex(alpha, Re, wl, wu, N, dz, Uinf):
@@ -2337,7 +2350,7 @@ def CST_to_kulfan(CST):
         lower = wu
         wl = lower
         wu = higher
-    N = 120
+    N = 200
     dz = 0.
     return wl, wu, N, dz
 
@@ -2519,7 +2532,10 @@ def ClassShapeComplex(w, x, N1, N2, dz):
     return y
 
 def getCoordinates(CST):
-    wl, wu, N, dz = CST_to_kulfan(CST[0])
+    try:
+        wl, wu, N, dz = CST_to_kulfan(CST[0])
+    except:
+        wl, wu, N, dz = CST_to_kulfan(CST)
     x = np.ones((N, 1))
     zeta = np.zeros((N, 1))
     for z in range(0, N):
