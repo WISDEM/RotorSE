@@ -285,6 +285,8 @@ class AirfoilSpline(Component):
         self.add_param('airfoil_parameterization', val=np.zeros((6, 8)))
         self.add_param('af_idx', val=np.zeros(n), pass_by_obj=True)
         self.add_param('af_str_idx', val=np.zeros(nstr), pass_by_obj=True)
+        self.add_param('idx_cylinder_str', val=1, pass_by_obj=True)
+        self.add_param('idx_cylinder_aero', val=1, pass_by_obj=True)
         self.add_output('airfoil_parameterization_full', val=np.zeros((n, 8)))
         self.add_output('airfoil_str_parameterization_full', val=np.zeros((nstr, 8)))
         self.n = n
@@ -297,10 +299,11 @@ class AirfoilSpline(Component):
         af_idx = params['af_idx']
         self.daf_daf = np.zeros((n*8,48))
         self.daf_daf_str = np.zeros((nstr*8,48))
-        for i in range(n-3):
+        aero_idx = params['idx_cylinder_aero']
+        for i in range(n-aero_idx):
             for j in range(8):
-                CST[i+3][j] = self.airfoil_parameterization[af_idx[i+3]-2][j]
-            self.daf_daf[np.ix_(range((i+3)*8, (i+3)*8+8), range((af_idx[i+3]-2)*8,((af_idx[i+3]-2)*8)+8))] += np.diag(np.ones(8))
+                CST[i+aero_idx][j] = self.airfoil_parameterization[af_idx[i+aero_idx]-2][j]
+            self.daf_daf[np.ix_(range((i+aero_idx)*8, (i+aero_idx)*8+8), range((af_idx[i+aero_idx]-2)*8,((af_idx[i+aero_idx]-2)*8)+8))] += np.diag(np.ones(8))
         unknowns['airfoil_parameterization_full'] = CST
 
         airfoil_types_str = np.zeros((8,8))
@@ -310,7 +313,7 @@ class AirfoilSpline(Component):
         af_str_idx = params['af_str_idx']
         for i in range(nstr):
             pro_str[i] = airfoil_types_str[af_str_idx[i]]
-        str_idx = 14
+        str_idx = params['idx_cylinder_str']
         for i in range(nstr-str_idx):
             self.daf_daf_str[np.ix_(range((i+str_idx)*8, (i+str_idx)*8+8), range((af_str_idx[i+str_idx]-2)*8,((af_str_idx[i+str_idx]-2)*8)+8))] += np.diag(np.ones(8))
         unknowns['airfoil_str_parameterization_full'] = np.asarray(pro_str)

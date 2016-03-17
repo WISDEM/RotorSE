@@ -806,16 +806,16 @@ class Airfoil(object):
                     to_delete = np.append(to_delete, zz)
             # error handling in case of XFOIL failure
             for k in range(len(cl)):
-                if cl[k] == -10.0:
-                    if k == 0:
-                        cl[k] = cl[k+1] - cl[k+2] + cl[k+1]
-                        cd[k] = cd[k+1] - cd[k+2] + cd[k+1]
-                    elif k == len(cl)-1:
-                        cl[k] = cl[k-1] - cl[k-2] + cl[k-1]
-                        cd[k] = cd[k-1] - cd[k-2] + cd[k-1]
-                    else:
-                        cl[k] = (cl[k+1] - cl[k-1])/2.0 + cl[k-1]
-                        cd[k] = (cd[k+1] - cd[k-1])/2.0 + cd[k-1]
+                # if cl[k] == -10.0:
+                #     if k == 0:
+                #         cl[k] = cl[k+1] - cl[k+2] + cl[k+1]
+                #         cd[k] = cd[k+1] - cd[k+2] + cd[k+1]
+                #     elif k == len(cl)-1:
+                #         cl[k] = cl[k-1] - cl[k-2] + cl[k-1]
+                #         cd[k] = cd[k-1] - cd[k-2] + cd[k-1]
+                #     else:
+                #         cl[k] = (cl[k+1] - cl[k-1])/2.0 + cl[k-1]
+                #         cd[k] = (cd[k+1] - cd[k-1])/2.0 + cd[k-1]
 
                 if cl[k] == -10.0 or cl[k] < -2. or cl[k] > 2. or cd[k] < 0.00001 or cd[k] > 1.0 or not np.isfinite(cd[k]) or not np.isfinite(cl[k]):
                     to_delete = np.append(to_delete, k)
@@ -1590,8 +1590,8 @@ class CCAirfoil:
         ky = min(len(Re)-1, 3)
 
         # a small amount of smoothing is used to prevent spurious multiple solutions
-        self.cl_spline = RectBivariateSpline(alpha, Re, cl, kx=kx, ky=ky) #, s=0.1)#, s=0.1)
-        self.cd_spline = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky) #, s=0.001) #, s=0.001)
+        self.cl_spline = RectBivariateSpline(alpha, Re, cl, kx=kx, ky=ky, s=0.001)#, s=0.1)
+        self.cd_spline = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky, s=0.00001) #, s=0.001)
 
         if CST is not None:
             self.CST = CST
@@ -2172,7 +2172,7 @@ def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
         for i in range(8):
             if abs(dcl_dafp[i]) > 2.0 or abs(dcd_dafp[i]) > 2.0 or exit_flag[i]:
                 # tolerance
-                alphas = np.linspace(-15, 15, 150)
+                alphas = np.linspace(-15, 15, 120)
                 Re = 1e6
                 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False)
                 # af1 = Airfoil.initFromCST(CST, alphas, [Re], airfoil_analysis_options)

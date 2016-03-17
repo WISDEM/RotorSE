@@ -39,6 +39,7 @@ class ResizeCompositeSection(Component):
         self.add_param('chord_str_ref', shape=nstr, units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)')
         self.add_param('thick_str_ref', shape=nstr, units='m', desc='airfoil thickness distribution for reference section, thickness of structural layup scaled with reference thickness')
         self.add_param('afp_str', val=np.zeros((nstr, 8)))
+        self.add_param('idx_cylinder_str', val=1, pass_by_obj=True)
 
         self.add_param('sector_idx_strain_spar', val=np.zeros(nstr, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
         self.add_param('sector_idx_strain_te', val=np.zeros(nstr, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True)
@@ -87,7 +88,7 @@ class ResizeCompositeSection(Component):
             webs = websCSOut[i]
 
             # factor = t_str[i]/tref[i]
-            if i < 14:
+            if i < params['idx_cylinder_str']:
                 factor = chord_str[i]/chord_str_ref[i]  # same as thickness ratio for constant t/c
             else:
                 from airfoilprep_free import getCoordinates
@@ -2545,7 +2546,8 @@ class RotorSE(Group):
         self.connect('airfoil_parameterization', 'airfoil_analysis.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'airfoil_analysis.airfoil_analysis_options')
         self.connect('airfoil_files', 'airfoil_analysis.airfoil_files')
-
+        self.connect('idx_cylinder_str', 'airfoil_spline.idx_cylinder_str')
+        self.connect('idx_cylinder_aero', 'airfoil_spline.idx_cylinder_aero')
         self.connect('airfoil_spline.airfoil_parameterization_full', 'analysis.airfoil_parameterization')
         self.connect('airfoil_analysis_options', 'analysis.airfoil_analysis_options')
 
@@ -2673,6 +2675,7 @@ class RotorSE(Group):
         self.connect('spline.sparT_str', 'resize.sparT_str')
         self.connect('spline.teT_str', 'resize.teT_str')
         self.connect('airfoil_spline.airfoil_str_parameterization_full', 'resize.afp_str')
+        self.connect('idx_cylinder_str', 'resize.idx_cylinder_str')
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')
