@@ -59,7 +59,6 @@ class GeometrySpline(Component):
         self.fd_options['force_fd'] = True
         
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "Geometry Spline"
         chord_sub = params['chord_sub']
         theta_sub = params['theta_sub']
         r_max_chord = params['r_max_chord']
@@ -178,7 +177,6 @@ class CCBladeGeometry(Component):
         self.add_output('diameter', shape=1, units='m')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "CCBlade Geometry"
         self.Rtip = params['Rtip']
         self.precurveTip = params['precurveTip']
         self.precone = params['precone']
@@ -246,9 +244,8 @@ class CCBladeAirfoils(Component):
             airfoil_types = [0]*8
             airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
             airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-
-            alphas = np.linspace(-10, 20, 100)
-            Re = 1e6
+            alphas = np.linspace(-15, 15, 100)
+            Re = 5e5
             cst_file = open("cst_file_tracker", "a")
             for i in range(len(airfoil_types)-2):
                 if change[i] > 0:
@@ -271,8 +268,6 @@ class CCBladeAirfoils(Component):
 
             unknowns['af'] = deepcopy(af)
             params['airfoil_files'] = deepcopy(af)
-            # else:
-            #     unknowns['af'] = params['airfoil_files']
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -346,7 +341,7 @@ class CCBlade(Component):
 
         # parameters
         # self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
-        self.add_param('airfoil_parameterization', val=np.zeros((17, 8)))
+        self.add_param('airfoil_parameterization', val=np.zeros((n, 8)))
         self.add_param('airfoil_analysis_options', val={}, pass_by_obj=True)
         self.add_param('af', shape=n, desc='names of airfoil file', pass_by_obj=True)
         self.add_param('B', val=3, desc='number of blades', pass_by_obj=True)
@@ -447,14 +442,12 @@ class CCBlade(Component):
                 wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
 
         if self.run_case == 'power':
-            # print "CCblade power"
             # power, thrust, torque
             self.P, self.T, self.Q, = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
             unknowns['T'] = self.T
             unknowns['Q'] = self.Q
             unknowns['P'] = self.P
         elif self.run_case == 'loads':
-            # print "CCblade loads"
             # distributed loads
             Np, Tp, = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
@@ -499,14 +492,12 @@ class CCBlade(Component):
                 wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=self.airfoil_parameterization, airfoil_options=self.airfoil_analysis_options)
 
         if self.run_case == 'power':
-            # print "CCblade power"
             # power, thrust, torque
 
             self.P, self.T, self.Q, self.dP, self.dT, self.dQ \
                 = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
 
         elif self.run_case == 'loads':
-            # print "CCblade loads"
             # distributed loads
             Np, Tp, self.dNp, self.dTp \
                 = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
@@ -651,7 +642,6 @@ class CSMDrivetrain(Component):
         self.add_output('power', shape=n, units='W', desc='total power after drivetrain losses')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "CSMDrivetrain"
         drivetrainType = params['drivetrainType']
         aeroPower = params['aeroPower']
         aeroTorque = params['aeroTorque']
@@ -733,7 +723,6 @@ class WeibullCDF(Component):
         self.add_output('F', shape=n)
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "Weibull CDF"
         unknowns['F'] = 1.0 - np.exp(-(params['x']/params['A'])**params['k'])
 
     def list_deriv_vars(self):
@@ -764,7 +753,6 @@ class WeibullWithMeanCDF(Component):
         self.add_output('F', shape=n)
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "WEibull mean CDF"
         A = params['xbar'] / gamma(1.0 + 1.0/params['k'])
 
         unknowns['F'] = 1.0 - np.exp(-(params['x']/A)**params['k'])
@@ -839,7 +827,6 @@ class RayleighCDF(Component):
         self.add_output('F', shape=200, units='m/s', desc='magnitude of wind speed at each z location')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "RayleightCDF"
         unknowns['F'] = 1.0 - np.exp(-pi/4.0*(params['x']/params['xbar'])**2)
 
     def linearize(self, params, unknowns, resids):

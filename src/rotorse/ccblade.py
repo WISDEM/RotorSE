@@ -337,7 +337,7 @@ class CCBlade:
             alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                              chord, theta, self.rho, self.mu)
             cl, cd = af.evaluate(alpha, Re)
-            # print np.degrees(alpha)
+
             fzero, a, ap = _bem.inductionfactors(r, chord, self.Rhub, self.Rtip, phi,
                                                  cl, cd, self.B, Vx, Vy, **self.bemoptions)
 
@@ -369,7 +369,7 @@ class CCBlade:
 
         dalpha_dx = np.array([1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
         dRe_dx = np.array([0.0, Re/chord, 0.0, Re*Vx/W**2, Re*Vy/W**2, 0.0, 0.0, 0.0, 0.0])
-        # print np.degrees(alpha)
+
         # cl, cd (spline derivatives)
         cl, cd = af.evaluate(alpha, Re)
         dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
@@ -394,7 +394,8 @@ class CCBlade:
             # if self.airfoil_analysis_options['FreeFormDesign']:
                 # dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha)
             # else:
-            dcl_dafp, dcd_dafp = af.airfoil_parameterization_derivatives(alpha, [1e6], af.CST, self.airfoil_analysis_options)
+            # dcl_dafp, dcd_dafp = af.airfoil_parameterization_derivatives(alpha, [1e6], af.CST, self.airfoil_analysis_options)
+            dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha, Re) #, af.CST, self.airfoil_analysis_options)
             dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
 
             return dR_dx, da_dx, dap_dx, dR_dafp, dcl_dafp, dcd_dafp
@@ -418,15 +419,16 @@ class CCBlade:
 
         alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                          chord, theta, self.rho, self.mu)
-        cl, cd = af.evaluate(alpha, Re)
-
+        if rotating:
+            cl, cd = af.evaluate_direct(alpha, Re)
+        else:
+            cl, cd = af.evaluate(alpha, Re)
         cn = cl*cphi + cd*sphi  # these expressions should always contain drag
         ct = cl*sphi - cd*cphi
 
         q = 0.5*self.rho*W**2
         Np = cn*q*chord
         Tp = ct*q*chord
-
 
         if not self.derivatives:
             return Np, Tp, 0.0, 0.0, 0.0
@@ -455,7 +457,6 @@ class CCBlade:
             a, da_dx, ap, dap_dx, Vx, dx_dx[3, :], Vy, dx_dx[4, :],
             self.pitch, dx_dx[8, :], chord, dx_dx[1, :], theta, dx_dx[2, :],
             self.rho, self.mu)
-        # print "ALPHA", np.degrees(alpha)
         # cl, cd (spline derivatives)
         dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
 
@@ -749,7 +750,6 @@ class CCBlade:
                     dTp_zeros[z, :] = DTp_Dafp[z]
                     dNp['dafp'][z] = dNp_zeros.flatten()
                     dTp['dafp'][z] = dTp_zeros.flatten()
-                # print "loads gradient complete"
 
             return Np, Tp, dNp, dTp
 
