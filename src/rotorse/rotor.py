@@ -88,13 +88,13 @@ class ResizeCompositeSection(Component):
             webs = websCSOut[i]
 
             # factor = t_str[i]/tref[i]
-            if i < params['idx_cylinder_str']:
-                factor = chord_str[i]/chord_str_ref[i]  # same as thickness ratio for constant t/c
-            else:
-                from airfoilprep_free import getCoordinates
-                xl, xu, yl, yu = getCoordinates(params['afp_str'][i])
-                t_str = max(abs(yl)) + max(abs(yu))
-                factor = t_str/thick_str_ref[i]
+            # if i < params['idx_cylinder_str']:
+            factor = chord_str[i]/chord_str_ref[i]  # same as thickness ratio for constant t/c
+            # else:
+            #     from airfoilprep_free import getCoordinates
+            #     xl, xu, yl, yu = getCoordinates(params['afp_str'][i])
+            #     t_str = max(abs(yl)) + max(abs(yu))
+            #     factor = t_str/thick_str_ref[i]
 
             for j in range(len(upper.t)):
                 upper.t[j] *= factor
@@ -834,8 +834,8 @@ class GeometrySpline(Component):
         self.add_param('teT', shape=5, units='m', desc='thickness values of trailing edge panels')
 
         # parameters
-        self.add_param('idx_cylinder_aero', shape=1, desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
-        self.add_param('idx_cylinder_str', shape=1, desc='first idx in r_str_unit of non-cylindrical section')
+        self.add_param('idx_cylinder_aero', val=1, desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
+        self.add_param('idx_cylinder_str', val=1, desc='first idx in r_str_unit of non-cylindrical section')
         self.add_param('hubFraction', shape=1, desc='hub location as fraction of radius')
 
         # out
@@ -2261,8 +2261,8 @@ class RotorSE(Group):
         if vars:
             self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero)), promotes=['*'])
             self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr)), promotes=['*'])
-            self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 0.0), promotes=['*'])
-            self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 0.0), promotes=['*'])
+            self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 1), promotes=['*'])
+            self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 1), promotes=['*'])
             self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
             self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero)), promotes=['*'])
             self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
@@ -2347,8 +2347,8 @@ class RotorSE(Group):
         else:
             self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero), pass_by_obj=True), promotes=['*'])
             self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr), pass_by_obj=True), promotes=['*'])
-            self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 0.0, pass_by_obj=True), promotes=['*'])
-            self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 0.0, pass_by_obj=True), promotes=['*'])
+            self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 1, pass_by_obj=True), promotes=['*'])
+            self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 1, pass_by_obj=True), promotes=['*'])
             self.add('hubFraction', IndepVarComp('hubFraction', 0.0, pass_by_obj=True), promotes=['*'])
             self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero), pass_by_obj=True), promotes=['*'])
             self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
@@ -3035,8 +3035,8 @@ class RotorSE(Group):
         self.add('obj_con6', ExecComp('con6 = freq_curvefem[0:2] - nBlades*ratedConditions_Omega/60.0*1.1', freq_curvefem=np.zeros(5), nBlades=3, ratedConditions_Omega=0.0, con6=np.zeros(2)), promotes=['*'])
         self.add('obj_con_freeform', ExecComp('con_freeform = airfoil_parameterization[:, [4, 5, 6, 7]] - airfoil_parameterization[:, [0, 1, 2, 3]]', airfoil_parameterization=np.zeros((6,8)), con_freeform=np.zeros((6,4))), promotes=['*'])
         self.add('obj_concon', ExecComp('concon = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
-        self.add('obj_con7', ExecComp('con7 = ratedConditions_T / 1e6 - 700000./1e6', ratedConditions_T=1.0, promotes=['*']))
-        self.connect('ratedConditions.T', 'ratedConditions_T')
+        # self.add('obj_con7', ExecComp('con7 = ratedConditions_T / 1e6 - 700000./1e6', ratedConditions_T=1.0, promotes=['*']))
+        # self.connect('ratedConditions.T', 'ratedConditions_T')
         self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
         self.fd_options['form'] = 'central'

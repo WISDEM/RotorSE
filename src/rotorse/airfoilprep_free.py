@@ -772,7 +772,7 @@ class Airfoil(object):
         polars = []
 
         if airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
-            [x, y] = cst_to_coordinates(CST)
+            [x, y] = cst_to_coordinates_full(CST)
             basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
             airfoil_shape_file = basepath + os.path.sep + 'cst_coordinates.dat'
             coord_file = open(airfoil_shape_file, 'w')
@@ -806,17 +806,6 @@ class Airfoil(object):
                     to_delete = np.append(to_delete, zz)
             # error handling in case of XFOIL failure
             for k in range(len(cl)):
-                # if cl[k] == -10.0:
-                #     if k == 0:
-                #         cl[k] = cl[k+1] - cl[k+2] + cl[k+1]
-                #         cd[k] = cd[k+1] - cd[k+2] + cd[k+1]
-                #     elif k == len(cl)-1:
-                #         cl[k] = cl[k-1] - cl[k-2] + cl[k-1]
-                #         cd[k] = cd[k-1] - cd[k-2] + cd[k-1]
-                #     else:
-                #         cl[k] = (cl[k+1] - cl[k-1])/2.0 + cl[k-1]
-                #         cd[k] = (cd[k+1] - cd[k-1])/2.0 + cd[k-1]
-
                 if cl[k] == -10.0 or cl[k] < -2. or cl[k] > 2. or cd[k] < 0.00001 or cd[k] > 1.0 or not np.isfinite(cd[k]) or not np.isfinite(cl[k]):
                     to_delete = np.append(to_delete, k)
             cl = np.delete(cl, to_delete)
@@ -1105,7 +1094,7 @@ class Airfoil(object):
     @classmethod
     def xfoilFlowGradients(self, CST, alpha, Re, FDorCS):
 
-        x, y = cst_to_coordinates(CST)
+        x, y = cst_to_coordinates_full(CST)
         # read in coordinate file
         basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
         airfoil_shape_file = basepath + os.path.sep + 'cst_coordinates.dat'
@@ -1590,10 +1579,26 @@ class CCAirfoil:
         ky = min(len(Re)-1, 3)
 
         # a small amount of smoothing is used to prevent spurious multiple solutions
-        self.cl_spline = RectBivariateSpline(alpha, Re, cl, kx=kx, ky=ky, s=0.001)#, s=0.1)
-        self.cd_spline = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky, s=0.00001) #, s=0.001)
+        self.cl_spline = RectBivariateSpline(alpha, Re, cl, kx=kx, ky=ky, s=0.1)#, s=0.1)
+        self.cd_spline = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky, s=0.001) #, s=0.001)
 
         if CST is not None:
+            # n = 1000
+            # import matplotlib.pylab as plt
+            # alphas2 = np.linspace(-30, 30, n)
+            # Re = 1e6
+            # cl2 = np.zeros(n)
+            # cd2 = np.zeros(n)
+            # for i in range(n):
+            #     cl2[i] = self.cl_spline.ev(np.radians(alphas2[i]), Re)
+            #     cd2[i] = self.cd_spline.ev(np.radians(alphas2[i]), Re)
+            # plt.figure()
+            # plt.plot(alphas2, cl2)
+            #
+            # plt.figure()
+            # plt.plot(alphas2, cd2)
+            #
+            # plt.show()
             self.CST = CST
             self.cl_2D_origin = cl_2D
             self.cd_2D_origin = cd_2D
@@ -1602,6 +1607,8 @@ class CCAirfoil:
             self.dcl_dafp_storage = []
             self.dcd_dafp_storage = []
             self.freeform_alpha_storage = []
+        else:
+            self.CST = None
 
 
 
@@ -1723,10 +1730,24 @@ class CCAirfoil:
         """
         cl = self.cl_spline.ev(alpha, Re)
         cd = self.cd_spline.ev(alpha, Re)
-
         return cl, cd
 
-
+    def evaluate_direct(self, alpha, Re):
+        if self.CST is not None:
+            if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+                airfoil_shape_file = None
+                [x, y] = cst_to_coordinates_full(self.CST)
+                airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
+                airfoil.re = 5e5
+                airfoil.mach = 0.00
+                airfoil.iter = 100
+                cl, cd, cm, lexitflag = airfoil.solveAlpha(np.degrees(alpha))
+            else:
+                pass #TODO CFD
+        else:
+            cl = self.cl_spline.ev(alpha, Re)
+            cd = self.cd_spline.ev(alpha, Re)
+        return cl, cd
 
     def derivatives(self, alpha, Re):
 
@@ -1745,17 +1766,14 @@ class CCAirfoil:
             dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
         return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
 
-    def airfoil_parameterization_derivatives(self, alpha, Re, CST, airfoil_analysis_options):
-        Uinf = 10.0
-        cl, cd = self.evaluate(alpha, Re)
-        if airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+    def freeform_derivatives(self, alpha, Re):
+        if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
             if alpha in self.freeform_alpha_storage:
                 index = self.freeform_alpha_storage.index(alpha)
                 dcl_dafp = self.dcl_dafp_storage[index]
                 dcd_dafp = self.dcd_dafp_storage[index]
             else:
-                cl, cd, dcl_dafp, dcd_dafp = xfoilGradients(CST, alpha, Re, airfoil_analysis_options['GradientType'], cl, cd)
-
+                dcl_dafp, dcd_dafp = self.xfoilGradients(alpha, Re)
             self.dcl_dafp_storage.append(dcl_dafp)
             self.dcd_dafp_storage.append(dcd_dafp)
             self.freeform_alpha_storage.append(alpha)
@@ -1764,92 +1782,88 @@ class CCAirfoil:
             cl, cd, dcl_dafp, dcd_dafp = cfdGradients(CST, alpha, Re, airfoil_analysis_options['CFDiterations'], airfoil_analysis_options['CFDprocessors'], airfoil_analysis_options['GradientType'], Uinf, ComputeGradients, GenerateMESH=True)
         return dcl_dafp, dcd_dafp
 
-    def correction_spline_derivatives(self, cl_2D_test, cd_2D_test, alpha_test):
+    def xfoilGradients(self, alpha, Re):
+        Re = 5e5
+        alpha = np.degrees(alpha)
+        wl, wu, N, dz = CST_to_kulfan(self.CST)
+        step_size = 1e-20
+        cs_step = complex(0, step_size)
+        dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8)
+        lexitflag = np.zeros(8)
+        for i in range(len(wl)):
+            wl_complex = deepcopy(wl.astype(complex))
+            wu_complex = deepcopy(wu.astype(complex))
+            wl_complex[i] += cs_step
+            cl_complex, cd_complex, lexitflag[i] = self.xfoilFlowComplex(alpha, wl_complex, wu_complex, N, dz)
+            dcl_dafp[i], dcd_dafp[i] = np.imag(cl_complex)/step_size, np.imag(cd_complex)/step_size
+            wl_complex = deepcopy(wl.astype(complex))
+            wu_complex = deepcopy(wu.astype(complex))
+            wu_complex[i] += cs_step
+            cl_complex, cd_complex, lexitflag[i+4] = self.xfoilFlowComplex(alpha, wl_complex, wu_complex, N, dz)
+            dcl_dafp[i+4], dcd_dafp[i+4] = np.imag(cl_complex)/step_size, np.imag(cd_complex)/step_size
+            if lexitflag[i] or lexitflag[i+4]:
+                fd_step = 1e-6
+                wl_fd1 = np.real(deepcopy(wl))
+                wl_fd2 = np.real(deepcopy(wl))
+                wl_fd1[i] -= fd_step
+                wl_fd2[i] += fd_step
+                cl_fd1, cd_fd1, flag1 = self.xfoilFlowReal(alpha, wl_complex, wu_complex, N, dz)
+                cl_fd2, cd_fd2, flag2 = self.xfoilFlowReal(alpha, wl_complex, wu_complex, N, dz)
+                lexitflag[i] = np.logical_or(flag1, flag2)
+                dcl_dafp[i] = (cl_fd2 - cl_fd1)/(2.*fd_step)
+                dcd_dafp[i] = (cd_fd2 - cd_fd1)/(2.*fd_step)
+                wu_fd1 = np.real(deepcopy(wu))
+                wu_fd2 = np.real(deepcopy(wu))
+                wu_fd1[i] -= fd_step
+                wu_fd2[i] += fd_step
+                l_fd1, cd_fd1, flag1 = self.xfoilFlowReal(alpha, wl_complex, wu_complex, N, dz)
+                cl_fd2, cd_fd2, flag2 = self.xfoilFlowReal(alpha, wl_complex, wu_complex, N, dz)
+                lexitflag[i+4] = np.logical_or(flag1, flag2)
+                dcl_dafp[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
+                dcd_dafp[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
+        for i in range(8):
+            if lexitflag[i]:
+                alphas = np.linspace(-15, 15, 50)
+                airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False)
+                af1 = Airfoil.initFromCST(self.CST, alphas, [Re], airfoil_analysis_options)
+                af_extrap11 = af1.extrapolate(1.5)
+                alphas_cur, Re_cur, cl_cur, cd_cur, cm_cur = af_extrap11.createDataGrid()
+                cl_spline_cur = Akima(alphas_cur, cl_cur)
+                cd_spline_cur = Akima(alphas_cur, cd_cur)
+                cl_fd_cur, _, _, _ = cl_spline_cur.interp(alpha)
+                cd_fd_cur, _, _, _ = cd_spline_cur.interp(alpha)
+                CST_new = deepcopy(self.CST)
+                CST_new[i] += fd_step
+                af = Airfoil.initFromCST(CST_new, alphas, [Re], airfoil_analysis_options)
+                af_extrap1 = af.extrapolate(1.5)
+                alphas_new, Re_new, cl_new, cd_new, cm_new = af_extrap1.createDataGrid()
+                cl_spline = Akima(alphas_new, cl_new)
+                cd_spline = Akima(alphas_new, cd_new)
+                cl_fd_new, _, _, _ = cl_spline.interp(alpha)
+                cd_fd_new, _, _, _ = cd_spline.interp(alpha)
+                dcl_dafp[i] = (cl_fd_new - cl_fd_cur) / fd_step
+                dcd_dafp[i] = (cd_fd_new - cd_fd_cur) / fd_step
+        return dcl_dafp, dcd_dafp
 
-        r_over_R = 0.5
-        chord_over_r = 0.15
-        tsr = 7.55
-        cd_max = 1.5
-        alpha2D = self.alpha_2D_origin
-        cl2D = self.cl_2D_origin
-        cd2D = self.cd_2D_origin
-        alpha_test_deg = np.degrees(alpha_test)
-        for i in range(len(alpha2D)):
-            if alpha2D[i] > alpha_test_deg:
-                index = i
-                break
-        alpha2D = alpha2D[:index] + [alpha_test_deg] + alpha2D[index:]
-        cl2D = cl2D[:index] + [cl_2D_test] + cl2D[index:]
-        cd2D = cd2D[:index] + [cd_2D_test] + cd2D[index:]
-
-        polar = Polar([1e6], alpha2D, cl2D, cd2D, cm=np.zeros_like(cd2D))
-        af = Airfoil(polars=[polar])
-        af3D = af.correction3D(r_over_R, chord_over_r, tsr)
-        af_extrap1 = af3D.extrapolate(cd_max)
-        # af_extrap1 = af.extrapolate(cd_max)
-        alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
-
-
-        alpha = np.radians(alpha)
-
-        if not all(np.diff(alpha)):
-            to_delete = np.zeros(0)
-            diff = np.diff(alpha)
-            for i in range(len(alpha)-1):
-                if not diff[i] > 0.0:
-                    to_delete = np.append(to_delete, i)
-            alpha = np.delete(alpha, to_delete)
-            cl = np.delete(cl, to_delete)
-            cd = np.delete(cd, to_delete)
-
-        self.one_Re_test = False
-        Re = [1e6]
-        # special case if zero or one Reynolds number (need at least two for bivariate spline)
-        if len(Re) < 2:
-            Re = [1e1, 1e15]
-            cl = np.c_[cl, cl]
-            cd = np.c_[cd, cd]
-            self.one_Re = True
-
-        kx = min(len(alpha)-1, 3)
-        ky = min(len(Re)-1, 3)
-
-        # a small amount of smoothing is used to prevent spurious multiple solutions
-        self.cl_spline_test = RectBivariateSpline(alpha, Re, cl, kx=kx, ky=ky, s=0.1)
-        self.cd_spline_test = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky, s=0.001)
-
-        cl_3D_new = self.cl_spline_test.ev(alpha_test, 1e6)
-        cd_3D_new = self.cd_spline_test.ev(alpha_test, 1e6)
-
-        return cl_3D_new, cd_3D_new
-
-    def splineGradients(self, alpha):
-        fd_step = 1e-4
-        wl, wu, N, dz = CST_to_kulfan(self.CST[0])
-        Re = 1e6
-        [x, y] = cst_to_coordinates_from_kulfan(wl, wu, N, dz)
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
-        airfoil_shape_file = basepath + os.path.sep + 'cst_coordinates.dat'
+    def xfoilFlowComplex(self, alpha, wl_complex, wu_complex, N, dz):
+        airfoil_shape_file = None
+        [x, y] = cst_to_coordinates_complex(wl_complex, wu_complex, N, dz)
         airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
-        airfoil.re = Re
-        airfoil.mach = 0.00
-        airfoil.iter = 100
-        alpha = np.radians(alpha)
+        airfoil.re = 5e5
+        airfoil.mach = 0.0
+        airfoil.iter = 200
+        cl_complex, cd_complex, cm_complex, lexitflag = airfoil.solveAlphaComplex(alpha)
+        return deepcopy(cl_complex), deepcopy(cd_complex), deepcopy(lexitflag)
+
+    def xfoilFlowReal(self, alpha, wl, wu, N, dz):
+        airfoil_shape_file = None
+        [x, y] = cst_to_coordinates(wl, wu, N, dz)
+        airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
+        airfoil.re = 5e5
+        airfoil.mach = 0.0
+        airfoil.iter = 200
         cl, cd, cm, lexitflag = airfoil.solveAlpha(alpha)
-
-        cl_3D_new, cd_3D_new = self.correction_spline_derivatives(cl, cd, alpha)
-
-        cl_new = cl + fd_step
-        cd_new = cd + fd_step
-        cl_3D_new2, cd_3D_new2 = self.correction_spline_derivatives(cl_new, cd_new, alpha)
-
-        dcl3D_spline_dcl2D_origin = (cl_3D_new2 - cl_3D_new) / fd_step
-        dcd3D_spline_dcd2D_origin = (cd_3D_new2 - cd_3D_new) / fd_step
-
-        return dcl3D_spline_dcl2D_origin, dcd3D_spline_dcd2D_origin
-
-
-
+        return deepcopy(cl), deepcopy(cd), deepcopy(lexitflag)
 
 def cfdGradients(CST, alpha, Re, iterations, processors, FDorCS, Uinf, ComputeGradients, GenerateMESH=True):
 
@@ -2070,133 +2084,7 @@ def cfdGradients(CST, alpha, Re, iterations, processors, FDorCS, Uinf, ComputeGr
     return cl, cd
 
 
-def xfoilGradients(CST, alpha, Re, FDorCS, cl_fd_cur, cd_fd_cur):
-    alpha = np.degrees(alpha)
-    wl, wu, N, dz = CST_to_kulfan(CST)
 
-    dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8)
-    cl, cd, flag_original = cstReal(alpha, Re, np.real(wl), np.real(wu), N, dz, Uinf=10.0)
-    cl, cd = deepcopy(cl), deepcopy(cd)
-    if flag_original:
-        cl, cd = deepcopy(cl_fd_cur), deepcopy(cd_fd_cur)
-        # cl_fd_cur, cd_fd_cur = deepcopy(cl), deepcopy(cd)
-    global lexitflag_counter
-    if FDorCS == 'CS':
-        step_size = 1e-20
-        cs_step = complex(0, step_size)
-        wl = wl.astype(complex)
-        wu = wu.astype(complex)
-        for i in range(len(wl)):
-
-            wl_complex = deepcopy(wl)
-            wl_complex[i] += cs_step
-            cl_complex, cd_complex, flag = cstComplex(alpha, Re, wl_complex, wu, N, dz, Uinf=10.0)
-            if flag:
-                lexitflag_counter += 1
-            dcl_dafp[i] = np.imag(cl_complex)/np.imag(cs_step)
-            dcd_dafp[i] = np.imag(cd_complex)/np.imag(cs_step)
-            wu_complex = deepcopy(wu)
-            wu_complex[i] += cs_step
-            cl_complex, cd_complex, flag = cstComplex(alpha, Re, wl, wu_complex, N, dz, Uinf=10.0)
-            if flag:
-                lexitflag_counter += 1
-            dcl_dafp[i+4] = np.imag(cl_complex)/np.imag(cs_step)
-            dcd_dafp[i+4] = np.imag(cd_complex)/np.imag(cs_step)
-    else:
-        step_size = 1e-6
-        fd_step = step_size
-        exit_flag = np.zeros(8)
-
-        # for i in range(len(wl)):
-        #     wl_fd1 = np.real(deepcopy(wl))
-        #     wl_fd2 = np.real(deepcopy(wl))
-        #     wl_fd1[i] += fd_step
-        #     # wl_fd2[i] += fd_step
-        #     cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
-        #     cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
-        #     if flag1:
-        #         lexitflag_counter += 1
-        #     # cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
-        #     # cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-        #     # if flag2:
-        #     #     lexitflag_counter += 1
-        #     exit_flag[i] = flag1 #np.logical_or(flag1, flag2)
-        #     dcl_dafp[i] = (cl_fd1 - cl)/(fd_step)
-        #     dcd_dafp[i] = (cd_fd1 - cd)/(fd_step)
-        #     wu_fd1 = np.real(deepcopy(wu))
-        #     wu_fd2 = np.real(deepcopy(wu))
-        #     wu_fd1[i] += fd_step
-        #     # wu_fd2[i] += fd_step
-        #     cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
-        #     cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
-        #     if flag1:
-        #         lexitflag_counter += 1
-        #     # cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
-        #     # cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-        #     # if flag2:
-        #     #     lexitflag_counter += 1
-        #     dcl_dafp[i+4] = (cl_fd1 - cl)/(fd_step)
-        #     dcd_dafp[i+4] = (cd_fd1 - cd)/(fd_step)
-        #     exit_flag[i+4] = flag1 #np.logical_or(flag1, flag2)
-        for i in range(len(wl)):
-            wl_fd1 = np.real(deepcopy(wl))
-            wl_fd2 = np.real(deepcopy(wl))
-            wl_fd1[i] -= fd_step
-            wl_fd2[i] += fd_step
-            cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, wl_fd1, np.real(wu), N, dz, Uinf=10.0)
-            cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
-            if flag1:
-                lexitflag_counter += 1
-            cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, wl_fd2, np.real(wu), N, dz, Uinf=10.0)
-            cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-            if flag2:
-                lexitflag_counter += 1
-            exit_flag[i] = np.logical_or(flag1, flag2)
-            dcl_dafp[i] = (cl_fd2 - cl_fd1)/(2.*fd_step)
-            dcd_dafp[i] = (cd_fd2 - cd_fd1)/(2.*fd_step)
-            wu_fd1 = np.real(deepcopy(wu))
-            wu_fd2 = np.real(deepcopy(wu))
-            wu_fd1[i] -= fd_step
-            wu_fd2[i] += fd_step
-            cl_fd1, cd_fd1, flag1 = cstReal(alpha, Re, np.real(wl), wu_fd1, N, dz, Uinf=10.0)
-            cl_fd1, cd_fd1, flag1 = deepcopy(cl_fd1), deepcopy(cd_fd1), deepcopy(flag1)
-            if flag1:
-                lexitflag_counter += 1
-            cl_fd2, cd_fd2, flag2 = cstReal(alpha, Re, np.real(wl), wu_fd2, N, dz, Uinf=10.0)
-            cl_fd2, cd_fd2, flag2 = deepcopy(cl_fd2), deepcopy(cd_fd2), deepcopy(flag2)
-            if flag2:
-                lexitflag_counter += 1
-            dcl_dafp[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
-            dcd_dafp[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
-            exit_flag[i+4] = np.logical_or(flag1, flag2)
-        for i in range(8):
-            if abs(dcl_dafp[i]) > 2.0 or abs(dcd_dafp[i]) > 2.0 or exit_flag[i]:
-                # tolerance
-                alphas = np.linspace(-15, 15, 120)
-                Re = 1e6
-                airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False)
-                # af1 = Airfoil.initFromCST(CST, alphas, [Re], airfoil_analysis_options)
-                # af_extrap11 = af1.extrapolate(1.5)
-                # alphas_cur, Re_cur, cl_cur, cd_cur, cm_cur = af_extrap11.createDataGrid()
-                # cl_spline_cur = Akima(alphas_cur, cl_cur)
-                # cd_spline_cur = Akima(alphas_cur, cd_cur)
-                # cl_fd_cur, _, _, _ = cl_spline_cur.interp(alpha)
-                # cd_fd_cur, _, _, _ = cd_spline_cur.interp(alpha)
-                CST_new = deepcopy(CST)
-                CST_new[i] += fd_step
-                af = Airfoil.initFromCST(CST_new, alphas, [Re], airfoil_analysis_options)
-                af_extrap1 = af.extrapolate(1.5)
-                alphas_new, Re_new, cl_new, cd_new, cm_new = af_extrap1.createDataGrid()
-                cl_spline = Akima(alphas_new, cl_new)
-                cd_spline = Akima(alphas_new, cd_new)
-                cl_fd_new, _, _, _ = cl_spline.interp(alpha)
-                cd_fd_new, _, _, _ = cd_spline.interp(alpha)
-                dcl_dafp[i] = (cl_fd_new - cl_fd_cur) / fd_step
-                dcd_dafp[i] = (cd_fd_new - cd_fd_cur) / fd_step
-            # for i in range(8):
-
-    # print lexitflag_counter
-    return cl, cd, dcl_dafp, dcd_dafp
 
 def cstComplex(alpha, Re, wl, wu, N, dz, Uinf):
 
@@ -2354,7 +2242,7 @@ def CST_to_kulfan(CST):
     dz = 0.
     return wl, wu, N, dz
 
-def cst_to_coordinates(CST):
+def cst_to_coordinates_full(CST):
     wl, wu, N, dz = CST_to_kulfan(CST)
     x = np.ones((N, 1))
     zeta = np.zeros((N, 1))
@@ -2395,7 +2283,7 @@ def cst_to_coordinates(CST):
     x = x1
     return [x, y]
 
-def cst_to_coordinates_split(wl, wu, N, dz):
+def cst_to_coordinates(wl, wu, N, dz):
     x = np.ones((N, 1))
     zeta = np.zeros((N, 1))
     for z in range(0, N):
