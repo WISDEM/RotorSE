@@ -623,7 +623,7 @@ class CCBlade:
 
             # derivatives of residual
             airfoils = [False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
-            if self.freeform:
+            if self.freeform and rotating and self.derivatives:
                 if airfoils[i]:
                     self.freeform_gradient = True
                     Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp = self.__loads(phi_star, rotating, *args, airfoil_parameterization=self.airfoil_parameterization[i])
@@ -632,6 +632,7 @@ class CCBlade:
                     Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
                     dNp_dafp, dTp_dafp, dR_dafp = 0.0, 0.0, 0.0
             else:
+                self.freeform_gradient = False
                 Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
 
             if self.derivatives:
@@ -648,7 +649,7 @@ class CCBlade:
                 DNp_Dx = dNp_dx - dNp_dy/dR_dy*dR_dx
                 DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
 
-                if self.freeform:# and self.freeform_gradient:
+                if self.freeform and rotating:
                     DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
                     DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
 

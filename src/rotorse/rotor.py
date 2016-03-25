@@ -2252,12 +2252,11 @@ class OptimizeRotorSE(Group):
         self.add('rotor', RotorSE(naero, nstr, False), promotes=['r_max_chord', 'chord_sub', 'theta_sub', 'control:tsr', 'mass_all_blades', 'AEP', 'obj', 'powercurve.control:Vin', 'powercurve.control:Vout', 'con1', 'con2', 'con3', 'con4', 'con5', 'con6', 'airfoil_parameterization', 'con_freeform', 'concon'])
 
 class RotorSE(Group):
-    def __init__(self, naero, nstr, vars=True):
+    def __init__(self, naero, nstr, npower, vars=True):
         super(RotorSE, self).__init__()
         """rotor model"""
         n3 = 4
         n5 = 5
-        n20 = 20
         if vars:
             self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero)), promotes=['*'])
             self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr)), promotes=['*'])
@@ -2441,13 +2440,13 @@ class RotorSE(Group):
         self.add('spline', GeometrySpline(naero, nstr))
         self.add('geom', CCBladeGeometry())
         # self.add('tipspeed', MaxTipSpeed())
-        self.add('setup', SetupRunVarSpeed())
+        self.add('setup', SetupRunVarSpeed(npower))
         self.add('airfoil_analysis', CCBladeAirfoils(naero))
         self.add('airfoil_spline', AirfoilSpline(naero, nstr))
-        self.add('analysis', CCBlade('power', naero, n20))
+        self.add('analysis', CCBlade('power', naero, npower))
 
-        self.add('dt', CSMDrivetrain(n20))
-        self.add('powercurve', RegulatedPowerCurveGroup())
+        self.add('dt', CSMDrivetrain(npower))
+        self.add('powercurve', RegulatedPowerCurveGroup(npower))
         self.add('wind', PowerWind())
         # self.add('cdf', WeibullWithMeanCDF())
         self.add('cdf', RayleighCDF())

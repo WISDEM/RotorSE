@@ -23,11 +23,12 @@ initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095
 rotor = Problem()
 naero = len(initial_aero_grid)
 nstr = len(initial_str_grid)
-rotor.root = RotorSE(naero, nstr)
+npower = 10 # 20
+rotor.root = RotorSE(naero, nstr, npower)
 
 ### SETUP OPTIMIZATION
-# rotor.driver = pyOptSparseDriver()
-# rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+#rotor.driver = pyOptSparseDriver()
+#rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
 # rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
 # rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
 # rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
@@ -35,9 +36,9 @@ rotor.root = RotorSE(naero, nstr)
 lower = np.ones((6,8))*[[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],
                         [-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1]]
 upper = np.ones((6,8))*[[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],
-                        [-0.13, -0.16, -0.13, 0.28, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.20, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.2, 0.55, 0.55, 0.4, 0.4]]
+                        [-0.13, -0.16, -0.13, 0.28, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.20, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.13, -0.13, 0.2, 0.55, 0.55, 0.4, 0.4]]
 
-rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
+# rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
 # rotor.driver.add_parameter('sparT', low=0.0001, high=0.2) # (Array, m): spar cap thickness parameters
 # rotor.driver.add_parameter('teT', low=0.001, high=0.2) # (Array, m): trailing-edge thickness parameters
 # rotor.driver.add_constraint('con1', lower=-1.0, upper=1.0)  # rotor strain sparL
@@ -46,10 +47,10 @@ rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
 # rotor.driver.add_constraint('con4', upper=0.0)  # rotor buckling spar
 # rotor.driver.add_constraint('con5', upper=0.0)  # rotor buckling te
 # rotor.driver.add_constraint('con6', lower=0.0)  # flap/edge freq
-# rotor.driver.add_constraint('con7', upper=0.0)
-rotor.driver.add_constraint('con_freeform', lower=0.05)
-rotor.driver.add_constraint('concon', lower=1.0)
-rotor.driver.add_objective('obj')
+#rotor.driver.add_constraint('con7', upper=0.0)
+# rotor.driver.add_constraint('con_freeform', lower=0.05)
+# rotor.driver.add_constraint('concon', lower=1.0)
+# rotor.driver.add_objective('obj')
 # rotor.driver.add_objective('AEP')
 # rotor.driver.add_objective('mass_all_blades')
 
@@ -85,6 +86,7 @@ rotor['nBlades'] = 3  # (Int): number of blades
 
 # === free form airfoil parameters ===
 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
+airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', GradientType='FD', CFDiterations=7500, CFDprocessors=16, FreeFormDesign=True)
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 af_str_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
 rotor['af_idx'] = np.asarray(af_idx)
@@ -156,7 +158,7 @@ rotor['airfoil_analysis_options'] = airfoil_analysis_options  # (List): names of
 # === atmosphere ===
 rotor['rho'] = 1.225  # (Float, kg/m**3): density of air
 rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
-rotor['shearExp'] = 0.2  # (Float): shear exponent
+rotor['shearExp'] = 0.0 #0.2  # (Float): shear exponent
 rotor['hubHt'] = np.array([90.0])  # (Float, m): hub height
 rotor['turbine_class'] = 'I'  # (Enum): IEC turbine class
 rotor['turbulence_class'] = 'B'  # (Enum): IEC turbulence class class
@@ -178,8 +180,8 @@ rotor['VfactorPC'] = 0.7  # (Float): fraction of rated speed at which the deflec
 # ----------------------
 
 # === aero and structural analysis options ===
-rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
-rotor['npts_coarse_power_curve'] = 20  # (Int): number of points to evaluate aero analysis at
+rotor['nSector'] = 1 #4 # (Int): number of sectors to divide rotor face into in computing thrust and power
+rotor['npts_coarse_power_curve'] = npower #20  # (Int): number of points to evaluate aero analysis at
 rotor['npts_spline_power_curve'] = 200  # (Int): number of points to use in fitting spline to power curve
 rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
 rotor['drivetrainType'] = 'geared'  # (Enum)
@@ -251,6 +253,9 @@ rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
 rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
 # ----------------
 
+# WARMSTART
+#rotor['']
+
 # === run and outputs ===
 "Running RotorSE..."
 time0 = time.time()
@@ -259,6 +264,7 @@ time1 = time.time() - time0
 print
 print "================== RotorSE Outputs =================="
 print "Time to run: ", time1
+print "mass / AEP: ", (rotor['mass_all_blades'] + 589154) / rotor['AEP']
 print 'AEP =', rotor['AEP']
 print 'diameter =', rotor['diameter']
 print 'ratedConditions.V =', rotor['ratedConditions:V']
@@ -282,12 +288,12 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
 
 ## Gradient checks
-# grad_total = open('total_gradient_check6.txt', 'w')
+# grad_total = open('total_gradient_check11.txt', 'w')
 # grad_partial = open('partial_gradient_check.txt', 'w')
 # total = rotor.check_total_derivatives(out_stream=grad_total)
 # partial= rotor.check_partial_derivatives(out_stream=grad_partial)
-grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
-# print grad
+grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
+print grad
 
 plt.figure()
 plt.plot(rotor['V'], rotor['P']/1e6)

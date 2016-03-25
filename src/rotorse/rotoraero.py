@@ -171,7 +171,7 @@ class SetupRunFixedSpeed(Component):
         unknowns['pitch'] = ctrl.pitch*np.ones_like(V)
 
 class SetupRunVarSpeed(Component):
-    def __init__(self):
+    def __init__(self, npower):
         super(SetupRunVarSpeed, self).__init__()
         """determines approriate conditions to run AeroBase code across the power curve"""
 
@@ -184,12 +184,12 @@ class SetupRunVarSpeed(Component):
         self.add_param('control:pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
         self.add_param('R', shape=1, units='m', desc='rotor radius')
-        self.add_param('npts', shape=1, val=20, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
+        self.add_param('npts', shape=1, val=npower, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
 
         # outputs
-        self.add_output('Uhub', shape=20, units='m/s', desc='freestream velocities to run')
-        self.add_output('Omega', shape=20, units='rpm', desc='rotation speeds to run')
-        self.add_output('pitch', shape=20, units='deg', desc='pitch angles to run')
+        self.add_output('Uhub', shape=npower, units='m/s', desc='freestream velocities to run')
+        self.add_output('Omega', shape=npower, units='rpm', desc='rotation speeds to run')
+        self.add_output('pitch', shape=npower, units='deg', desc='pitch angles to run')
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -241,7 +241,7 @@ class SetupRunVarSpeed(Component):
 
 
 class UnregulatedPowerCurve(Component):
-    def __init__(self):
+    def __init__(self, npower):
         super(UnregulatedPowerCurve, self).__init__()
 
         # inputs
@@ -250,11 +250,11 @@ class UnregulatedPowerCurve(Component):
         self.add_param('control:ratedPower', units='W', desc='rated power')
         self.add_param('control:Omega', units='rpm', desc='fixed rotor rotation speed')
         self.add_param('control:pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
-        self.add_param('control:npts', val=20, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
+        self.add_param('control:npts', val=npower, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
 
-        self.add_param('Vcoarse', shape=20, units='m/s', desc='wind speeds')
-        self.add_param('Pcoarse', shape=20, units='W', desc='unregulated power curve (but after drivetrain losses)')
-        self.add_param('Tcoarse', shape=20, units='N', desc='unregulated thrust curve')
+        self.add_param('Vcoarse', shape=npower, units='m/s', desc='wind speeds')
+        self.add_param('Pcoarse', shape=npower, units='W', desc='unregulated power curve (but after drivetrain losses)')
+        self.add_param('Tcoarse', shape=npower, units='N', desc='unregulated thrust curve')
         self.add_param('npts', val=200, desc='number of points for splined power curve', pass_by_obj=True)
 
         # outputs
@@ -286,7 +286,7 @@ class UnregulatedPowerCurve(Component):
 class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
 
-    def __init__(self):
+    def __init__(self, npower):
         super(RegulatedPowerCurve, self).__init__()
 
         self.eval_only = True  # allows an external solver to converge this, otherwise it will converge itself to mimic an explicit comp
@@ -303,9 +303,9 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('control:tsr', shape=1, desc='tip-speed ratio in Region 2 (should be optimized externally)')
         self.add_param('control:pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
-        self.add_param('Vcoarse', shape=20, units='m/s', desc='wind speeds')
-        self.add_param('Pcoarse', shape=20, units='W', desc='unregulated power curve (but after drivetrain losses)')
-        self.add_param('Tcoarse', shape=20, units='N', desc='unregulated thrust curve')
+        self.add_param('Vcoarse', shape=npower, units='m/s', desc='wind speeds')
+        self.add_param('Pcoarse', shape=npower, units='W', desc='unregulated power curve (but after drivetrain losses)')
+        self.add_param('Tcoarse', shape=npower, units='N', desc='unregulated thrust curve')
         self.add_param('R', shape=1, units='m', desc='rotor radius')
         self.add_param('npts', val=200, desc='number of points for splined power curve', pass_by_obj=True)
 
@@ -423,9 +423,9 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         return self.J
 
 class RegulatedPowerCurveGroup(Group):
-    def __init__(self):
+    def __init__(self, npower):
         super(RegulatedPowerCurveGroup, self).__init__()
-        self.add('powercurve_comp', RegulatedPowerCurve(), promotes=['*'])
+        self.add('powercurve_comp', RegulatedPowerCurve(npower), promotes=['*'])
         self.nl_solver = Brent()
         self.ln_solver = ScipyGMRES()
         self.nl_solver.options['var_lower_bound'] = 'powercurve.control:Vin'

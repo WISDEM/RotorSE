@@ -35,6 +35,8 @@ import sys
 import subprocess
 from scipy.interpolate import RectBivariateSpline, bisplev
 from akima import Akima
+import os, sys, shutil, copy
+import csv
 
 global lexitflag_counter
 lexitflag_counter = 0
@@ -770,8 +772,8 @@ class Airfoil(object):
         """
         # initialize
         polars = []
-
-        if airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+        # airfoil_analysis_options['AnalysisMethod'] = 'XFOIL'
+        if True: #airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
             [x, y] = cst_to_coordinates_full(CST)
             basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
             airfoil_shape_file = basepath + os.path.sep + 'cst_coordinates.dat'
@@ -829,7 +831,7 @@ class Airfoil(object):
                     generateMesh = True
                 else:
                     generateMesh = False
-                cl[j], cd[j], dcl_dafp, dcd_dafp = Airfoil.cfdGradients(CST, alphas[j], Re, airfoil_analysis_options['CFDiterations'], airfoil_analysis_options['CFDprocessors'], airfoil_analysis_options['GradientType'], ComputeGradients=False, GenerateMESH=generateMesh)
+                cl[j], cd[j] = Airfoil.cfdSolve(CST, alphas[j], Re, airfoil_analysis_options, GenerateMESH=generateMesh)
             polars.append(polarType(Re, alphas, cl, cd, cm))
         else:
             print "The initFromCST method needs an 'AnalysisMethod' of XFOIL or CFD"
@@ -1149,103 +1151,29 @@ class Airfoil(object):
 
         return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
 
-
-
     @classmethod
-    def cfdGradients(self, CST, alpha, Re, iterations, processors, FDorCS, Uinf, ComputeGradients, GenerateMESH=True):
-
-        import os, sys, shutil, copy
+    def cfdSolve(cls, CST, alpha, Re, airfoil_analysis_options, GenerateMESH=True):
         sys.path.append(os.environ['SU2_RUN'])
-        # sys.path.append("/usr/local/bin")
         import SU2
-
-        wl, wu, N, dz = CST_to_kulfan(CST)
-
-        # Populate x coordinates
-        x = np.ones((N, 1))
-        zeta = np.zeros((N, 1))
-        for z in range(0, N):
-            zeta[z] = 2 * pi / N * z
-            if z == N - 1:
-                zeta[z] = 2.0 * pi
-            x[z] = 0.5*(cos(zeta[z])+1.0)
-
-        # N1 and N2 parameters (N1 = 0.5 and N2 = 1 for airfoil shape)
-        N1 = 0.5
-        N2 = 1
-
-        try:
-            zerind = np.where(x == 0)  # Used to separate upper and lower surfaces
-            zerind = zerind[0][0]
-        except:
-            zerind = N/2
-
-        xl = np.zeros(zerind)
-        xu = np.zeros(N-zerind)
-
-        for z in range(len(xl)):
-            xl[z] = x[z]        # Lower surface x-coordinates
-        for z in range(len(xu)):
-            xu[z] = x[z + zerind]   # Upper surface x-coordinates
-
-        yl = ClassShape(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
-        yu = ClassShape(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
-
-        y = np.concatenate([yl, yu])  # Combine upper and lower y coordinates
-        y = y[::-1]
-        # coord_split = [xl, yl, xu, yu]  # Combine x and y into single output
-        # coord = [x, y]
-        x1 = np.zeros(len(x))
-        for k in range(len(x)):
-            x1[k] = x[k][0]
-        x = x1
-
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
-        airfoil_shape_file = basepath + os.path.sep + 'airfoil_shape.dat'
-
-        coord_file = open(airfoil_shape_file, 'w')
-
-        print >> coord_file, 'CST'
-        for i in range(len(x)):
-            print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
-
-        coord_file.close()
-
-        # if GenerateMESH:
-        #
-        #     ## Update mesh for specific airfoil (mesh deformation in SU2_EDU)
-        #     basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
-        #     su2_file_execute = basepath + os.path.sep + 'SU2_EDU'
-        #
-        #     savedPath = os.getcwd()
-        #     os.chdir(basepath)
-        #     subprocess.call([su2_file_execute])
-        #     os.chdir(savedPath)
-
-        partitions = processors
-        compute = True
-        step = 1e-4
-        iterations = iterations
-
-        # Config and state
         basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
-        # filename = basepath + os.path.sep + 'inv_NACA0012.cfg'
-        # filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
-        # filename = basepath + os.path.sep + 'turb_nasa.cfg'
-        filename = basepath + os.path.sep + 'su2_incomp_rans.cfg'
-
-        config = SU2.io.Config(filename)
+        # config_filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
+        config_filename = basepath + os.path.sep + 'inv_NACA0012.cfg'
+        config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
-        config.NUMBER_PART = 0
-        config.EXT_ITER    = iterations
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
-        mesh_filename = basepath + os.path.sep + 'mesh_AIRFOIL.su2'
-        config.MESH_FILENAME = mesh_filename
+        config.NUMBER_PART = airfoil_analysis_options['CFDprocessors']
+        config.EXT_ITER    = airfoil_analysis_options['CFDiterations']
+        config.WRT_CSV_SOL = 'YES'
+
         if GenerateMESH:
-            import os
+            # Create airfoil coordinate file for SU2
+            [x, y] = cst_to_coordinates_full(CST)
+            coord_file = open('airfoil_shape.dat', 'w')
+            print >> coord_file, 'CST'
+            for i in range(len(x)):
+                print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+            coord_file.close()
 
             konfig = copy.deepcopy(config)
-
             tempname = 'config_DEF.cfg'
             konfig.dump(tempname)
             SU2_RUN = os.environ['SU2_RUN']
@@ -1254,10 +1182,7 @@ class Airfoil(object):
             base_Command = os.path.join(SU2_RUN,'%s')
             the_Command = 'SU2_DEF ' + tempname
             the_Command = base_Command % the_Command
-            # the_Command = build_command( the_Command , processes )
-
             sys.stdout.flush()
-
             proc = subprocess.Popen( the_Command, shell=True    ,
                              stdout=sys.stdout      ,
                              stderr=subprocess.PIPE,
@@ -1268,180 +1193,29 @@ class Airfoil(object):
             proc.stdin.write('1.0\n')
             proc.stdin.write('Yes\n')
             proc.stdin.write('clockwise\n')
-
-            # return_code = proc.wait()
-            # message = proc.stderr.read()
             proc.stdin.close()
-            # proc.stdout.close()
             return_code = proc.wait()
-            # run_command( the_Command )
 
-            # config.DV_VALUE_NEW = config.DV_VALUE
-            from subprocess import Popen, PIPE, STDOUT
-            # p = Popen(['myapp'], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-            # konfig = copy.deepcopy(config)
-            # tempname = 'config_DEF.cfg'
-            # konfig.dump(tempname)
-            # su2_file_execute = 'SU2_DEF ' + filename
-            # subprocess.call(su2_file_execute)
-            #
-            # # info = SU2.run.DEF(config)
-            #
-            # stdout_data = p.communicate(input='data_to_write')[0]
-            # sys.stdout.write('airfoil_shape.dat')
-            # sys.stdout.write('Selig')
-            # sys.stdout.write('1.0')
-            # sys.stdout.write('Yes')
-            # sys.stdout.write('clockwise')
-            # state.update(info)
-
-        config.NUMBER_PART = partitions
-        config.WRT_CSV_SOL = 'YES'
-
-        config.AoA = alpha #np.degrees(alpha)
+        config.MESH_FILENAME = 'mesh_out.su2' #mesh_AIRFOIL.su2'
+        state.FILES.MESH = config.MESH_FILENAME
+        config.AoA = np.degrees(alpha)
+        Uinf = 10.0
         Ma = Uinf / 340.29  # Speed of sound at sea level
-        x_vel = Uinf * cos(np.radians(alpha))
-        y_vel = Uinf * sin(np.radians(alpha))
+        x_vel = Uinf * cos(alpha)
+        y_vel = Uinf * sin(alpha)
         config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
         config.MACH_NUMBER = Ma
-        config.REYNOLDS_NUMBER = Re
-        config.FREESTREAM_DENSITY = 1.225
-        config.FREESTREAM_VISCOSITY = 1.81206e-5
+        config.REYNOLDS_NUMBER = 1e6 #Re
 
-
-        # find solution files if they exist
-        # state.find_files(config)
-        ffdtag = []
-        kind = []
-        marker = []
-        param = []
-        scale = []
-        # for i in range(len(x)):
-        #     ffdtag.append([])
-        #     kind.append('HICKS_HENNE')
-        #     marker.append(['airfoil'])
-        #     if i < len(x) / 2.0:
-        #         param.append([0.0, x[i]])
-        #     else:
-        #         param.append([1.0, x[i]])
-        #     scale.append(1.0)
-        # config.DEFINITION_DV = dict(FFDTAG=ffdtag, KIND=kind, MARKER=marker, PARAM=param, SCALE=scale)
-
-        restart = True
-
-        if restart:
-            print "restart"
-            config.RESTART_SOL = 'YES'
-            basepath2 = os.path.dirname(os.path.realpath(__file__))
-            config.VOLUME_FLOW_FILENAME = basepath2 + os.path.sep + 'DIRECT/flow_' + str(wu[0]) + '_' + str(alpha)
-            restart_file = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
-            if os.path.isfile(restart_file):
-                config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
-                config.EXT_ITER = iterations / 200
-            else:
-                config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat'
-            config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
-            state.find_files(config)
-        else:
-            basepath2 = os.path.dirname(os.path.realpath(__file__))
-            # restart_file = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
-            # config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat'
-            #config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
-            #state.find_files(config)
-            state.FILES.MESH = config.MESH_FILENAME
+        # restart = True
+        # if restart:
+        #     config.RESTART_SOL = 'YES'
+        #     basepath2 = os.path.dirname(os.path.realpath(__file__))
+        #     config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat' #_' + str(int(wu[0]) + '_' + str(alpha) + '.dat'
+        #     config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
 
         cd = SU2.eval.func('DRAG', config, state)
         cl = SU2.eval.func('LIFT', config, state)
-        cm = SU2.eval.func('MOMENT_Z', config, state)
-        if ComputeGradients:
-            # RUN FOR DRAG GRADIENTS
-            info = SU2.run.adjoint(config)
-            state.update(info)
-            #SU2.io.restart2solution(config,state)
-            # Gradient Projection
-            info = SU2.run.projection(config, step)
-            state.update(info)
-            get_gradients = info.get('GRADIENTS')
-            dcd_dx = get_gradients.get('DRAG')
-
-            # RUN FOR LIFT GRADIENTS
-            config.OBJECTIVE_FUNCTION = 'LIFT'
-            info = SU2.run.adjoint(config)
-            state.update(info)
-            #SU2.io.restart2solution(config,state)
-            # Gradient Projection
-            info = SU2.run.projection(config, step)
-            state.update(info)
-            get_gradients = info.get('GRADIENTS')
-            dcl_dx = get_gradients.get('LIFT')
-
-            where_are_NaNs_cl = np.isnan(dcl_dx)
-            dcl_dx[where_are_NaNs_cl] = 0.0
-
-            where_are_NaNs_cl = np.isnan(dcl_dx)
-            dcd_dx[where_are_NaNs_cl] = 0.0
-
-            n = len(CST)
-            m = len(dcd_dx)
-            dcst_dx = np.zeros((n, m))
-
-            wl_original, wu_original = wu, wl
-            dz = 0.0
-            N = 200
-            coord_old = cst_to_coordinates_from_kulfan(wl_original, wu_original, N, dz)
-
-            # design = [85, 79, 74, 70, 67, 63, 60, 56, 53, 50, 47, 43, 40, 37, 33, 29, 25, 21, 14, 115, 121, 126, 130, 133, 137, 140, 144, 147, 150, 153, 157, 160, 163, 167, 171, 175, 179, 186]
-            design = range(0, len(x))
-            # Gradients
-            FDorCS = 'FD'
-            if FDorCS == 'FD':
-                fd_step = 1e-6
-                for i in range(0, n):
-                    wl_new = deepcopy(wl_original)
-                    wu_new = deepcopy(wu_original)
-                    if i < n/2:
-                        wl_new[i] += fd_step
-                    else:
-                        wu_new[i-4] += fd_step
-                    coor_new = cst_to_coordinates_from_kulfan(wl_new, wu_new, N, dz)
-                    j = 0
-                    for coor_d in design:
-                        if (coor_new[1][coor_d] - coord_old[1][coor_d]).real == 0:
-                            dcst_dx[i][j] = 0
-                        else:
-                            dcst_dx[i][j] = 1/((coor_new[1][coor_d] - coord_old[1][coor_d]).real / fd_step)
-                        j += 1
-
-            elif FDorCS == 'CS':
-                step_size = 1e-20
-                cs_step = complex(0, step_size)
-
-                for i in range(0, n):
-                    wl_new = deepcopy(wl_original.astype(complex))
-                    wu_new = deepcopy(wu_original.astype(complex))
-                    if i >= n/2:
-                        wl_new[i-4] += cs_step
-                    else:
-                        wu_new[i] += cs_step
-                    coor_new = cst_to_coordinates_complex(wl_new, wu_new, N, dz)
-                    j = 0
-                    for coor_d in design:
-                        if coor_new[1][coor_d].imag == 0:
-                            dcst_dx[i][j] = 0
-                        else:
-                            dcst_dx[i][j] = 1/(coor_new[1][coor_d].imag / np.imag(cs_step))
-                        j += 1
-            else:
-                print 'Warning. FDorCS needs to be set to either FD or CS'
-            dcst_dx = np.matrix(dcst_dx)
-            dcl_dx = np.matrix(dcl_dx)
-            dcd_dx = np.matrix(dcd_dx)
-
-            dcl_dcst = dcst_dx * dcl_dx.T
-            dcd_dcst = dcst_dx * dcd_dx.T
-
-            # print cl, cd, dcl_dcst, dcd_dcst
-            return cl, cd, dcl_dcst, dcd_dcst
 
         return cl, cd
 
@@ -1607,6 +1381,9 @@ class CCAirfoil:
             self.dcl_dafp_storage = []
             self.dcd_dafp_storage = []
             self.freeform_alpha_storage = []
+            self.cl_storage = []
+            self.cd_storage = []
+            self.alpha_storage = []
         else:
             self.CST = None
 
@@ -1742,11 +1519,15 @@ class CCAirfoil:
                 airfoil.mach = 0.00
                 airfoil.iter = 100
                 cl, cd, cm, lexitflag = airfoil.solveAlpha(np.degrees(alpha))
+                if lexitflag:
+                    cl = self.cl_spline.ev(alpha, Re)
+                    cd = self.cd_spline.ev(alpha, Re)
             else:
-                pass #TODO CFD
+                cl, cd = self.cfdGradients(alpha, Re, ComputeGradients=False, GenerateMESH=True)
         else:
             cl = self.cl_spline.ev(alpha, Re)
             cd = self.cd_spline.ev(alpha, Re)
+        print "lift, drag", cl, cd
         return cl, cd
 
     def derivatives(self, alpha, Re):
@@ -1778,8 +1559,8 @@ class CCAirfoil:
             self.dcd_dafp_storage.append(dcd_dafp)
             self.freeform_alpha_storage.append(alpha)
         else:
-            ComputeGradients = True
-            cl, cd, dcl_dafp, dcd_dafp = cfdGradients(CST, alpha, Re, airfoil_analysis_options['CFDiterations'], airfoil_analysis_options['CFDprocessors'], airfoil_analysis_options['GradientType'], Uinf, ComputeGradients, GenerateMESH=True)
+            cl, cd, dcl_dafp, dcd_dafp = self.cfdGradients(alpha, Re, ComputeGradients=True)
+        print "gradients", dcl_dafp, dcd_dafp
         return dcl_dafp, dcd_dafp
 
     def xfoilGradients(self, alpha, Re):
@@ -1865,226 +1646,192 @@ class CCAirfoil:
         cl, cd, cm, lexitflag = airfoil.solveAlpha(alpha)
         return deepcopy(cl), deepcopy(cd), deepcopy(lexitflag)
 
-def cfdGradients(CST, alpha, Re, iterations, processors, FDorCS, Uinf, ComputeGradients, GenerateMESH=True):
+    def cfdGradients(self, alpha, Re, ComputeGradients=False, GenerateMESH=True):
 
-    import os, sys, shutil, copy
-    sys.path.append(os.environ['SU2_RUN'])
-    import SU2
+        # Import SU2
+        sys.path.append(os.environ['SU2_RUN'])
+        import SU2
 
-    wl, wu, N, dz = CST_to_kulfan(CST)
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
+        # config_filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
+        config_filename = basepath + os.path.sep + 'inv_NACA0012.cfg'
+        config = SU2.io.Config(config_filename)
+        state  = SU2.io.State()
+        config.NUMBER_PART = self.airfoil_analysis_options['CFDprocessors']
+        config.EXT_ITER    = self.airfoil_analysis_options['CFDiterations']
+        config.WRT_CSV_SOL = 'YES'
 
-    # Populate x coordinates
-    x = np.ones((N, 1))
-    zeta = np.zeros((N, 1))
-    for z in range(0, N):
-        zeta[z] = 2 * pi / N * z
-        if z == N - 1:
-            zeta[z] = 2.0 * pi
-        x[z] = 0.5*(cos(zeta[z])+1.0)
+        if GenerateMESH:
+            # Create airfoil coordinate file for SU2
+            [x, y] = cst_to_coordinates_full(self.CST)
+            coord_file = open('airfoil_shape.dat', 'w')
+            print >> coord_file, 'CST'
+            for i in range(len(x)):
+                print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+            coord_file.close()
+
+            konfig = copy.deepcopy(config)
+            tempname = 'config_DEF.cfg'
+            konfig.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            # must run with rank 1
+            processes = konfig['NUMBER_PART']
+            base_Command = os.path.join(SU2_RUN,'%s')
+            the_Command = 'SU2_DEF ' + tempname
+            the_Command = base_Command % the_Command
+            sys.stdout.flush()
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                             stdout=sys.stdout      ,
+                             stderr=subprocess.PIPE,
+                             stdin=subprocess.PIPE)
+            proc.stderr.close()
+            proc.stdin.write('airfoil_shape.dat\n')
+            proc.stdin.write('Selig\n')
+            proc.stdin.write('1.0\n')
+            proc.stdin.write('Yes\n')
+            proc.stdin.write('clockwise\n')
+            proc.stdin.close()
+            return_code = proc.wait()
+
+        config.MESH_FILENAME = 'mesh_out.su2' # basepath + os.path.sep + 'mesh_AIRFOIL.su2'
+        state.FILES.MESH = config.MESH_FILENAME
+        config.AoA = np.degrees(alpha)
+        Uinf = 10.0
+        Ma = Uinf / 340.29  # Speed of sound at sea level
+        x_vel = Uinf * cos(alpha)
+        y_vel = Uinf * sin(alpha)
+        config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
+        config.MACH_NUMBER = Ma
+        config.REYNOLDS_NUMBER = 1e6 #Re
+
+        # restart = True
+        # if restart:
+        #     config.RESTART_SOL = 'YES'
+        #     basepath2 = os.path.dirname(os.path.realpath(__file__))
+        #     config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat' #_' + str(int(wu[0]) + '_' + str(alpha) + '.dat'
+        #     config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
+
+        cd = SU2.eval.func('DRAG', config, state)
+        cl = SU2.eval.func('LIFT', config, state)
+
+        if ComputeGradients:
+            mesh_data = SU2.mesh.tools.read(config.MESH_FILENAME)
+            points_sorted,loop_sorted = SU2.mesh.tools.sort_airfoil(mesh_data,marker_name='airfoil')
+
+            info = SU2.run.direct(config)
+            state.update(info)
+            SU2.io.restart2solution(config,state)
+            # RUN FOR DRAG GRADIENTS
+
+            config.OBJECTIVE_FUNCTION = 'DRAG'
+            info = SU2.run.adjoint(config)
+            state.update(info)
+            dcd_dx, xl, xu = self.su2Gradient(loop_sorted)
+
+            config.OBJECTIVE_FUNCTION = 'LIFT'
+            info = SU2.run.adjoint(config)
+            state.update(info)
+            dcl_dx, xl, xu = self.su2Gradient(loop_sorted)
+
+            dz = 0
+            n = 8
+            fd_step = 1e-6
+            m = 200
+            dx_dcst = np.zeros((n, m))
+            wl_original, wu_original, N, dz = CST_to_kulfan(self.CST)
+            yl_old, yu_old = cst_to_y_coordinates_given_x(wl_original, wu_original, N, dz, xl, xu)
+            if self.airfoil_analysis_options['GradientType'] == 'FD':
+                for i in range(0, n):
+                    wl_new = deepcopy(wl_original)
+                    wu_new = deepcopy(wu_original)
+                    if i < n/2:
+                        wl_new[i] += fd_step
+                    else:
+                        wu_new[i-4] += fd_step
+
+                    yl_new, yu_new = cst_to_y_coordinates_given_x(wl_new, wu_new, N, dz, xl, xu)
+                    j = 0
+                    for j in range(m):
+                        if i < n/2:
+                            if j < len(yl_new):
+                                dx_dcst[i][j] = (yl_new[j] - yl_old[j]) / fd_step
+                            else:
+                                dx_dcst[i][j] = 0.0
+                        else:
+                            if j > m - len(yu_new):
+                                dx_dcst[i][j] = (yu_new[j- (m-len(yu_new))] - yu_old[j-(m-len(yu_new))]) / fd_step
+                            else:
+                                dx_dcst[i][j] = 0.0
+            elif self.airfoil_analysis_options['GradientType'] == 'CS':
+                step_size = 1e-20
+                cs_step = complex(0, step_size)
+
+                for i in range(0, n):
+                    wl_new = deepcopy(wl_original.astype(complex))
+                    wu_new = deepcopy(wu_original.astype(complex))
+                    if i >= n/2:
+                        wl_new[i-4] += cs_step
+                    else:
+                        wu_new[i] += cs_step
+                    coor_new = cst_to_coordinates_complex(wl_new, wu_new, N, dz)
+                    j = 0
+                    for coor_d in design:
+                        if coor_new[1][coor_d].imag == 0:
+                            dcst_dx[i][j] = 0
+                        else:
+                            dcst_dx[i][j] = (coor_new[1][coor_d].imag / np.imag(cs_step))
+                        j += 1
+            else:
+                print 'Warning. GradientType needs to be set to either FD or CS'
+
+            dcst_dx = np.matrix(dx_dcst)
+            dcl_dx = np.matrix(dcl_dx)
+            dcd_dx = np.matrix(dcd_dx)
+
+            dcl_dcst = dcst_dx * dcl_dx.T
+            dcd_dcst = dcst_dx * dcd_dx.T
+
+            return cl, cd, np.asarray(dcl_dcst), np.asarray(dcd_dcst)
+
+        return cl, cd
+
+    def su2Gradient(self, loop_sorted):
+        data = np.zeros([500, 8])
+        with open('surface_adjoint.csv', 'rb') as f1:
+            reader = csv.reader(f1, dialect='excel', quotechar='|')
+            i = 0
+            for row in reader:
+                if i > 0:
+                    data[i, :] = row[0:8]
+                i += 1
+            f1.close()
+        N = 200
+        dobj_dx_raw = data[:, 1][1:N+1].reshape(N,1)
+        point_ids = data[:, 0][1:N+1].reshape(N,1)
+        x = data[:, 6][1:N+1].reshape(N,1)
+        y = data[:, 7][1:N+1].reshape(N,1)
+
+        xu, xl, yu, yl, dobj_dxl, dobj_dxu = np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(0),  np.zeros(0), np.zeros(0) #TODO: Initalize
+        for i in range(N):
+            index = np.where(point_ids == loop_sorted[i])[0][0]
+            if i < N/2:
+                xl = np.append(xl, x[index])
+                yl = np.append(yl, y[index])
+                dobj_dxl = np.append(dobj_dxl, dobj_dx_raw[index])
+            else:
+                xu = np.append(xu, x[index])
+                yu = np.append(yu, y[index])
+                dobj_dxu = np.append(dobj_dxu, dobj_dx_raw[index])
+        return np.concatenate([dobj_dxl, dobj_dxu]), xl, xu
+
+def cst_to_y_coordinates_given_x(wl, wu, N, dz, xl, xu):
 
     # N1 and N2 parameters (N1 = 0.5 and N2 = 1 for airfoil shape)
     N1 = 0.5
     N2 = 1
-
-    try:
-        zerind = np.where(x == 0)  # Used to separate upper and lower surfaces
-        zerind = zerind[0][0]
-    except:
-        zerind = N/2
-
-    xl = np.zeros(zerind)
-    xu = np.zeros(N-zerind)
-
-    for z in range(len(xl)):
-        xl[z] = x[z]        # Lower surface x-coordinates
-    for z in range(len(xu)):
-        xu[z] = x[z + zerind]   # Upper surface x-coordinates
-
     yl = ClassShape(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
     yu = ClassShape(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
-
-    y = np.concatenate([yl, yu])  # Combine upper and lower y coordinates
-    y = y[::-1]
-    # coord_split = [xl, yl, xu, yu]  # Combine x and y into single output
-    # coord = [x, y]
-    x1 = np.zeros(len(x))
-    for k in range(len(x)):
-        x1[k] = x[k][0]
-    x = x1
-
-    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
-    airfoil_shape_file = basepath + os.path.sep + 'airfoil_shape.dat'
-
-    coord_file = open(airfoil_shape_file, 'w')
-
-    print >> coord_file, 'CST'
-    for i in range(len(x)):
-        print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
-
-    coord_file.close()
-
-    if GenerateMESH:
-        ## Update mesh for specific airfoil (mesh deformation in SU2_EDU)
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
-        su2_file_execute = basepath + os.path.sep + 'SU2_EDU'
-
-        savedPath = os.getcwd()
-        os.chdir(basepath)
-        subprocess.call([su2_file_execute])
-        os.chdir(savedPath)
-
-    partitions = processors
-    compute = True
-    step = 1e-4
-    iterations = iterations
-
-    # Config and state
-    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
-    # filename = basepath + os.path.sep + 'inv_NACA0012.cfg'
-    filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
-    # filename = basepath + os.path.sep + 'turb_nasa.cfg'
-
-    config = SU2.io.Config(filename)
-    state  = SU2.io.State()
-    config.NUMBER_PART = partitions
-    config.EXT_ITER    = iterations
-
-    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SU2_EDU/bin')
-    mesh_filename = basepath + os.path.sep + 'mesh_AIRFOIL.su2'
-
-    config.WRT_CSV_SOL = 'YES'
-    config.MESH_FILENAME = mesh_filename
-    config.AoA = alpha #np.degrees(alpha)
-    Ma = Uinf / 340.29  # Speed of sound at sea level
-    x_vel = Uinf * cos(np.radians(alpha))
-    y_vel = Uinf * sin(np.radians(alpha))
-    config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
-    config.MACH_NUMBER = Ma
-    config.REYNOLDS_NUMBER = Re
-    restart = True
-    if restart:
-        config.RESTART_SOL = 'YES'
-        basepath2 = os.path.dirname(os.path.realpath(__file__))
-        config.RESTART_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow.dat' #_' + str(int(wu[0]) + '_' + str(alpha) + '.dat'
-        config.SOLUTION_FLOW_FILENAME = basepath2 + os.path.sep + 'solution_flow_' + str(wu[0]) + '_' + str(alpha) + '.dat'
-
-    # find solution files if they exist
-    # state.find_files(config)
-    ffdtag = []
-    kind = []
-    marker = []
-    param = []
-    scale = []
-    for i in range(len(x)):
-        ffdtag.append([])
-        kind.append('HICKS_HENNE')
-        marker.append(['airfoil'])
-        if i < len(x) / 2.0:
-            param.append([0.0, x[i]])
-        else:
-            param.append([1.0, x[i]])
-        scale.append(1.0)
-    config.DEFINITION_DV = dict(FFDTAG=ffdtag, KIND=kind, MARKER=marker, PARAM=param, SCALE=scale)
-    state.FILES.MESH = config.MESH_FILENAME
-
-
-    cd = SU2.eval.func('DRAG', config, state)
-    cl = SU2.eval.func('LIFT', config, state)
-    cm = SU2.eval.func('MOMENT_Z', config, state)
-    if ComputeGradients:
-        # RUN FOR DRAG GRADIENTS
-        info = SU2.run.adjoint(config)
-        state.update(info)
-        #SU2.io.restart2solution(config,state)
-        # Gradient Projection
-        info = SU2.run.projection(config, step)
-        state.update(info)
-        get_gradients = info.get('GRADIENTS')
-        dcd_dx = get_gradients.get('DRAG')
-
-        # RUN FOR LIFT GRADIENTS
-        config.OBJECTIVE_FUNCTION = 'LIFT'
-        info = SU2.run.adjoint(config)
-        state.update(info)
-        #SU2.io.restart2solution(config,state)
-        # Gradient Projection
-        info = SU2.run.projection(config, step)
-        state.update(info)
-        get_gradients = info.get('GRADIENTS')
-        dcl_dx = get_gradients.get('LIFT')
-
-        where_are_NaNs_cl = np.isnan(dcl_dx)
-        dcl_dx[where_are_NaNs_cl] = 0.0
-
-        where_are_NaNs_cl = np.isnan(dcl_dx)
-        dcd_dx[where_are_NaNs_cl] = 0.0
-
-        n = len(CST)
-        m = len(dcd_dx)
-        dcst_dx = np.zeros((n, m))
-
-        wl_original, wu_original = wu, wl
-        dz = 0.0
-        N = 200
-        coord_old = cst_to_coordinates_split(wl_original, wu_original, N, dz)
-
-        # design = [85, 79, 74, 70, 67, 63, 60, 56, 53, 50, 47, 43, 40, 37, 33, 29, 25, 21, 14, 115, 121, 126, 130, 133, 137, 140, 144, 147, 150, 153, 157, 160, 163, 167, 171, 175, 179, 186]
-        design = range(0, len(x))
-        # Gradients
-        FDorCS = 'FD'
-        if FDorCS == 'FD':
-            fd_step = 1e-6
-            for i in range(0, n):
-                wl_new = deepcopy(wl_original)
-                wu_new = deepcopy(wu_original)
-                if i < n/2:
-                    wl_new[i] += fd_step
-                else:
-                    wu_new[i-4] += fd_step
-                coor_new = cst_to_coordinates_split(wl_new, wu_new, N, dz)
-                j = 0
-                for coor_d in design:
-                    if (coor_new[1][coor_d] - coord_old[1][coor_d]).real == 0:
-                        dcst_dx[i][j] = 0
-                    else:
-                        dcst_dx[i][j] = 1/((coor_new[1][coor_d] - coord_old[1][coor_d]).real / fd_step)
-                    j += 1
-
-        elif FDorCS == 'CS':
-            step_size = 1e-20
-            cs_step = complex(0, step_size)
-
-            for i in range(0, n):
-                wl_new = deepcopy(wl_original.astype(complex))
-                wu_new = deepcopy(wu_original.astype(complex))
-                if i >= n/2:
-                    wl_new[i-4] += cs_step
-                else:
-                    wu_new[i] += cs_step
-                coor_new = cst_to_coordinates_complex(wl_new, wu_new, N, dz)
-                j = 0
-                for coor_d in design:
-                    if coor_new[1][coor_d].imag == 0:
-                        dcst_dx[i][j] = 0
-                    else:
-                        dcst_dx[i][j] = 1/(coor_new[1][coor_d].imag / np.imag(cs_step))
-                    j += 1
-        else:
-            print 'Warning. FDorCS needs to be set to either FD or CS'
-        dcst_dx = np.matrix(dcst_dx)
-        dcl_dx = np.matrix(dcl_dx)
-        dcd_dx = np.matrix(dcd_dx)
-
-        dcl_dcst = dcst_dx * dcl_dx.T
-        dcd_dcst = dcst_dx * dcd_dx.T
-
-        # print cl, cd, dcl_dcst, dcd_dcst
-        return cl, cd, dcl_dcst, dcd_dcst
-
-    return cl, cd
-
-
-
+    return yl, yu
 
 def cstComplex(alpha, Re, wl, wu, N, dz, Uinf):
 
