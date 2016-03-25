@@ -4,7 +4,7 @@ import numpy as np
 import math
 from openmdao.api import IndepVarComp, Component, ExecComp, Group, ScipyGMRES
 from rotoraero import SetupRunVarSpeed, RegulatedPowerCurve, AEP, \
-    RPM2RS, RS2RPM, RegulatedPowerCurveGroup
+    RPM2RS, RS2RPM, RegulatedPowerCurveGroup, COE
 
 from rotoraerodefaults import CCBladeGeometry, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF, RayleighCDF, CCBlade, CCBladeAirfoils, AirfoilSpline
 
@@ -3025,7 +3025,10 @@ class RotorSE(Group):
         self.connect('spline.Rtip', 'Rtip_in')
         self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[nstr-1])
 
-        self.add('obj_cmp', ExecComp('obj = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
+        #COE Objective
+        self.add('coe', COE(), promotes=['*'])
+        self.add('obj_cmp', ExecComp('obj = COE*100.0', COE=0.1), promotes=['*'])
+        # self.add('obj_cmp', ExecComp('obj = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
         eta_strain = 1.35*1.3*1.0
         self.add('obj_con1', ExecComp('con1 = strainU_spar[[0, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_spar', strainU_spar=np.zeros(nstr), eta_strain=eta_strain, strain_ult_spar=0.0, con1=np.zeros(7)), promotes=['*'])
         self.add('obj_con2', ExecComp('con2 = strainU_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', strainU_te=np.zeros(nstr), eta_strain=eta_strain, strain_ult_te=0.0, con2=np.zeros(8)), promotes=['*'])
