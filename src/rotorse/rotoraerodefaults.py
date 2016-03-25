@@ -554,7 +554,7 @@ class CCBlade(Component):
             J['Q', 'precurve'] = dQ['dprecurve']
             J['Q', 'precurveTip'] = dQ['dprecurveTip']
 
-            if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files':
+            if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files' and params['airfoil_analysis_options']['FreeFormDesign']:
                 J['P', 'airfoil_parameterization'] = dP['dafp']
                 J['T', 'airfoil_parameterization'] = dT['dafp']
                 J['Q', 'airfoil_parameterization'] = dQ['dafp']
@@ -617,7 +617,7 @@ class CCBlade(Component):
             J['loads:pitch', 'pitch_load'] = 1.0
             J['loads:azimuth', 'azimuth_load'] = 1.0
 
-            if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files':
+            if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files' and params['airfoil_analysis_options']['FreeFormDesign']:
                 zero_afp = np.zeros((17*8))
                 J['loads:Px', 'airfoil_parameterization'] = np.vstack([zero_afp, dNp['dafp'], zero_afp])
                 J['loads:Py', 'airfoil_parameterization'] = np.vstack([zero_afp, -dTp['dafp'], zero_afp])

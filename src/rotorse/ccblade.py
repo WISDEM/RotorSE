@@ -292,12 +292,11 @@ class CCBlade:
         self.iterRe = iterRe
         self.derivatives = derivatives
 
-        if airfoil_parameterization is not None and airfoil_options is not None and derivatives:
-            self.airfoil_parameterization = airfoil_parameterization
-            self.airfoil_analysis_options = airfoil_options
-            self.freeform = True
-        else:
-            self.freeform = False
+        self.airfoil_parameterization = airfoil_parameterization
+        self.airfoil_analysis_options = airfoil_options
+        self.freeform = airfoil_options['FreeFormDesign']
+
+
         # self.freeform = False
         # check if no precurve / presweep
         if precurve is None:
