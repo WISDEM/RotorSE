@@ -23,7 +23,7 @@ initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095
 rotor = Problem()
 naero = len(initial_aero_grid)
 nstr = len(initial_str_grid)
-npower = 10 # 20
+npower = 5 # 20
 rotor.root = RotorSE(naero, nstr, npower)
 
 ### SETUP OPTIMIZATION
@@ -79,14 +79,14 @@ rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m)
 rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
 # rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
 rotor['precone'] = 2.5  # (Float, deg): precone angle
-rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
+rotor['tilt'] = 0.0 # 5.0  # (Float, deg): shaft tilt
 rotor['yaw'] = 0.0  # (Float, deg): yaw error
 rotor['nBlades'] = 3  # (Int): number of blades
 # ------------------
 
 # === free form airfoil parameters ===
 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
-airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', GradientType='FD', CFDiterations=7500, CFDprocessors=16, FreeFormDesign=True)
+# airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', GradientType='FD', CFDiterations=7500, CFDprocessors=16, FreeFormDesign=True)
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 af_str_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
 rotor['af_idx'] = np.asarray(af_idx)
@@ -264,6 +264,7 @@ time1 = time.time() - time0
 print
 print "================== RotorSE Outputs =================="
 print "Time to run: ", time1
+print "COE: ", rotor['COE']
 print "mass / AEP: ", (rotor['mass_all_blades'] + 589154) / rotor['AEP']
 print 'AEP =', rotor['AEP']
 print 'diameter =', rotor['diameter']
@@ -288,12 +289,12 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
 
 ## Gradient checks
-# grad_total = open('total_gradient_check11.txt', 'w')
+grad_total = open('total_gradient_check_coe.txt', 'w')
 # grad_partial = open('partial_gradient_check.txt', 'w')
-# total = rotor.check_total_derivatives(out_stream=grad_total)
+total = rotor.check_total_derivatives(out_stream=grad_total)
 # partial= rotor.check_partial_derivatives(out_stream=grad_partial)
-grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
-print grad
+# grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
+# print grad
 
 plt.figure()
 plt.plot(rotor['V'], rotor['P']/1e6)

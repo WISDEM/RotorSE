@@ -15,10 +15,6 @@ from openmdao.api import ScipyGMRES
 
 from utilities import hstack, vstack, linspace_with_deriv, smooth_min, trapz_deriv
 from akima import Akima
-from enum import Enum
-from csmHub import csmHub
-from csmNacelle import csmNacelle
-from csmTower import csmTower
 
 # convert between rotations/minute and radians/second
 RPM2RS = pi/30.0
@@ -508,81 +504,28 @@ class COE(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
         # fixed cost assumptions from NREL 5MW turbine (update as needed)
-        fcr = 0.12
-        turbineNum = 100
-        om = 360992.401612
-        taxrate = 0.4
-        llc = 19967.1948787
-        lrc = 91048.3870968
-        tcc = self.getTCC(params['mass_all_blades'])
-        bos = self.getBOS(tcc, turbineNum)
-        warrantyPremium = (tcc / 1.10) * 0.15
-        icc = tcc * turbineNum + warrantyPremium * turbineNum + bos
-        unknowns['COE'] = ((icc/turbineNum * fcr) + (om * (1-taxrate) + llc + lrc)) / params['AEP']
+        bos_costs = 7668775.3
+        preventative_opex = 401819.023
+        lease_opex = 22225.395
+        corrective_opex = 91048.387
+        avg_annual_opex = preventative_opex + corrective_opex + lease_opex
+        fixed_charge_rate = 0.12
+        tax_rate = 0.4
+        ppi_mat   = 1.0465528035
+        slope   = 13.0
+        intercept     = 5813.9
+
+        blade_cost = ((slope*params['mass_all_blades']/3.0 + intercept)*ppi_mat)
+        rotor_cost = 1244064.53 - 230870.76 + blade_cost
+        nacelle_cost = 1834848.89
+        tower_cost = 1390588.80
+        turbine_cost = rotor_cost + nacelle_cost + tower_cost
+        icc = turbine_cost + bos_costs
+
+        unknowns['COE'] = (icc * fixed_charge_rate / params['AEP']) + (avg_annual_opex) * (1-tax_rate) / params['AEP']
         print "COE: ", unknowns['COE']
 
-    def getTCC(self, bladeMass, airDensity=1.2137, hubHeight=90.0, machineRating=5000.0, maxTipSpd=80.0, rotorDiam=126.0, dtDesign=1, nblades = 3, \
-                       maxEfficiency=0.90201, ratedWindSpd = 11.5064, altitude=0.0, thrustCoeff=0.50, seaDepth=20.0, crane=True, advancedBlade = False, \
-                       advancedBedplate = 0, advancedTower = False, year = 2009, month = 12):
-        # calaculate derivative input parameters for nacelle calculations       # todo - these should come from AEP/rotor module
-        ratedHubPower  = machineRating / maxEfficiency
-        rotorSpeed     = (maxTipSpd/(0.5*rotorDiam)) * (60.0 / (2*pi))
-        maximumThrust  = airDensity * thrustCoeff * pi * rotorDiam**2. * (ratedWindSpd**2.) / 8.
-        rotorTorque = ratedHubPower/(rotorSpeed*(pi/30))*1000   # NREL internal version
-        offshore = 1
-        # self.blades  = csmBlades()
-        self.hub     = csmHub()
-        self.nac     = csmNacelle()
-        self.tower   = csmTower()
-
-        self.hub.compute(bladeMass/3.0, rotorDiam,nblades,year,month)
-
-        self.rotorMass = bladeMass + self.hub.getMass()
-        self.rotorCost = 251526.064248 * nblades * nblades + self.hub.getCost()
-
-        self.nac.compute(rotorDiam, machineRating, self.rotorMass, rotorSpeed, \
-                      maximumThrust, rotorTorque, dtDesign, offshore, \
-                      crane, advancedBedplate, year, month)
-
-        self.tower.compute(rotorDiam, hubHeight, advancedTower, year, month)
-
-        self.cost = \
-            self.rotorCost + \
-            self.nac.cost + \
-            self.tower.cost
-
-        self.marCost = 0.0
-        if (offshore == 1): # offshore - add marinization - NOTE: includes Foundation cost (not included in CSM.xls)
-            marCoeff = 0.10 # 10%
-            self.marCost = marCoeff * self.cost
-
-        self.cost += self.marCost
-
-        self.mass = \
-            self.rotorMass + \
-            self.nac.mass + \
-            self.tower.mass
-
-        return self.cost
-
-    def getBOS(self, tcc, turbine_number):
-        bos = 726809821.136
-        suretyBRate = 0.03
-        suretyBond = suretyBRate * (tcc + bos/ turbine_number)
-        bos += suretyBond * turbine_number
-        return bos
-
     # def linearize(self, params, unknowns, resids):
-    #
-    #     lossFactor = params['lossFactor']
-    #     P = params['P']
-    #     factor = lossFactor/1e3*365.0*24.0
-    #
-    #     dAEP_dP, dAEP_dCDF = trapz_deriv(P, params['CDF_V'])
-    #     dAEP_dP *= factor
-    #     dAEP_dCDF *= factor
-    #
-    #     dAEP_dlossFactor = np.array([unknowns['AEP']/lossFactor])
     #
     #     J = {}
     #     J['COE', 'mass_all_blades'] = 0.0# TODO

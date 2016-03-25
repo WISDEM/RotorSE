@@ -2432,7 +2432,6 @@ class RotorSE(Group):
         self.add('thick_str_ref', IndepVarComp('thick_str_ref', val=np.zeros(nstr), units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)', pass_by_obj=True), promotes=['*'])
         self.add('af_idx', IndepVarComp('af_idx', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
         self.add('af_str_idx', IndepVarComp('af_str_idx', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
-        nSector = 4
         self.add('turbineclass', TurbineClass())
         self.add('gridsetup', GridSetup(naero, nstr))
         self.add('grid', RGrid(naero, nstr))
@@ -2713,7 +2712,7 @@ class RotorSE(Group):
         self.connect('rho', 'aero_rated.rho')
         self.connect('mu', 'aero_rated.mu')
         self.connect('shearExp', 'aero_rated.shearExp')
-        # self.connect('nSector', 'aero_rated.nSector') # TODO: Check effect
+        self.connect('nSector', 'aero_rated.nSector') # TODO: Check effect
         # self.connect('powercurve.ratedConditions:V + 3*gust.sigma', 'aero_rated.V_load')  # OpenMDAO bug
         self.connect('gust.V_gust', 'aero_rated.V_load')
         self.connect('powercurve.ratedConditions:Omega', 'aero_rated.Omega_load')
@@ -2804,7 +2803,7 @@ class RotorSE(Group):
         self.connect('rho', 'aero_defl_powercurve.rho')
         self.connect('mu', 'aero_defl_powercurve.mu')
         self.connect('shearExp', 'aero_defl_powercurve.shearExp')
-        # self.connect('nSector', 'aero_defl_powercurve.nSector') # CHECK EFFECT
+        self.connect('nSector', 'aero_defl_powercurve.nSector') # CHECK EFFECT
         self.connect('setuppc.Uhub', 'aero_defl_powercurve.V_load')
         self.connect('setuppc.Omega', 'aero_defl_powercurve.Omega_load')
         self.connect('setuppc.pitch', 'aero_defl_powercurve.pitch_load')

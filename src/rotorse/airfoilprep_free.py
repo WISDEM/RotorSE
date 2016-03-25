@@ -1527,7 +1527,7 @@ class CCAirfoil:
         else:
             cl = self.cl_spline.ev(alpha, Re)
             cd = self.cd_spline.ev(alpha, Re)
-        print "lift, drag", cl, cd
+        # print "lift, drag", cl, cd
         return cl, cd
 
     def derivatives(self, alpha, Re):
