@@ -234,40 +234,43 @@ class CCBladeAirfoils(Component):
                 self.airfoil_analysis_options = None
                 unknowns['af'] = af
         else:
-            af_idx = params['af_idx']
-            change = np.zeros(6)
-            for j in range(6):
-                index = np.where(af_idx >= j+2)[0][0]
-                change[j] = max(abs(self.airfoil_files[index].CST - self.airfoil_parameterization[j]))
-            basepath = '5MW_AFFiles' + os.path.sep
-            af_freeform_init = CCAirfoil.initFromCST
-            airfoil_types = [0]*8
-            airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-            airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-            alphas = np.linspace(-15, 15, 100)
-            Re = 5e5
-            cst_file = open("cst_file_tracker", "a")
-            for i in range(len(airfoil_types)-2):
-                if change[i] > 0:
-                    time0 = time.time()
-                    airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], alphas, Re, self.airfoil_analysis_options)
-                    print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
-                    print params['airfoil_parameterization'][i]
-                    print >> cst_file, 'Airfoil ', str(i+1), " changed. ", params['airfoil_parameterization'][i]
+            if self.airfoil_analysis_options['BEMSpline']:
+                af_idx = params['af_idx']
+                change = np.zeros(6)
+                for j in range(6):
+                    index = np.where(af_idx >= j+2)[0][0]
+                    change[j] = max(abs(self.airfoil_files[index].CST - self.airfoil_parameterization[j]))
+                basepath = '5MW_AFFiles' + os.path.sep
+                af_freeform_init = CCAirfoil.initFromCST
+                airfoil_types = [0]*8
+                airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
+                airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+                alphas = np.linspace(-15, 15, 30)
+                Re = 5e5
+                cst_file = open("cst_file_tracker", "a")
+                for i in range(len(airfoil_types)-2):
+                    if change[i] > 0:
+                        time0 = time.time()
+                        airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], alphas, Re, self.airfoil_analysis_options)
+                        print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
+                        print params['airfoil_parameterization'][i]
+                        print >> cst_file, 'Airfoil ', str(i+1), " changed. ", params['airfoil_parameterization'][i]
 
-                else:
-                    index = np.where(af_idx >= i+2)[0][0]
-                    airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
-                    # print "Airfoil ", str(i+1), " parameterization has not changed."
-            cst_file.close()
-            n = len(af_idx)
-            af = [0]*n
+                    else:
+                        index = np.where(af_idx >= i+2)[0][0]
+                        airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
+                        # print "Airfoil ", str(i+1), " parameterization has not changed."
+                cst_file.close()
+                n = len(af_idx)
+                af = [0]*n
 
-            for i in range(n):
-                af[i] = airfoil_types[af_idx[i]]
+                for i in range(n):
+                    af[i] = airfoil_types[af_idx[i]]
 
-            unknowns['af'] = deepcopy(af)
-            params['airfoil_files'] = deepcopy(af)
+                unknowns['af'] = deepcopy(af)
+                params['airfoil_files'] = deepcopy(af)
+            else:
+                unknowns['af'] = params['airfoil_files']
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -485,11 +488,16 @@ class CCBlade(Component):
 
 
     def linearize(self, params, unknowns, resids):
-        # if not self.airfoil_analysis_options['FreeFormDesign']:
-        self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
-                self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
-                self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=self.airfoil_parameterization, airfoil_options=self.airfoil_analysis_options)
+        if self.airfoil_analysis_options['FreeFormDesign']:
+            self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
+                    self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
+                    self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
+                    wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=self.airfoil_parameterization, airfoil_options=self.airfoil_analysis_options)
+        else:
+            self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
+                    self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
+                    self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
+                    wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
 
         if self.run_case == 'power':
             # power, thrust, torque

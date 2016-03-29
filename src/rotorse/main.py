@@ -85,7 +85,8 @@ rotor['nBlades'] = 3  # (Int): number of blades
 # ------------------
 
 # === free form airfoil parameters ===
-airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
+airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD',
+                                CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True, BEMSpline=False) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
 # airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', GradientType='FD', CFDiterations=7500, CFDprocessors=16, FreeFormDesign=True)
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 af_str_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
@@ -131,8 +132,8 @@ else:
     # load all airfoils
     non_airfoils_idx = 2
     airfoil_types = [0]*8
-    alphas = np.linspace(-10, 25, 100)
-    Re = 1e6
+    alphas = np.linspace(-15, 15, 30)
+    Re = 5e5
     non_airfoils_alphas = [-180.0, 0.0, 180.0]
     non_airfoils_cls = [0.0, 0.0, 0.0]
     non_airfoils_cds = [[0.5, 0.5, 0.5],[0.35, 0.35, 0.35]]
@@ -289,10 +290,10 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
 
 ## Gradient checks
-grad_total = open('total_gradient_check_coe.txt', 'w')
-# grad_partial = open('partial_gradient_check.txt', 'w')
-total = rotor.check_total_derivatives(out_stream=grad_total)
-# partial= rotor.check_partial_derivatives(out_stream=grad_partial)
+# grad_total = open('total_gradient_check_coe.txt', 'w')
+grad_partial = open('partial_gradient_check_coe.txt', 'w')
+# total = rotor.check_total_derivatives(out_stream=grad_total)
+partial= rotor.check_partial_derivatives(out_stream=grad_partial)
 # grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
 # print grad
 

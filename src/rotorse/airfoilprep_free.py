@@ -1094,64 +1094,6 @@ class Airfoil(object):
         return alpha, Re, cl, cd, cm
 
     @classmethod
-    def xfoilFlowGradients(self, CST, alpha, Re, FDorCS):
-
-        x, y = cst_to_coordinates_full(CST)
-        # read in coordinate file
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
-        airfoil_shape_file = basepath + os.path.sep + 'cst_coordinates.dat'
-        # with suppress_stdout_stderr():
-        airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
-        airfoil.re = 1e6 #Re
-        airfoil.mach = 0.00
-        airfoil.iter = 100
-
-        ## TODO Fix CS alpha and Re
-        FDorCS = 'FD'
-        if FDorCS == 'CS':
-            alpha = np.degrees(alpha)
-            step_size = 1e-20
-            cs_step = complex(0, step_size)
-            angle = alpha+cs_step
-            cl_alpha, cd_alpha, cm, lexitflag = airfoil.solveAlphaComplex(angle)
-            if lexitflag:
-                cl_alpha = -10.0
-                cd_alpha = 0.0
-            dcl_dalpha = np.imag(cl_alpha)/np.imag(cs_step)
-            dcd_dalpha = np.imag(cd_alpha)/np.imag(cs_step)
-
-            airfoil.re = Re[0][0] + cs_step
-            cl_Re, cd_Re, cm, lexitflag = airfoil.solveAlphaComplex(alpha)
-            if lexitflag:
-                cl_Re = -10.0
-                cd_Re = 0.0
-            dcl_dRe = np.imag(cl_Re)/np.imag(cs_step)
-            dcd_dRe = np.imag(cd_Re)/np.imag(cs_step)
-        else:
-            angle = np.degrees(alpha)
-            cl, cd, cm, lexitflag = airfoil.solveAlpha(angle)
-            step_size = 1
-            fd_step = step_size
-            angle = alpha+fd_step
-            angle = np.degrees(angle)
-            cl_alpha, cd_alpha, cm, lexitflag = airfoil.solveAlpha(angle)
-            if lexitflag:
-                cl_alpha = -10.0
-                cd_alpha = 0.0
-            dcl_dalpha = (cl_alpha - cl) / fd_step
-            dcd_dalpha = (cd_alpha - cd) / fd_step
-
-            airfoil.re = Re[0][0] + fd_step
-            cl_Re, cd_Re, cm, lexitflag = airfoil.solveAlpha(alpha)
-            if lexitflag:
-                cl_Re = -10.0
-                cd_Re = 0.0
-            dcl_dRe = (cl_Re - cl) / fd_step
-            dcd_dRe = (cd_Re - cl) / fd_step
-
-        return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
-
-    @classmethod
     def cfdSolve(cls, CST, alpha, Re, airfoil_analysis_options, GenerateMESH=True):
         sys.path.append(os.environ['SU2_RUN'])
         import SU2
@@ -1357,7 +1299,7 @@ class CCAirfoil:
         self.cd_spline = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky, s=0.001) #, s=0.001)
 
         if CST is not None:
-            # n = 1000
+            # n = 2000
             # import matplotlib.pylab as plt
             # alphas2 = np.linspace(-30, 30, n)
             # Re = 1e6
@@ -1368,10 +1310,13 @@ class CCAirfoil:
             #     cd2[i] = self.cd_spline.ev(np.radians(alphas2[i]), Re)
             # plt.figure()
             # plt.plot(alphas2, cl2)
+            # plt.plot(np.degrees(alpha), cl[:,0], 'rx')
+            # plt.xlim(xmin=-30, xmax=30)
             #
             # plt.figure()
             # plt.plot(alphas2, cd2)
-            #
+            # plt.plot(np.degrees(alpha), cd[:,0], 'rx')
+            # plt.xlim(xmin=-30, xmax=30)
             # plt.show()
             self.CST = CST
             self.cl_2D_origin = cl_2D
@@ -1507,6 +1452,7 @@ class CCAirfoil:
         """
         cl = self.cl_spline.ev(alpha, Re)
         cd = self.cd_spline.ev(alpha, Re)
+
         return cl, cd
 
     def evaluate_direct(self, alpha, Re):
@@ -1528,7 +1474,7 @@ class CCAirfoil:
             cl = self.cl_spline.ev(alpha, Re)
             cd = self.cd_spline.ev(alpha, Re)
         # print "lift, drag", cl, cd
-        return cl, cd
+        return deepcopy(cl), deepcopy(cd)
 
     def derivatives(self, alpha, Re):
 
@@ -1547,6 +1493,49 @@ class CCAirfoil:
             dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
         return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
 
+    def derivatives_direct(self, alpha, Re):
+
+        if self.CST is not None:
+            fd_step = 1e-6
+            if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+                airfoil_shape_file = None
+                [x, y] = cst_to_coordinates_full(self.CST)
+                airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
+                airfoil.re = 5e5
+                airfoil.mach = 0.00
+                airfoil.iter = 100
+                angle = complex(np.degrees(alpha),180.0/np.pi*1e-20)
+                cl, cd, cm, lexitflag = airfoil.solveAlphaComplex(angle)
+                dcl_dalpha, dcd_dalpha = np.imag(deepcopy(cl))/ 1e-20, np.imag(deepcopy(cd)) / 1e-20
+                if lexitflag:
+                    cl = self.cl_spline.ev(alpha, Re)
+                    cd = self.cd_spline.ev(alpha, Re)
+                    cl1 = self.cl_spline.ev(alpha+fd_step, Re)
+                    cd1 = self.cd_spline.ev(alpha+fd_step, Re)
+                    dcl_dalpha = (cl1 - cl) / fd_step
+                    dcd_dalpha = (cd1 - cd) / fd_step
+            else:
+                cl, cd = self.cfdGradients(alpha, Re, ComputeGradients=False, GenerateMESH=True)
+
+        else:
+            tck_cl = self.cl_spline.tck[:3] + self.cl_spline.degrees  # concatenate lists
+            tck_cd = self.cd_spline.tck[:3] + self.cd_spline.degrees
+
+            dcl_dalpha = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
+            dcd_dalpha = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
+
+            if self.one_Re:
+                dcl_dRe = 0.0
+                dcd_dRe = 0.0
+            else:
+                dcl_dRe = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
+                dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
+
+        dcl_dRe = 0.0
+        dcd_dRe = 0.0
+
+        return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
+
     def freeform_derivatives(self, alpha, Re):
         if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
             if alpha in self.freeform_alpha_storage:
@@ -1560,7 +1549,65 @@ class CCAirfoil:
             self.freeform_alpha_storage.append(alpha)
         else:
             cl, cd, dcl_dafp, dcd_dafp = self.cfdGradients(alpha, Re, ComputeGradients=True)
-        print "gradients", dcl_dafp, dcd_dafp
+        return dcl_dafp, dcd_dafp
+
+    def freeform_derivatives_spline(self, alpha, Re):
+        if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+            # if alpha in self.freeform_alpha_storage:
+            #     index = self.freeform_alpha_storage.index(alpha)
+            #     dcl_dafp = self.dcl_dafp_storage[index]
+            #     dcd_dafp = self.dcd_dafp_storage[index]
+            # else:
+            dcl_dafp, dcd_dafp = self.xfoilGradientsSpline(alpha, Re)
+            # self.dcl_dafp_storage.append(dcl_dafp)
+            # self.dcd_dafp_storage.append(dcd_dafp)
+            # self.freeform_alpha_storage.append(alpha)
+        else:
+            cl, cd, dcl_dafp, dcd_dafp = self.cfdGradients(alpha, Re, ComputeGradients=True)
+        return dcl_dafp, dcd_dafp
+
+    def xfoilGradientsSpline(self, alpha, Re):
+        Re = 5e5
+        dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8)
+        fd_step = 1.e-6
+        alphas = np.linspace(-15, 15, 40)
+        airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False)
+        cl_cur = self.cl_spline.ev(alpha, Re)
+        cd_cur = self.cd_spline.ev(alpha, Re)
+        for i in range(8):
+
+            CST_new = deepcopy(self.CST)
+            CST_new[i] += fd_step
+            af = Airfoil.initFromCST(CST_new, alphas, [Re], airfoil_analysis_options)
+            af_extrap = af.extrapolate(1.5)
+            alphas_new, Re_new, cl_new, cd_new, cm_new = af_extrap.createDataGrid()
+            alphas_new = np.radians(alphas_new)
+
+            if not all(np.diff(alphas_new)):
+                to_delete = np.zeros(0)
+                diff = np.diff(alphas_new)
+                for j in range(len(alphas_new)-1):
+                    if not diff[j] > 0.0:
+                        to_delete = np.append(to_delete, j)
+                alphas_new = np.delete(alphas_new, to_delete)
+                cl_new = np.delete(cl_new, to_delete)
+                cd_new = np.delete(cd_new, to_delete)
+
+            # special case if zero or one Reynolds number (need at least two for bivariate spline)
+            if len(Re_new) < 2:
+                Re2 = [1e1, 1e15]
+                cl_new = np.c_[cl_new, cl_new]
+                cd_new = np.c_[cd_new, cd_new]
+            kx = min(len(alphas_new)-1, 3)
+            ky = min(len(Re2)-1, 3)
+            # a small amount of smoothing is used to prevent spurious multiple solutions
+            cl_spline_new = RectBivariateSpline(alphas_new, Re2, cl_new, kx=kx, ky=ky, s=0.1)#, s=0.1)
+            cd_spline_new = RectBivariateSpline(alphas_new, Re2, cd_new, kx=kx, ky=ky, s=0.001) #, s=0.001)
+            Re1 = [5e5]
+            cl_new_fd = cl_spline_new.ev(alpha, Re1)
+            cd_new_fd = cd_spline_new.ev(alpha, Re1)
+            dcl_dafp[i] = (cl_new_fd - cl_cur) / fd_step
+            dcd_dafp[i] = (cd_new_fd - cd_cur) / fd_step
         return dcl_dafp, dcd_dafp
 
     def xfoilGradients(self, alpha, Re):
@@ -1604,7 +1651,7 @@ class CCAirfoil:
                 dcd_dafp[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
         for i in range(8):
             if lexitflag[i]:
-                alphas = np.linspace(-15, 15, 50)
+                alphas = np.linspace(-15, 15, 30)
                 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD', CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False)
                 af1 = Airfoil.initFromCST(self.CST, alphas, [Re], airfoil_analysis_options)
                 af_extrap11 = af1.extrapolate(1.5)

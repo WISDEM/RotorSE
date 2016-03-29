@@ -336,7 +336,10 @@ class CCBlade:
 
             alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                              chord, theta, self.rho, self.mu)
-            cl, cd = af.evaluate(alpha, Re)
+            if self.airfoil_analysis_options['BEMSpline']:
+                cl, cd = af.evaluate(alpha, Re)
+            else:
+                cl, cd = af.evaluate_direct(alpha, Re)
 
             fzero, a, ap = _bem.inductionfactors(r, chord, self.Rhub, self.Rtip, phi,
                                                  cl, cd, self.B, Vx, Vy, **self.bemoptions)
@@ -371,8 +374,12 @@ class CCBlade:
         dRe_dx = np.array([0.0, Re/chord, 0.0, Re*Vx/W**2, Re*Vy/W**2, 0.0, 0.0, 0.0, 0.0])
 
         # cl, cd (spline derivatives)
-        cl, cd = af.evaluate(alpha, Re)
-        dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
+        if self.airfoil_analysis_options['BEMSpline']:
+            cl, cd = af.evaluate(alpha, Re)
+            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
+        else:
+            cl, cd = af.evaluate_direct(alpha, Re)
+            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives_direct(alpha, Re)
 
         # chain rule
         dcl_dx = dcl_dalpha*dalpha_dx + dcl_dRe*dRe_dx
@@ -391,12 +398,14 @@ class CCBlade:
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-            # if self.airfoil_analysis_options['FreeFormDesign']:
-                # dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha)
-            # else:
-            # dcl_dafp, dcd_dafp = af.airfoil_parameterization_derivatives(alpha, [1e6], af.CST, self.airfoil_analysis_options)
-            dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha, Re) #, af.CST, self.airfoil_analysis_options)
-            dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
+
+            dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha, Re)
+            if self.airfoil_analysis_options['BEMSpline']:
+                dcl_dafp_R, dcd_dafp_R = af.freeform_derivatives_spline(alpha, Re)
+                dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
+            else:
+                dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
+
 
             return dR_dx, da_dx, dap_dx, dR_dafp, dcl_dafp, dcd_dafp
 
@@ -421,8 +430,10 @@ class CCBlade:
                                          chord, theta, self.rho, self.mu)
         if rotating:
             cl, cd = af.evaluate_direct(alpha, Re)
+            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives_direct(alpha, Re)
         else:
             cl, cd = af.evaluate(alpha, Re)
+            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
         cn = cl*cphi + cd*sphi  # these expressions should always contain drag
         ct = cl*sphi - cd*cphi
 
@@ -458,7 +469,6 @@ class CCBlade:
             self.pitch, dx_dx[8, :], chord, dx_dx[1, :], theta, dx_dx[2, :],
             self.rho, self.mu)
         # cl, cd (spline derivatives)
-        dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
 
         # chain rule
         dcl_dx = dcl_dalpha*dalpha_dx + dcl_dRe*dRe_dx
@@ -753,6 +763,115 @@ class CCBlade:
                     dTp['dafp'][z] = dTp_zeros.flatten()
 
             return Np, Tp, dNp, dTp
+
+    def TEST(self, Uinf, Omega, pitch, azimuth, i):
+
+        self.pitch = radians(pitch)
+        azimuth = radians(azimuth)
+
+        # component of velocity at each radial station
+        Vx, Vy, dVx_dw, dVy_dw, dVx_dcurve, dVy_dcurve = self.__windComponents(Uinf, Omega, azimuth)
+
+
+        # initialize
+        n = len(self.r)
+        Np = np.zeros(n)
+        Tp = np.zeros(n)
+
+        dNp_dVx = np.zeros(n)
+        dTp_dVx = np.zeros(n)
+        dNp_dVy = np.zeros(n)
+        dTp_dVy = np.zeros(n)
+        dNp_dz = np.zeros((6, n))
+        dTp_dz = np.zeros((6, n))
+        DNp_Dafp = np.zeros((17, 8))
+        DTp_Dafp = np.zeros((17, 8))
+
+        errf = self.__errorFunction
+        rotating = (Omega != 0)
+
+
+
+        # index dependent arguments
+        args = (self.r[i], self.chord[i], self.theta[i], self.af[i], Vx[i], Vy[i])
+        if not rotating:  # non-rotating
+
+            phi_star = pi/2.0
+
+        else:
+
+            # ------ BEM solution method see (Ning, doi:10.1002/we.1636) ------
+
+            # set standard limits
+            epsilon = 1e-6
+            phi_lower = epsilon
+            phi_upper = pi/2
+
+            if errf(phi_lower, *args)*errf(phi_upper, *args) > 0:  # an uncommon but possible case
+
+                if errf(-pi/4, *args) < 0 and errf(-epsilon, *args) > 0:
+                    phi_lower = -pi/4
+                    phi_upper = -epsilon
+                else:
+                    phi_lower = pi/2
+                    phi_upper = pi - epsilon
+
+            try:
+                phi_star = brentq(errf, phi_lower, phi_upper, args=args)
+
+            except ValueError:
+
+                warnings.warn('error.  check input values.')
+                phi_star = 0.0
+
+            # ----------------------------------------------------------------
+
+        # derivatives of residual
+        airfoils = [False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+        if self.freeform and rotating and self.derivatives:
+            if airfoils[i]:
+                self.freeform_gradient = True
+                Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp = self.__loads(phi_star, rotating, *args, airfoil_parameterization=self.airfoil_parameterization[i])
+            else:
+                self.freeform_gradient = False
+                Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
+                dNp_dafp, dTp_dafp, dR_dafp = 0.0, 0.0, 0.0
+        else:
+            self.freeform_gradient = False
+            Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
+
+        if self.derivatives:
+            # separate state vars from design vars
+            # x = [phi, chord, theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
+            dNp_dy = dNp_dx[0]
+            dNp_dx = dNp_dx[1:]
+            dTp_dy = dTp_dx[0]
+            dTp_dx = dTp_dx[1:]
+            dR_dy = dR_dx[0]
+            dR_dx = dR_dx[1:]
+
+            # direct (or adjoint) total derivatives
+            DNp_Dx = dNp_dx - dNp_dy/dR_dy*dR_dx
+            DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
+
+            if self.freeform and rotating:
+                print dNp_dafp - dNp_dy/dR_dy*dR_dafp
+                DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
+                DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
+
+            # parse components
+            # z = [r, chord, theta, Rhub, Rtip, pitch]
+            zidx = [4, 0, 1, 5, 6, 7]
+            dNp_dz[:, i] = DNp_Dx[zidx]
+            dTp_dz[:, i] = DTp_Dx[zidx]
+
+            dNp_dVx[i] = DNp_Dx[2]
+            dTp_dVx[i] = DTp_Dx[2]
+
+            dNp_dVy[i] = DNp_Dx[3]
+            dTp_dVy[i] = DTp_Dx[3]
+
+        return Np[i]
 
     def evaluate(self, Uinf, Omega, pitch, coefficient=False):
         """Run the aerodynamic analysis at the specified conditions.
