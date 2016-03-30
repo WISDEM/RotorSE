@@ -442,7 +442,7 @@ class CCBlade(Component):
             self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
                 self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                 self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
+                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=None, airfoil_options=self.airfoil_analysis_options)
 
         if self.run_case == 'power':
             # power, thrust, torque
@@ -497,7 +497,7 @@ class CCBlade(Component):
             self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
                     self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                     self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                    wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
+                    wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=None, airfoil_options=self.airfoil_analysis_options)
 
         if self.run_case == 'power':
             # power, thrust, torque

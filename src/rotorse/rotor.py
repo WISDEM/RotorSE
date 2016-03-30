@@ -2105,22 +2105,22 @@ class OutputsAero(Component):
     def linearize(self, params, unknowns,resids):
         J = {}
         J['AEP', 'AEP_in'] = 1
-        # J['V', 'V_in'] = np.diag(np.ones(len(params['V_in'])))
-        # J['P', 'P_in'] = np.diag(np.ones(len(params['P_in'])))
-        # J['Omega', 'Omega_in'] = 1
-        # J['ratedConditions:V', 'ratedConditions:V_in'] = 1
-        # J['ratedConditions:Omega', 'ratedConditions:Omega_in'] = 1
-        # J['ratedConditions:pitch', 'ratedConditions:pitch_in'] = 1
+        J['V', 'V_in'] = np.diag(np.ones(len(params['V_in'])))
+        J['P', 'P_in'] = np.diag(np.ones(len(params['P_in'])))
+        J['Omega', 'Omega_in'] = 1
+        J['ratedConditions:V', 'ratedConditions:V_in'] = 1
+        J['ratedConditions:Omega', 'ratedConditions:Omega_in'] = 1
+        J['ratedConditions:pitch', 'ratedConditions:pitch_in'] = 1
         J['ratedConditions:T', 'ratedConditions:T_in'] = 1
-        # J['ratedConditions:Q', 'ratedConditions:Q_in'] = 1
-        # J['hub_diameter', 'hub_diameter_in'] = 1
-        # J['diameter', 'diameter_in'] = 1
-        # J['V_extreme', 'V_extreme_in'] = 1
-        # J['T_extreme', 'T_extreme_in'] = 1
-        # J['Q_extreme', 'Q_extreme_in'] = 1
-        # J['Rtip', 'Rtip_in'] = 1
-        # J['precurveTip', 'precurveTip_in'] = 1
-        # J['presweepTip', 'T_presweepTip_in'] = 1
+        J['ratedConditions:Q', 'ratedConditions:Q_in'] = 1
+        J['hub_diameter', 'hub_diameter_in'] = 1
+        J['diameter', 'diameter_in'] = 1
+        J['V_extreme', 'V_extreme_in'] = 1
+        J['T_extreme', 'T_extreme_in'] = 1
+        J['Q_extreme', 'Q_extreme_in'] = 1
+        J['Rtip', 'Rtip_in'] = 1
+        J['precurveTip', 'precurveTip_in'] = 1
+        J['presweepTip', 'T_presweepTip_in'] = 1
 
         return J
 
@@ -2206,6 +2206,7 @@ class OutputsStructures(Component):
         J['tip_deflection', 'tip_deflection_in'] = 1
         J['strainU_spar', 'strainU_spar_in'] = np.diag(np.ones(len(params['strainU_spar_in'])))
         J['strainL_spar', 'strainL_spar_in'] = np.diag(np.ones(len(params['strainL_spar_in'])))
+        J['strainU_te', 'strainU_te_in'] = np.diag(np.ones(len(params['strainU_te_in'])))
         J['strainL_te', 'strainL_te_in'] = np.diag(np.ones(len(params['strainL_te_in'])))
         J['eps_crit_spar', 'eps_crit_spar_in'] = np.diag(np.ones(len(params['eps_crit_spar_in'])))
         J['eps_crit_te', 'eps_crit_te_in'] = np.diag(np.ones(len(params['eps_crit_te_in'])))
@@ -2216,6 +2217,7 @@ class OutputsStructures(Component):
         J['damageL_te', 'damageL_te_in'] = np.diag(np.ones(len(params['damageL_te_in'])))
         J['delta_bladeLength_out', 'delta_bladeLength_out_in'] = 1
         J['delta_precurve_sub_out', 'delta_precurve_sub_out_in'] = np.diag(np.ones(len(params['delta_precurve_sub_out_in'])))
+
         return J
 
 class StructureGroup(Group):
@@ -3040,6 +3042,6 @@ class RotorSE(Group):
         # self.connect('ratedConditions.T', 'ratedConditions_T')
         self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
-        self.fd_options['form'] = 'central'
+        # self.fd_options['form'] = 'central'
         # self.fd_options['relative'] =
 

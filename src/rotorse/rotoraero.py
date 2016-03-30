@@ -432,7 +432,7 @@ class RegulatedPowerCurveGroup(Group):
         self.nl_solver.options['state_var'] = 'Vrated'
         # self.fd_options['form'] = 'central'
         # self.fd_options['step_type'] = 'relative'
-        # self.fd_options['force_fd'] = True
+        self.fd_options['force_fd'] = True
 
     def list_deriv_vars(self):
 
@@ -499,8 +499,6 @@ class COE(Component):
         self.add_param('AEP', shape=1, units='kW*h', desc='annual energy production')
         # outputs
         self.add_output('COE', shape=1, units='$/kW*h', desc='cost of energy')
-        self.fd_options['force_fd'] = True
-
 
     def solve_nonlinear(self, params, unknowns, resids):
         # fixed cost assumptions from NREL 5MW turbine (update as needed)
@@ -522,16 +520,19 @@ class COE(Component):
         turbine_cost = rotor_cost + nacelle_cost + tower_cost
         icc = turbine_cost + bos_costs
 
+        self.dcoe_dmass_all_blades = slope/3.0*ppi_mat * fixed_charge_rate/params['AEP']
+        self.dcoe_dAEP = -(icc * fixed_charge_rate / params['AEP']**2) + -(avg_annual_opex) * (1-tax_rate) / params['AEP']**2
+
         unknowns['COE'] = (icc * fixed_charge_rate / params['AEP']) + (avg_annual_opex) * (1-tax_rate) / params['AEP']
         print "COE: ", unknowns['COE']
 
-    # def linearize(self, params, unknowns, resids):
-    #
-    #     J = {}
-    #     J['COE', 'mass_all_blades'] = 0.0# TODO
-    #     J['COE', 'AEP'] = 0.0 #TODO
-    #
-    #     return J
+    def linearize(self, params, unknowns, resids):
+
+        J = {}
+        J['COE', 'mass_all_blades'] = self.dcoe_dmass_all_blades
+        J['COE', 'AEP'] = self.dcoe_dAEP
+
+        return J
 
 
 

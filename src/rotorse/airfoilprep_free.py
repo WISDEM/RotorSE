@@ -1465,7 +1465,7 @@ class CCAirfoil:
                 airfoil.mach = 0.00
                 airfoil.iter = 100
                 cl, cd, cm, lexitflag = airfoil.solveAlpha(np.degrees(alpha))
-                if lexitflag:
+                if lexitflag or abs(cl) > 2. or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
                     cl = self.cl_spline.ev(alpha, Re)
                     cd = self.cd_spline.ev(alpha, Re)
             else:
@@ -1496,18 +1496,20 @@ class CCAirfoil:
     def derivatives_direct(self, alpha, Re):
 
         if self.CST is not None:
-            fd_step = 1e-6
+
             if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+                cs_step = 1e-20
                 airfoil_shape_file = None
                 [x, y] = cst_to_coordinates_full(self.CST)
                 airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
                 airfoil.re = 5e5
                 airfoil.mach = 0.00
                 airfoil.iter = 100
-                angle = complex(np.degrees(alpha),180.0/np.pi*1e-20)
+                angle = complex(np.degrees(alpha),180.0/np.pi*cs_step)
                 cl, cd, cm, lexitflag = airfoil.solveAlphaComplex(angle)
-                dcl_dalpha, dcd_dalpha = np.imag(deepcopy(cl))/ 1e-20, np.imag(deepcopy(cd)) / 1e-20
-                if lexitflag:
+                dcl_dalpha, dcd_dalpha = np.imag(deepcopy(cl))/ cs_step, np.imag(deepcopy(cd)) / cs_step
+                if lexitflag or abs(cl) > 2. or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
+                    fd_step = 1e-6
                     cl = self.cl_spline.ev(alpha, Re)
                     cd = self.cd_spline.ev(alpha, Re)
                     cl1 = self.cl_spline.ev(alpha+fd_step, Re)

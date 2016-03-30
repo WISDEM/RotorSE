@@ -434,6 +434,8 @@ class CCBlade:
         else:
             cl, cd = af.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
+
+        # print "alpha", np.degrees(alpha), "cl", cl, "cd", cd
         cn = cl*cphi + cd*sphi  # these expressions should always contain drag
         ct = cl*sphi - cd*cphi
 
@@ -855,7 +857,6 @@ class CCBlade:
             DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
 
             if self.freeform and rotating:
-                print dNp_dafp - dNp_dy/dR_dy*dR_dafp
                 DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
                 DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
 
