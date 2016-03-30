@@ -2449,8 +2449,8 @@ class RotorSE(Group):
         self.add('dt', CSMDrivetrain(npower))
         self.add('powercurve', RegulatedPowerCurveGroup(npower))
         self.add('wind', PowerWind())
-        # self.add('cdf', WeibullWithMeanCDF())
-        self.add('cdf', RayleighCDF())
+        self.add('cdf', WeibullWithMeanCDF(200))
+        # self.add('cdf', RayleighCDF())
         self.add('aep', AEP())
 
         self.add('outputs_aero', OutputsAero(), promotes=['*'])
@@ -2606,7 +2606,7 @@ class RotorSE(Group):
         # connections to cdf
         self.connect('powercurve.V', 'cdf.x')
         self.connect('wind.U', 'cdf.xbar', src_indices=[0])
-        # self.connect('weibull_shape', 'cdf.k') #TODO
+        self.connect('weibull_shape', 'cdf.k') #TODO
 
         # connections to aep
         self.connect('cdf.F', 'aep.CDF_V')
@@ -3042,6 +3042,6 @@ class RotorSE(Group):
         # self.connect('ratedConditions.T', 'ratedConditions_T')
         self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
-        # self.fd_options['form'] = 'central'
-        # self.fd_options['relative'] =
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
 

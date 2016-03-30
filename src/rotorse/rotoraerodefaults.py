@@ -432,7 +432,6 @@ class CCBlade(Component):
         self.Omega_load = params['Omega_load']
         self.pitch_load = params['pitch_load']
         self.azimuth_load = params['azimuth_load']
-
         if self.airfoil_analysis_options['AnalysisMethod'] != 'Files':
             self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
                 self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
@@ -750,21 +749,20 @@ class WeibullCDF(Component):
 
 
 class WeibullWithMeanCDF(Component):
-    def __init__(self, n):
+    def __init__(self, nspline):
         super(WeibullWithMeanCDF, self).__init__()
         """Weibull cumulative distribution function"""
 
         self.add_param('xbar', shape=1, desc='mean value of distribution')
         self.add_param('k', shape=1, desc='shape or form factor')
-        self.add_param('x', shape=n)
+        self.add_param('x', shape=nspline)
 
-        self.add_output('F', shape=n)
+        self.add_output('F', shape=nspline)
 
     def solve_nonlinear(self, params, unknowns, resids):
         A = params['xbar'] / gamma(1.0 + 1.0/params['k'])
 
         unknowns['F'] = 1.0 - np.exp(-(params['x']/A)**params['k'])
-
 
     def list_deriv_vars(self):
 
