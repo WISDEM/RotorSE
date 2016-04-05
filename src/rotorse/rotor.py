@@ -3042,6 +3042,4 @@ class RotorSE(Group):
         # self.connect('ratedConditions.T', 'ratedConditions_T')
         self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
-        #self.fd_options['form'] = 'central'
-        #self.fd_options['step_type'] = 'relative'
 

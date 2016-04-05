@@ -27,8 +27,8 @@ npower = 5 # 20
 rotor.root = RotorSE(naero, nstr, npower)
 
 ### SETUP OPTIMIZATION
-# rotor.driver = pyOptSparseDriver()
-# rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+rotor.driver = pyOptSparseDriver()
+rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
 rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
 rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
 rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
@@ -50,10 +50,10 @@ rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
 #rotor.driver.add_constraint('con7', upper=0.0)
 # rotor.driver.add_constraint('con_freeform', lower=0.05)
 # rotor.driver.add_constraint('concon', lower=1.0)
-# rotor.driver.add_objective('obj')
-#rotor.driver.add_objective('AEP')
+rotor.driver.add_objective('obj')
+# rotor.driver.add_objective('AEP')
 # rotor.driver.add_objective('mass_all_blades')
-rotor.driver.add_objective('analysis.P')
+# rotor.driver.add_objective('analysis.P')
 # rotor.driver.add_objective('powercurve.P')
 # rotor.driver.add_objective('dt.power')
 
@@ -89,7 +89,8 @@ rotor['nBlades'] = 3  # (Int): number of blades
 
 # === free form airfoil parameters ===
 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD',
-                                CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True, BEMSpline=True) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
+                                CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True, BEMSpline=False,
+                                alphas=np.linspace(-15, 15, 30), Re=5e5) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
 # airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', GradientType='FD', CFDiterations=7500, CFDprocessors=16, FreeFormDesign=True)
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 af_str_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
@@ -135,18 +136,16 @@ else:
     # load all airfoils
     non_airfoils_idx = 2
     airfoil_types = [0]*8
-    alphas = np.linspace(-15, 15, 30)
-    Re = 5e5
     non_airfoils_alphas = [-180.0, 0.0, 180.0]
     non_airfoils_cls = [0.0, 0.0, 0.0]
     non_airfoils_cds = [[0.5, 0.5, 0.5],[0.35, 0.35, 0.35]]
     print "Generating airfoil data..."
     for i in range(len(airfoil_types)):
         if i < non_airfoils_idx:
-            airfoil_types[i] = af_input_init(non_airfoils_alphas, Re, non_airfoils_cls, non_airfoils_cds[i], non_airfoils_cls)
+            airfoil_types[i] = af_input_init(non_airfoils_alphas, airfoil_analysis_options['Re'], non_airfoils_cls, non_airfoils_cds[i], non_airfoils_cls)
         else:
             time0 = time.time()
-            airfoil_types[i] = af_freeform_init(airfoil_parameterization[i-2], alphas, Re, airfoil_analysis_options)
+            airfoil_types[i] = af_freeform_init(airfoil_parameterization[i-2], airfoil_analysis_options)
             print "Airfoil ", str(i+1-2), " data generation complete in ", time.time() - time0, " seconds."
     print "Finished generating airfoil data"
 
@@ -291,20 +290,17 @@ print 'theta_sub =', rotor['theta_sub']
 print 'control:tsr =', rotor['control:tsr']
 print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
-
-## Gradient checks
-# grad_total = open('total_gradient_check_coe_afp_withpowercurve7.txt', 'w')
-# grad_partial = open('partial_gradient_check_coe2.txt', 'w')
-# total = rotor.check_total_derivatives(out_stream=grad_total)
-# partial= rotor.check_partial_derivatives(out_stream=grad_partial)
-airfoil_analysis_options['FreeFormDesign'] = True
+# Test adjoint method
+time0 = time.time()
 grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
+print "AD time is ", time.time() - time0
 print "AD COE", grad
-airfoil_analysis_options['FreeFormDesign'] = False
-rotor['airfoil_analysis_options'] = airfoil_analysis_options
+
+# Test finite difference method
+time0 = time.time()
 grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
-print "FD", grad
-# grad_partial.close()
+print "FD time is ", time.time() - time0
+print "FD COE", grad
 
 
 plt.figure()
@@ -332,7 +328,7 @@ plt.xlabel('r')
 plt.ylabel('strain')
 plt.legend()
 # plt.save('/Users/sning/Desktop/strain_te.pdf')
-# plt.save('/Users/sning/Desktop/strain_te.png') v
+# plt.save('/Users/sning/Desktop/strain_te.png')
 print "RotorSE Complete"
 plt.show()
 # ----------------

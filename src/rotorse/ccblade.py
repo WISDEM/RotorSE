@@ -294,10 +294,11 @@ class CCBlade:
 
         self.airfoil_parameterization = airfoil_parameterization
         self.airfoil_analysis_options = airfoil_options
-        self.freeform = airfoil_options['FreeFormDesign']
+        if airfoil_parameterization is None:
+            self.freeform = False
+        else:
+            self.freeform = airfoil_options['FreeFormDesign']
 
-
-        # self.freeform = False
         # check if no precurve / presweep
         if precurve is None:
             precurve = np.zeros(len(r))
@@ -325,7 +326,6 @@ class CCBlade:
         else:
             self.nSector = max(4, nSector)  # at least 4 are necessary
 
-
     # residual
     def __runBEM(self, phi, r, chord, theta, af, Vx, Vy):
         """residual of BEM method and other corresponding variables"""
@@ -336,7 +336,7 @@ class CCBlade:
 
             alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                              chord, theta, self.rho, self.mu)
-            if self.airfoil_analysis_options['BEMSpline']:
+            if self.airfoil_analysis_options['BEMSpline'] or np.degrees(alpha) > 30.0:
                 cl, cd = af.evaluate(alpha, Re)
             else:
                 cl, cd = af.evaluate_direct(alpha, Re)
@@ -374,7 +374,7 @@ class CCBlade:
         dRe_dx = np.array([0.0, Re/chord, 0.0, Re*Vx/W**2, Re*Vy/W**2, 0.0, 0.0, 0.0, 0.0])
 
         # cl, cd (spline derivatives)
-        if self.airfoil_analysis_options['BEMSpline']:
+        if self.airfoil_analysis_options['BEMSpline'] or np.degrees(alpha) > 30.0:
             cl, cd = af.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
         else:
@@ -398,8 +398,10 @@ class CCBlade:
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-
-            dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha, Re)
+            if np.degrees(alpha) < 30.0:
+                dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha, Re)
+            else:
+                dcl_dafp, dcd_dafp = af.freeform_derivatives_spline(alpha, Re)
             if self.airfoil_analysis_options['BEMSpline']:
                 dcl_dafp_R, dcd_dafp_R = af.freeform_derivatives_spline(alpha, Re)
                 dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
@@ -428,17 +430,15 @@ class CCBlade:
 
         alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                          chord, theta, self.rho, self.mu)
-        if rotating:
+        if rotating and np.degrees(alpha) < 30.0:
             cl, cd = af.evaluate_direct(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives_direct(alpha, Re)
         else:
             cl, cd = af.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
 
-        # print "alpha", np.degrees(alpha), "cl", cl, "cd", cd
         cn = cl*cphi + cd*sphi  # these expressions should always contain drag
         ct = cl*sphi - cd*cphi
-
         q = 0.5*self.rho*W**2
         Np = cn*q*chord
         Tp = ct*q*chord
@@ -460,7 +460,8 @@ class CCBlade:
             dphi_dx = np.zeros(9)
             dR_dafp, dcl_dafp, dcd_dafp = 0.0, 0.0, 0.0
 
-        # x = [phi, chord, theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
+
+        # x = [phi, chord,  theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
         dx_dx = np.eye(9)
         dchord_dx = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
@@ -542,6 +543,7 @@ class CCBlade:
             hub height wind speed (float).  If desired, an array can be input which specifies
             the velocity at each radial location along the blade (useful for analyzing loads
             behind tower shadow for example).  In either case shear corrections will be applied.
+        Omega : float (RPM)
         Omega : float (RPM)
             rotor rotation speed
         pitch : float (deg)
@@ -872,7 +874,7 @@ class CCBlade:
             dNp_dVy[i] = DNp_Dx[3]
             dTp_dVy[i] = DTp_Dx[3]
 
-        return Np[i]
+        return Tp[i]
 
     def evaluate(self, Uinf, Omega, pitch, coefficient=False):
         """Run the aerodynamic analysis at the specified conditions.

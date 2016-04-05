@@ -190,6 +190,8 @@ class SetupRunVarSpeed(Component):
         self.add_output('Omega', shape=npower, units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', shape=npower, units='deg', desc='pitch angles to run')
 
+        self.fd_options['force_fd'] = True #TODO
+
     def solve_nonlinear(self, params, unknowns, resids):
 
         n = params['npts']
@@ -283,8 +285,6 @@ class UnregulatedPowerCurve(Component):
 
 
 class RegulatedPowerCurve(Component): # Implicit COMPONENT
-
-
     def __init__(self, npower):
         super(RegulatedPowerCurve, self).__init__()
 
@@ -326,16 +326,20 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         self.add_output('azimuth', shape=1, units='deg', desc='azimuth load')
 
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
+        # self.fd_options['form'] = 'central'
+        # self.fd_options['step_type'] = 'relative'
         # self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
+        pass
+
+    def apply_nonlinear(self, params, unknowns, resids):
         n = params['npts']
         Vrated = unknowns['Vrated']
         # residual
         spline = Akima(params['Vcoarse'], params['Pcoarse'])
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
+        resids['Vrated'] = P - params['control:ratedPower']
 
         # region 2
         V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, n/2)
@@ -404,17 +408,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         J['ratedConditions:Q', 'control:maxOmega'] = drQ[-1]
 
         self.J = J
-
-    def apply_nonlinear(self, params, unknowns, resids):
-        # residual
-        n = params['npts']
-        Vrated = unknowns['Vrated']
-        spline = Akima(params['Vcoarse'], params['Pcoarse'])
-        P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
-        resids['Vrated'] = P - params['control:ratedPower']
-        if unknowns['Vrated'] == params['control:Vout'] and resids['Vrated'] < 0.0:
-            fail = True
-
 
 
     def linearize(self, params, unknowns, resids):
