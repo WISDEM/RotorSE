@@ -38,7 +38,7 @@ lower = np.ones((6,8))*[[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6,
 upper = np.ones((6,8))*[[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],
                         [-0.13, -0.16, -0.13, 0.28, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.20, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.13, -0.13, 0.2, 0.55, 0.55, 0.4, 0.4]]
 
-rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
+# rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
 # rotor.driver.add_parameter('sparT', low=0.0001, high=0.2) # (Array, m): spar cap thickness parameters
 # rotor.driver.add_parameter('teT', low=0.001, high=0.2) # (Array, m): trailing-edge thickness parameters
 # rotor.driver.add_constraint('con1', lower=-1.0, upper=1.0)  # rotor strain sparL
@@ -47,7 +47,7 @@ rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
 # rotor.driver.add_constraint('con4', upper=0.0)  # rotor buckling spar
 # rotor.driver.add_constraint('con5', upper=0.0)  # rotor buckling te
 # rotor.driver.add_constraint('con6', lower=0.0)  # flap/edge freq
-#rotor.driver.add_constraint('con7', upper=0.0)
+# rotor.driver.add_constraint('con7', upper=0.0)
 # rotor.driver.add_constraint('con_freeform', lower=0.05)
 # rotor.driver.add_constraint('concon', lower=1.0)
 rotor.driver.add_objective('obj')
@@ -89,7 +89,7 @@ rotor['nBlades'] = 3  # (Int): number of blades
 
 # === free form airfoil parameters ===
 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD',
-                                CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True, BEMSpline=False,
+                                CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False, BEMSpline=True,
                                 alphas=np.linspace(-15, 15, 30), Re=5e5) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
 # airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', GradientType='FD', CFDiterations=7500, CFDprocessors=16, FreeFormDesign=True)
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
@@ -290,17 +290,17 @@ print 'theta_sub =', rotor['theta_sub']
 print 'control:tsr =', rotor['control:tsr']
 print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
-# Test adjoint method
-time0 = time.time()
-grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
-print "AD time is ", time.time() - time0
-print "AD COE", grad
-
-# Test finite difference method
-time0 = time.time()
-grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
-print "FD time is ", time.time() - time0
-print "FD COE", grad
+# # Test adjoint method
+# time0 = time.time()
+# grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
+# print "AD time is ", time.time() - time0
+# print "AD COE", grad
+#
+# # Test finite difference method
+# time0 = time.time()
+# grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
+# print "FD time is ", time.time() - time0
+# print "FD COE", grad
 
 
 plt.figure()

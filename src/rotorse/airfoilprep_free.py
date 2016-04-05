@@ -1679,7 +1679,7 @@ class CCAirfoil:
                 lexitflag[i+4] = np.logical_or(flag1, flag2)
                 dcl_dafp[i+4] = (cl_fd2 - cl_fd1)/(2.*fd_step)
                 dcd_dafp[i+4] = (cd_fd2 - cd_fd1)/(2.*fd_step)
-                print "derivative CST fail", alpha
+                #print "derivative CST fail", alpha
         for i in range(8):
             if lexitflag[i]:
                 af1 = Airfoil.initFromCST(self.afp, self.airfoil_analysis_options)

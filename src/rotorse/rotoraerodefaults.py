@@ -239,7 +239,7 @@ class CCBladeAirfoils(Component):
                 change = np.zeros(6)
                 for j in range(6):
                     index = np.where(af_idx >= j+2)[0][0]
-                    change[j] = max(abs(self.airfoil_files[index].CST - self.airfoil_parameterization[j]))
+                    change[j] = max(abs(self.airfoil_files[index].afp - self.airfoil_parameterization[j]))
                 basepath = '5MW_AFFiles' + os.path.sep
                 af_freeform_init = CCAirfoil.initFromCST
                 airfoil_types = [0]*8
