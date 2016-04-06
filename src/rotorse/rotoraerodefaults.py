@@ -10,6 +10,7 @@ Copyright (c) NREL. All rights reserved.
 import numpy as np
 from math import pi, gamma
 from openmdao.api import Component, Group
+from openmdao.core.system import AnalysisError
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
 
 from utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
@@ -438,31 +439,34 @@ class CCBlade(Component):
                     self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                     self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
                     wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=afp, airfoil_options=self.airfoil_analysis_options)
-        if self.run_case == 'power':
-            # power, thrust, torque
-            self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
-            unknowns['T'] = self.T
-            unknowns['Q'] = self.Q
-            unknowns['P'] = self.P
-        elif self.run_case == 'loads':
-            # distributed loads
-            Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+        try:
+            if self.run_case == 'power':
+                # power, thrust, torque
+                self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+                unknowns['T'] = self.T
+                unknowns['Q'] = self.Q
+                unknowns['P'] = self.P
+            elif self.run_case == 'loads':
+                # distributed loads
+                Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
-            # concatenate loads at root/tip
-            unknowns['loads:r'] = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
-            Np = np.concatenate([[0.0], Np, [0.0]])
-            Tp = np.concatenate([[0.0], Tp, [0.0]])
+                # concatenate loads at root/tip
+                unknowns['loads:r'] = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
+                Np = np.concatenate([[0.0], Np, [0.0]])
+                Tp = np.concatenate([[0.0], Tp, [0.0]])
 
-            # conform to blade-aligned coordinate system
-            unknowns['loads:Px'] = Np
-            unknowns['loads:Py'] = -Tp
-            unknowns['loads:Pz'] = 0*Np
+                # conform to blade-aligned coordinate system
+                unknowns['loads:Px'] = Np
+                unknowns['loads:Py'] = -Tp
+                unknowns['loads:Pz'] = 0*Np
 
-            # return other outputs needed
-            unknowns['loads:V'] = self.V_load
-            unknowns['loads:Omega'] = self.Omega_load
-            unknowns['loads:pitch'] = self.pitch_load
-            unknowns['loads:azimuth'] = self.azimuth_load
+                # return other outputs needed
+                unknowns['loads:V'] = self.V_load
+                unknowns['loads:Omega'] = self.Omega_load
+                unknowns['loads:pitch'] = self.pitch_load
+                unknowns['loads:azimuth'] = self.azimuth_load
+        except:
+            raise AnalysisError
 
     def list_deriv_vars(self):
 
@@ -487,13 +491,16 @@ class CCBlade(Component):
                 self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                 self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
                 wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=self.airfoil_parameterization, airfoil_options=self.airfoil_analysis_options)
-        if self.run_case == 'power':
-            # power, thrust, torque
-            self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+        try:
+            if self.run_case == 'power':
+                # power, thrust, torque
+                self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
 
-        elif self.run_case == 'loads':
-            # distributed loads
-            Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+            elif self.run_case == 'loads':
+                # distributed loads
+                Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+        except:
+            raise AnalysisError
 
         J = {}
         if self.run_case == 'power':

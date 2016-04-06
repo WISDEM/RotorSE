@@ -1,6 +1,6 @@
 # from __future__ import print_function
 
-from openmdao.api import Problem
+from openmdao.api import Problem, SqliteRecorder
 from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
 import numpy as np
 from rotor import RotorSE, OptimizeRotorSE
@@ -27,18 +27,18 @@ npower = 5 # 20
 rotor.root = RotorSE(naero, nstr, npower)
 
 ### SETUP OPTIMIZATION
-rotor.driver = pyOptSparseDriver()
-rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
-rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
-rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
-rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
+# rotor.driver = pyOptSparseDriver()
+# rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
+# rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+# rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
+# rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+# rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
 lower = np.ones((6,8))*[[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],
                         [-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1]]
 upper = np.ones((6,8))*[[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],
                         [-0.13, -0.16, -0.13, 0.28, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.20, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.13, -0.13, 0.2, 0.55, 0.55, 0.4, 0.4]]
 
-# rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
+rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
 # rotor.driver.add_parameter('sparT', low=0.0001, high=0.2) # (Array, m): spar cap thickness parameters
 # rotor.driver.add_parameter('teT', low=0.001, high=0.2) # (Array, m): trailing-edge thickness parameters
 # rotor.driver.add_constraint('con1', lower=-1.0, upper=1.0)  # rotor strain sparL
@@ -56,6 +56,15 @@ rotor.driver.add_objective('obj')
 # rotor.driver.add_objective('analysis.P')
 # rotor.driver.add_objective('powercurve.P')
 # rotor.driver.add_objective('dt.power')
+
+# rotor.driver.opt_settings['Verify level'] = 0
+# rotor.driver.opt_settings['Print file'] = 'SNOPT_print_'+'.out'
+# rotor.driver.opt_settings['Summary file'] = 'SNOPT_summary_'+'.out'
+# rotor.driver.opt_settings['Major iterations limit'] = 1000
+recorder = SqliteRecorder("freeform_optimization.sql")
+recorder.options['record_params'] = True
+recorder.options['record_metadata'] = True
+rotor.driver.add_recorder(recorder)
 
 print "Setting up RotorSE..."
 rotor.setup(check=False)
@@ -291,16 +300,16 @@ print 'control:tsr =', rotor['control:tsr']
 print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
 # # Test adjoint method
-# time0 = time.time()
-# grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
-# print "AD time is ", time.time() - time0
-# print "AD COE", grad
+time0 = time.time()
+grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
+print "AD time is ", time.time() - time0
+print "AD COE", grad
 #
 # # Test finite difference method
-# time0 = time.time()
-# grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
-# print "FD time is ", time.time() - time0
-# print "FD COE", grad
+time0 = time.time()
+grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
+print "FD time is ", time.time() - time0
+print "FD COE", grad
 
 
 plt.figure()
