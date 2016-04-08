@@ -29,10 +29,10 @@ rotor.root = RotorSE(naero, nstr, npower)
 ### SETUP OPTIMIZATION
 # rotor.driver = pyOptSparseDriver()
 # rotor.driver.options['optimizer'] = 'SNOPT' #'SLSQP'
-# rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-# rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
-# rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
-# rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
+rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
+rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
 lower = np.ones((6,8))*[[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],
                         [-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1]]
 upper = np.ones((6,8))*[[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],
@@ -61,10 +61,10 @@ rotor.driver.add_objective('obj')
 # rotor.driver.opt_settings['Print file'] = 'SNOPT_print_'+'.out'
 # rotor.driver.opt_settings['Summary file'] = 'SNOPT_summary_'+'.out'
 # rotor.driver.opt_settings['Major iterations limit'] = 1000
-recorder = SqliteRecorder("freeform_optimization.sql")
-recorder.options['record_params'] = True
-recorder.options['record_metadata'] = True
-rotor.driver.add_recorder(recorder)
+# recorder = SqliteRecorder("freeform_optimization.sql")
+# recorder.options['record_params'] = True
+# recorder.options['record_metadata'] = True
+# rotor.driver.add_recorder(recorder)
 
 print "Setting up RotorSE..."
 rotor.setup(check=False)
@@ -98,8 +98,8 @@ rotor['nBlades'] = 3  # (Int): number of blades
 
 # === free form airfoil parameters ===
 airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST', GradientType='FD',
-                                CFDiterations=10000, CFDprocessors=0, FreeFormDesign=False, BEMSpline=True,
-                                alphas=np.linspace(-15, 15, 30), Re=5e5) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
+                                CFDiterations=10000, CFDprocessors=0, FreeFormDesign=True, BEMSpline=True,
+                                alphas=np.linspace(-15, 15, 30), Re=5e5, ComputeGradient=True) ## airfoil_analysis_options: AnalysisMethod = {'Files', 'XFOIL', 'CFD'}, AirfoilParameterization={'None, 'CST', 'NACA'}, GradientType={'FD', 'CS'}
 # airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', GradientType='FD', CFDiterations=7500, CFDprocessors=16, FreeFormDesign=True)
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 af_str_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
@@ -299,18 +299,20 @@ print 'theta_sub =', rotor['theta_sub']
 print 'control:tsr =', rotor['control:tsr']
 print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
-# # Test adjoint method
-time0 = time.time()
-grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
-print "AD time is ", time.time() - time0
-print "AD COE", grad
-#
-# # Test finite difference method
-time0 = time.time()
-grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
-print "FD time is ", time.time() - time0
-print "FD COE", grad
-
+# # # Test adjoint method
+# time0 = time.time()
+# grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
+# print "AD time is ", time.time() - time0
+# print "AD COE", grad
+# #
+# # # Test finite difference method
+# time0 = time.time()
+# grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
+# print "FD time is ", time.time() - time0
+# print "FD COE", grad
+total = open('total_xfoil.txt', 'w')
+rotor.check_total_derivatives(out_stream=total)
+total.close()
 
 plt.figure()
 plt.plot(rotor['V'], rotor['P']/1e6)

@@ -374,12 +374,12 @@ class CCBlade:
         dRe_dx = np.array([0.0, Re/chord, 0.0, Re*Vx/W**2, Re*Vy/W**2, 0.0, 0.0, 0.0, 0.0])
 
         # cl, cd (spline derivatives)
-        if self.airfoil_analysis_options['BEMSpline'] or np.degrees(alpha) > 30.0:
-            cl, cd = af.evaluate(alpha, Re)
-            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
-        else:
-            cl, cd = af.evaluate_direct(alpha, Re)
-            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives_direct(alpha, Re)
+        # if self.airfoil_analysis_options['BEMSpline'] or np.degrees(alpha) > 30.0:
+        cl, cd = af.evaluate(alpha, Re)
+        dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
+        # else:
+        #     cl, cd = af.evaluate_direct(alpha, Re)
+        #     dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives_direct(alpha, Re)
 
         # chain rule
         dcl_dx = dcl_dalpha*dalpha_dx + dcl_dRe*dRe_dx
@@ -398,18 +398,18 @@ class CCBlade:
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-            if np.degrees(alpha) < 30.0:
-                dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha, Re)
-            else:
-                dcl_dafp, dcd_dafp = af.freeform_derivatives_spline(alpha, Re)
-            if self.airfoil_analysis_options['BEMSpline']:
-                dcl_dafp_R, dcd_dafp_R = af.freeform_derivatives_spline(alpha, Re)
-                dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
-            else:
-                dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
+            # if np.degrees(alpha) < 30.0:
+            #     dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha, Re)
+            # else:
+            #     dcl_dafp, dcd_dafp = af.freeform_derivatives_spline(alpha, Re)
+            # if self.airfoil_analysis_options['BEMSpline']:
+            dcl_dafp_R, dcd_dafp_R = af.freeform_derivatives_spline(alpha, Re)
+            dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
+            # else:
+            # dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
 
 
-            return dR_dx, da_dx, dap_dx, dR_dafp, dcl_dafp, dcd_dafp
+            return dR_dx, da_dx, dap_dx, dR_dafp #, dcl_dafp, dcd_dafp
 
         return dR_dx, da_dx, dap_dx
 
@@ -430,9 +430,10 @@ class CCBlade:
 
         alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                          chord, theta, self.rho, self.mu)
-        if rotating and np.degrees(alpha) < 30.0:
-            cl, cd = af.evaluate_direct(alpha, Re)
-            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives_direct(alpha, Re)
+        if rotating and self.freeform:
+            cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = af.evaluate_direct(alpha, Re, computeAlphaGradient=True, computeAFPGradient=True)
+        elif rotating:
+            cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.evaluate_direct(alpha, Re, computeAlphaGradient=True)
         else:
             cl, cd = af.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
@@ -448,7 +449,7 @@ class CCBlade:
         # derivative of residual function
         if rotating:
             if self.freeform and self.freeform_gradient:
-                dR_dx, da_dx, dap_dx, dR_dafp, dcl_dafp, dcd_dafp = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy, airfoil_parameterization)
+                dR_dx, da_dx, dap_dx, dR_dafp = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy, airfoil_parameterization)
             else:
                 dR_dx, da_dx, dap_dx = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy)
             dphi_dx = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -488,7 +489,10 @@ class CCBlade:
 
         if self.freeform and self.freeform_gradient:
             dphi_dafp = 0.0
+            # try:
             dcn_dafp = dcl_dafp*cphi - cl*sphi*dphi_dafp + dcd_dafp*sphi + cd*cphi*dphi_dafp
+            # except:
+            #     pass
             dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
             dNp_dafp = Np*(1.0/cn*dcn_dafp)
             dTp_dafp = Tp*(1.0/ct*dct_dafp)
@@ -859,6 +863,7 @@ class CCBlade:
             DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
 
             if self.freeform and rotating:
+                print dTp_dafp - dTp_dy/dR_dy*dR_dafp
                 DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
                 DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
 

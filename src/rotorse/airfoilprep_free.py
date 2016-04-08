@@ -1325,15 +1325,19 @@ class CCAirfoil:
             self.cd_2D_origin = cd_2D
             self.alpha_2D_origin = alpha_2D
             self.airfoil_analysis_options = airfoil_analysis_options
-            self.dcl_dafp_storage = []
-            self.dcd_dafp_storage = []
-            self.freeform_alpha_storage = []
             self.cl_storage = []
             self.cd_storage = []
             self.alpha_storage = []
             self.dcl_storage = []
             self.dcd_storage = []
             self.dalpha_storage = []
+            self.dcl_dafp_storage = []
+            self.dcd_dafp_storage = []
+            self.dalpha_dafp_storage = []
+            self.dcl_dafp_spline_storage = []
+            self.dcd_dafp_spline_storage = []
+            self.dalpha_dafp_spline_storage = []
+
             self.alphas_spline = alphas_spline
 
         else:
@@ -1462,37 +1466,100 @@ class CCAirfoil:
 
         return cl, cd
 
-    def evaluate_direct(self, alpha, Re):
-        if self.afp is not None:
-            if alpha in self.alpha_storage:
+    def evaluate_direct(self, alpha, Re, computeAlphaGradient=False, computeAFPGradient=False):
+        if self.afp is not None and np.degrees(alpha) < 30.0 :
+            if alpha in self.alpha_storage and alpha in self.dalpha_storage:
                 index = self.alpha_storage.index(alpha)
                 cl = self.cl_storage[index]
                 cd = self.cd_storage[index]
-            elif self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+                if computeAlphaGradient:
+                    index = self.dalpha_storage.index(alpha)
+                    dcl_dalpha = self.dcl_storage[index]
+                    dcd_dalpha = self.dcd_storage[index]
+                if computeAFPGradient and alpha in self.dalpha_dafp_storage:
+                    index = self.dalpha_dafp_storage.index(alpha)
+                    dcl_dafp = self.dcl_dafp_storage[index]
+                    dcd_dafp = self.dcd_dafp_storage[index]
+                dcl_dRe = 0.0
+                dcd_dRe = 0.0
+            else:
                 airfoil_shape_file = None
-                [x, y] = cst_to_coordinates_full(self.afp)
-                airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
-                airfoil.re = self.Re[0]
-                airfoil.mach = 0.00
-                airfoil.iter = 100
-                cl, cd, cm, lexitflag = airfoil.solveAlpha(np.degrees(alpha))
-                cl, cd = np.asscalar(cl), np.asscalar(cd)
-                if lexitflag or abs(cl) > 2. or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
+                x, y = self.afp_to_coordinates()
+                if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+                    airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
+                    airfoil.re = self.Re[0]
+                    airfoil.mach = 0.00
+                    airfoil.iter = 100
+                    cs_step = 1e-20
+                    angle = complex(np.degrees(alpha), cs_step)
+                    cl, cd, cm, lexitflag = airfoil.solveAlphaComplex(angle)
+                    if computeAlphaGradient:
+                        dcl_dalpha, dcd_dalpha = 180.0/np.pi*np.imag(deepcopy(cl))/ cs_step, 180.0/np.pi*np.imag(deepcopy(cd)) / cs_step
+                        if abs(dcl_dalpha) > 10.0 or abs(dcd_dalpha) > 10.0:
+                            fd_step = 1e-6
+                            angle2 = np.degrees(alpha + fd_step)
+                            cl2, cd2, cm2, lexitflag = airfoil.solveAlpha(angle2)
+                            cl2, cd2 = np.asscalar(cl2), np.asscalar(cd2)
+                            dcl_dalpha, dcd_dalpha = (cl2-np.real(np.asscalar(cl)))/ fd_step, (cd2-np.real(np.asscalar(cl)))/ fd_step
+                    if computeAFPGradient:
+                        dcl_dafp, dcd_dafp = self.xfoilGradients(alpha, Re)
+                    cl, cd = np.real(np.asscalar(cl)), np.real(np.asscalar(cd))
+                else:
+                    if computeAFPGradient:
+                        cl, cd, dcl_dafp, dcd_dafp = self.cfdGradients(alpha, Re, ComputeGradients=True, GenerateMESH=True)
+                    else:
+                        cl, cd = self.cfdGradients(alpha, Re, ComputeGradients=False, GenerateMESH=True)
+                    if computeAlphaGradient:
+                        fd_step = 1e-4
+                        cl2, cd2 = self.cfdGradients(alpha+fd_step, Re, ComputeGradients=False, GenerateMESH=False)
+                        dcl_dalpha, dcd_dalpha = (cl2-cl)/fd_step, (cd2-cd)/fd_step
+                    lexitflag = 0
+                if lexitflag or abs(cl) > 2.5 or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
                     cl = self.cl_spline.ev(alpha, Re)
                     cd = self.cd_spline.ev(alpha, Re)
-                    # print "direct fail", np.degrees(alpha), cl, cd
-                # if alpha in self.alpha_storage:
-                #     print "change", cl2 - cl, cd2-cd
+                    tck_cl = self.cl_spline.tck[:3] + self.cl_spline.degrees  # concatenate lists
+                    tck_cd = self.cd_spline.tck[:3] + self.cd_spline.degrees
+                    dcl_dalpha = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
+                    dcd_dalpha = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
+                dcl_dRe = 0.0
+                dcd_dRe = 0.0
                 self.cl_storage.append(cl)
                 self.cd_storage.append(cd)
                 self.alpha_storage.append(alpha)
-            else:
-                cl, cd = self.cfdGradients(alpha, Re, ComputeGradients=False, GenerateMESH=True)
+                self.dcl_storage.append(dcl_dalpha)
+                self.dcd_storage.append(dcd_dalpha)
+                self.dalpha_storage.append(alpha)
+                self.dcl_dafp_storage.append(dcl_dafp)
+                self.dcd_dafp_storage.append(dcd_dafp)
+                self.dalpha_dafp_storage.append(alpha)
         else:
             cl = self.cl_spline.ev(alpha, Re)
             cd = self.cd_spline.ev(alpha, Re)
+            tck_cl = self.cl_spline.tck[:3] + self.cl_spline.degrees  # concatenate lists
+            tck_cd = self.cd_spline.tck[:3] + self.cd_spline.degrees
 
-        return cl, cd
+            dcl_dalpha = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
+            dcd_dalpha = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
+
+            if self.one_Re:
+                dcl_dRe = 0.0
+                dcd_dRe = 0.0
+            else:
+                dcl_dRe = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
+                dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
+            if computeAFPGradient and self.afp is not None:
+                dcl_dafp, dcd_dafp = self.xfoilGradientsSpline(alpha, Re)
+            else:
+                dcl_dafp, dcd_dafp = 0.0, 0.0
+        if computeAFPGradient:
+            try:
+                return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
+            except:
+                pass
+        elif computeAlphaGradient:
+            return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
+        else:
+            return cl, cd
 
     def derivatives(self, alpha, Re):
 
@@ -1511,96 +1578,38 @@ class CCAirfoil:
             dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
         return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
 
-    def derivatives_direct(self, alpha, Re):
-
-        if self.afp is not None:
-            # if alpha in self.dalpha_storage:
-            #     index = self.dalpha_storage.index(alpha)
-            #     dcl_dalpha = self.dcl_storage[index]
-            #     dcd_dalpha = self.dcd_storage[index]
-            if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
-                cs_step = 1e-20
-                airfoil_shape_file = None
-                [x, y] = cst_to_coordinates_full(self.afp)
-                airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
-                airfoil.re = self.Re
-                airfoil.mach = 0.00
-                airfoil.iter = 200
-                angle = complex(np.degrees(alpha), cs_step)
-                cl, cd, cm, lexitflag = airfoil.solveAlphaComplex(angle)
-                dcl_dalpha, dcd_dalpha = 180.0/np.pi*np.imag(deepcopy(cl))/ cs_step, 180.0/np.pi*np.imag(deepcopy(cd)) / cs_step
-                if lexitflag or abs(cl) > 2. or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):# or abs(dcl_dalpha) > 100.0 or abs(dcd_dalpha) > 100.0:
-                    tck_cl = self.cl_spline.tck[:3] + self.cl_spline.degrees  # concatenate lists
-                    tck_cd = self.cd_spline.tck[:3] + self.cd_spline.degrees
-                    dcl_dalpha = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
-                    dcd_dalpha = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
-                    # print "direct derivative fail", np.degrees(alpha), cl, cd, dcl_dalpha, dcd_dalpha
-                if abs(dcl_dalpha) > 10.0 or abs(dcd_dalpha) > 10.0:
-                    fd_step = 1e-6
-                    cl, cd, cm, lexitflag = airfoil.solveAlpha(np.degrees(alpha))
-                    cl, cd = np.asscalar(cl), np.asscalar(cd)
-                    angle2 = np.degrees(alpha + fd_step)
-                    cl2, cd2, cm2, lexitflag = airfoil.solveAlpha(angle2)
-                    cl2, cd2 = np.asscalar(cl2), np.asscalar(cd2)
-                    dcl_dalpha, dcd_dalpha = (cl2-cl)/ fd_step, (cd2-cd)/ fd_step
-                self.dcl_storage.append(dcl_dalpha)
-                self.dcd_storage.append(dcd_dalpha)
-                self.dalpha_storage.append(alpha)
-            else:
-                cl, cd = self.cfdGradients(alpha, Re, ComputeGradients=False, GenerateMESH=True)
-
-        else:
-            tck_cl = self.cl_spline.tck[:3] + self.cl_spline.degrees  # concatenate lists
-            tck_cd = self.cd_spline.tck[:3] + self.cd_spline.degrees
-
-            dcl_dalpha = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
-            dcd_dalpha = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
-
-            if self.one_Re:
-                dcl_dRe = 0.0
-                dcd_dRe = 0.0
-            else:
-                dcl_dRe = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
-                dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
-
-        dcl_dRe = 0.0
-        dcd_dRe = 0.0
-
-        return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
+    def afp_to_coordinates(self):
+        if self.airfoil_analysis_options['AirfoilParameterization'] == 'CST':
+            [x, y] = cst_to_coordinates_full(self.afp)
+        return x, y
 
     def freeform_derivatives(self, alpha, Re):
         if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
-            # if alpha in self.freeform_alpha_storage:
-            #     index = self.freeform_alpha_storage.index(alpha)
-            #     dcl_dafp = self.dcl_dafp_storage[index]
-            #     dcd_dafp = self.dcd_dafp_storage[index]
-            # else:
+
             dcl_dafp, dcd_dafp = self.xfoilGradients(alpha, Re)
-            # self.dcl_dafp_storage.append(dcl_dafp)
-            # self.dcd_dafp_storage.append(dcd_dafp)
-            # self.freeform_alpha_storage.append(alpha)
+
         else:
             cl, cd, dcl_dafp, dcd_dafp = self.cfdGradients(alpha, Re, ComputeGradients=True)
         return dcl_dafp, dcd_dafp
 
     def freeform_derivatives_spline(self, alpha, Re):
-        if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
-            # if alpha in self.freeform_alpha_storage:
-            #     index = self.freeform_alpha_storage.index(alpha)
-            #     dcl_dafp = self.dcl_dafp_storage[index]
-            #     dcd_dafp = self.dcd_dafp_storage[index]
-            # else:
-            dcl_dafp, dcd_dafp = self.xfoilGradientsSpline(alpha, Re)
-            # self.dcl_dafp_storage.append(dcl_dafp)
-            # self.dcd_dafp_storage.append(dcd_dafp)
-            # self.freeform_alpha_storage.append(alpha)
+        # if self.airfoil_analysis_options['AnalysisMethod'] == 'XFOIL':
+        if alpha in self.dalpha_dafp_spline_storage:
+            index = self.dalpha_dafp_spline_storage.index(alpha)
+            dcl_dafp = self.dcl_dafp_spline_storage[index]
+            dcd_dafp = self.dcd_dafp_spline_storage[index]
         else:
-            cl, cd, dcl_dafp, dcd_dafp = self.cfdGradients(alpha, Re, ComputeGradients=True)
+            dcl_dafp, dcd_dafp = self.xfoilGradientsSpline(alpha, Re)
+            self.dcl_dafp_spline_storage.append(dcl_dafp)
+            self.dcd_dafp_spline_storage.append(dcd_dafp)
+            self.dalpha_dafp_spline_storage.append(alpha)
+        # else:
+        #     cl, cd, dcl_dafp, dcd_dafp = self.cfdGradients(alpha, Re, ComputeGradients=True)
         return dcl_dafp, dcd_dafp
 
     def xfoilGradientsSpline(self, alpha, Re):
         Re = self.Re[0]
-        alphas = self.alphas_spline
+        # alphas = self.alphas_spline
         airfoil_analysis_options = self.airfoil_analysis_options
         dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8)
         fd_step = 1.e-6
@@ -1867,7 +1876,7 @@ class CCAirfoil:
             dcl_dafp = dafp_dx * dcl_dx.T
             dcd_dafp = dafp_dx * dcd_dx.T
 
-            return cl, cd, np.asarray(dcl_dafp), np.asarray(dcd_dafp)
+            return cl, cd, np.asarray(dcl_dafp).reshape(8), np.asarray(dcd_dafp).reshape(8)
 
         return cl, cd
 
@@ -1899,6 +1908,9 @@ class CCAirfoil:
                 yu = np.append(yu, y[index])
                 dobj_dxu = np.append(dobj_dxu, dobj_dx_raw[index])
         return np.concatenate([dobj_dxl, dobj_dxu]), xl, xu
+
+
+
 
 def cst_to_y_coordinates_given_x(wl, wu, N, dz, xl, xu):
 
