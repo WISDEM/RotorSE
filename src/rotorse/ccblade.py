@@ -430,10 +430,14 @@ class CCBlade:
 
         alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                          chord, theta, self.rho, self.mu)
-        if rotating and self.freeform:
+        if rotating and self.freeform and self.derivatives:
             cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = af.evaluate_direct(alpha, Re, computeAlphaGradient=True, computeAFPGradient=True)
-        elif rotating:
+        elif rotating and self.freeform:
+            cl, cd = af.evaluate_direct(alpha, Re)
+        elif rotating and self.derivatives:
             cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.evaluate_direct(alpha, Re, computeAlphaGradient=True)
+        elif rotating:
+            cl, cd = af.evaluate_direct(alpha, Re)
         else:
             cl, cd = af.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
@@ -1234,28 +1238,70 @@ if __name__ == '__main__':
     rho = 1.225
     mu = 1.81206e-5
 
-    import os
-    afinit = CCAirfoil.initFromAerodynFile  # just for shorthand
-    basepath = '5MW_AFFiles' + os.path.sep
-
-    # load all airfoils
-    airfoil_types = [0]*8
-    airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-    airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-    airfoil_types[2] = afinit(basepath + 'DU40_A17.dat')
-    airfoil_types[3] = afinit(basepath + 'DU35_A17.dat')
-    airfoil_types[4] = afinit(basepath + 'DU30_A17.dat')
-    airfoil_types[5] = afinit(basepath + 'DU25_A17.dat')
-    airfoil_types[6] = afinit(basepath + 'DU21_A17.dat')
-    airfoil_types[7] = afinit(basepath + 'NACA64_A17.dat')
-
-    # place at appropriate radial stations
+    # Airfoil specifications
+    airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
+                                CFDiterations=10000, CFDprocessors=32, FreeFormDesign=True, BEMSpline=True,
+                                alphas=np.linspace(-15, 15, 30), Re=5e5, ComputeGradient=True)
     af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+    if airfoil_analysis_options['AnalysisMethod'] == 'Files':
+        import os
+        afinit = CCAirfoil.initFromAerodynFile  # just for shorthand
+        basepath = '5MW_AFFiles' + os.path.sep
 
-    af = [0]*len(r)
-    for i in range(len(r)):
-        af[i] = airfoil_types[af_idx[i]]
+        # load all airfoils
+        airfoil_types = [0]*8
+        airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
+        airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+        airfoil_types[2] = afinit(basepath + 'DU40_A17.dat')
+        airfoil_types[3] = afinit(basepath + 'DU35_A17.dat')
+        airfoil_types[4] = afinit(basepath + 'DU30_A17.dat')
+        airfoil_types[5] = afinit(basepath + 'DU25_A17.dat')
+        airfoil_types[6] = afinit(basepath + 'DU21_A17.dat')
+        airfoil_types[7] = afinit(basepath + 'NACA64_A17.dat')
 
+        # place at appropriate radial stations
+        af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+
+        af = [0]*len(r)
+        for i in range(len(r)):
+            af[i] = airfoil_types[af_idx[i]]
+
+    else:
+        # Specify airfoil parameters
+        airfoil_parameterization = np.asarray([[-0.49209940079930325, -0.72861624849999296, -0.38147646962813714, 0.13679205926397994, 0.50396496117640877, 0.54798355691567613, 0.37642896917099616, 0.37017796580840234],
+                                               [-0.38027535114760153, -0.75920832612723133, -0.21834261746205941, 0.086359012110824224, 0.38364567865371835, 0.48445264573011815, 0.26999944648962521, 0.34675843509167931],
+                                               [-0.29817561716727448, -0.67909473119918973, -0.15737231648880162, 0.12798260780188203, 0.2842322211249545, 0.46026650967959087, 0.21705062978922526, 0.33758303223369945],
+                                               [-0.27413320446357803, -0.40701949670950271, -0.29237424992338562, 0.27867844397438357, 0.23582783854698663, 0.43718573158380936, 0.25389099250498309, 0.31090780344061775],
+                                               [-0.19600050454371795, -0.28861738331958697, -0.20594891135118523, 0.19143138186871009, 0.22876347660120994, 0.39940768357615447, 0.28896745336793572, 0.29519782561050112],
+                                               [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]])
+
+        af_input_init = CCAirfoil.initFromInput
+        if airfoil_analysis_options['AirfoilParameterization'] == 'CST':
+            af_freeform_init = CCAirfoil.initFromCST
+        elif airfoil_analysis_options['AirfoilParameterization'] == 'NACA':
+            af_freeform_init = CCAirfoil.initFromNACA
+        else:
+            af_freeform_init = CCAirfoil.initFromInput
+
+        # load all airfoils
+        non_airfoils_idx = 2
+        airfoil_types = [0]*8
+        non_airfoils_alphas = [-180.0, 0.0, 180.0]
+        non_airfoils_cls = [0.0, 0.0, 0.0]
+        non_airfoils_cds = [[0.5, 0.5, 0.5],[0.35, 0.35, 0.35]]
+        print "Generating airfoil data..."
+        for i in range(len(airfoil_types)):
+            if i < non_airfoils_idx:
+                airfoil_types[i] = af_input_init(non_airfoils_alphas, airfoil_analysis_options['Re'], non_airfoils_cls, non_airfoils_cds[i], non_airfoils_cls)
+            else:
+                time0 = time.time()
+                airfoil_types[i] = af_freeform_init(airfoil_parameterization[i-2], airfoil_analysis_options)
+                print "Airfoil ", str(i+1-2), " data generation complete in ", time.time() - time0, " seconds."
+        print "Finished generating airfoil data"
+
+        af = [0]*len(r)
+        for i in range(len(af)):
+            af[i] = airfoil_types[af_idx[i]]
 
     tilt = -5.0
     precone = 2.5
@@ -1263,91 +1309,9 @@ if __name__ == '__main__':
     shearExp = 0.2
     hubHt = 80.0
     nSector = 8
-    airfoil_analysis_options = dict(AirfoilParameterization='CST', CFDorXFOIL='CFD', FDorCS='CS', iterations=20000, processors=32)
-    import os
-    w0 = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]
-    wl_1 = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]
-    wl_2 = [-0.19600050454371795, -0.28861738331958697, -0.20594891135118523, 0.19143138186871009, 0.22876347660120994, 0.39940768357615447, 0.28896745336793572, 0.29519782561050112]
-    wl_3 = [-0.27413320446357803, -0.40701949670950271, -0.29237424992338562, 0.27867844397438357, 0.23582783854698663, 0.43718573158380936, 0.25389099250498309, 0.31090780344061775]
-    wl_4 = [-0.29817561716727448, -0.67909473119918973, -0.15737231648880162, 0.12798260780188203, 0.2842322211249545, 0.46026650967959087, 0.21705062978922526, 0.33758303223369945]
-    wl_5 = [-0.38027535114760153, -0.75920832612723133, -0.21834261746205941, 0.086359012110824224, 0.38364567865371835, 0.48445264573011815, 0.26999944648962521, 0.34675843509167931]
-    wl_6 = [-0.49209940079930325, -0.72861624849999296, -0.38147646962813714, 0.13679205926397994, 0.50396496117640877, 0.54798355691567613, 0.37642896917099616, 0.37017796580840234]
 
-    CST_full = [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861,
-            -0.19600050454371795, -0.28861738331958697, -0.20594891135118523, 0.19143138186871009, 0.22876347660120994, 0.39940768357615447, 0.28896745336793572, 0.29519782561050112,
-            -0.27413320446357803, -0.40701949670950271, -0.29237424992338562, 0.27867844397438357, 0.23582783854698663, 0.43718573158380936, 0.25389099250498309, 0.31090780344061775,
-            -0.29817561716727448, -0.67909473119918973, -0.15737231648880162, 0.12798260780188203, 0.2842322211249545, 0.46026650967959087, 0.21705062978922526, 0.33758303223369945,
-            -0.38027535114760153, -0.75920832612723133, -0.21834261746205941, 0.086359012110824224, 0.38364567865371835, 0.48445264573011815, 0.26999944648962521, 0.34675843509167931,
-            -0.49209940079930325, -0.72861624849999296, -0.38147646962813714, 0.13679205926397994, 0.50396496117640877, 0.54798355691567613, 0.37642896917099616, 0.37017796580840234]
-
-    CST = [[wl_6],[wl_6], [wl_6], [wl_5], [wl_4], [wl_3], [wl_2], [wl_1]]
-    # CST = [[wl_6], [wl_5], [wl_4], [wl_3], [wl_2], [wl_1]]
-    CST2 = np.array([[wl_1], [wl_6], [wl_5], [wl_4], [wl_3], [wl_2]]) #, [wl_1]])
-    basepath = '5MW_AFFiles' + os.path.sep
-    afinit = CCAirfoil.initFromAerodynFile
-    afinit2 = CCAirfoil.initFromCST  # just for shorthand
-    # load all airfoils
-    airfoil_types = [0]*8
-    airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-    airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-    # airfoil_types = [0]*8
-    # airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-    # airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-    # airfoil_types[2] = afinit(basepath + 'DU40_A17.dat')
-    # airfoil_types[3] = afinit(basepath + 'DU35_A17.dat')
-    # airfoil_types[4] = afinit(basepath + 'DU30_A17.dat')
-    # airfoil_types[5] = afinit(basepath + 'DU25_A17.dat')
-    # airfoil_types[6] = afinit(basepath + 'DU21_A17.dat')
-    # airfoil_types[7] = afinit(basepath + 'NACA64_A17.dat')
-
-    af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-
-    af = [0]*len(r)
-    for i in range(len(r)):
-        af[i] = airfoil_types[af_idx[i]]
-
-    # CST_full_2 = np.zeros(len(CST_full))
-    # for i in range(len(CST_full_2)):
-    #     CST_full_2[i] = CST_full[i]
-    CST_full = np.zeros((17, 8))
-    for i in range(len(r)):
-        for j in range(8):
-            CST_full[i][j] = CST[af_idx[i]][0][j]
-    CST = CST_full.reshape(17, 1, 8)
-    CST2 = CST2.reshape(6,1,8)
-    from copy import deepcopy
-    airfoil_types_xfoil = deepcopy(airfoil_types)
-
-    print "Generating airfoil data"
-    for i in range(len(airfoil_types)-2):
-        # airfoil_types[i+2] = afinit2(CST2[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
-        airfoil_types_xfoil[i+2] = afinit2(CST2[i], 'XFOIL', airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
-    print "Finished generating airfoil data"
-
-
-    af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-
-    af = [0]*len(r)
-    af_xfoil = [0]*len(r)
-    for i in range(len(r)):
-        af[i] = airfoil_types[af_idx[i]]
-        af_xfoil[i] = airfoil_types_xfoil[af_idx[i]]
-    # CST_full_2 = np.zeros(len(CST_full))
-    # for i in range(len(CST_full_2)):
-    #     CST_full_2[i] = CST_full[i]
-    CST_full = np.zeros((17, 8))
-    for i in range(len(r)):
-        for j in range(8):
-            CST_full[i][j] = CST[af_idx[i]][0][j]
-    CST = CST_full.reshape(17, 1, 8)
-    CST2 = CST2.reshape(6,1,8)
-    # create CCBlade object
-    # aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
-    #                        precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
-
-    aeroanalysis_xfoil = CCBlade(r, chord, theta, af_xfoil, Rhub, Rtip, B, rho, mu,
-                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
-
+    aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
+                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=airfoil_parameterization, airfoil_options=airfoil_analysis_options, derivatives=False)
 
     # set conditions
     Uinf = 10.0
@@ -1356,134 +1320,35 @@ if __name__ == '__main__':
     Omega = Uinf*tsr/Rtip * 30.0/pi  # convert to RPM
     azimuth = 90
 
-
-    delta = 1e-6
-    dNp_dcst_fd = np.zeros((17, 17, 8))
-    dTp_dcst_fd = np.zeros((17, 17,8))
-    # rotor = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
-    #            precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=False)
-    # Np, Tp, = rotor.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
-    # from copy import deepcopy
-    #
-    # for i in range(17):
-    #     for j in range(8):
-    #         CST_new = deepcopy(CST)
-    #         af_new = deepcopy(af)
-    #         CST_new[i][0][j] += delta
-    #         af[i] = afinit2(CST_new[i], airfoil_analysis_options['CFDorXFOIL'], airfoil_analysis_options['processors'], airfoil_analysis_options['iterations'])
-    #
-    #         rotor = CCBlade(r, chord, theta, af_new, Rhub, Rtip, B, rho, mu,
-    #                        precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST_new, airfoil_options=airfoil_analysis_options, derivatives=False)
-    #
-    #         Npd, Tpd = rotor.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
-    #
-    #         dNp_dcst_fd[:, i, j] = (Npd - Np) / delta
-    #         dTp_dcst_fd[:, i, j] = (Tpd - Tp) / delta
-    #
-    # aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
-    #                precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=CST, airfoil_options=airfoil_analysis_options, derivatives=True)
-    Np, Tp = aeroanalysis_xfoil.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
-    print Np, Tp
+    ### LOADS
+    Np, Tp = aeroanalysis.distributedAeroLoads(Uinf, Omega, pitch, azimuth)
 
     import matplotlib.pyplot as plt
-#     # rstar = (rload - rload[0]) / (rload[-1] - rload[0])
-#     plt.plot(r, Tp/1e3, 'k', label='lead-lag')
-#     plt.plot(r, Np/1e3, 'r', label='flapwise')
-#     plt.xlabel('blade fraction')
-#     plt.ylabel('distributed aerodynamic loads (kN)')
-#     plt.legend(loc='upper left')
-#
-    # CP, CT, CQ = aeroanalysis.evaluate([Uinf], [Omega], [pitch], coefficient=True)
-    #
-    # print CP, CT, CQ
-
+    # rstar = (rload - rload[0]) / (rload[-1] - rload[0])
+    plt.plot(r, Tp/1e3, 'k', label='lead-lag')
+    plt.plot(r, Np/1e3, 'r', label='flapwise')
+    plt.xlabel('blade fraction')
+    plt.ylabel('distributed aerodynamic loads (kN)')
+    plt.legend(loc='upper left')
 
     tsr = np.linspace(2, 14, 20)
     Omega = 10.0 * np.ones_like(tsr)
     Uinf = Omega*pi/30.0 * Rtip/tsr
     pitch = np.zeros_like(tsr)
 
+    # COEFFICIENTS
     CP, CT, CQ = aeroanalysis.evaluate(Uinf, Omega, pitch, coefficient=True)
-    CP_xfoil, CT_xfoil, CQ_xfoil = aeroanalysis_xfoil.evaluate(Uinf, Omega, pitch, coefficient=True)
-    print CP
-    print CT
-    print CQ
-    tsr2 = np.linspace(2, 14, 20)
+    print CP, CT, CQ
+
     wind_tunnel_CP_origin = [ 0.02344119,  0.0653068,   0.12733272,  0.19768979,  0.275223,    0.35764107,
-0.41604225,  0.44387852,  0.45630932,  0.45969981,  0.45627368,  0.44741262,
-0.43461535,  0.4190967,   0.40101026,  0.38017748,  0.35642367,  0.32954743,
-0.29939923,  0.26601073]
+                            0.41604225,  0.44387852,  0.45630932,  0.45969981,  0.45627368,  0.44741262,
+                            0.43461535,  0.4190967,   0.40101026,  0.38017748,  0.35642367,  0.32954743,
+                            0.29939923,  0.26601073]
 
     plt.figure()
     plt.plot(tsr, CP, 'xk-', label='CFD')
-    plt.plot(tsr2, wind_tunnel_CP_origin, '^r-', label='WT')
-    plt.plot(tsr, CP_xfoil, 'b*-', label='XFOIL')
+    plt.plot(tsr, wind_tunnel_CP_origin, '^r-', label='WT')
     plt.legend(loc='best')
     plt.xlabel('$\lambda$')
     plt.ylabel('$c_p$')
-
-    print dNp_dcst_fd[7]
-    print dTp_dcst_fd[7]
-    print dNp['dcst'][7]
-    print dTp['dcst'][7]
-
-    # import matplotlib.pyplot as plt
-    # plt.figure()
-    # plt.plot(range(8*17), dNp_dcst_fd[0], 'r-', label='FD')
-    # plt.plot(range(8*17), dNp['dcst'][0], 'b-', label='Adjoint')
-    # for i in range(17-1):
-    #     plt.plot(range(8*17), dNp_dcst_fd[i+1], 'r-')
-    #     plt.plot(range(8*17), dNp['dcst'][i+1], 'b-')
-    # plt.legend(loc='best')
-    # plt.xlabel('Flattened Kulfan parameter array')
-    # plt.ylabel('Np sensitivities')
-    #
-    # plt.figure()
-    # plt.plot(range(8*17), dTp_dcst_fd[0], 'r-', label='FD')
-    # plt.plot(range(8*17), dTp['dcst'][0], 'b-', label='Adjoint')
-    # for i in range(17-1):
-    #     plt.plot(range(8*17), dTp_dcst_fd[i+1], 'r-')
-    #     plt.plot(range(8*17), dTp['dcst'][i+1], 'b-')
-    # plt.legend(loc='best')
-    # plt.xlabel('Flattened Kulfan parameter array')
-    # plt.ylabel('Tp sensitivities')
-    #
-    # plt.show()
-
-    # plot
-    #
-    # # rstar = (rload - rload[0]) / (rload[-1] - rload[0])
-    # plt.plot(r, Tp/1e3, 'k', label='lead-lag')
-    # plt.plot(r, Np/1e3, 'r', label='flapwise')
-    # plt.xlabel('blade fraction')
-    # plt.ylabel('distributed aerodynamic loads (kN)')
-    # plt.legend(loc='upper left')
-    #
-    # CP, CT, CQ, dCP, dCT, dCQ = aeroanalysis.evaluate([Uinf], [Omega], [pitch], coefficient=True)
-    # print dCP['dCST'], dCT['dCST'], dCQ['dCST']
-    # print CP, CT, CQ
-
-
-#     tsr = np.linspace(2, 14, 50)
-#     Omega = 10.0 * np.ones_like(tsr)
-#     Uinf = Omega*pi/30.0 * Rtip/tsr
-#     pitch = np.zeros_like(tsr)
-#
-#     CP, CT, CQ = aeroanalysis.evaluate(Uinf, Omega, pitch, coefficient=True)
-#
-#     tsr2 = np.linspace(2, 14, 20)
-#     wind_tunnel_CP_origin = [ 0.02344119,  0.0653068,   0.12733272,  0.19768979,  0.275223,    0.35764107,
-# 0.41604225,  0.44387852,  0.45630932,  0.45969981,  0.45627368,  0.44741262,
-# 0.43461535,  0.4190967,   0.40101026,  0.38017748,  0.35642367,  0.32954743,
-# 0.29939923,  0.26601073]
-#
-#     plt.figure()
-#     plt.plot(tsr, CP, 'k', label='XFOIL')
-#     plt.plot(tsr2, wind_tunnel_CP_origin, 'r', label='WT')
-#     plt.legend(loc='best')
-#     plt.xlabel('$\lambda$')
-#     plt.ylabel('$c_p$')
-
-#
     plt.show()
-    print "DONE"
