@@ -495,24 +495,36 @@ class COE(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
         # fixed cost assumptions from NREL 5MW land-based turbine (update as needed)
-        fixed_charge_rate = 0.095 #0.12
+        fixed_charge_rate = 0.095
         tax_rate = 0.4
         ppi_mat   = 1.0465528035
         slope   = 13.0
         intercept     = 5813.9
         bos = 559. * 5e3
-        #net_aep = 19566000.
+        array_losses = 0.059
+        other_losses = 0.0
+        availability = 0.94
+        losses = availability * (1-array_losses) * (1-other_losses)
+        net_aep = (losses * params['AEP'])
+        advanced_blade = True
+        offshore = False
+        assemblyCostMultiplier = 0.30
+        profitMultiplier = 0.20
+        overheadCostMultiplier = 0.0
+        transportMultiplier = 0.0
         #turbine_cost = 1702*5e3
 
         blade_cost = ((slope*params['mass_all_blades']/3.0 + intercept)*ppi_mat)
         rotor_cost = 1505102.53 - 250342.93 + blade_cost
-        nacelle_cost = 3000270
+        nacelle_cost = 3000270. #1834848.89
         tower_cost = 1390588.80
-        turbine_cost = rotor_cost + nacelle_cost + tower_cost
 
-        unknowns['COE'] = fixed_charge_rate*(turbine_cost+bos)/params['AEP'] + 0.0122*(1-tax_rate)
-        self.dcoe_dmass_all_blades = (slope/3.0*ppi_mat * fixed_charge_rate) / params['AEP']
-        self.dcoe_dAEP = -fixed_charge_rate*(turbine_cost+bos)/params['AEP']**2
+        parts_cost = (rotor_cost + nacelle_cost + tower_cost)
+        turbine_multiplier = (1 + transportMultiplier + profitMultiplier) * (1+overheadCostMultiplier+assemblyCostMultiplier)
+        turbine_cost = turbine_multiplier * parts_cost
+        unknowns['COE'] = fixed_charge_rate*(turbine_cost+bos)/net_aep + 0.0122*(1-tax_rate)
+        self.dcoe_dmass_all_blades = turbine_multiplier * (slope/3.0*ppi_mat * fixed_charge_rate) / net_aep
+        self.dcoe_dAEP = -fixed_charge_rate*(turbine_cost+bos)/(losses*(params['AEP']**2))
 
 
         print "COE: ", unknowns['COE']
