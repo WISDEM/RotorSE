@@ -339,7 +339,17 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # residual
         spline = Akima(params['Vcoarse'], params['Pcoarse'])
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
+
         resids['Vrated'] = P - params['control:ratedPower']
+
+        if True:
+            P1, _, _, _ = spline.interp(params['control:Vin'])
+            P2, _, _, _ = spline.interp(params['control:Vout'])
+            resids1 = P1- params['control:ratedPower']
+            resids2 = P2 - params['control:ratedPower']
+            if ((resids1<0) == (resids2<0)):
+                print "Powercurve, Vcoarse: ", params['Vcoarse'], "Pcoarse", params['Pcoarse']
+        ## Test on
 
         # region 2
         V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, n/2)

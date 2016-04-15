@@ -816,7 +816,7 @@ class Airfoil(object):
             cd = np.delete(cd, to_delete)
             cm = np.delete(cm, to_delete)
             if not cl.size:
-                print "XFOIL Failure! Using default airfoil."
+                print "XFOIL Failure! Using default airfoil.", CST
                 cl = [-1.1227906,  -0.55726515, -0.30884085, -0.02638192,  0.19234127,  0.40826801,  0.67141856,  0.95384527,  1.28095228]
                 cd = [ 0.05797574,  0.01721584,  0.01167788,  0.01055452,  0.0102769,   0.01022808,  0.01051864,  0.01179746, 0.0337189 ]
             else:
@@ -1498,6 +1498,7 @@ class CCAirfoil:
                         dcl_dalpha, dcd_dalpha = 180.0/np.pi*np.imag(deepcopy(cl))/ cs_step, 180.0/np.pi*np.imag(deepcopy(cd)) / cs_step
                         cl, cd = np.real(np.asscalar(cl)), np.real(np.asscalar(cd))
                         if abs(dcl_dalpha) > 10.0 or abs(dcd_dalpha) > 10.0:
+                            airfoil.iter = 500
                             fd_step = 1e-6
                             cl, cd, cm, lexitflag = airfoil.solveAlpha(np.degrees(alpha))
                             cl, cd = np.asscalar(cl), np.asscalar(cd)

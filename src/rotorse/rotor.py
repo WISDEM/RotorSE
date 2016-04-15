@@ -861,7 +861,11 @@ class GeometrySpline(Component):
         self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "GeometrySpline"
+        print 'r_max_chord', params['r_max_chord']
+        print 'chord_sub', params['chord_sub']
+        print 'theta_sub', params['theta_sub']
+        print 'sparT', params['sparT']
+        print 'teT', params['teT']
         Rhub = params['hubFraction'] * params['bladeLength']
         Rtip = Rhub + params['bladeLength']
 
@@ -1995,7 +1999,7 @@ class SetupPCModVarSpeed(Component):
         self.add_output('azimuth', shape=1, units='deg')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print 'SetupPCmodVarspeed'
+        print 'control_tsr', params['control:tsr']
         self.Vrated = params['Vrated']
         self.R = params['R']
         self.Vfactor = params['Vfactor']
@@ -2171,9 +2175,6 @@ class OutputsStructures(Component):
         self.add_output('delta_bladeLength_out', shape=1, units='m', desc='adjustment to blade length to account for curvature from loading', pass_by_obj=pbo)
         self.add_output('delta_precurve_sub_out', shape=3, units='m', desc='adjustment to precurve to account for curvature from loading', pass_by_obj=pbo)
 
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
-
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['mass_one_blade'] = params['mass_one_blade_in']
         print "mass_all_blades", params['mass_all_blades_in']
@@ -2219,6 +2220,97 @@ class OutputsStructures(Component):
         J['delta_precurve_sub_out', 'delta_precurve_sub_out_in'] = np.diag(np.ones(len(params['delta_precurve_sub_out_in'])))
 
         return J
+
+class ObjandCons(Component):
+    def __init__(self, nstr):
+        super(ObjandCons, self).__init__()
+        self.add_param('COE', val=0.1)
+        self.add_param('strainU_spar', val=np.zeros(nstr))
+        self.add_param('strain_ult_spar', val=0.0)
+        self.add_param('strainU_te', val=np.zeros(nstr))
+        self.add_param('strain_ult_te', val=0.0)
+        self.add_param('strainL_te', val=np.zeros(nstr))
+        self.add_param('eps_crit_spar', val=np.zeros(nstr))
+        self.add_param('eps_crit_te', val=np.zeros(nstr))
+        self.add_param('freq_curvefem', val=np.zeros(5))
+        self.add_param('ratedConditions:Omega', val=0.0)
+        self.add_param('nBlades', val=3, pass_by_obj=True)
+        self.add_param('airfoil_parameterization', val=np.zeros((6,8)))
+
+        self.add_output('obj', val=1.0)
+        self.add_output('con1', val=np.zeros(7))
+        self.add_output('con2', val=np.zeros(8))
+        self.add_output('con3', val=np.zeros(8))
+        self.add_output('con4', val=np.zeros(8))
+        self.add_output('con5', val=np.zeros(7))
+        self.add_output('con6', val=np.zeros(2))
+        self.add_output('con_freeform', val=np.zeros((6,4)))
+
+    def solve_nonlinear(self, params, unknowns, resids):
+        self.eta_strain = 1.35*1.3*1.0
+        self.con1_indices = [0, 12, 14, 18, 22, 28, 34]
+        self.con2_indices = [0, 8, 12, 14, 18, 22, 28, 34]
+        self.con3_indices = self.con2_indices
+        self.con4_indices = [10, 12, 14, 20, 23, 27, 31, 33]
+        self.con5_indices = [10, 12, 13, 14, 21, 28, 33]
+        unknowns['obj'] = params['COE']*100.0
+        unknowns['con1'] = params['strainU_spar'][self.con1_indices]*self.eta_strain/params['strain_ult_spar']
+        unknowns['con2'] = params['strainU_te'][self.con2_indices]*self.eta_strain/params['strain_ult_te']
+        unknowns['con3'] = params['strainL_te'][self.con3_indices]*self.eta_strain/params['strain_ult_te']
+        unknowns['con4'] = (params['eps_crit_spar'][self.con4_indices] - params['strainU_spar'][self.con4_indices]) / params['strain_ult_spar']
+        unknowns['con5'] = (params['eps_crit_te'][self.con5_indices] - params['strainU_te'][self.con5_indices]) / params['strain_ult_te']
+        unknowns['con6'] = params['freq_curvefem'][0:2] - params['nBlades']*params['ratedConditions:Omega']/60.0*1.1
+        unknowns['con_freeform'] = params['airfoil_parameterization'][:, [4, 5, 6, 7]] - params['airfoil_parameterization'][:, [0, 1, 2, 3]]
+
+    def linearize(self, params, unknowns, resids):
+        J = {}
+        dcon1_dstrainU_spar = np.zeros((7, 38))
+        dcon1_dstrain_ult_spar = -params['strainU_spar'][self.con1_indices]*self.eta_strain/params['strain_ult_spar']**2
+        dcon2_dstrainU_te = np.zeros((8, 38))
+        dcon2_dstrain_ult_te = -params['strainU_te'][self.con2_indices]*self.eta_strain/params['strain_ult_te']**2
+        dcon3_dstrainL_te = np.zeros((8, 38))
+        dcon3_dstrain_ult_te = -params['strainL_te'][self.con3_indices]*self.eta_strain/params['strain_ult_te']**2
+        dcon4_deps_crit_spar = np.zeros((8, 38))
+        dcon4_dstrainU_spar = np.zeros((8, 38))
+        dcon4_dstrain_ult_spar = -(params['eps_crit_spar'][self.con4_indices] - params['strainU_spar'][self.con4_indices]) / params['strain_ult_spar']**2
+        dcon5_deps_crit_te = np.zeros((7, 38))
+        dcon5_dstrainU_te = np.zeros((7, 38))
+        dcon5_dstrain_ult_te = -(params['eps_crit_te'][self.con5_indices] - params['strainU_te'][self.con5_indices]) / params['strain_ult_te']**2
+        dcon6_dfreq = np.zeros((2, 5))
+        dcon6_dfreq[0][0], dcon6_dfreq[1][1] = 1.0, 1.0
+        dcon6_dOmega = -params['nBlades']*np.ones(2)/60.0*1.1
+        dcon_freeform_dafp = np.zeros((24,48))
+        for i in range(6):
+            dcon_freeform_dafp[np.ix_(range(i*4,i*4+4), range(i*8,i*8+8))] += np.hstack((np.diag(-np.ones(4)), np.diag(np.ones(4))))
+
+        for i in range(7):
+            dcon1_dstrainU_spar[i][self.con1_indices[i]] = self.eta_strain / params['strain_ult_spar']
+            dcon5_deps_crit_te[i][self.con5_indices[i]] = 1.0 / params['strain_ult_te']
+            dcon5_dstrainU_te[i][self.con5_indices[i]] = -1.0 / params['strain_ult_te']
+        for i in range(8):
+            dcon2_dstrainU_te[i][self.con2_indices[i]] = self.eta_strain / params['strain_ult_te']
+            dcon3_dstrainL_te[i][self.con3_indices[i]] = self.eta_strain / params['strain_ult_te']
+            dcon4_deps_crit_spar[i][self.con4_indices[i]] = 1.0 / params['strain_ult_spar']
+            dcon4_dstrainU_spar[i][self.con4_indices[i]] = -1.0 / params['strain_ult_spar']
+
+        J['obj', 'COE'] = 100.0
+        J['con1', 'strainU_spar'] = dcon1_dstrainU_spar
+        J['con1', 'strain_ult_spar'] = dcon1_dstrain_ult_spar
+        J['con2', 'strainU_te'] = dcon2_dstrainU_te
+        J['con2', 'strain_ult_te'] = dcon2_dstrain_ult_te
+        J['con3', 'strainL_te'] = dcon3_dstrainL_te
+        J['con3', 'strain_ult_te'] = dcon3_dstrain_ult_te
+        J['con4', 'eps_crit_spar'] = dcon4_deps_crit_spar
+        J['con4', 'strainU_spar'] = dcon4_dstrainU_spar
+        J['con4', 'strain_ult_spar'] = dcon4_dstrain_ult_spar
+        J['con5', 'eps_crit_te'] = dcon5_deps_crit_te
+        J['con5', 'strainU_te'] = dcon5_dstrainU_te
+        J['con5', 'strain_ult_te'] = dcon5_dstrain_ult_te
+        J['con6', 'freq_curvefem'] = dcon6_dfreq
+        J['con6', 'ratedConditions:Omega'] = dcon6_dOmega
+        J['con_freeform', 'airfoil_parameterization'] = dcon_freeform_dafp
+        return J
+
 
 class StructureGroup(Group):
     def __init__(self, naero, nstr):
@@ -2637,7 +2729,7 @@ class RotorSE(Group):
         #
         self.add('aero_rated', CCBlade('loads', naero, 1)) # 'loads', naero, 1))
         self.add('aero_extrm', CCBlade('loads', naero,  1))
-        self.add('aero_extrm_forces', CCBlade('power', naero, 2))
+        #self.add('aero_extrm_forces', CCBlade('power', naero, 2))
         self.add('aero_defl_powercurve', CCBlade('loads', naero,  1))
         #
         # self.add('beam', PreCompSections(nstr))
@@ -2752,36 +2844,36 @@ class RotorSE(Group):
         # self.aero_extrm.Omega_load = 0.0  # parked case
 
         # connections to aero_extrm_forces (for tower thrust)
-        self.connect('spline.r_aero', 'aero_extrm_forces.r')
-        self.connect('spline.chord_aero', 'aero_extrm_forces.chord')
-        self.connect('spline.theta_aero', 'aero_extrm_forces.theta')
-        self.connect('spline.precurve_aero', 'aero_extrm_forces.precurve')
-        self.connect('spline.precurve_str', 'aero_extrm_forces.precurveTip', src_indices=[nstr-1])
-        self.connect('spline.Rhub', 'aero_extrm_forces.Rhub')
-        self.connect('spline.Rtip', 'aero_extrm_forces.Rtip')
-        self.connect('hubHt', 'aero_extrm_forces.hubHt')
-        self.connect('precone', 'aero_extrm_forces.precone')
-        self.connect('tilt', 'aero_extrm_forces.tilt')
-        self.connect('yaw', 'aero_extrm_forces.yaw')
-        # self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
-        self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_extrm_forces.airfoil_parameterization')
-        self.connect('airfoil_analysis_options', 'aero_extrm_forces.airfoil_analysis_options')
-        self.connect('airfoil_analysis.af', 'aero_extrm_forces.af')
-        # self.connect('airfoil_parameterization', 'aero_extrm_forces.airfoil_parameterization')
+        # self.connect('spline.r_aero', 'aero_extrm_forces.r')
+        # self.connect('spline.chord_aero', 'aero_extrm_forces.chord')
+        # self.connect('spline.theta_aero', 'aero_extrm_forces.theta')
+        # self.connect('spline.precurve_aero', 'aero_extrm_forces.precurve')
+        # self.connect('spline.precurve_str', 'aero_extrm_forces.precurveTip', src_indices=[nstr-1])
+        # self.connect('spline.Rhub', 'aero_extrm_forces.Rhub')
+        # self.connect('spline.Rtip', 'aero_extrm_forces.Rtip')
+        # self.connect('hubHt', 'aero_extrm_forces.hubHt')
+        # self.connect('precone', 'aero_extrm_forces.precone')
+        # self.connect('tilt', 'aero_extrm_forces.tilt')
+        # self.connect('yaw', 'aero_extrm_forces.yaw')
+        # # self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
+        # self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_extrm_forces.airfoil_parameterization')
         # self.connect('airfoil_analysis_options', 'aero_extrm_forces.airfoil_analysis_options')
-        self.connect('nBlades', 'aero_extrm_forces.B')
-        self.connect('rho', 'aero_extrm_forces.rho')
-        self.connect('mu', 'aero_extrm_forces.mu')
-        self.connect('shearExp', 'aero_extrm_forces.shearExp')
-        self.connect('nSector', 'aero_extrm_forces.nSector')
-        # self.aero_extrm_forces.Uhub = np.zeros(2)
-        # self.aero_extrm_forces.Omega = np.zeros(2)  # parked case
-        # self.aero_extrm_forces.pitch = np.zeros(2)
-        self.connect('turbineclass.V_extreme_full', 'aero_extrm_forces.Uhub')
-        self.connect('pitch_extreme_full', 'aero_extrm_forces.pitch')
-        # self.aero_extrm_forces.pitch[1] = 90  # feathered
-        # self.aero_extrm_forces.T = np.zeros(2)
-        # self.aero_extrm_forces.Q = np.zeros(2)
+        # self.connect('airfoil_analysis.af', 'aero_extrm_forces.af')
+        # # self.connect('airfoil_parameterization', 'aero_extrm_forces.airfoil_parameterization')
+        # # self.connect('airfoil_analysis_options', 'aero_extrm_forces.airfoil_analysis_options')
+        # self.connect('nBlades', 'aero_extrm_forces.B')
+        # self.connect('rho', 'aero_extrm_forces.rho')
+        # self.connect('mu', 'aero_extrm_forces.mu')
+        # self.connect('shearExp', 'aero_extrm_forces.shearExp')
+        # self.connect('nSector', 'aero_extrm_forces.nSector')
+        # # self.aero_extrm_forces.Uhub = np.zeros(2)
+        # # self.aero_extrm_forces.Omega = np.zeros(2)  # parked case
+        # # self.aero_extrm_forces.pitch = np.zeros(2)
+        # self.connect('turbineclass.V_extreme_full', 'aero_extrm_forces.Uhub')
+        # self.connect('pitch_extreme_full', 'aero_extrm_forces.pitch')
+        # # self.aero_extrm_forces.pitch[1] = 90  # feathered
+        # # self.aero_extrm_forces.T = np.zeros(2)
+        # # self.aero_extrm_forces.Q = np.zeros(2)
 
         # connections to aero_defl_powercurve (for gust reversal)
         self.connect('spline.r_aero', 'aero_defl_powercurve.r')
@@ -2981,9 +3073,9 @@ class RotorSE(Group):
         self.connect('tilt', 'mass.tilt')
 
         # connectsion to extreme
-        self.connect('aero_extrm_forces.T', 'extreme.T')
-        self.connect('aero_extrm_forces.Q', 'extreme.Q')
-        self.connect('nBlades', 'extreme.nBlades')
+        # self.connect('aero_extrm_forces.T', 'extreme.T')
+        # self.connect('aero_extrm_forces.Q', 'extreme.Q')
+        # self.connect('nBlades', 'extreme.nBlades')
 
         # connections to blade_defl
         self.connect('struc.dx_pc_defl', 'blade_defl.dx')
@@ -3027,19 +3119,20 @@ class RotorSE(Group):
 
         #COE Objective
         self.add('coe', COE(), promotes=['*'])
-        self.add('obj_cmp', ExecComp('obj = COE*100.0', COE=0.1), promotes=['*'])
+        self.add('obj_cons', ObjandCons(nstr), promotes=['*'])
+        #self.add('obj_cmp', ExecComp('obj = COE*100.0', COE=0.1), promotes=['*'])
         # self.add('obj_cmp', ExecComp('obj = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
-        eta_strain = 1.35*1.3*1.0
-        self.add('obj_con1', ExecComp('con1 = strainU_spar[[0, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_spar', strainU_spar=np.zeros(nstr), eta_strain=eta_strain, strain_ult_spar=0.0, con1=np.zeros(7)), promotes=['*'])
-        self.add('obj_con2', ExecComp('con2 = strainU_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', strainU_te=np.zeros(nstr), eta_strain=eta_strain, strain_ult_te=0.0, con2=np.zeros(8)), promotes=['*'])
-        self.add('obj_con3', ExecComp('con3 = strainL_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', strainL_te=np.zeros(nstr), eta_strain=eta_strain, strain_ult_te=0.0, con3=np.zeros(8)), promotes=['*'])
-        self.add('obj_con4', ExecComp('con4 = (eps_crit_spar[[10, 12, 14, 20, 23, 27, 31, 33]] - strainU_spar[[10, 12, 14, 20, 23, 27, 31, 33]]) / strain_ult_spar', eps_crit_spar=np.zeros(nstr), strainU_spar=np.zeros(nstr), strain_ult_spar=0.0, con4=np.zeros(8)), promotes=['*'])
-        self.add('obj_con5', ExecComp('con5 = (eps_crit_te[[10, 12, 13, 14, 21, 28, 33]] - strainU_te[[10, 12, 13, 14, 21, 28, 33]]) / strain_ult_te', eps_crit_te=np.zeros(nstr), strainU_te=np.zeros(nstr), strain_ult_te=0.0, con5=np.zeros(7)), promotes=['*'])
-        self.add('obj_con6', ExecComp('con6 = freq_curvefem[0:2] - nBlades*ratedConditions_Omega/60.0*1.1', freq_curvefem=np.zeros(5), nBlades=3, ratedConditions_Omega=0.0, con6=np.zeros(2)), promotes=['*'])
-        self.add('obj_con_freeform', ExecComp('con_freeform = airfoil_parameterization[:, [4, 5, 6, 7]] - airfoil_parameterization[:, [0, 1, 2, 3]]', airfoil_parameterization=np.zeros((6,8)), con_freeform=np.zeros((6,4))), promotes=['*'])
-        self.add('obj_concon', ExecComp('concon = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
-        # self.add('obj_con7', ExecComp('con7 = ratedConditions_T / 1e6 - 700000./1e6', ratedConditions_T=1.0, promotes=['*']))
+        #eta_strain = 1.35*1.3*1.0
+        #self.add('obj_con1', ExecComp('con1 = strainU_spar[[0, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_spar', strainU_spar=np.zeros(nstr), eta_strain=eta_strain, strain_ult_spar=0.0, con1=np.zeros(7)), promotes=['*'])
+        #self.add('obj_con2', ExecComp('con2 = strainU_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', strainU_te=np.zeros(nstr), eta_strain=eta_strain, strain_ult_te=0.0, con2=np.zeros(8)), promotes=['*'])
+        #self.add('obj_con3', ExecComp('con3 = strainL_te[[0, 8, 12, 14, 18, 22, 28, 34]]*eta_strain/strain_ult_te', strainL_te=np.zeros(nstr), eta_strain=eta_strain, strain_ult_te=0.0, con3=np.zeros(8)), promotes=['*'])
+        #self.add('obj_con4', ExecComp('con4 = (eps_crit_spar[[10, 12, 14, 20, 23, 27, 31, 33]] - strainU_spar[[10, 12, 14, 20, 23, 27, 31, 33]]) / strain_ult_spar', eps_crit_spar=np.zeros(nstr), strainU_spar=np.zeros(nstr), strain_ult_spar=0.0, con4=np.zeros(8)), promotes=['*'])
+        #self.add('obj_con5', ExecComp('con5 = (eps_crit_te[[10, 12, 13, 14, 21, 28, 33]] - strainU_te[[10, 12, 13, 14, 21, 28, 33]]) / strain_ult_te', eps_crit_te=np.zeros(nstr), strainU_te=np.zeros(nstr), strain_ult_te=0.0, con5=np.zeros(7)), promotes=['*'])
+        #self.add('obj_con6', ExecComp('con6 = freq_curvefem[0:2] - nBlades*ratedConditions_Omega/60.0*1.1', freq_curvefem=np.zeros(5), nBlades=3, ratedConditions_Omega=0.0, con6=np.zeros(2)), promotes=['*'])
+        #self.add('obj_con_freeform', ExecComp('con_freeform = airfoil_parameterization[:, [4, 5, 6, 7]] - airfoil_parameterization[:, [0, 1, 2, 3]]', airfoil_parameterization=np.zeros((6,8)), con_freeform=np.zeros((6,4))), promotes=['*'])
+        #self.add('obj_concon', ExecComp('concon = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
+        ## self.add('obj_con7', ExecComp('con7 = ratedConditions_T / 1e6 - 700000./1e6', ratedConditions_T=1.0, promotes=['*']))
         # self.connect('ratedConditions.T', 'ratedConditions_T')
-        self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
+        #self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
 
