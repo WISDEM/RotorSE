@@ -329,7 +329,10 @@ class PreCompSections(Component):
                         yl1[k] = float(yl[k])
                     x = np.append(xu1, xl1)
                     y = np.append(yu1, yl1)
-                    profile[j] = Profile.initFromCoordinates(x, y)
+                    try:
+                        profile[j] = Profile.initFromCoordinates(x, y)
+                    except:
+                        print "ERROR 3"
         mat = self.materials
         csU = self.upperCS
         csL = self.lowerCS
@@ -861,11 +864,11 @@ class GeometrySpline(Component):
         self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
-        print 'r_max_chord', params['r_max_chord']
-        print 'chord_sub', params['chord_sub']
-        print 'theta_sub', params['theta_sub']
-        print 'sparT', params['sparT']
-        print 'teT', params['teT']
+        #print 'r_max_chord', params['r_max_chord']
+        #print 'chord_sub', params['chord_sub']
+        #print 'theta_sub', params['theta_sub']
+        #print 'sparT', params['sparT']
+        #print 'teT', params['teT']
         Rhub = params['hubFraction'] * params['bladeLength']
         Rtip = Rhub + params['bladeLength']
 
