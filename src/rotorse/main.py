@@ -29,18 +29,18 @@ rotor.root = RotorSE(naero, nstr, npower)
 ### SETUP OPTIMIZATION
 rotor.driver = pyOptSparseDriver()
 rotor.driver.options['optimizer'] = 'SNOPT'
-#rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-#rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
-#rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
-#rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
+rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
+rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)
 lower = np.ones((6,8))*[[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],
                         [-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.6, -0.76, -0.4, -0.25, 0.13, 0.16, 0.13, 0.1],[-0.3, -0.36, -0.3, -0.25, 0.13, 0.16, 0.13, 0.1]]
 upper = np.ones((6,8))*[[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.15, 0.55, 0.55, 0.4, 0.4],
                         [-0.13, -0.16, -0.13, 0.28, 0.55, 0.55, 0.4, 0.4],[-0.13, -0.16, -0.13, 0.20, 0.55, 0.55, 0.4, 0.4],[-0.10, -0.13, -0.10, 0.2, 0.4, 0.45, 0.4, 0.4]]
 
-rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
-#rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)
-#rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)
+#rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper)
+rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)
+rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)
 
 rotor.driver.add_constraint('con1', lower=-1.0, upper=1.0)  # rotor strain sparL
 rotor.driver.add_constraint('con2', lower=-1.0, upper=1.0)  # rotor strain teL
@@ -63,7 +63,7 @@ rotor.driver.add_objective('obj')
 # rotor.driver.opt_settings['Print file'] = 'SNOPT_print_'+'.out'
 # rotor.driver.opt_settings['Summary file'] = 'SNOPT_summary_'+'.out'
 # rotor.driver.opt_settings['Major iterations limit'] = 1000
-recorder = SqliteRecorder("freeform_optimization_xfoil_direct3.sql")
+recorder = SqliteRecorder("freeform_optimization_cfd_conven2.sql")
 recorder.options['record_params'] = True
 recorder.options['record_metadata'] = True
 rotor.driver.add_recorder(recorder)
@@ -99,9 +99,9 @@ rotor['nBlades'] = 3  # (Int): number of blades
 # ------------------
 
 # === free form airfoil parameters ===
-airfoil_analysis_options = dict(AnalysisMethod='XFOIL', AirfoilParameterization='CST',
-                                CFDiterations=10000, CFDprocessors=16, FreeFormDesign=True, BEMSpline='XFOIL', maxDirectAoA=0, fd_step=1e-6, cs_step=1e-20,
-                                alphas=np.linspace(-15, 15, 30), Re=5e5, ComputeGradient=True)
+airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
+                                CFDiterations=10000, CFDprocessors=2, FreeFormDesign=False, BEMSpline='CFD', maxDirectAoA=15, fd_step=1e-6, cs_step=1e-20,
+                                alphas=np.linspace(-15, 15, 15), Re=5e5, ComputeGradient=True, cfdConfigFile='inv_NACA0012.cfg', ParallelAirfoils=True)
 af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
 af_str_idx = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7]
 rotor['af_idx'] = np.asarray(af_idx)
@@ -284,12 +284,12 @@ rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigu
 #rotor['teT'] = np.asarray([ 0.028200 , 0.033998,   0.015854 , 0.010452,  0.005     ])
 
 # SPLINE CONVENTIONAL
-rotor['r_max_chord'] = 0.302223
-rotor['chord_sub'] = np.asarray([ 2.629387,  4.672614,  2.884555,  1.414332])
-rotor['theta_sub'] =np.asarray([ 11.048077 ,  4.024375 ,  2.018483,  -1.664388])
-rotor['control:tsr'] = 7.583849
-rotor['sparT'] = np.asarray([ 0.043957,  0.040577,  0.041654,  0.030354 , 0.005     ])
-rotor['teT'] = np.asarray([ 0.067799 , 0.030785,   0.018208 , 0.008919,  0.005     ])
+#rotor['r_max_chord'] = 0.302223
+#rotor['chord_sub'] = np.asarray([ 2.629387,  4.672614,  2.884555,  1.414332])
+#rotor['theta_sub'] =np.asarray([ 11.048077 ,  4.024375 ,  2.018483,  -1.664388])
+#rotor['control:tsr'] = 7.583849
+#rotor['sparT'] = np.asarray([ 0.043957,  0.040577,  0.041654,  0.030354 , 0.005     ])
+#rotor['teT'] = np.asarray([ 0.067799 , 0.030785,   0.018208 , 0.008919,  0.005     ])
 
 # === run and outputs ===
 "Running RotorSE..."

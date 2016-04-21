@@ -781,6 +781,7 @@ class Airfoil(object):
         cl = np.zeros(len(alphas))
         cd = np.zeros(len(alphas))
         cm = np.zeros(len(alphas))
+        failure = False
         if airfoil_analysis_options['BEMSpline'] == 'XFOIL':
             [x, y] = cst_to_coordinates_full(CST)
             basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
@@ -819,24 +820,40 @@ class Airfoil(object):
             cl = np.delete(cl, to_delete)
             cd = np.delete(cd, to_delete)
             cm = np.delete(cm, to_delete)
-            if not cl.size or len(cl) < 3 or max(cl) < 0.0 or min(cl) > 0.0:
-                print "XFOIL Failure! Using default airfoil.", CST
-                cl = [-1.1227906,  -0.55726515, -0.30884085, -0.02638192,  0.19234127,  0.40826801,  0.67141856,  0.95384527,  1.28095228]
-                cd = [ 0.05797574,  0.01721584,  0.01167788,  0.01055452,  0.0102769,   0.01022808,  0.01051864,  0.01179746, 0.0337189 ]
+            if not cl.size or len(cl) < 3: #& or max(cl) < 0.0 or min(cl) > 0.0:
+                print "XFOIL Failure! Using default backup airfoil.", CST
+                # for CST = [-0.25, -0.25, -0.25, -0.25, 0.25, 0.25, 0.25, 0.25]
+                cl = [-1.11249573, -1.10745928, -1.10242437, -1.10521061, -1.03248528, -0.9272929, -0.81920516, -0.70843745, -0.58962942, -0.45297636, -0.34881162, -0.26194, -0.17375163, -0.09322158, -0.01072867,  0.07232111,
+                      0.15326737,  0.22932199, 0.29657574,  0.36818004,  0.45169576,  0.55640456 , 0.68532189,  0.81592085, 0.93355555,  1.04754944,  1.06513144,  1.07821432 , 1.09664777,  1.11425611]
+                cd = [ 0.03966997,  0.03289554,  0.02783541,  0.02418726,  0.02120267,  0.01849611,  0.01623273,  0.01424686,  0.0124225 ,  0.01083306,  0.00973778,  0.00908278, 0.00867001,  0.00838171,  0.00823596,  0.00820681,
+                       0.00828496 , 0.00842328,  0.00867177,  0.00921659,  0.01004469,  0.01129231,  0.01306175 , 0.01509252, 0.01731396,  0.01986422,  0.02234169 , 0.02555122,  0.02999641 , 0.03574208]
+                #cl = [-1.1227906,  -0.55726515, -0.30884085, -0.02638192,  0.19234127,  0.40826801,  0.67141856,  0.95384527,  1.28095228]
+                #cd = [ 0.05797574,  0.01721584,  0.01167788,  0.01055452,  0.0102769,   0.01022808,  0.01051864,  0.01179746, 0.0337189 ]
                 cm = np.zeros(len(cl))
                 alphas = np.linspace(-15, 15, len(cl))
                 failure = True
 
             else:
                 alphas = np.delete(alphas, to_delete)
-                failure = False
         elif airfoil_analysis_options['BEMSpline'] == 'CFD':
-            for j in range(len(alphas)):
-                if j == 0:
-                    mesh = True
-                else:
-                    mesh = False
-                cl[j], cd[j] = cfdDirectSolve(alphas[j], Re, CST, airfoil_analysis_options, GenerateMESH=mesh)
+            import time
+            if airfoil_analysis_options['ParallelAirfoils']:
+                time0 = time.time()
+                cl, cd = cfdDirectSolveParallel(np.radians(alphas), Re, CST, airfoil_analysis_options)
+                print "PARALLEL TIME", time.time() - time0
+            else:
+                time0 = time.time()
+                for j in range(len(alphas)):
+                    if j == 0:
+                        mesh = True
+                    else:
+                        mesh = False
+
+                    cl[j], cd[j] = cfdDirectSolve(np.radians(alphas[j]), Re, CST, airfoil_analysis_options, GenerateMESH=mesh)
+                print "SERIAL TIME", time.time() - time0
+        else:
+            print "Please choose CFD or XFOIL."
+            raise ValueError
 
         polars.append(polarType(Re, alphas, cl, cd, cm))
 
@@ -1689,7 +1706,7 @@ class CCAirfoil:
 
         basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
         # config_filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
-        config_filename = basepath + os.path.sep + 'inv_NACA0012.cfg'
+        config_filename = basepath + os.path.sep + self.airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
         config.NUMBER_PART = self.airfoil_analysis_options['CFDprocessors']
@@ -2282,8 +2299,7 @@ def cfdDirectSolve(alpha, Re, afp, airfoil_analysis_options, GenerateMESH=False,
         import SU2
 
         basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
-        # config_filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
-        config_filename = basepath + os.path.sep + 'inv_NACA0012.cfg'
+        config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
         config.NUMBER_PART = airfoil_analysis_options['CFDprocessors']
@@ -2356,7 +2372,192 @@ def cfdDirectSolve(alpha, Re, afp, airfoil_analysis_options, GenerateMESH=False,
 
         cd = SU2.eval.func('DRAG', config, state)
         cl = SU2.eval.func('LIFT', config, state)
+        print cl, cd
         return cl, cd
+
+def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
+        # Import SU2
+        sys.path.append(os.environ['SU2_RUN'])
+        import SU2
+
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
+        config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
+        config = SU2.io.Config(config_filename)
+        state  = SU2.io.State()
+        config.NUMBER_PART = airfoil_analysis_options['CFDprocessors']
+        config.EXT_ITER    = airfoil_analysis_options['CFDiterations']
+        config.WRT_CSV_SOL = 'YES'
+        meshFileName = 'mesh_AIRFOIL_parallel.su2'
+        config.CONSOLE = 'QUIET'
+
+        # Create airfoil coordinate file for SU2
+        [x, y] = cst_to_coordinates_full(afp)
+        airfoilFile = 'airfoil_shape_parallel.dat'
+        coord_file = open(airfoilFile, 'w')
+        print >> coord_file, 'Airfoil Parallel'
+        for i in range(len(x)):
+            print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+        coord_file.close()
+        oldstdout = sys.stdout
+        sys.stdout = open('output_meshes_stdout.txt', 'w')
+        konfig = copy.deepcopy(config)
+        konfig.MESH_OUT_FILENAME = meshFileName
+        konfig.DV_KIND = 'AIRFOIL'
+        tempname = 'config_DEF.cfg'
+        konfig.dump(tempname)
+        SU2_RUN = os.environ['SU2_RUN']
+        # must run with rank 1
+        processes = konfig['NUMBER_PART']
+        base_Command = os.path.join(SU2_RUN,'%s')
+        the_Command = 'SU2_DEF ' + tempname
+        the_Command = base_Command % the_Command
+        sys.stdout.flush()
+        proc = subprocess.Popen( the_Command, shell=True    ,
+                         stdout=sys.stdout      ,
+                         stderr=subprocess.PIPE,
+                         stdin=subprocess.PIPE)
+        proc.stderr.close()
+        proc.stdin.write(airfoilFile+'\n')
+        proc.stdin.write('Selig\n')
+        proc.stdin.write('1.0\n')
+        proc.stdin.write('Yes\n')
+        proc.stdin.write('clockwise\n')
+        proc.stdin.close()
+        return_code = proc.wait()
+
+        restart = False
+        sys.stdout = oldstdout
+
+        config.MESH_FILENAME = meshFileName #'mesh_out.su2' # basepath + os.path.sep + 'mesh_AIRFOIL.su2'
+        state.FILES.MESH = config.MESH_FILENAME
+        Uinf = 10.0
+        Ma = Uinf / 340.29  # Speed of sound at sea level
+        config.MACH_NUMBER = Ma
+        config.REYNOLDS_NUMBER = Re
+
+        if restart:
+            config.RESTART_SOL = 'YES'
+            config.RESTART_FLOW_FILENAME = 'solution_flow_AIRFOIL_parallel.dat'
+            config.SOLUTION_FLOW_FILENAME = 'solution_flow_SOLVED_AIRFOIL_parallel.dat'
+        else:
+            config.RESTART_SOL = 'NO'
+            config.SOLUTION_FLOW_FILENAME = 'solution_flow_AIRFOIL_parallel.dat'
+        cl = np.zeros(len(alphas))
+        cd = np.zeros(len(alphas))
+        alphas = np.degrees(alphas)
+        procTotal = []
+        konfigTotal = []
+        for i in range(len(alphas)):
+            x_vel = Uinf * cos(np.radians(alphas[i]))
+            y_vel = Uinf * sin(np.radians(alphas[i]))
+            config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
+            config.AoA = alphas[i]
+            config.CONV_FILENAME = 'history_'+str(int(alphas[i]))
+            state = SU2.io.State(state)
+            konfig = copy.deepcopy(config)
+            # setup direct problem
+            konfig['MATH_PROBLEM']  = 'DIRECT'
+            konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_direct'
+
+            # Run Solution
+            tempname = 'config_CFD'+str(int(alphas[i]))+'.cfg'
+            konfig.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            sys.path.append( SU2_RUN )
+
+            mpi_Command = 'mpirun -n %i %s'
+
+            processes = konfig['NUMBER_PART']
+
+            the_Command = 'SU2_CFD ' + tempname
+            the_Command = base_Command % the_Command
+            if processes > 0:
+                if not mpi_Command:
+                    raise RuntimeError , 'could not find an mpi interface'
+            the_Command = mpi_Command % (processes,the_Command)
+            sys.stdout.flush()
+            cfd_output = open('cfd_output'+str(i+1)+'.txt', 'w')
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                         stdout=cfd_output      ,
+                         stderr=subprocess.PIPE,
+                         stdin=subprocess.PIPE)
+            proc.stderr.close()
+            proc.stdin.close()
+            procTotal.append(deepcopy(proc))
+            konfigTotal.append(deepcopy(konfig))
+            print "CFD" + str(i+1)
+
+        for i in range(len(alphas)):
+            while procTotal[i].poll() is None:
+                pass
+            konfig = konfigTotal[i]
+            konfig['SOLUTION_FLOW_FILENAME'] = konfig['RESTART_FLOW_FILENAME']
+            oldstdout = sys.stdout
+            sys.stdout = open(os.devnull, 'w')
+            SU2.run.merge(konfig)
+            sys.stdout = oldstdout
+            # filenames
+            plot_format      = konfig['OUTPUT_FORMAT']
+            plot_extension   = SU2.io.get_extension(plot_format)
+            history_filename = konfig['CONV_FILENAME'] + plot_extension
+            special_cases    = SU2.io.get_specialCases(konfig)
+
+            final_avg = config.get('ITER_AVERAGE_OBJ',0)
+
+            # get history and objectives
+            #history      = su2io.read_history( history_filename )
+            aerodynamics = SU2.io.read_aerodynamics( history_filename , special_cases, final_avg )
+
+            # update super config
+            config.update({ 'MATH_PROBLEM' : konfig['MATH_PROBLEM']  })
+
+            # info out
+            info = SU2.io.State()
+            info.FUNCTIONS.update( aerodynamics )
+            state.update(info)
+
+            cl[i], cd[i] = info.FUNCTIONS['LIFT'], info.FUNCTIONS['DRAG']
+        print "Done ALL"
+        return cl, cd
+
+
+def direct ( config ):
+    """ info = SU2.run.direct(config)
+
+        Runs an adjoint analysis with:
+            SU2.run.decomp()
+            SU2.run.CFD()
+            SU2.run.merge()
+
+        Assumptions:
+            Does not rename restart filename to solution filename
+            Adds 'direct' suffix to convergence filename
+
+        Outputs:
+            info - SU2 State with keys:
+                FUNCTIONS
+                HISTORY.DIRECT
+                FILES.DIRECT
+
+        Updates:
+            config.MATH_PROBLEM
+
+        Executes in:
+            ./
+    """
+
+    # local copy
+
+    info.FILES.DIRECT = konfig['RESTART_FLOW_FILENAME']
+    if 'EQUIV_AREA' in special_cases:
+        info.FILES.WEIGHT_NF = 'WeightNF.dat'
+    if 'INV_DESIGN_CP' in special_cases:
+        info.FILES.TARGET_CP = 'TargetCp.dat'
+    if 'INV_DESIGN_HEATFLUX' in special_cases:
+        info.FILES.TARGET_HEATFLUX = 'TargetHeatFlux.dat'
+    info.HISTORY.DIRECT = history
+
+    return info
 
 if __name__ == '__main__':
 
