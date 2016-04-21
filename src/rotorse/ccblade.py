@@ -336,10 +336,7 @@ class CCBlade:
 
             alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                              chord, theta, self.rho, self.mu)
-            if self.airfoil_analysis_options['BEMSpline'] or np.degrees(alpha) > 30.0:
-                cl, cd = af.evaluate(alpha, Re)
-            else:
-                cl, cd = af.evaluate_direct(alpha, Re)
+            cl, cd = af.evaluate(alpha, Re)
 
             fzero, a, ap = _bem.inductionfactors(r, chord, self.Rhub, self.Rtip, phi,
                                                  cl, cd, self.B, Vx, Vy, **self.bemoptions)
@@ -403,7 +400,7 @@ class CCBlade:
             # else:
             #     dcl_dafp, dcd_dafp = af.freeform_derivatives_spline(alpha, Re)
             # if self.airfoil_analysis_options['BEMSpline']:
-            dcl_dafp_R, dcd_dafp_R = af.freeform_derivatives_spline(alpha, Re)
+            dcl_dafp_R, dcd_dafp_R = af.splineFreeFormGrad(alpha, Re)
             dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
             # else:
             # dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
@@ -645,6 +642,7 @@ class CCBlade:
 
             # derivatives of residual
             airfoils = [False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+            #print "UINF", Uinf
             if self.freeform and rotating and self.derivatives:
                 if airfoils[i]:
                     self.freeform_gradient = True
@@ -654,6 +652,8 @@ class CCBlade:
                     Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
                     dNp_dafp, dTp_dafp, dR_dafp = 0.0, 0.0, 0.0
             else:
+                if Uinf > 22.5 and rotating:
+                    pass
                 self.freeform_gradient = False
                 Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
 

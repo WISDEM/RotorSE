@@ -359,12 +359,14 @@ class Polar(object):
         found_zero_lift = False
 
         for i in range(len(self.cm)):
+#            try:
             if abs(self.alpha[i]) < 20.0 and self.cl[i] <= 0 and self.cl[i+1] >= 0:
                 p = -self.cl[i] / (self.cl[i + 1] - self.cl[i])
                 cm0 = self.cm[i] + p * (self.cm[i+1] - self.cm[i])
                 found_zero_lift = True
                 break
-
+#            except:
+#                pass
         if not found_zero_lift:
             p = -self.cl[0] / (self.cl[1] - self.cl[0])
             cm0 = self.cm[0] + p * (self.cm[1] - self.cm[0])
@@ -523,7 +525,7 @@ class Airfoil(object):
 
     """
 
-    def __init__(self, polars):
+    def __init__(self, polars, failure=False):
         """Constructor
 
         Parameters
@@ -538,6 +540,8 @@ class Airfoil(object):
 
         # save type of polar we are using
         self.polar_type = polars[0].__class__
+
+        self.failure = failure
 
 
     @classmethod
@@ -774,56 +778,71 @@ class Airfoil(object):
         polars = []
         Re = airfoil_analysis_options['Re']
         alphas = airfoil_analysis_options['alphas']
-
-        [x, y] = cst_to_coordinates_full(CST)
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
-        airfoil_shape_file = basepath + os.path.sep + 'cst_coordinates.dat'
-        coord_file = open(airfoil_shape_file, 'w')
-        print >> coord_file, 'CST'
-        for i in range(len(x)):
-            print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
-        coord_file.close()
-
-        # read in coordinate file
-        airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
-        airfoil.re = Re
-        airfoil.mach = 0.00
-        airfoil.iter = 100
-
         cl = np.zeros(len(alphas))
         cd = np.zeros(len(alphas))
         cm = np.zeros(len(alphas))
-        to_delete = np.zeros(0)
-        for j in range(len(alphas)):
-            cl[j], cd[j], cm[j], lexitflag = airfoil.solveAlpha(alphas[j])
-            if lexitflag:
-                global lexitflag_counter
-                lexitflag_counter += 1
-            if lexitflag:
-                cl[j] = -10.0
-                cd[j] = 0.0
-        cl_diff = np.diff(np.asarray(cl))
-        cd_diff = np.diff(np.asarray(cd))
-        for zz in range(len(cl_diff)):
-            if abs(cd_diff[zz]) > 0.02 or abs(cl_diff[zz]) > 0.5:
-                to_delete = np.append(to_delete, zz)
-        # error handling in case of XFOIL failure
-        for k in range(len(cl)):
-            if cl[k] == -10.0 or cl[k] < -2. or cl[k] > 2. or cd[k] < 0.00001 or cd[k] > 1.0 or not np.isfinite(cd[k]) or not np.isfinite(cl[k]):
-                to_delete = np.append(to_delete, k)
-        cl = np.delete(cl, to_delete)
-        cd = np.delete(cd, to_delete)
-        cm = np.delete(cm, to_delete)
-        if not cl.size:
-            print "XFOIL Failure! Using default airfoil.", CST
-            cl = [-1.1227906,  -0.55726515, -0.30884085, -0.02638192,  0.19234127,  0.40826801,  0.67141856,  0.95384527,  1.28095228]
-            cd = [ 0.05797574,  0.01721584,  0.01167788,  0.01055452,  0.0102769,   0.01022808,  0.01051864,  0.01179746, 0.0337189 ]
-        else:
-            alphas = np.delete(alphas, to_delete)
+        if airfoil_analysis_options['BEMSpline'] == 'XFOIL':
+            [x, y] = cst_to_coordinates_full(CST)
+            basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
+            airfoil_shape_file = basepath + os.path.sep + 'cst_coordinates.dat'
+            coord_file = open(airfoil_shape_file, 'w')
+            print >> coord_file, 'CST'
+            for i in range(len(x)):
+                print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+            coord_file.close()
+
+            # read in coordinate file
+            airfoil = pyXLIGHT.xfoilAnalysis(airfoil_shape_file, x=x, y=y)
+            airfoil.re = Re
+            airfoil.mach = 0.00
+            airfoil.iter = 100
+
+
+            to_delete = np.zeros(0)
+            for j in range(len(alphas)):
+                cl[j], cd[j], cm[j], lexitflag = airfoil.solveAlpha(alphas[j])
+                if lexitflag:
+                    global lexitflag_counter
+                    lexitflag_counter += 1
+                if lexitflag:
+                    cl[j] = -10.0
+                    cd[j] = 0.0
+            cl_diff = np.diff(np.asarray(cl))
+            cd_diff = np.diff(np.asarray(cd))
+            for zz in range(len(cl_diff)):
+                if abs(cd_diff[zz]) > 0.02 or abs(cl_diff[zz]) > 0.5:
+                    to_delete = np.append(to_delete, zz)
+            # error handling in case of XFOIL failure
+            for k in range(len(cl)):
+                if cl[k] == -10.0 or cl[k] < -2. or cl[k] > 2. or cd[k] < 0.00001 or cd[k] > 1.0 or not np.isfinite(cd[k]) or not np.isfinite(cl[k]):
+                    to_delete = np.append(to_delete, k)
+            cl = np.delete(cl, to_delete)
+            cd = np.delete(cd, to_delete)
+            cm = np.delete(cm, to_delete)
+            if not cl.size or len(cl) < 3 or max(cl) < 0.0 or min(cl) > 0.0:
+                print "XFOIL Failure! Using default airfoil.", CST
+                cl = [-1.1227906,  -0.55726515, -0.30884085, -0.02638192,  0.19234127,  0.40826801,  0.67141856,  0.95384527,  1.28095228]
+                cd = [ 0.05797574,  0.01721584,  0.01167788,  0.01055452,  0.0102769,   0.01022808,  0.01051864,  0.01179746, 0.0337189 ]
+                cm = np.zeros(len(cl))
+                alphas = np.linspace(-15, 15, len(cl))
+                failure = True
+
+            else:
+                alphas = np.delete(alphas, to_delete)
+                failure = False
+        elif airfoil_analysis_options['BEMSpline'] == 'CFD':
+            for j in range(len(alphas)):
+                if j == 0:
+                    mesh = True
+                else:
+                    mesh = False
+                cl[j], cd[j] = cfdDirectSolve(alphas[j], Re, CST, airfoil_analysis_options, GenerateMESH=mesh)
 
         polars.append(polarType(Re, alphas, cl, cd, cm))
 
-        return cls(polars)
+        return cls(polars, failure)
+
+
 
 
     def getPolar(self, Re):
@@ -1170,7 +1189,7 @@ class CCAirfoil:
     # implements(AirfoilInterface)
 
 
-    def __init__(self, alpha, Re, cl, cd, cm, afp=None, airfoil_analysis_options=None, airfoilNum=0):
+    def __init__(self, alpha, Re, cl, cd, cm, afp=None, airfoil_analysis_options=None, airfoilNum=0, failure=False):
         """Setup CCAirfoil from raw airfoil data on a grid.
 
         Parameters
@@ -1217,6 +1236,9 @@ class CCAirfoil:
         self.cl_spline = RectBivariateSpline(alpha, Re, cl, kx=kx, ky=ky)#, s=0.1)#, s=0.1)
         self.cd_spline = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky)#, s=0.001) #, s=0.001)
 
+        self.failure = failure
+        if failure:
+            afp = np.asarray([-0.25, -0.25, -0.25, -0.25, 0.25, 0.25, 0.25, 0.25])
         if afp is not None:
             # To check spline
             # n = 2000
@@ -1330,7 +1352,7 @@ class CCAirfoil:
 
         """
         af = Airfoil.initFromCST(CST, airfoil_analysis_options)
-
+        failure = af.failure
         # For 3D Correction TODO
         # r_over_R = 0.5
         # chord_over_r = 0.15
@@ -1340,7 +1362,7 @@ class CCAirfoil:
         af_extrap1 = af.extrapolate(cd_max)
         alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
 
-        return cls(alpha, Re, cl, cd, cm, afp=CST, airfoil_analysis_options=airfoil_analysis_options, airfoilNum=airfoilNum)
+        return cls(alpha, Re, cl, cd, cm, afp=CST, airfoil_analysis_options=airfoil_analysis_options, airfoilNum=airfoilNum, failure=failure)
 
     @classmethod
     def initFromNACA(cls, NACA, alphas, Re, airfoil_analysis_options, ComputeGradient=False):
@@ -1416,7 +1438,7 @@ class CCAirfoil:
         return cl, cd
 
     def evaluate_direct(self, alpha, Re, computeAlphaGradient=False, computeAFPGradient=False):
-        if self.afp is not None and np.degrees(alpha) < 15.0: #30.0:
+        if self.afp is not None and abs(np.degrees(alpha)) < self.airfoil_analysis_options['maxDirectAoA']:
             if alpha in self.alpha_storage and alpha in self.dalpha_storage:
                 index = self.alpha_storage.index(alpha)
                 cl = self.cl_storage[index]
@@ -1453,7 +1475,7 @@ class CCAirfoil:
                         if abs(dcl_dalpha) > 10.0 or abs(dcd_dalpha) > 10.0:
                         #    print "ERROR dcl", self.afp, "alpha", np.degrees(alpha)
                             #airfoil.iter = 500
-                            fd_step = 1e-6
+                            fd_step = self.airfoil_analysis_options['fd_step']
                             cl, cd, cm, lexitflag = airfoil.solveAlpha(np.degrees(alpha))
                             if lexitflag or abs(cl) > 2.5 or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
                                 print "flag1", self.afp, "alpha", np.degrees(alpha)
@@ -1519,7 +1541,7 @@ class CCAirfoil:
                 dcl_dRe = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
                 dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
             if computeAFPGradient and self.afp is not None:
-                dcl_dafp, dcd_dafp = self.xfoilGradientsSpline(alpha, Re)
+                dcl_dafp, dcd_dafp = self.splineFreeFormGrad(alpha, Re)
             else:
                 dcl_dafp, dcd_dafp = 0.0, 0.0
         if computeAFPGradient:
@@ -1554,9 +1576,9 @@ class CCAirfoil:
             [x, y] = cst_to_coordinates_full(self.afp)
         return x, y
 
-    def xfoilGradientsSpline(self, alpha, Re):
+    def splineFreeFormGrad(self, alpha, Re):
         dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8)
-        fd_step = 1.e-6
+        fd_step = self.airfoil_analysis_options['fd_step']
         cl_cur = self.cl_spline.ev(alpha, Re)
         cd_cur = self.cd_spline.ev(alpha, Re)
         for i in range(8):
@@ -1586,7 +1608,7 @@ class CCAirfoil:
             dcl_dafp[i+4], dcd_dafp[i+4] = np.imag(cl_complex)/step_size, np.imag(cd_complex)/step_size
             if lexitflag[i] or lexitflag[i+4] or abs(dcl_dafp[i+4]) > 100.0 or abs(dcd_dafp[i+4]) > 100.0 or abs(dcl_dafp[i]) > 100.0 or abs(dcd_dafp[i]) > 100.0:
                 print "ERROR"
-                fd_step = 1e-6
+                fd_step = self.airfoil_analysis_options['fd_step']
                 wl_fd1 = np.real(deepcopy(wl))
                 wl_fd2 = np.real(deepcopy(wl))
                 wl_fd1[i] -= 0.0#fd_step
@@ -1680,7 +1702,7 @@ class CCAirfoil:
 
             # Create airfoil coordinate file for SU2
             [x, y] = cst_to_coordinates_full(self.afp)
-            airfoilFile = 'airfoil_shape'+str(airfoilNum+1)+'.dat'
+            airfoilFile = 'airfoil_shape.dat'
             coord_file = open(airfoilFile, 'w')
             print >> coord_file, 'Airfoil ' + str(airfoilNum+1)
             for i in range(len(x)):
@@ -1690,6 +1712,7 @@ class CCAirfoil:
             sys.stdout = open('output_meshes_stdout.txt', 'w')
             konfig = copy.deepcopy(config)
             konfig.MESH_OUT_FILENAME = meshFileName
+            konfig.DV_KIND = 'AIRFOIL'
             tempname = 'config_DEF.cfg'
             konfig.dump(tempname)
             SU2_RUN = os.environ['SU2_RUN']
@@ -1704,8 +1727,8 @@ class CCAirfoil:
                              stderr=subprocess.PIPE,
                              stdin=subprocess.PIPE)
             proc.stderr.close()
-            proc.stdin.write(airfoilFile+'\n')
-            #proc.stdin.write('airfoil_shape.dat\n')
+            #proc.stdin.write(airfoilFile+'\n')
+            proc.stdin.write('airfoil_shape.dat\n')
             proc.stdin.write('Selig\n')
             proc.stdin.write('1.0\n')
             proc.stdin.write('Yes\n')
@@ -1761,12 +1784,13 @@ class CCAirfoil:
 
             dz = 0
             n = 8
-            fd_step = 1e-6
+            fd_step = self.airfoil_analysis_options['fd_step']
             m = 200
             dx_dafp = np.zeros((n, m))
             wl_original, wu_original, N, dz = CST_to_kulfan(self.afp)
             yl_old, yu_old = cst_to_y_coordinates_given_x(wl_original, wu_original, N, dz, xl, xu)
-            if self.airfoil_analysis_options['GradientType'] == 'FD':
+            grad_type = 'FD'
+            if grad_type == 'FD':
                 for i in range(0, n):
                     wl_new = deepcopy(wl_original)
                     wu_new = deepcopy(wu_original)
@@ -1776,7 +1800,6 @@ class CCAirfoil:
                         wu_new[i-4] += fd_step
 
                     yl_new, yu_new = cst_to_y_coordinates_given_x(wl_new, wu_new, N, dz, xl, xu)
-                    j = 0
                     for j in range(m):
                         if i < n/2:
                             if j < len(yl_new):
@@ -1788,8 +1811,8 @@ class CCAirfoil:
                                 dx_dafp[i][j] = (yu_new[j- (m-len(yu_new))] - yu_old[j-(m-len(yu_new))]) / fd_step
                             else:
                                 dx_dafp[i][j] = 0.0
-            elif self.airfoil_analysis_options['GradientType'] == 'CS':
-                step_size = 1e-20
+            elif grad_type == 'CS':
+                step_size = self.airfoil_analysis_options['cs_step']
                 cs_step = complex(0, step_size)
 
                 for i in range(0, n):
@@ -1799,14 +1822,18 @@ class CCAirfoil:
                         wl_new[i-4] += cs_step
                     else:
                         wu_new[i] += cs_step
-                    coor_new = cst_to_coordinates_complex(wl_new, wu_new, N, dz)
-                    j = 0
-                    for coor_d in design:
-                        if coor_new[1][coor_d].imag == 0:
-                            dafp_dx[i][j] = 0
+                    yl_new, yu_new = cst_to_y_coordinates_given_x_Complexx(wl_new, wu_new, N, dz, xl, xu)
+                    for j in range(m):
+                        if i < n/2:
+                            if j < len(yl_new):
+                                dx_dafp[i][j] = (np.imag(yl_new[j])) / step_size
+                            else:
+                                dx_dafp[i][j] = 0.0
                         else:
-                            dafp_dx[i][j] = (coor_new[1][coor_d].imag / np.imag(cs_step))
-                        j += 1
+                            if j > m - len(yu_new):
+                                dx_dafp[i][j] = np.imag(yu_new[j- (m-len(yu_new))]) / step_size
+                            else:
+                                dx_dafp[i][j] = 0.0
             else:
                 print 'Warning. GradientType needs to be set to either FD or CS'
 
@@ -1816,7 +1843,7 @@ class CCAirfoil:
 
             dcl_dafp = dafp_dx * dcl_dx.T
             dcd_dafp = dafp_dx * dcd_dx.T
-
+            print cl, cd, np.asarray(dcl_dafp).reshape(8), np.asarray(dcd_dafp).reshape(8)
             return cl, cd, np.asarray(dcl_dafp).reshape(8), np.asarray(dcd_dafp).reshape(8)
         print "CL, CD", cl, cd
         return cl, cd
@@ -1860,6 +1887,15 @@ def cst_to_y_coordinates_given_x(wl, wu, N, dz, xl, xu):
     N2 = 1
     yl = ClassShape(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
     yu = ClassShape(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
+    return yl, yu
+
+def cst_to_y_coordinates_given_x_Complexx(wl, wu, N, dz, xl, xu):
+
+    # N1 and N2 parameters (N1 = 0.5 and N2 = 1 for airfoil shape)
+    N1 = 0.5
+    N2 = 1
+    yl = ClassShapeComplex(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
+    yu = ClassShapeComplex(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
     return yl, yu
 
 def cstComplex(alpha, Re, wl, wu, N, dz, Uinf):
@@ -2240,7 +2276,87 @@ def getCoordinates(CST):
 
     return xl, xu, yl, yu
 
+def cfdDirectSolve(alpha, Re, afp, airfoil_analysis_options, GenerateMESH=False, airfoilNum=0):
+        # Import SU2
+        sys.path.append(os.environ['SU2_RUN'])
+        import SU2
 
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
+        # config_filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
+        config_filename = basepath + os.path.sep + 'inv_NACA0012.cfg'
+        config = SU2.io.Config(config_filename)
+        state  = SU2.io.State()
+        config.NUMBER_PART = airfoil_analysis_options['CFDprocessors']
+        config.EXT_ITER    = airfoil_analysis_options['CFDiterations']
+        config.WRT_CSV_SOL = 'YES'
+        meshFileName = 'mesh_AIRFOIL'+str(airfoilNum+1)+'.su2'
+        config.CONSOLE = 'QUIET'
+
+        if GenerateMESH:
+
+            # Create airfoil coordinate file for SU2
+            [x, y] = cst_to_coordinates_full(afp)
+            airfoilFile = 'airfoil_shape'+str(airfoilNum+1)+'.dat'
+            coord_file = open(airfoilFile, 'w')
+            print >> coord_file, 'Airfoil ' + str(airfoilNum+1)
+            for i in range(len(x)):
+                print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+            coord_file.close()
+            oldstdout = sys.stdout
+            sys.stdout = open('output_meshes_stdout.txt', 'w')
+            konfig = copy.deepcopy(config)
+            konfig.MESH_OUT_FILENAME = meshFileName
+            konfig.DV_KIND = 'AIRFOIL'
+            tempname = 'config_DEF.cfg'
+            konfig.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            # must run with rank 1
+            processes = konfig['NUMBER_PART']
+            base_Command = os.path.join(SU2_RUN,'%s')
+            the_Command = 'SU2_DEF ' + tempname
+            the_Command = base_Command % the_Command
+            sys.stdout.flush()
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                             stdout=sys.stdout      ,
+                             stderr=subprocess.PIPE,
+                             stdin=subprocess.PIPE)
+            proc.stderr.close()
+            proc.stdin.write(airfoilFile+'\n')
+            #proc.stdin.write('airfoil_shape.dat\n')
+            proc.stdin.write('Selig\n')
+            proc.stdin.write('1.0\n')
+            proc.stdin.write('Yes\n')
+            proc.stdin.write('clockwise\n')
+            proc.stdin.close()
+            return_code = proc.wait()
+
+            restart = False
+            sys.stdout = oldstdout
+        else:
+            restart = True
+
+        config.MESH_FILENAME = meshFileName #'mesh_out.su2' # basepath + os.path.sep + 'mesh_AIRFOIL.su2'
+        state.FILES.MESH = config.MESH_FILENAME
+        config.AoA = np.degrees(alpha)
+        Uinf = 10.0
+        Ma = Uinf / 340.29  # Speed of sound at sea level
+        x_vel = Uinf * cos(alpha)
+        y_vel = Uinf * sin(alpha)
+        config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
+        config.MACH_NUMBER = Ma
+        config.REYNOLDS_NUMBER = 5e5 #Re
+
+        if restart:
+            config.RESTART_SOL = 'YES'
+            config.RESTART_FLOW_FILENAME = 'solution_flow_AIRFOIL' + str(airfoilNum+1) +'.dat'
+            config.SOLUTION_FLOW_FILENAME = 'solution_flow_SOLVED_AIRFOIL' + str(airfoilNum+1) + '.dat'
+        else:
+            config.RESTART_SOL = 'NO'
+            config.SOLUTION_FLOW_FILENAME = 'solution_flow_AIRFOIL' + str(airfoilNum+1) + '.dat'
+
+        cd = SU2.eval.func('DRAG', config, state)
+        cl = SU2.eval.func('LIFT', config, state)
+        return cl, cd
 
 if __name__ == '__main__':
 

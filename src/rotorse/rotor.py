@@ -864,11 +864,11 @@ class GeometrySpline(Component):
         self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
-        #print 'r_max_chord', params['r_max_chord']
-        #print 'chord_sub', params['chord_sub']
-        #print 'theta_sub', params['theta_sub']
-        #print 'sparT', params['sparT']
-        #print 'teT', params['teT']
+        print 'r_max_chord', params['r_max_chord']
+        print 'chord_sub', params['chord_sub']
+        print 'theta_sub', params['theta_sub']
+        print 'sparT', params['sparT']
+        print 'teT', params['teT']
         Rhub = params['hubFraction'] * params['bladeLength']
         Rtip = Rhub + params['bladeLength']
 
@@ -2225,7 +2225,7 @@ class OutputsStructures(Component):
         return J
 
 class ObjandCons(Component):
-    def __init__(self, nstr):
+    def __init__(self, nstr, npower):
         super(ObjandCons, self).__init__()
         self.add_param('COE', val=0.1)
         self.add_param('strainU_spar', val=np.zeros(nstr))
@@ -2239,6 +2239,8 @@ class ObjandCons(Component):
         self.add_param('ratedConditions:Omega', val=0.0)
         self.add_param('nBlades', val=3, pass_by_obj=True)
         self.add_param('airfoil_parameterization', val=np.zeros((6,8)))
+        self.add_param('power', val=np.zeros(npower))
+        self.add_param('control:ratedPower', val=0.0)
 
         self.add_output('obj', val=1.0)
         self.add_output('con1', val=np.zeros(7))
@@ -2248,6 +2250,7 @@ class ObjandCons(Component):
         self.add_output('con5', val=np.zeros(7))
         self.add_output('con6', val=np.zeros(2))
         self.add_output('con_freeform', val=np.zeros((6,4)))
+        self.add_output('con_power', val=0.0)
 
     def solve_nonlinear(self, params, unknowns, resids):
         self.eta_strain = 1.35*1.3*1.0
@@ -2264,6 +2267,7 @@ class ObjandCons(Component):
         unknowns['con5'] = (params['eps_crit_te'][self.con5_indices] - params['strainU_te'][self.con5_indices]) / params['strain_ult_te']
         unknowns['con6'] = params['freq_curvefem'][0:2] - params['nBlades']*params['ratedConditions:Omega']/60.0*1.1
         unknowns['con_freeform'] = params['airfoil_parameterization'][:, [4, 5, 6, 7]] - params['airfoil_parameterization'][:, [0, 1, 2, 3]]
+        unknowns['con_power'] = params['power'][-1] - params['control:ratedPower']
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -2312,6 +2316,8 @@ class ObjandCons(Component):
         J['con6', 'freq_curvefem'] = dcon6_dfreq
         J['con6', 'ratedConditions:Omega'] = dcon6_dOmega
         J['con_freeform', 'airfoil_parameterization'] = dcon_freeform_dafp
+        J['con_power', 'power'] = 1.0
+        J['con_power', 'control:ratedPower'] = -1.0
         return J
 
 
@@ -3122,7 +3128,8 @@ class RotorSE(Group):
 
         #COE Objective
         self.add('coe', COE(), promotes=['*'])
-        self.add('obj_cons', ObjandCons(nstr), promotes=['*'])
+        self.add('obj_cons', ObjandCons(nstr, npower), promotes=['*'])
+        self.connect('analysis.P', 'power')
         #self.add('obj_cmp', ExecComp('obj = COE*100.0', COE=0.1), promotes=['*'])
         # self.add('obj_cmp', ExecComp('obj = (mass_all_blades + 589154)*100.0 / AEP', mass_all_blades=50000.0, AEP=1000000.0), promotes=['*'])
         #eta_strain = 1.35*1.3*1.0

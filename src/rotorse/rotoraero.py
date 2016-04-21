@@ -349,6 +349,11 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             resids2 = P2 - params['control:ratedPower']
             if ((resids1<0) == (resids2<0)):
                 print "Powercurve, Vcoarse: ", params['Vcoarse'], "Pcoarse", params['Pcoarse']
+                if Vrated == params['control:Vout']:
+                    resids['Vrated'] = 10000
+                elif Vrated != params['control:Vin']:
+                    resids['Vrated'] = 0
+
         ## Test on
 
         # region 2

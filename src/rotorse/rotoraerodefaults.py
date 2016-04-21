@@ -246,14 +246,14 @@ class CCBladeAirfoils(Component):
                 airfoil_types = [0]*8
                 airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
                 airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-                cst_file = open("cst_file_tracker_cfd.txt", "a")
+                cst_file = open("cst_file_tracxfoil2.txt", "a")
                 for i in range(len(airfoil_types)-2):
                     if change[i] > 0:
                         time0 = time.time()
-                        try:
-                            airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], self.airfoil_analysis_options)
-                        except:
-                            raise AnalysisError
+                        #try:
+                        airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], self.airfoil_analysis_options, airfoilNum=i)
+                        #except:
+                        #    raise AnalysisError
                         print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
                         print params['airfoil_parameterization'][i]
                         print >> cst_file, 'Airfoil ', str(i+1), " changed. ", params['airfoil_parameterization'][i]
@@ -454,6 +454,8 @@ class CCBlade(Component):
             unknowns['T'] = self.T
             unknowns['Q'] = self.Q
             unknowns['P'] = self.P
+            if self.P[-1] < 5e6:
+                print "Power error"
         elif self.run_case == 'loads':
             # distributed loads
             if computeGradient:
