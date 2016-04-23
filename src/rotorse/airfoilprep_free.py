@@ -2493,8 +2493,8 @@ def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
             konfig = konfigTotal[i]
             konfig['SOLUTION_FLOW_FILENAME'] = konfig['RESTART_FLOW_FILENAME']
             oldstdout = sys.stdout
-            sys.stdout = open(os.devnull, 'w')
-            SU2.run.merge(konfig)
+            #sys.stdout = open(os.devnull, 'w')
+            #SU2.run.merge(konfig)
             sys.stdout = oldstdout
             # filenames
             plot_format      = konfig['OUTPUT_FORMAT']
@@ -2503,11 +2503,11 @@ def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
             special_cases    = SU2.io.get_specialCases(konfig)
 
             final_avg = config.get('ITER_AVERAGE_OBJ',0)
-
+            #
             # get history and objectives
             #history      = su2io.read_history( history_filename )
             aerodynamics = SU2.io.read_aerodynamics( history_filename , special_cases, final_avg )
-
+#
             # update super config
             config.update({ 'MATH_PROBLEM' : konfig['MATH_PROBLEM']  })
 
