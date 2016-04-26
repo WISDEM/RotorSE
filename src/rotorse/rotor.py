@@ -2316,7 +2316,7 @@ class ObjandCons(Component):
         J['con6', 'freq_curvefem'] = dcon6_dfreq
         J['con6', 'ratedConditions:Omega'] = dcon6_dOmega
         J['con_freeform', 'airfoil_parameterization'] = dcon_freeform_dafp
-        J['con_power', 'power'] = 1.0
+        J['con_power', 'power'] = np.asarray([0.0, 0.0, 0.0, 0.0, 1.0]).reshape(1,5)
         J['con_power', 'control:ratedPower'] = -1.0
         return J
 
