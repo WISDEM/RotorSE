@@ -446,11 +446,15 @@ class CCBlade(Component):
                     wakerotation=self.wakerotation, usecd=self.usecd, derivatives=computeGradient, airfoil_parameterization=afp, airfoil_options=self.airfoil_analysis_options)
         # try:
         if self.run_case == 'power':
+            if self.airfoil_analysis_options['ParallelAirfoils']:
+                ccblade_power = self.ccblade.evaluateParallel
+            else:
+                ccblade_power = self.ccblade.evaluate
             # power, thrust, torque
             if computeGradient:
-                self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+                self.P, self.T, self.Q, self.dP, self.dT, self.dQ = ccblade_power(self.Uhub, self.Omega, self.pitch, coefficient=False)
             else:
-                self.P, self.T, self.Q = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+                self.P, self.T, self.Q = ccblade_power(self.Uhub, self.Omega, self.pitch, coefficient=False)
             unknowns['T'] = self.T
             unknowns['Q'] = self.Q
             unknowns['P'] = self.P
@@ -458,10 +462,14 @@ class CCBlade(Component):
                 print "Power error"
         elif self.run_case == 'loads':
             # distributed loads
-            if computeGradient:
-                Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+            if self.airfoil_analysis_options['ParallelAirfoils']:
+                ccblade_loads = self.ccblade.distributedAeroLoadsParallel
             else:
-                Np, Tp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+                ccblade_loads = self.ccblade.distributedAeroLoads
+            if computeGradient:
+                Np, Tp, self.dNp, self.dTp = ccblade_loads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+            else:
+                Np, Tp = ccblade_loads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
             # concatenate loads at root/tip
             unknowns['loads:r'] = np.concatenate([[self.Rhub], self.r, [self.Rtip]])
             Np = np.concatenate([[0.0], Np, [0.0]])
