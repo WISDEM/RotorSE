@@ -359,14 +359,14 @@ class Polar(object):
         found_zero_lift = False
 
         for i in range(len(self.cm)):
-#            try:
+            # try:
             if abs(self.alpha[i]) < 20.0 and self.cl[i] <= 0 and self.cl[i+1] >= 0:
                 p = -self.cl[i] / (self.cl[i + 1] - self.cl[i])
                 cm0 = self.cm[i] + p * (self.cm[i+1] - self.cm[i])
                 found_zero_lift = True
                 break
-#            except:
-#                pass
+            # except:
+            #     pass
         if not found_zero_lift:
             p = -self.cl[0] / (self.cl[1] - self.cl[0])
             cm0 = self.cm[0] + p * (self.cm[1] - self.cm[0])
@@ -820,7 +820,7 @@ class Airfoil(object):
             cl = np.delete(cl, to_delete)
             cd = np.delete(cd, to_delete)
             cm = np.delete(cm, to_delete)
-            if not cl.size or len(cl) < 3: #& or max(cl) < 0.0 or min(cl) > 0.0:
+            if not cl.size or len(cl) < 3 or max(cl) < 0.0:
                 print "XFOIL Failure! Using default backup airfoil.", CST
                 # for CST = [-0.25, -0.25, -0.25, -0.25, 0.25, 0.25, 0.25, 0.25]
                 cl = [-1.11249573, -1.10745928, -1.10242437, -1.10521061, -1.03248528, -0.9272929, -0.81920516, -0.70843745, -0.58962942, -0.45297636, -0.34881162, -0.26194, -0.17375163, -0.09322158, -0.01072867,  0.07232111,
@@ -1323,9 +1323,9 @@ class CCAirfoil:
                     # a small amount of smoothing is used to prevent spurious multiple solutions
                     self.cl_splines_new[i] = RectBivariateSpline(alphas_new, Re2, cl_new, kx=kx, ky=ky)#, s=0.1)#, s=0.1)
                     self.cd_splines_new[i] = RectBivariateSpline(alphas_new, Re2, cd_new, kx=kx, ky=ky)#, s=0.001) #, s=0.001)
-            if airfoil_analysis_options['AnalysisMethod'] == 'CFD' and airfoil_analysis_options['maxDirectAoA']>0.0:
-                # Create restart file and generate mesh
-                cl, cd = self.cfdSolve(np.radians(5.0), Re, ComputeGradients=False, GenerateMESH=True, airfoilNum=airfoilNum)
+            # if airfoil_analysis_options['AnalysisMethod'] == 'CFD' and airfoil_analysis_options['maxDirectAoA']>0.0:
+            #     # Create restart file and generate mesh
+            #     cl, cd = self.cfdSolve(np.radians(5.0), Re, ComputeGradients=False, GenerateMESH=True, airfoilNum=airfoilNum)
 
 
 
@@ -1468,6 +1468,9 @@ class CCAirfoil:
                     index = self.dalpha_dafp_storage.index(alpha)
                     dcl_dafp = self.dcl_dafp_storage[index]
                     dcd_dafp = self.dcd_dafp_storage[index]
+                else:
+                    dcl_dafp = np.zeros(8)
+                    dcd_dafp = np.zeros(8)
                 dcl_dRe = 0.0
                 dcd_dRe = 0.0
             else:
@@ -1513,13 +1516,13 @@ class CCAirfoil:
 
                 else:
                     if computeAFPGradient or computeAlphaGradient:
-                        cl, cd, dcl_dafp, dcd_dafp, dcl_dalpha, dcd_dalpha = self.cfdSolve(alpha, Re, ComputeGradients=True, GenerateMESH=False, airfoilNum=self.airfoilNum)
+                        cl, cd, dcl_dafp, dcd_dafp, dcl_dalpha2, dcd_dalpha2 = self.cfdSolve(alpha, Re, ComputeGradients=True, GenerateMESH=True, airfoilNum=self.airfoilNum)
                     else:
-                        cl, cd = self.cfdSolve(alpha, Re, ComputeGradients=False, GenerateMESH=False, airfoilNum=self.airfoilNum)
+                        cl, cd = self.cfdSolve(alpha, Re, ComputeGradients=False, GenerateMESH=True, airfoilNum=self.airfoilNum)
                     if computeAlphaGradient:
                         fd_step = 1e-4
-                        cl2, cd2 = self.cfdSolve(alpha+fd_step, Re, ComputeGradients=False, GenerateMESH=False, airfoilNum=self.airfoilNum)
-                        dcl_dalpha2, dcd_dalpha2 = (cl2-cl)/fd_step, (cd2-cd)/fd_step
+                        cl2, cd2 = self.cfdSolve(alpha+fd_step, Re, ComputeGradients=False, GenerateMESH=True, airfoilNum=self.airfoilNum)
+                        dcl_dalpha, dcd_dalpha = (cl2-cl)/fd_step, (cd2-cd)/fd_step
                     lexitflag = 0
                 if lexitflag or abs(cl) > 2.5 or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
                     print "error cl"
@@ -1705,7 +1708,6 @@ class CCAirfoil:
         import SU2
 
         basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
-        # config_filename = basepath + os.path.sep + 'test_incomp_rans.cfg'
         config_filename = basepath + os.path.sep + self.airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
@@ -1854,18 +1856,21 @@ class CCAirfoil:
                             dx_dafp[i][j] = 0.0
                     else:
                         if j > m - len(yu_new):
-                            dx_dafp[i][j] = np.imag(yu_new[j- (m-len(yu_new))]) / step_size
+                            dx_dafp[i][j] = -np.imag(yu_new[j- (m-len(yu_new))]) / step_size
                         else:
                             dx_dafp[i][j] = 0.0
-
+            dy_dafp = cst_to_y_coordinates_derivatives(wl_original, wu_original, N, dz, xl, xu)
+            dy_dafp = np.matrix(dy_dafp)
             dafp_dx = np.matrix(dx_dafp)
             dcl_dx = np.matrix(dcl_dx)
             dcd_dx = np.matrix(dcd_dx)
+            dcl_dafp = dy_dafp * dcl_dx.T
+            dcd_dafp = dy_dafp * dcd_dx.T
 
-            dcl_dafp = dafp_dx * dcl_dx.T
-            dcd_dafp = dafp_dx * dcd_dx.T
+            dcl_dafp2 = dafp_dx * dcl_dx.T
+            dcd_dafp2 = dafp_dx * dcd_dx.T
             sys.stdout = oldstdout
-            print cl, cd, np.asarray(dcl_dafp).reshape(8), np.asarray(dcd_dafp).reshape(8), dcl_dalpha, dcd_dalpha
+            print cl, cd, np.asarray(dcl_dafp).reshape(8), np.asarray(dcd_dafp).reshape(8), np.asarray(dcl_dafp2).reshape(8), np.asarray(dcd_dafp2).reshape(8)
             return cl, cd, np.asarray(dcl_dafp).reshape(8), np.asarray(dcd_dafp).reshape(8), dcl_dalpha, dcd_dalpha
         print "CL, CD", cl, cd
         return cl, cd
@@ -1910,6 +1915,21 @@ def cst_to_y_coordinates_given_x(wl, wu, N, dz, xl, xu):
     yl = ClassShape(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
     yu = ClassShape(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
     return yl, yu
+
+def cst_to_y_coordinates_derivatives(wl, wu, N, dz, xl, xu):
+
+    # N1 and N2 parameters (N1 = 0.5 and N2 = 1 for airfoil shape)
+    N1 = 0.5
+    N2 = 1
+    dyl = ClassShapeDerivative(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
+    dyu = ClassShapeDerivative(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
+    dyl_dzeros = np.zeros((len(wl), N-len(xl)))
+    dyu_dzeros = np.zeros((len(wu), N-len(xu)))
+    dyl_dw = np.hstack((dyl, dyl_dzeros))
+    dyu_dw = np.hstack((dyu_dzeros, dyu))
+    dy_dafp = np.vstack((dyl_dw, dyu_dw))
+
+    return dy_dafp
 
 def cst_to_y_coordinates_given_x_Complexx(wl, wu, N, dz, xl, xu):
 
@@ -2252,6 +2272,43 @@ def ClassShapeComplex(w, x, N1, N2, dz):
         y[i] = C[i] * S[i] + x[i] * dz
 
     return y
+
+def ClassShapeDerivative(w, x, N1, N2, dz):
+    n = len(w) - 1
+    dy_dw = np.zeros((n+1, len(x)))
+    for i in range(len(x)):
+        for j in range(0, n+1):
+            dy_dw[j][i] = x[i]**N1*((1-x[i])**N2) * factorial(n)/(factorial(j)*(factorial((n)-(j)))) * x[i]**(j) * ((1-x[i])**(n-(j)))
+    y = ClassShape(w, x, N1, N2, dz)
+
+    dy_total = np.zeros_like(dy_dw)
+    for i in range(len(y)):
+        if i == 0 or i == len(y) - 1:
+            norm_y = 0
+        else:
+            # normal vector of forward line adjacent point
+            dx1 = x[i+1] - x[i]
+            dy1 = y[i+1] - y[i]
+            dnormy1 = dx1 - -dx1
+            dnormx1 = -dy1 - dy1
+
+            # normal vector of backward line with adjacent point
+            dx2 = x[i] - x[i-1]
+            dy2 = y[i] - y[i-1]
+            dnormy2 = dx2 - -dx2
+            dnormx2 = -dy2 - dy2
+
+            dnormx = dnormx1 + dnormx2
+            dnormy = dnormy1 + dnormy2
+
+            norm_y = -dnormy / np.sqrt(dnormy**2 + dnormx**2)
+            print norm_y, x[i], y[i]
+            if norm_y > 1.0:
+                print "NORM", norm_y
+
+        for j in range(0, n+1):
+            dy_total[j][i] = dy_dw[j][i] * norm_y
+    return dy_total
 
 def getCoordinates(CST):
     try:

@@ -783,9 +783,11 @@ class WeibullWithMeanCDF(Component):
         A = params['xbar'] / gamma(1.0 + 1.0/k)
         dx = np.diag(np.exp(-(x/A)**k)*(x/A)**(k-1)*k/A)
         dxbar = -np.exp(-(x/A)**k)*(x/A)**(k-1)*k*x/A**2/gamma(1.0 + 1.0/k)
+
         J = {}
         J['F', 'x'] = dx
         J['F', 'xbar'] = dxbar
+        J['F', 'k'] = np.exp(-(x/A)**k)*(x/A)**k*np.log(x/A) # TODO Check derivative
 
         return J
 

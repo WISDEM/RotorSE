@@ -54,6 +54,8 @@ class ResizeCompositeSection(Component):
         self.add_output('websCSOut', shape=nstr, desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
         self.add_output('dummy', shape=1)
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
         # print "ResizeCompositeSection"
@@ -183,6 +185,8 @@ class PreCompSections(Component):
         self.add_output('beam:y_ec_str', shape=nstr, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
 
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
         self.nstr = nstr
 
 
@@ -491,6 +495,8 @@ class RotorWithpBEAM(Component):
         self.add_output('damageL_te', shape=nstr, desc='fatigue damage on lower surface in trailing-edge panels')
 
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
 
     def principalCS(self, EIyy, EIxx, y_ec_str, x_ec_str, EA, EIxy):
 
@@ -583,7 +589,6 @@ class RotorWithpBEAM(Component):
         return damageU, damageL
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "RotorWithpBEAM"
         Px_defl = params['Px_defl']
         Py_defl = params['Py_defl']
         Pz_defl = params['Pz_defl']
@@ -713,6 +718,8 @@ class CurveFEM(Component):
         self.add_output('freq', shape=5, units='Hz', desc='first nF natural frequencies')
 
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
         # print "CurveFEM"
@@ -743,6 +750,8 @@ class GridSetup(Component):
         self.add_output('idxj', val=np.zeros(nstr, dtype=np.int), desc='index of augmented aero grid corresponding to structural index', pass_by_obj=True)
 
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
         self.naero = naero
         self.nstr = nstr
 
@@ -862,6 +871,8 @@ class GeometrySpline(Component):
         self.fd_options['form'] = 'forward'
         self.fd_options['step_type'] = 'absolute'
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
         print 'r_max_chord', params['r_max_chord']
@@ -1866,6 +1877,8 @@ class TurbineClass(Component):
         self.add_output('V_extreme', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
         self.add_output('V_extreme_full', shape=2, units='m/s', desc='IEC extreme wind speed at hub height')
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -2267,7 +2280,8 @@ class ObjandCons(Component):
         unknowns['con5'] = (params['eps_crit_te'][self.con5_indices] - params['strainU_te'][self.con5_indices]) / params['strain_ult_te']
         unknowns['con6'] = params['freq_curvefem'][0:2] - params['nBlades']*params['ratedConditions:Omega']/60.0*1.1
         unknowns['con_freeform'] = params['airfoil_parameterization'][:, [4, 5, 6, 7]] - params['airfoil_parameterization'][:, [0, 1, 2, 3]]
-        unknowns['con_power'] = params['power'][-1] - params['control:ratedPower']
+        unknowns['con_power'] = (params['power'][-1] - params['control:ratedPower']) # / 1.e6
+        print "CON_POWER", unknowns['con_power'], params['power'][-1], params['control:ratedPower']
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -2348,6 +2362,8 @@ class StructureGroup(Group):
         # self.add('blade_defl', BladeDeflection(nstr))
 
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
 
 class OptimizeRotorSE(Group):
     def __init__(self, naero, nstr):
@@ -3125,6 +3141,8 @@ class RotorSE(Group):
 
         self.connect('spline.Rtip', 'Rtip_in')
         self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[nstr-1])
+
+        #self.connect('Omega', 'Omega_in')
 
         #COE Objective
         self.add('coe', COE(), promotes=['*'])

@@ -348,7 +348,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             resids1 = P1- params['control:ratedPower']
             resids2 = P2 - params['control:ratedPower']
             if ((resids1<0) == (resids2<0)):
-                print "Powercurve, Vcoarse: ", params['Vcoarse'], "Pcoarse", params['Pcoarse']
+                #print "Powercurve, Vcoarse: ", params['Vcoarse'], "Pcoarse", params['Pcoarse']
                 if Vrated == params['control:Vout']:
                     resids['Vrated'] = 10000
                 elif Vrated != params['control:Vin']:
@@ -507,6 +507,7 @@ class COE(Component):
         self.add_param('AEP', shape=1, units='kW*h', desc='annual energy production')
         # outputs
         self.add_output('COE', shape=1, units='$/kW*h', desc='cost of energy')
+        self.fd_options['step_size'] = 1.0
 
     def solve_nonlinear(self, params, unknowns, resids):
         # fixed cost assumptions from NREL 5MW land-based turbine (update as needed)
@@ -535,12 +536,11 @@ class COE(Component):
         tower_cost = 1390588.80
 
         parts_cost = (rotor_cost + nacelle_cost + tower_cost)
-        turbine_multiplier = (1 + transportMultiplier + profitMultiplier) * (1+overheadCostMultiplier+assemblyCostMultiplier)
+        turbine_multiplier = (1 + transportMultiplier + profitMultiplier) * (1 + overheadCostMultiplier + assemblyCostMultiplier)
         turbine_cost = turbine_multiplier * parts_cost
         unknowns['COE'] = fixed_charge_rate*(turbine_cost+bos)/net_aep + 0.0122*(1-tax_rate)
-        self.dcoe_dmass_all_blades = turbine_multiplier * (slope/3.0*ppi_mat * fixed_charge_rate) / net_aep
+        self.dcoe_dmass_all_blades = fixed_charge_rate * turbine_multiplier * (slope/3.0*ppi_mat) / net_aep
         self.dcoe_dAEP = -fixed_charge_rate*(turbine_cost+bos)/(losses*(params['AEP']**2))
-
 
         print "COE: ", unknowns['COE']
 
