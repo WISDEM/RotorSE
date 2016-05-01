@@ -390,7 +390,7 @@ class CCBlade:
             dx_dx[0, :], dcl_dx, dcd_dx, dx_dx[3, :], dx_dx[4, :], **self.bemoptions)
 
 
-        if self.freeform and self.freeform_gradient:
+        if self.freeform:
             fzero_cl, dR_dcl, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
@@ -545,7 +545,9 @@ class CCBlade:
         Tps = np.zeros(len(r))
         n = len(r)
         dRs_dx = []
-        dR_dafp_total = []
+        dRs_dafp = []
+        dNps_dafp = []
+        dTps_dafp = []
         dcl_dafp_total = []
         dcd_dafp_total = []
         dNps_dx = []
@@ -601,21 +603,25 @@ class CCBlade:
                 dNp_dx = Nps[i]*(1.0/cn*dcn_dx + 2.0/Ws[i]*dW_dx + 1.0/chord[i]*dchord_dx)
                 dTp_dx = Tps[i]*(1.0/ct*dct_dx + 2.0/Ws[i]*dW_dx + 1.0/chord[i]*dchord_dx)
 
-                if self.freeform and self.freeform_gradient:
+                if self.freeform:
                     dphi_dafp = 0.0
                     # try:
                     dcn_dafp = dcl_dafp*cphi - cl*sphi*dphi_dafp + dcd_dafp*sphi + cd*cphi*dphi_dafp
                     # except:
                     #     pass
                     dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
-                    dNp_dafp = Np*(1.0/cn*dcn_dafp)
-                    dTp_dafp = Tp*(1.0/ct*dct_dafp)
+                    dNp_dafp = Nps[i]*(1.0/cn*dcn_dafp)
+                    dTp_dafp = Tps[i]*(1.0/ct*dct_dafp)
+                    dNps_dafp.append(dNp_dafp)
+                    dTps_dafp.append(dTp_dafp)
+                    dRs_dafp.append(dR_dafp)
                 dNps_dx.append(dNp_dx)
                 dTps_dx.append(dTp_dx)
                 dRs_dx.append(dR_dx)
+
         if not self.derivatives:
             return Nps, Tps, [0.0]*n, [0.0]*n, [0.0]*n
-        elif self.freeform:
+        elif self.freeform and rotating:
             return Nps, Tps, dNps_dx, dTps_dx, dRs_dx, dNps_dafp, dTps_dafp, dRs_dafp
         else:
             return Nps, Tps, dNps_dx, dTps_dx, dRs_dx
@@ -1019,6 +1025,7 @@ class CCBlade:
                 DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
 
                 if self.freeform and rotating:
+                    dNp_dafp, dTp_dafp, dR_dafp = dNps_dafp[i], dTps_dafp, dRs_dafp[i]
                     DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
                     DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
 
@@ -1037,7 +1044,7 @@ class CCBlade:
 
 
         if not self.derivatives:
-            return Np, Tp
+            return Nps, Tps
 
         else:
 
