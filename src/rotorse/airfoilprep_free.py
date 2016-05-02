@@ -1330,7 +1330,8 @@ class CCAirfoil:
 
 
         else:
-            self.afp = None
+            self.afp = afp
+            self.airfoil_analysis_options = airfoil_analysis_options
 
 
     @classmethod
@@ -1800,12 +1801,12 @@ class CCAirfoil:
             config.OBJECTIVE_FUNCTION = 'DRAG'
             info = SU2.run.adjoint(config)
             state.update(info)
-            dcd_dx, xl, xu = self.su2Gradient(loop_sorted)
+            dcd_dx, xl, xu = self.su2Gradient(loop_sorted, config.SURFACE_ADJ_FILENAME + '.csv')
             dcd_dalpha = state.HISTORY.ADJOINT_DRAG.Sens_AoA[-1]
             config.OBJECTIVE_FUNCTION = 'LIFT'
             info = SU2.run.adjoint(config)
             state.update(info)
-            dcl_dx, xl, xu = self.su2Gradient(loop_sorted)
+            dcl_dx, xl, xu = self.su2Gradient(loop_sorted, config.SURFACE_ADJ_FILENAME + '.csv')
             dcl_dalpha = state.HISTORY.ADJOINT_LIFT.Sens_AoA[-1]
 
             dz = 0
@@ -1814,52 +1815,28 @@ class CCAirfoil:
             m = 200
             dx_dafp = np.zeros((n, m))
             wl_original, wu_original, N, dz = CST_to_kulfan(self.afp)
-            #yl_old, yu_old = cst_to_y_coordinates_given_x(wl_original, wu_original, N, dz, xl, xu)
-            # grad_type = self.airfoil_analysis_options['grad_type']
-            # if grad_type == 'FD':
-            #     for i in range(0, n):
-            #         wl_new = deepcopy(wl_original)
-            #         wu_new = deepcopy(wu_original)
-            #         if i < n/2:
-            #             wl_new[i] += fd_step
-            #         else:
-            #             wu_new[i-4] += fd_step
-            #
-            #         yl_new, yu_new = cst_to_y_coordinates_given_x(wl_new, wu_new, N, dz, xl, xu)
-            #         for j in range(m):
-            #             if i < n/2:
-            #                 if j < len(yl_new):
-            #                     dx_dafp[i][j] = (yl_new[j] - yl_old[j]) / fd_step
-            #                 else:
-            #                     dx_dafp[i][j] = 0.0
-            #             else:
-            #                 if j > m - len(yu_new):
-            #                     dx_dafp[i][j] = (yu_new[j- (m-len(yu_new))] - yu_old[j-(m-len(yu_new))]) / fd_step
-            #                 else:
-            #                     dx_dafp[i][j] = 0.0
-            # elif grad_type == 'CS':
             step_size = self.airfoil_analysis_options['cs_step']
             cs_step = complex(0, step_size)
 
-            for i in range(0, n):
-                wl_new = deepcopy(wl_original.astype(complex))
-                wu_new = deepcopy(wu_original.astype(complex))
-                if i < n/2:
-                    wl_new[i] += cs_step
-                else:
-                    wu_new[i-4] += cs_step
-                yl_new, yu_new = cst_to_y_coordinates_given_x_Complexx(wl_new, wu_new, N, dz, xl, xu)
-                for j in range(m):
-                    if i < n/2:
-                        if j < len(yl_new):
-                            dx_dafp[i][j] = (np.imag(yl_new[j])) / step_size
-                        else:
-                            dx_dafp[i][j] = 0.0
-                    else:
-                        if j > m - len(yu_new):
-                            dx_dafp[i][j] = -np.imag(yu_new[j- (m-len(yu_new))]) / step_size
-                        else:
-                            dx_dafp[i][j] = 0.0
+            # for i in range(0, n):
+            #     wl_new = deepcopy(wl_original.astype(complex))
+            #     wu_new = deepcopy(wu_original.astype(complex))
+            #     if i < n/2:
+            #         wl_new[i] += cs_step
+            #     else:
+            #         wu_new[i-4] += cs_step
+            #     yl_new, yu_new = cst_to_y_coordinates_given_x_Complexx(wl_new, wu_new, N, dz, xl, xu)
+            #     for j in range(m):
+            #         if i < n/2:
+            #             if j < len(yl_new):
+            #                 dx_dafp[i][j] = (np.imag(yl_new[j])) / step_size
+            #             else:
+            #                 dx_dafp[i][j] = 0.0
+            #         else:
+            #             if j > m - len(yu_new):
+            #                 dx_dafp[i][j] = -np.imag(yu_new[j- (m-len(yu_new))]) / step_size
+            #             else:
+            #                 dx_dafp[i][j] = 0.0
             dy_dafp = cst_to_y_coordinates_derivatives(wl_original, wu_original, N, dz, xl, xu)
             dy_dafp = np.matrix(dy_dafp)
             dafp_dx = np.matrix(dx_dafp)
@@ -1876,9 +1853,9 @@ class CCAirfoil:
         print "CL, CD", cl, cd
         return cl, cd
 
-    def su2Gradient(self, loop_sorted):
+    def su2Gradient(self, loop_sorted, surface_adjoint):
         data = np.zeros([500, 8])
-        with open('surface_adjoint.csv', 'rb') as f1:
+        with open(surface_adjoint, 'rb') as f1:
             reader = csv.reader(f1, dialect='excel', quotechar='|')
             i = 0
             for row in reader:
@@ -2293,22 +2270,36 @@ def ClassShapeDerivative(w, x, N1, N2, dz):
             dnormy1 = dx1 - -dx1
             dnormx1 = -dy1 - dy1
 
+            dnormx3 = y[i+1] - y[i]
+            dnormy3 = -(x[i+1] - x[i])
+
+
             # normal vector of backward line with adjacent point
             dx2 = x[i] - x[i-1]
             dy2 = y[i] - y[i-1]
             dnormy2 = dx2 - -dx2
             dnormx2 = -dy2 - dy2
 
-            dnormx = dnormx1 + dnormx2
-            dnormy = dnormy1 + dnormy2
+            dnormx4 = y[i] - y[i-1]
+            dnormy4 = -(x[i] - x[i-1])
 
-            norm_y = -dnormy / np.sqrt(dnormy**2 + dnormx**2)
+            # dnormx = dnormx1 + dnormx2
+            # dnormy = dnormy1 + dnormy2
+
+            dnormx = dnormx3 + dnormx4
+            dnormy = dnormy3 + dnormy4
+
+
+            norm_y = dnormy / np.sqrt(dnormy**2 + dnormx**2)
             print norm_y, x[i], y[i]
             if norm_y > 1.0:
                 print "NORM", norm_y
 
         for j in range(0, n+1):
             dy_total[j][i] = dy_dw[j][i] * norm_y
+
+        # Dim_Normal[0] = val_coord_Elem_CG[1]-val_coord_Edge_CG[1];
+        # Dim_Normal[1] = -(val_coord_Elem_CG[0]-val_coord_Edge_CG[0]);
     return dy_total
 
 def getCoordinates(CST):
@@ -2812,32 +2803,8 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
                 dcd_dx.append(dcd_dx1)
                 dcd_dalpha1 = ztate.HISTORY.ADJOINT_DRAG.Sens_AoA[-1]
                 dcd_dalpha.append(dcd_dalpha1)
-                n = 8
-                m = 200
-                dx_dafp = np.zeros((n, m))
                 wl_original, wu_original, N, dz = CST_to_kulfan(afps[i])
-                step_size = airfoil_analysis_options['cs_step']
-                cs_step = complex(0, step_size)
-
-                for k in range(0, n):
-                    wl_new = deepcopy(wl_original.astype(complex))
-                    wu_new = deepcopy(wu_original.astype(complex))
-                    if k < n/2:
-                        wl_new[k] += cs_step
-                    else:
-                        wu_new[k-4] += cs_step
-                    yl_new, yu_new = cst_to_y_coordinates_given_x_Complexx(wl_new, wu_new, N, dz, xl, xu)
-                    for j in range(m):
-                        if k < n/2:
-                            if j < len(yl_new):
-                                dx_dafp[k][j] = (np.imag(yl_new[j])) / step_size
-                            else:
-                                dx_dafp[k][j] = 0.0
-                        else:
-                            if j > m - len(yu_new):
-                                dx_dafp[k][j] = np.imag(yu_new[j- (m-len(yu_new))]) / step_size
-                            else:
-                                dx_dafp[k][j] = 0.0
+                dx_dafp = cst_to_y_coordinates_derivatives(wl_original, wu_original, N, dz, xl, xu)
                 dx_dafpTotal.append(dx_dafp)
             procTotal = []
             for i in range(len(alphas)):
