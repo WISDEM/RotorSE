@@ -390,20 +390,14 @@ class CCBlade:
             dx_dx[0, :], dcl_dx, dcd_dx, dx_dx[3, :], dx_dx[4, :], **self.bemoptions)
 
 
-        if self.freeform:
+        if self.freeform and af.afp is not None:
             fzero_cl, dR_dcl, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-            # if np.degrees(alpha) < 30.0:
-            #     dcl_dafp, dcd_dafp = af.freeform_derivatives(alpha, Re)
-            # else:
-            #     dcl_dafp, dcd_dafp = af.freeform_derivatives_spline(alpha, Re)
-            # if self.airfoil_analysis_options['BEMSpline']:
             dcl_dafp_R, dcd_dafp_R = af.splineFreeFormGrad(alpha, Re)
             dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
-            # else:
-            # dR_dafp = dR_dcl*dcl_dafp + dR_dcd*dcd_dafp
+
 
 
             return dR_dx, da_dx, dap_dx, dR_dafp #, dcl_dafp, dcd_dafp
@@ -541,6 +535,8 @@ class CCBlade:
                 dcl_dRe.append(dcl_dRe1)
                 dcd_dalpha.append(dcd_dalpha1)
                 dcd_dRe.append(dcd_dRe1)
+            dcl_dafp = np.zeros((len(r),8))
+            dcd_dafp = np.zeros((len(r), 8))
         Nps = np.zeros(len(r))
         Tps = np.zeros(len(r))
         n = len(r)
@@ -564,7 +560,7 @@ class CCBlade:
 
                 # derivative of residual function
                 if rotating:
-                    if self.freeform and self.freeform_gradient:
+                    if self.freeform and af[i].afp is not None:
                         dR_dx, da_dx, dap_dx, dR_dafp = self.__residualDerivatives(phi[i], r[i], chord[i], theta[i], af[i], Vx[i], Vy[i], airfoil_parameterization[i])
                     else:
                         dR_dx, da_dx, dap_dx = self.__residualDerivatives(phi[i], r[i], chord[i], theta[i], af[i], Vx[i], Vy[i])
@@ -575,7 +571,7 @@ class CCBlade:
                     da_dx = np.zeros(9)
                     dap_dx = np.zeros(9)
                     dphi_dx = np.zeros(9)
-                    dR_dafp, dcl_dafp, dcd_dafp = 0.0, 0.0, 0.0
+                    dR_dafp = np.zeros(8)#,  dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8), np.zeros(8)
 
 
                 # x = [phi, chord,  theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
@@ -603,18 +599,22 @@ class CCBlade:
                 dNp_dx = Nps[i]*(1.0/cn*dcn_dx + 2.0/Ws[i]*dW_dx + 1.0/chord[i]*dchord_dx)
                 dTp_dx = Tps[i]*(1.0/ct*dct_dx + 2.0/Ws[i]*dW_dx + 1.0/chord[i]*dchord_dx)
 
-                if self.freeform:
+                if self.freeform and af[i].afp is not None:
                     dphi_dafp = 0.0
                     # try:
-                    dcn_dafp = dcl_dafp*cphi - cl*sphi*dphi_dafp + dcd_dafp*sphi + cd*cphi*dphi_dafp
+                    dcn_dafp = dcl_dafp[i]*cphi - cl[i]*sphi*dphi_dafp + dcd_dafp[i]*sphi + cd[i]*cphi*dphi_dafp
                     # except:
                     #     pass
-                    dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
+                    dct_dafp = dcl_dafp[i]*sphi + cl[i]*cphi*dphi_dafp - dcd_dafp[i]*cphi + cd[i]*sphi*dphi_dafp
                     dNp_dafp = Nps[i]*(1.0/cn*dcn_dafp)
                     dTp_dafp = Tps[i]*(1.0/ct*dct_dafp)
                     dNps_dafp.append(dNp_dafp)
                     dTps_dafp.append(dTp_dafp)
                     dRs_dafp.append(dR_dafp)
+                elif self.freeform:
+                    dNps_dafp.append(np.zeros(8))
+                    dTps_dafp.append(np.zeros(8))
+                    dRs_dafp.append(np.zeros(8))
                 dNps_dx.append(dNp_dx)
                 dTps_dx.append(dTp_dx)
                 dRs_dx.append(dR_dx)
@@ -1025,7 +1025,7 @@ class CCBlade:
                 DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
 
                 if self.freeform and rotating:
-                    dNp_dafp, dTp_dafp, dR_dafp = dNps_dafp[i], dTps_dafp, dRs_dafp[i]
+                    dNp_dafp, dTp_dafp, dR_dafp = dNps_dafp[i], dTps_dafp[i], dRs_dafp[i]
                     DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
                     DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
 
