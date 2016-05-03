@@ -10,14 +10,13 @@ Copyright (c) NREL. All rights reserved.
 import numpy as np
 from math import pi, gamma
 from openmdao.api import Component, Group
-from openmdao.core.system import AnalysisError
+#from openmdao.core.system import AnalysisError
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
 
 from utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import common_configure
 from akima import Akima
 from enum import Enum
-import os
 from copy import deepcopy
 import time
 
@@ -242,7 +241,7 @@ class CCBladeAirfoils(Component):
                     index = np.where(af_idx >= j+2)[0][0]
                     change[j] = max(abs(self.airfoil_files[index].afp - self.airfoil_parameterization[j]))
                 basepath = '5MW_AFFiles' + os.path.sep
-                af_freeform_init = CCAirfoil.initFromCST
+                af_freeform_init = CCAirfoil.initFromFreeForm
                 airfoil_types = [0]*8
                 airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
                 airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
@@ -250,10 +249,7 @@ class CCBladeAirfoils(Component):
                 for i in range(len(airfoil_types)-2):
                     if change[i] > 0:
                         time0 = time.time()
-                        #try:
                         airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], self.airfoil_analysis_options, airfoilNum=i)
-                        #except:
-                        #    raise AnalysisError
                         print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
                         print params['airfoil_parameterization'][i]
                         print >> cst_file, 'Airfoil ', str(i+1), " changed. ", params['airfoil_parameterization'][i]
@@ -261,7 +257,6 @@ class CCBladeAirfoils(Component):
                     else:
                         index = np.where(af_idx >= i+2)[0][0]
                         airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
-                        # print "Airfoil ", str(i+1), " parameterization has not changed."
                 cst_file.close()
                 n = len(af_idx)
                 af = [0]*n
@@ -446,7 +441,7 @@ class CCBlade(Component):
                     wakerotation=self.wakerotation, usecd=self.usecd, derivatives=computeGradient, airfoil_parameterization=afp, airfoil_options=self.airfoil_analysis_options)
         # try:
         if self.run_case == 'power':
-            if self.airfoil_analysis_options['ParallelAirfoils']:
+            if self.airfoil_analysis_options['ParallelAirfoils'] and self.airfoil_analysis_options['AnalysisMethod'] == 'CFD':
                 ccblade_power = self.ccblade.evaluateParallel
             else:
                 ccblade_power = self.ccblade.evaluate
@@ -458,11 +453,9 @@ class CCBlade(Component):
             unknowns['T'] = self.T
             unknowns['Q'] = self.Q
             unknowns['P'] = self.P
-            if self.P[-1] < 5e6:
-                print "Power error"
         elif self.run_case == 'loads':
             # distributed loads
-            if self.airfoil_analysis_options['ParallelAirfoils']:
+            if self.airfoil_analysis_options['ParallelAirfoils'] and self.airfoil_analysis_options['AnalysisMethod'] == 'CFD':
                 ccblade_loads = self.ccblade.distributedAeroLoadsParallel
             else:
                 ccblade_loads = self.ccblade.distributedAeroLoads
@@ -574,10 +567,10 @@ class CCBlade(Component):
             J['Q', 'precurve'] = dQ['dprecurve']
             J['Q', 'precurveTip'] = dQ['dprecurveTip']
 
-            if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files' and params['airfoil_analysis_options']['FreeFormDesign']:
-                J['P', 'airfoil_parameterization'] = dP['dafp']
-                J['T', 'airfoil_parameterization'] = dT['dafp']
-                J['Q', 'airfoil_parameterization'] = dQ['dafp']
+
+            J['P', 'airfoil_parameterization'] = dP['dafp']
+            J['T', 'airfoil_parameterization'] = dT['dafp']
+            J['Q', 'airfoil_parameterization'] = dQ['dafp']
 
         elif self.run_case == 'loads':
 
@@ -637,10 +630,10 @@ class CCBlade(Component):
             J['loads:pitch', 'pitch_load'] = 1.0
             J['loads:azimuth', 'azimuth_load'] = 1.0
 
-            if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files' and params['airfoil_analysis_options']['FreeFormDesign']:
-                zero_afp = np.zeros((17*8))
-                J['loads:Px', 'airfoil_parameterization'] = np.vstack([zero_afp, dNp['dafp'], zero_afp])
-                J['loads:Py', 'airfoil_parameterization'] = np.vstack([zero_afp, -dTp['dafp'], zero_afp])
+
+            zero_afp = np.zeros((17*8))
+            J['loads:Px', 'airfoil_parameterization'] = np.vstack([zero_afp, dNp['dafp'], zero_afp])
+            J['loads:Py', 'airfoil_parameterization'] = np.vstack([zero_afp, -dTp['dafp'], zero_afp])
 
         return J
 

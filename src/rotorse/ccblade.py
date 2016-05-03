@@ -30,170 +30,523 @@ limitations under the License.
 """
 
 import numpy as np
-from math import pi, radians, sin, cos, acos, asin, exp
+from math import pi, radians, sin, cos
 from scipy.optimize import brentq
 from scipy.interpolate import RectBivariateSpline, bisplev
 from zope.interface import Interface, implements
 import warnings
 import time
 # from airfoilprep import Airfoil
-from airfoilprep_free import Airfoil, CCAirfoil, evaluate_direct_parallel
+from airfoilprep_free import Airfoil
 import _bem
+import pyXLIGHT
+from copy import deepcopy
+from airfoil_parameterization import AirfoilAnalysis
+
+class CCAirfoil:
+    """A helper class to evaluate airfoil data using a continuously
+    differentiable cubic spline"""
+
+    def __init__(self, alpha, Re, cl, cd, cm, afp=None, airfoil_analysis_options=None, airfoilNum=0, failure=False):
+        """Setup CCAirfoil from raw airfoil data on a grid.
+
+        Parameters
+        ----------
+        alpha : array_like (deg)
+            angles of attack where airfoil data are defined
+            (should be defined from -180 to +180 degrees)
+        Re : array_like
+            Reynolds numbers where airfoil data are defined
+            (can be empty or of length one if not Reynolds number dependent)
+        cl : array_like
+            lift coefficient 2-D array with shape (alpha.size, Re.size)
+            cl[i, j] is the lift coefficient at alpha[i] and Re[j]
+        cd : array_like
+            drag coefficient 2-D array with shape (alpha.size, Re.size)
+            cd[i, j] is the drag coefficient at alpha[i] and Re[j]
+
+        """
+        alpha = np.radians(alpha)
+        self.Re = Re
+        if not all(np.diff(alpha)):
+            to_delete = np.zeros(0)
+            diff = np.diff(alpha)
+            for i in range(len(alpha)-1):
+                if not diff[i] > 0.0:
+                    to_delete = np.append(to_delete, i)
+            alpha = np.delete(alpha, to_delete)
+            cl = np.delete(cl, to_delete)
+            cd = np.delete(cd, to_delete)
+
+        self.one_Re = False
+
+        # special case if zero or one Reynolds number (need at least two for bivariate spline)
+        if len(Re) < 2:
+            Re = [1e1, 1e15]
+            cl = np.c_[cl, cl]
+            cd = np.c_[cd, cd]
+            self.one_Re = True
+
+        kx = min(len(alpha)-1, 3)
+        ky = min(len(Re)-1, 3)
+
+        # a small amount of smoothing is used to prevent spurious multiple solutions
+        self.cl_spline = RectBivariateSpline(alpha, Re, cl, kx=kx, ky=ky)#, s=0.1)#, s=0.1)
+        self.cd_spline = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky)#, s=0.001) #, s=0.001)
+
+        self.failure = failure
+        if failure:
+            afp = np.asarray([-0.25, -0.25, -0.25, -0.25, 0.25, 0.25, 0.25, 0.25])
+
+        self.freeform = False
+        if afp is not None:
+            self.afp = afp
+            self.airfoilNum = airfoilNum
+            self.airfoil_analysis_options = airfoil_analysis_options
+            self.cl_storage = []
+            self.cd_storage = []
+            self.alpha_storage = []
+            self.dcl_storage = []
+            self.dcd_storage = []
+            self.dalpha_storage = []
+            self.dcl_dafp_storage = []
+            self.dcd_dafp_storage = []
+            self.dalpha_dafp_storage = []
+
+            if airfoil_analysis_options['FreeFormDesign'] and airfoil_analysis_options['ComputeGradient']:
+                self.freeform = True
+                self.cl_splines_new = [0]*8
+                self.cd_splines_new = [0]*8
+                for i in range(8):
+                    fd_step = 1e-6
+                    afp_new = deepcopy(self.afp)
+                    afp_new[i] += fd_step
+                    af = Airfoil.initFromCST(afp_new, airfoil_analysis_options)
+                    af_extrap = af.extrapolate(1.5)
+                    alphas_new, Re_new, cl_new, cd_new, cm_new = af_extrap.createDataGrid()
+                    alphas_new = np.radians(alphas_new)
+
+                    if not all(np.diff(alphas_new)):
+                        to_delete = np.zeros(0)
+                        diff = np.diff(alphas_new)
+                        for j in range(len(alphas_new)-1):
+                            if not diff[j] > 0.0:
+                                to_delete = np.append(to_delete, j)
+                        alphas_new = np.delete(alphas_new, to_delete)
+                        cl_new = np.delete(cl_new, to_delete)
+                        cd_new = np.delete(cd_new, to_delete)
+
+                    # special case if zero or one Reynolds number (need at least two for bivariate spline)
+                    if len(Re_new) < 2:
+                        Re2 = [1e1, 1e15]
+                        cl_new = np.c_[cl_new, cl_new]
+                        cd_new = np.c_[cd_new, cd_new]
+                    kx = min(len(alphas_new)-1, 3)
+                    ky = min(len(Re2)-1, 3)
+                    # a small amount of smoothing is used to prevent spurious multiple solutions
+                    self.cl_splines_new[i] = RectBivariateSpline(alphas_new, Re2, cl_new, kx=kx, ky=ky)#, s=0.1)#, s=0.1)
+                    self.cd_splines_new[i] = RectBivariateSpline(alphas_new, Re2, cd_new, kx=kx, ky=ky)#, s=0.001) #, s=0.001)
+        else:
+            self.afp = afp
+            self.airfoil_analysis_options = airfoil_analysis_options
 
 
 
-# ------------------
-#  Interfaces
-# ------------------
+    @classmethod
+    def initFromAerodynFile(cls, aerodynFile):
+        """convenience method for initializing with AeroDyn formatted files
 
+        Parameters
+        ----------
+        aerodynFile : str
+            location of AeroDyn style airfoiil file
 
-# class AirfoilInterface(Interface):
-#     """Interface for airfoil aerodynamic analysis."""
-#
-#     def evaluate(alpha, Re):
-#         """Get lift/drag coefficient at the specified angle of attack and Reynolds number
-#
-#         Parameters
-#         ----------
-#         alpha : float (rad)
-#             angle of attack
-#         Re : float
-#             Reynolds number
-#
-#         Returns
-#         -------
-#         cl : float
-#             lift coefficient
-#         cd : float
-#             drag coefficient
-#
-#         Notes
-#         -----
-#         Any implementation can be used, but to keep the smooth properties
-#         of CCBlade, the implementation should be C1 continuous.
-#
-#         """
-#
-#
-# # ------------------
-# #  Airfoil Class
-# # ------------------
-#
-#
-# class CCAirfoil:
-#     """A helper class to evaluate airfoil data using a continuously
-#     differentiable cubic spline"""
-#     implements(AirfoilInterface)
-#
-#
-#     def __init__(self, alpha, Re, cl, cd):
-#         """Setup CCAirfoil from raw airfoil data on a grid.
-#
-#         Parameters
-#         ----------
-#         alpha : array_like (deg)
-#             angles of attack where airfoil data are defined
-#             (should be defined from -180 to +180 degrees)
-#         Re : array_like
-#             Reynolds numbers where airfoil data are defined
-#             (can be empty or of length one if not Reynolds number dependent)
-#         cl : array_like
-#             lift coefficient 2-D array with shape (alpha.size, Re.size)
-#             cl[i, j] is the lift coefficient at alpha[i] and Re[j]
-#         cd : array_like
-#             drag coefficient 2-D array with shape (alpha.size, Re.size)
-#             cd[i, j] is the drag coefficient at alpha[i] and Re[j]
-#
-#         """
-#
-#         alpha = np.radians(alpha)
-#         self.one_Re = False
-#
-#         # special case if zero or one Reynolds number (need at least two for bivariate spline)
-#         if len(Re) < 2:
-#             Re = [1e1, 1e15]
-#             cl = np.c_[cl, cl]
-#             cd = np.c_[cd, cd]
-#             self.one_Re = True
-#
-#         kx = min(len(alpha)-1, 3)
-#         ky = min(len(Re)-1, 3)
-#
-#         # a small amount of smoothing is used to prevent spurious multiple solutions
-#         self.cl_spline = RectBivariateSpline(alpha, Re, cl, kx=kx, ky=ky, s=0.1)
-#         self.cd_spline = RectBivariateSpline(alpha, Re, cd, kx=kx, ky=ky, s=0.001)
-#
-#
-#     @classmethod
-#     def initFromAerodynFile(cls, aerodynFile):
-#         """convenience method for initializing with AeroDyn formatted files
-#
-#         Parameters
-#         ----------
-#         aerodynFile : str
-#             location of AeroDyn style airfoiil file
-#
-#         Returns
-#         -------
-#         af : CCAirfoil
-#             a constructed CCAirfoil object
-#
-#         """
-#
-#         af = Airfoil.initFromAerodynFile(aerodynFile)
-#         alpha, Re, cl, cd, cm = af.createDataGrid()
-#         return cls(alpha, Re, cl, cd)
-#
-#
-#     def evaluate(self, alpha, Re):
-#         """Get lift/drag coefficient at the specified angle of attack and Reynolds number.
-#
-#         Parameters
-#         ----------
-#         alpha : float (rad)
-#             angle of attack
-#         Re : float
-#             Reynolds number
-#
-#         Returns
-#         -------
-#         cl : float
-#             lift coefficient
-#         cd : float
-#             drag coefficient
-#
-#         Notes
-#         -----
-#         This method uses a spline so that the output is continuously differentiable, and
-#         also uses a small amount of smoothing to help remove spurious multiple solutions.
-#
-#         """
-#
-#         cl = self.cl_spline.ev(alpha, Re)
-#         cd = self.cd_spline.ev(alpha, Re)
-#
-#         return cl, cd
-#
-#
-#     def derivatives(self, alpha, Re):
-#
-#         # note: direct call to bisplev will be unnecessary with latest scipy update (add derivative method)
-#         tck_cl = self.cl_spline.tck[:3] + self.cl_spline.degrees  # concatenate lists
-#         tck_cd = self.cd_spline.tck[:3] + self.cd_spline.degrees
-#
-#         dcl_dalpha = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
-#         dcd_dalpha = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
-#
-#         if self.one_Re:
-#             dcl_dRe = 0.0
-#             dcd_dRe = 0.0
-#         else:
-#             dcl_dRe = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
-#             dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
-#
-#         return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
-#
-#
+        Returns
+        -------
+        af : CCAirfoil
+            a constructed CCAirfoil object
+
+        """
+
+        af = Airfoil.initFromAerodynFile(aerodynFile)
+        alpha, Re, cl, cd, cm = af.createDataGrid()
+        return cls(alpha, Re, cl, cd, cm)
+
+    @classmethod
+    def initFromFreeForm(cls, afp, airfoil_analysis_options, airfoilNum=0):
+        """convenience method for initializing with AeroDyn formatted files
+
+        Parameters
+        ----------
+        aerodynFile : str
+            location of AeroDyn style airfoiil file
+
+        Returns
+        -------
+        af : CCAirfoil
+            a constructed CCAirfoil object
+
+        """
+        af = Airfoil.initFromCST(afp, airfoil_analysis_options)
+        failure = af.failure
+        # For 3D Correction TODO
+        # r_over_R = 0.5
+        # chord_over_r = 0.15
+        # tsr = 7.55
+        # af3D = af.correction3D(r_over_R, chord_over_r, tsr)
+        cd_max = 1.5
+        af_extrap1 = af.extrapolate(cd_max)
+        alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
+
+        return cls(alpha, Re, cl, cd, cm, afp=afp, airfoil_analysis_options=airfoil_analysis_options, airfoilNum=airfoilNum, failure=failure)
+
+    @classmethod
+    def initFromPrecomputational(cls, t_c, airfoil_analysis_options, airfoilNum=0):
+
+        af = Airfoil.initFromThicknesses(t_c, airfoil_analysis_options)
+        failure = af.failure
+        # For 3D Correction TODO
+        # r_over_R = 0.5
+        # chord_over_r = 0.15
+        # tsr = 7.55
+        # af3D = af.correction3D(r_over_R, chord_over_r, tsr)
+        cd_max = 1.5
+        af_extrap1 = af.extrapolate(cd_max)
+        alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
+
+        return cls(alpha, Re, cl, cd, cm, afp=t_c, airfoil_analysis_options=airfoil_analysis_options, airfoilNum=airfoilNum, failure=failure)
+
+    @classmethod
+    def initFromInput(cls, alpha, Re, cl, cd, cm=None):
+        """convenience method for initializing with AeroDyn formatted files
+
+        Parameters
+        ----------
+        aerodynFile : str
+            location of AeroDyn style airfoiil file
+
+        Returns
+        -------
+        af : CCAirfoil
+            a constructed CCAirfoil object
+
+        """
+        return cls(alpha, [Re], cl, cd, cm)
+
+    def evaluate(self, alpha, Re):
+        """Get lift/drag coefficient at the specified angle of attack and Reynolds number.
+
+        Parameters
+        ----------
+        alpha : float (rad)
+            angle of attack
+        Re : float
+            Reynolds number
+
+        Returns
+        -------
+        cl : float
+            lift coefficient
+        cd : float
+            drag coefficient
+
+        Notes
+        -----
+        This method uses a spline so that the output is continuously differentiable, and
+        also uses a small amount of smoothing to help remove spurious multiple solutions.
+
+        """
+        cl = self.cl_spline.ev(alpha, Re)
+        cd = self.cd_spline.ev(alpha, Re)
+
+        return cl, cd
+
+    def evaluate_direct(self, alpha, Re, computeAlphaGradient=False, computeAFPGradient=False):
+        if self.afp is not None and abs(np.degrees(alpha)) < self.airfoil_analysis_options['maxDirectAoA']:
+            if alpha in self.alpha_storage and alpha in self.dalpha_storage:
+                index = self.alpha_storage.index(alpha)
+                cl = self.cl_storage[index]
+                cd = self.cd_storage[index]
+                if computeAlphaGradient:
+                    index = self.dalpha_storage.index(alpha)
+                    dcl_dalpha = self.dcl_storage[index]
+                    dcd_dalpha = self.dcd_storage[index]
+                if computeAFPGradient and alpha in self.dalpha_dafp_storage:
+                    index = self.dalpha_dafp_storage.index(alpha)
+                    dcl_dafp = self.dcl_dafp_storage[index]
+                    dcd_dafp = self.dcd_dafp_storage[index]
+                else:
+                    dcl_dafp = np.zeros(8)
+                    dcd_dafp = np.zeros(8)
+                dcl_dRe = 0.0
+                dcd_dRe = 0.0
+            else:
+                afanalysis = AirfoilAnalysis(self.afp, self.airfoil_analysis_options)
+                cl, cd, dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag = afanalysis.computeDirect(alpha, Re)
+                print cl, cd, alpha
+                if lexitflag or abs(cl) > 2.5 or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
+                    cl, cd = self.evaluate(alpha, Re)
+                    dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe = self.derivatives(alpha, Re)
+                self.cl_storage.append(cl)
+                self.cd_storage.append(cd)
+                self.alpha_storage.append(alpha)
+                if self.airfoil_analysis_options['ComputeGradient']:
+                    self.dcl_storage.append(dcl_dalpha)
+                    self.dcd_storage.append(dcd_dalpha)
+                    self.dalpha_storage.append(alpha)
+                    if self.airfoil_analysis_options['FreeFormDesign']:
+                        self.dcl_dafp_storage.append(dcl_dafp)
+                        self.dcd_dafp_storage.append(dcd_dafp)
+                        self.dalpha_dafp_storage.append(alpha)
+        else:
+            cl, cd = self.evaluate(alpha, Re)
+            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = self.derivatives(alpha, Re)
+            dcl_dafp, dcd_dafp = self.splineFreeFormGrad(alpha, Re)
+
+        return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
+
+    def derivatives(self, alpha, Re):
+
+        # note: direct call to bisplev will be unnecessary with latest scipy update (add derivative method)
+        tck_cl = self.cl_spline.tck[:3] + self.cl_spline.degrees  # concatenate lists
+        tck_cd = self.cd_spline.tck[:3] + self.cd_spline.degrees
+
+        dcl_dalpha = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
+        dcd_dalpha = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
+
+        if self.one_Re:
+            dcl_dRe = 0.0
+            dcd_dRe = 0.0
+        else:
+            dcl_dRe = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
+            dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
+        return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
+
+    def splineFreeFormGrad(self, alpha, Re):
+        dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8)
+        if self.freeform and self.afp is not None:
+            fd_step = self.airfoil_analysis_options['fd_step']
+            cl_cur = self.cl_spline.ev(alpha, Re)
+            cd_cur = self.cd_spline.ev(alpha, Re)
+            for i in range(8):
+                cl_new_fd = self.cl_splines_new[i].ev(alpha, self.Re)
+                cd_new_fd = self.cd_splines_new[i].ev(alpha, self.Re)
+                dcl_dafp[i] = (cl_new_fd - cl_cur) / fd_step
+                dcd_dafp[i] = (cd_new_fd - cd_cur) / fd_step
+        return dcl_dafp, dcd_dafp
+
+    def cfdSolve(self, alpha, Re, ComputeGradients=False, GenerateMESH=True, airfoilNum=0):
+
+        # Import SU2
+        sys.path.append(os.environ['SU2_RUN'])
+        import SU2
+
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CoordinatesFiles')
+        config_filename = basepath + os.path.sep + self.airfoil_analysis_options['cfdConfigFile']
+        config = SU2.io.Config(config_filename)
+        state  = SU2.io.State()
+        config.NUMBER_PART = self.airfoil_analysis_options['CFDprocessors']
+        config.EXT_ITER    = self.airfoil_analysis_options['CFDiterations']
+        config.WRT_CSV_SOL = 'YES'
+        meshFileName = 'mesh_AIRFOIL'+str(airfoilNum+1)+'.su2'
+        config.CONSOLE = 'QUIET'
+
+        if GenerateMESH:
+
+            # Create airfoil coordinate file for SU2
+            [x, y] = cst_to_coordinates_full(self.afp)
+            airfoilFile = 'airfoil_shape.dat'
+            coord_file = open(airfoilFile, 'w')
+            print >> coord_file, 'Airfoil ' + str(airfoilNum+1)
+            for i in range(len(x)):
+                print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+            coord_file.close()
+            oldstdout = sys.stdout
+            sys.stdout = open('output_meshes_stdout.txt', 'w')
+            konfig = copy.deepcopy(config)
+            konfig.MESH_OUT_FILENAME = meshFileName
+            konfig.DV_KIND = 'AIRFOIL'
+            tempname = 'config_DEF.cfg'
+            konfig.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            # must run with rank 1
+            processes = konfig['NUMBER_PART']
+            base_Command = os.path.join(SU2_RUN,'%s')
+            the_Command = 'SU2_DEF ' + tempname
+            the_Command = base_Command % the_Command
+            sys.stdout.flush()
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                             stdout=sys.stdout      ,
+                             stderr=subprocess.PIPE,
+                             stdin=subprocess.PIPE)
+            proc.stderr.close()
+            #proc.stdin.write(airfoilFile+'\n')
+            proc.stdin.write('airfoil_shape.dat\n')
+            proc.stdin.write('Selig\n')
+            proc.stdin.write('1.0\n')
+            proc.stdin.write('Yes\n')
+            proc.stdin.write('clockwise\n')
+            proc.stdin.close()
+            return_code = proc.wait()
+
+            restart = False
+            sys.stdout = oldstdout
+        else:
+            restart = True
+
+        config.MESH_FILENAME = meshFileName #'mesh_out.su2' # basepath + os.path.sep + 'mesh_AIRFOIL.su2'
+        state.FILES.MESH = config.MESH_FILENAME
+        config.AoA = np.degrees(alpha)
+        Uinf = 10.0
+        Ma = Uinf / 340.29  # Speed of sound at sea level
+        x_vel = Uinf * cos(alpha)
+        y_vel = Uinf * sin(alpha)
+        config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
+        config.MACH_NUMBER = Ma
+        config.REYNOLDS_NUMBER = 5e5 #Re
+
+        if restart:
+            config.RESTART_SOL = 'YES'
+            config.RESTART_FLOW_FILENAME = 'solution_flow_AIRFOIL' + str(airfoilNum+1) +'.dat'
+            config.SOLUTION_FLOW_FILENAME = 'solution_flow_SOLVED_AIRFOIL' + str(airfoilNum+1) + '.dat'
+        else:
+            config.RESTART_SOL = 'NO'
+            config.SOLUTION_FLOW_FILENAME = 'solution_flow_AIRFOIL' + str(airfoilNum+1) + '.dat'
+        oldstdout = sys.stdout
+        sys.stdout = open('output_cfd_direct.txt', 'w')
+        info = SU2.run.direct(config)
+        sys.stdout = oldstdout
+        state.update(info)
+        cl = state.FUNCTIONS.LIFT
+        cd = state.FUNCTIONS.DRAG
+        #cd = SU2.eval.func('DRAG', config, state)
+        #cl = SU2.eval.func('LIFT', config, state)
+
+        if ComputeGradients:
+            config.RESTART_SOL = 'NO'
+            mesh_data = SU2.mesh.tools.read(config.MESH_FILENAME)
+            points_sorted, loop_sorted = SU2.mesh.tools.sort_airfoil(mesh_data, marker_name='airfoil')
+            sys.stdout = open('output_cfd_adjoint.txt', 'w')
+            SU2.io.restart2solution(config, state)
+            # RUN FOR DRAG GRADIENTS
+
+            config.OBJECTIVE_FUNCTION = 'DRAG'
+            info = SU2.run.adjoint(config)
+            state.update(info)
+            dcd_dx, xl, xu = self.su2Gradient(loop_sorted, config.SURFACE_ADJ_FILENAME + '.csv')
+            dcd_dalpha = state.HISTORY.ADJOINT_DRAG.Sens_AoA[-1]
+            config.OBJECTIVE_FUNCTION = 'LIFT'
+            info = SU2.run.adjoint(config)
+            state.update(info)
+            dcl_dx, xl, xu = self.su2Gradient(loop_sorted, config.SURFACE_ADJ_FILENAME + '.csv')
+            dcl_dalpha = state.HISTORY.ADJOINT_LIFT.Sens_AoA[-1]
+
+            dz = 0
+            n = 8
+            #fd_step = self.airfoil_analysis_options['fd_step']
+            m = 200
+            dx_dafp = np.zeros((n, m))
+            wl_original, wu_original, N, dz = CST_to_kulfan(self.afp)
+            step_size = self.airfoil_analysis_options['cs_step']
+            cs_step = complex(0, step_size)
+            dy_dafp = cst_to_y_coordinates_derivatives(wl_original, wu_original, N, dz, xl, xu)
+            dy_dafp = np.matrix(dy_dafp)
+            dafp_dx = np.matrix(dx_dafp)
+            dcl_dx = np.matrix(dcl_dx)
+            dcd_dx = np.matrix(dcd_dx)
+            dcl_dafp = dy_dafp * dcl_dx.T
+            dcd_dafp = dy_dafp * dcd_dx.T
+
+            dcl_dafp2 = dafp_dx * dcl_dx.T
+            dcd_dafp2 = dafp_dx * dcd_dx.T
+            sys.stdout = oldstdout
+            print cl, cd, np.asarray(dcl_dafp).reshape(8), np.asarray(dcd_dafp).reshape(8), np.asarray(dcl_dafp2).reshape(8), np.asarray(dcd_dafp2).reshape(8)
+            return cl, cd, np.asarray(dcl_dafp).reshape(8), np.asarray(dcd_dafp).reshape(8), dcl_dalpha, dcd_dalpha
+        print "CL, CD", cl, cd
+        return cl, cd
+
+def evaluate_direct_parallel(alphas, Res, afs, computeAlphaGradient=False, computeAFPGradient=False):
+        indices_to_compute = []
+        n = len(alphas)
+        airfoil_analysis_options = afs[-1].airfoil_analysis_options
+        cl = np.zeros(n)
+        cd = np.zeros(n)
+        dcl_dalpha = [0]*n
+        dcd_dalpha = [0]*n
+        dcl_dafp = [0]*n
+        dcd_dafp = [0]*n
+        dcl_dRe = [0]*n
+        dcd_dRe = [0]*n
+
+        for i in range(len(alphas)):
+            alpha = alphas[i]
+            Re = Res[i]
+            af = afs[i]
+            if af.afp is not None and abs(np.degrees(alpha)) < af.airfoil_analysis_options['maxDirectAoA']:
+                if alpha in af.alpha_storage and alpha in af.dalpha_storage:
+                    index = af.alpha_storage.index(alpha)
+                    cl[i] = af.cl_storage[index]
+                    cd[i] = af.cd_storage[index]
+                    if computeAlphaGradient:
+                        index = af.dalpha_storage.index(alpha)
+                        dcl_dalpha[i] = af.dcl_storage[index]
+                        dcd_dalpha[i] = af.dcd_storage[index]
+                    if computeAFPGradient and alpha in af.dalpha_dafp_storage:
+                        index = af.dalpha_dafp_storage.index(alpha)
+                        dcl_dafp[i] = af.dcl_dafp_storage[index]
+                        dcd_dafp[i] = af.dcd_dafp_storage[index]
+                    dcl_dRe[i] = 0.0
+                    dcd_dRe[i] = 0.0
+                else:
+                    indices_to_compute.append(i)
+            else:
+                cl[i] = af.cl_spline.ev(alpha, Re)
+                cd[i] = af.cd_spline.ev(alpha, Re)
+                tck_cl = af.cl_spline.tck[:3] + af.cl_spline.degrees  # concatenate lists
+                tck_cd = af.cd_spline.tck[:3] + af.cd_spline.degrees
+
+                dcl_dalpha[i] = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
+                dcd_dalpha[i] = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
+
+                if af.one_Re:
+                    dcl_dRe[i] = 0.0
+                    dcd_dRe[i] = 0.0
+                else:
+                    dcl_dRe[i] = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
+                    dcd_dRe[i] = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
+                if computeAFPGradient and af.afp is not None:
+                    dcl_dafp[i], dcd_dafp[i] = af.splineFreeFormGrad(alpha, Re)
+                else:
+                    dcl_dafp[i], dcd_dafp[i] = np.zeros(8), np.zeros(8)
+        if indices_to_compute is not None:
+            alphas_to_compute = [alphas[i] for i in indices_to_compute]
+            Res_to_compute = [Res[i] for i in indices_to_compute]
+            afps_to_compute = [afs[i].afp for i in indices_to_compute]
+            if airfoil_analysis_options['ComputeGradient']:
+                cls, cds, dcls_dalpha, dcls_dRe, dcds_dalpha, dcds_dRe, dcls_dafp, dcds_dafp = cfdAirfoilsSolveParallel(alphas_to_compute, Res_to_compute, afps_to_compute, airfoil_analysis_options)
+                for j in range(len(indices_to_compute)):
+                    dcl_dalpha[indices_to_compute[j]] = dcls_dalpha[j]
+                    dcl_dRe[indices_to_compute[j]] = dcls_dRe[j]
+                    dcd_dalpha[indices_to_compute[j]] = dcds_dalpha[j]
+                    dcd_dRe[indices_to_compute[j]] = dcls_dRe[j]
+                    dcl_dafp[indices_to_compute[j]] = dcls_dafp[j]
+                    dcd_dafp[indices_to_compute[j]] = dcds_dafp[j]
+
+            else:
+                cls, cds = cfdAirfoilsSolveParallel(alphas_to_compute, Res_to_compute, afps_to_compute, airfoil_analysis_options)
+            for j in range(len(indices_to_compute)):
+                cl[indices_to_compute[j]] = cls[j]
+                cd[indices_to_compute[j]] = cds[j]
+
+        if computeAFPGradient:
+            try:
+                return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
+            except:
+                raise
+        elif computeAlphaGradient:
+            return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
+        else:
+            return cl, cd
 
 # ------------------
 #  Main Class: CCBlade
@@ -370,13 +723,8 @@ class CCBlade:
         dalpha_dx = np.array([1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
         dRe_dx = np.array([0.0, Re/chord, 0.0, Re*Vx/W**2, Re*Vy/W**2, 0.0, 0.0, 0.0, 0.0])
 
-        # cl, cd (spline derivatives)
-        # if self.airfoil_analysis_options['BEMSpline'] or np.degrees(alpha) > 30.0:
         cl, cd = af.evaluate(alpha, Re)
         dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
-        # else:
-        #     cl, cd = af.evaluate_direct(alpha, Re)
-        #     dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives_direct(alpha, Re)
 
         # chain rule
         dcl_dx = dcl_dalpha*dalpha_dx + dcl_dRe*dRe_dx
@@ -397,13 +745,9 @@ class CCBlade:
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
             dcl_dafp_R, dcd_dafp_R = af.splineFreeFormGrad(alpha, Re)
             dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
-
-
-
-            return dR_dx, da_dx, dap_dx, dR_dafp #, dcl_dafp, dcd_dafp
-
-        return dR_dx, da_dx, dap_dx
-
+        else:
+            dR_dafp = np.zeros(8)
+        return dR_dx, da_dx, dap_dx, dR_dafp
 
 
     def __loads(self, phi, rotating, r, chord, theta, af, Vx, Vy, airfoil_parameterization=None):
@@ -421,17 +765,12 @@ class CCBlade:
 
         alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                          chord, theta, self.rho, self.mu)
-        if rotating and self.freeform and self.derivatives:
+        if rotating:
             cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = af.evaluate_direct(alpha, Re, computeAlphaGradient=True, computeAFPGradient=True)
-        elif rotating and self.freeform:
-            cl, cd = af.evaluate_direct(alpha, Re)
-        elif rotating and self.derivatives:
-            cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.evaluate_direct(alpha, Re, computeAlphaGradient=True)
-        elif rotating:
-            cl, cd = af.evaluate_direct(alpha, Re)
         else:
             cl, cd = af.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
+            dcl_dafp, dcd_dafp = af.splineFreeFormGrad(alpha, Re)
 
         cn = cl*cphi + cd*sphi  # these expressions should always contain drag
         ct = cl*sphi - cd*cphi
@@ -440,13 +779,11 @@ class CCBlade:
         Tp = ct*q*chord
 
         if not self.derivatives:
-            return Np, Tp, 0.0, 0.0, 0.0
+            return Np, Tp, 0.0, 0.0, 0.0, np.zeros(8), np.zeros(8), np.zeros(8)
+
         # derivative of residual function
         if rotating:
-            if self.freeform and self.freeform_gradient:
-                dR_dx, da_dx, dap_dx, dR_dafp = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy, airfoil_parameterization)
-            else:
-                dR_dx, da_dx, dap_dx = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy)
+            dR_dx, da_dx, dap_dx, dR_dafp = self.__residualDerivatives(phi, r, chord, theta, af, Vx, Vy, airfoil_parameterization)
             dphi_dx = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         else:
             dR_dx = np.zeros(9)
@@ -454,7 +791,7 @@ class CCBlade:
             da_dx = np.zeros(9)
             dap_dx = np.zeros(9)
             dphi_dx = np.zeros(9)
-            dR_dafp, dcl_dafp, dcd_dafp = 0.0, 0.0, 0.0
+            dR_dafp, dcl_dafp, dcd_dafp = np.zeros(8), np.zeros(8), np.zeros(8)
 
 
         # x = [phi, chord,  theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
@@ -467,7 +804,6 @@ class CCBlade:
             a, da_dx, ap, dap_dx, Vx, dx_dx[3, :], Vy, dx_dx[4, :],
             self.pitch, dx_dx[8, :], chord, dx_dx[1, :], theta, dx_dx[2, :],
             self.rho, self.mu)
-        # cl, cd (spline derivatives)
 
         # chain rule
         dcl_dx = dcl_dalpha*dalpha_dx + dcl_dRe*dRe_dx
@@ -482,19 +818,14 @@ class CCBlade:
         dNp_dx = Np*(1.0/cn*dcn_dx + 2.0/W*dW_dx + 1.0/chord*dchord_dx)
         dTp_dx = Tp*(1.0/ct*dct_dx + 2.0/W*dW_dx + 1.0/chord*dchord_dx)
 
-        if self.freeform and self.freeform_gradient:
-            dphi_dafp = 0.0
-            # try:
-            dcn_dafp = dcl_dafp*cphi - cl*sphi*dphi_dafp + dcd_dafp*sphi + cd*cphi*dphi_dafp
-            # except:
-            #     pass
-            dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
-            dNp_dafp = Np*(1.0/cn*dcn_dafp)
-            dTp_dafp = Tp*(1.0/ct*dct_dafp)
+        # freeform design
+        dphi_dafp = 0.0
+        dcn_dafp = dcl_dafp*cphi - cl*sphi*dphi_dafp + dcd_dafp*sphi + cd*cphi*dphi_dafp
+        dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
+        dNp_dafp = Np*(1.0/cn*dcn_dafp)
+        dTp_dafp = Tp*(1.0/ct*dct_dafp)
 
-            return Np, Tp, dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp
-
-        return Np, Tp, dNp_dx, dTp_dx, dR_dx
+        return Np, Tp, dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp
 
     def __loads_parallel(self, phi, rotating, r, chord, theta, af, Vx, Vy, airfoil_parameterization=None):
         """normal and tangential loads at one section (and optionally derivatives)"""
@@ -765,21 +1096,7 @@ class CCBlade:
                 # ----------------------------------------------------------------
 
             # derivatives of residual
-            airfoils = [False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
-            #print "UINF", Uinf
-            if self.freeform and rotating and self.derivatives:
-                if airfoils[i]:
-                    self.freeform_gradient = True
-                    Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp = self.__loads(phi_star, rotating, *args, airfoil_parameterization=self.airfoil_parameterization[i])
-                else:
-                    self.freeform_gradient = False
-                    Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
-                    dNp_dafp, dTp_dafp, dR_dafp = 0.0, 0.0, 0.0
-            else:
-                if Uinf > 22.5 and rotating:
-                    pass
-                self.freeform_gradient = False
-                Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx = self.__loads(phi_star, rotating, *args)
+            Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp = self.__loads(phi_star, rotating, *args)
 
             if self.derivatives:
                 # separate state vars from design vars
@@ -795,9 +1112,8 @@ class CCBlade:
                 DNp_Dx = dNp_dx - dNp_dy/dR_dy*dR_dx
                 DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
 
-                if self.freeform and rotating:
-                    DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
-                    DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
+                DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
+                DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
 
                 # parse components
                 # z = [r, chord, theta, Rhub, Rtip, pitch]
@@ -887,16 +1203,15 @@ class CCBlade:
             dNp['dpitch'] = dNp_dX[13, :].reshape(n, 1)
             dTp['dpitch'] = dTp_dX[13, :].reshape(n, 1)
 
-            if self.freeform:
-                dNp['dafp'] = np.zeros((n, 17*8))
-                dTp['dafp'] = np.zeros((n, 17*8))
-                for z in range(n):
-                    dNp_zeros = np.zeros((17,8))
-                    dTp_zeros = np.zeros((17,8))
-                    dNp_zeros[z, :] = DNp_Dafp[z]
-                    dTp_zeros[z, :] = DTp_Dafp[z]
-                    dNp['dafp'][z] = dNp_zeros.flatten()
-                    dTp['dafp'][z] = dTp_zeros.flatten()
+            dNp['dafp'] = np.zeros((n, 17*8))
+            dTp['dafp'] = np.zeros((n, 17*8))
+            for z in range(n):
+                dNp_zeros = np.zeros((17,8))
+                dTp_zeros = np.zeros((17,8))
+                dNp_zeros[z, :] = DNp_Dafp[z]
+                dTp_zeros[z, :] = DTp_Dafp[z]
+                dNp['dafp'][z] = dNp_zeros.flatten()
+                dTp['dafp'][z] = dTp_zeros.flatten()
 
             return Np, Tp, dNp, dTp
 

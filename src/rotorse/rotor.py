@@ -19,7 +19,7 @@ import _curvefem
 import _bem  # TODO: move to rotoraero
 from enum import Enum
 # from ccblade2 import CCBlade_to_RotorSE_connection as CCBlade
-from airfoilprep_free import getCoordinates
+from airfoil_parameterization import AirfoilAnalysis
 
 
 
@@ -321,7 +321,9 @@ class PreCompSections(Component):
                 if pro_str[j][0] == 0.0:
                     profile[j] = Profile.initFromPreCompFile(os.path.join(basepath, 'shape_' + str(j+1) + '.inp'))
                 else:
-                    xl, xu, yl, yu = getCoordinates([pro_str[j]])
+                    afanalysis = AirfoilAnalysis(pro_str[j], params['airfoil_analysis_options'])
+                    xl, xu, yl, yu = afanalysis.getCoordinates(type='split')
+                    # xl, xu, yl, yu = getCoordinates([pro_str[j]])
                     xu1 = np.zeros(len(xu))
                     xl1 = np.zeros(len(xu))
                     yu1 = np.zeros(len(xu))
@@ -333,10 +335,7 @@ class PreCompSections(Component):
                         yl1[k] = float(yl[k])
                     x = np.append(xu1, xl1)
                     y = np.append(yu1, yl1)
-                    try:
-                        profile[j] = Profile.initFromCoordinates(x, y)
-                    except:
-                        print "ERROR 3"
+                    profile[j] = Profile.initFromCoordinates(x, y)
         mat = self.materials
         csU = self.upperCS
         csL = self.lowerCS
