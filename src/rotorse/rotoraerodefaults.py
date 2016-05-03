@@ -19,6 +19,7 @@ from akima import Akima
 from enum import Enum
 from copy import deepcopy
 import time
+import os
 
 # ---------------------
 # Map Design Variables to Discretization
