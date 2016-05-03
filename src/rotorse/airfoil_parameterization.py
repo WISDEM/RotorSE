@@ -690,7 +690,7 @@ class AirfoilAnalysis:
             konfig.OBJECTIVE_FUNCTION = 'DRAG'
 
             # setup problem
-            konfig['MATH_PROBLEM']  = 'ADJOINT'
+            konfig['MATH_PROBLEM']  = 'CONTINUOUS_ADJOINT'
             konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_adjoint'
 
             # Run Solution
@@ -771,7 +771,7 @@ class AirfoilAnalysis:
             konfig.OBJECTIVE_FUNCTION = 'LIFT'
 
             # setup problem
-            konfig['MATH_PROBLEM']  = 'ADJOINT'
+            konfig['MATH_PROBLEM']  = 'CONTINUOUS_ADJOINT'
             konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_adjoint'
 
             # Run Solution
@@ -1125,7 +1125,7 @@ def cfdSolveBladeParallel(self, alphas, Res, afps, airfoil_analysis_options):
             konfig.OBJECTIVE_FUNCTION = 'DRAG'
 
             # setup problem
-            konfig['MATH_PROBLEM']  = 'ADJOINT'
+            konfig['MATH_PROBLEM']  = 'CONTINUOUS_ADJOINT'
             konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_adjoint'
 
             # Run Solution
@@ -1207,7 +1207,7 @@ def cfdSolveBladeParallel(self, alphas, Res, afps, airfoil_analysis_options):
             konfig.OBJECTIVE_FUNCTION = 'LIFT'
 
             # setup problem
-            konfig['MATH_PROBLEM']  = 'ADJOINT'
+            konfig['MATH_PROBLEM']  = 'CONTINUOUS_ADJOINT'
             konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_adjoint'
 
             # Run Solution
@@ -1325,3 +1325,702 @@ def su2Gradient(loop_sorted, surface_adjoint):
             dobj_dxu = np.append(dobj_dxu, dobj_dx_raw[index])
     return np.concatenate([dobj_dxl, dobj_dxu]), xl, xu
 
+
+
+def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
+        # Import SU2
+        sys.path.append(os.environ['SU2_RUN'])
+        import SU2
+
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+
+        config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
+        config = SU2.io.Config(config_filename)
+        state  = SU2.io.State()
+        config.NUMBER_PART = airfoil_analysis_options['CFDprocessors']
+        config.EXT_ITER    = airfoil_analysis_options['CFDiterations']
+        config.WRT_CSV_SOL = 'YES'
+        meshFileName = basepath + os.path.sep + 'mesh_AIRFOIL_parallel.su2'
+        config.CONSOLE = 'QUIET'
+
+        # Create airfoil coordinate file for SU2
+        afanalysis = AirfoilAnalysis(afp, airfoil_analysis_options)
+        x, y = afanalysis.x, afanalysis.y
+        airfoilFile = basepath + os.path.sep + 'airfoil_shape_parallel.dat'
+        coord_file = open(airfoilFile, 'w')
+        print >> coord_file, 'Airfoil Parallel'
+        for i in range(len(x)):
+            print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+        coord_file.close()
+        oldstdout = sys.stdout
+        sys.stdout = open(basepath + os.path.sep + 'output_meshes_stdout.txt', 'w')
+        konfig = deepcopy(config)
+        konfig.MESH_OUT_FILENAME = meshFileName
+        konfig.DV_KIND = 'AIRFOIL'
+        tempname = 'config_DEF.cfg'
+        konfig.dump(tempname)
+        SU2_RUN = os.environ['SU2_RUN']
+        base_Command = os.path.join(SU2_RUN,'%s')
+        the_Command = 'SU2_DEF ' + tempname
+        the_Command = base_Command % the_Command
+        sys.stdout.flush()
+        proc = subprocess.Popen( the_Command, shell=True    ,
+                         stdout=sys.stdout      ,
+                         stderr=subprocess.PIPE,
+                         stdin=subprocess.PIPE)
+        proc.stderr.close()
+        proc.stdin.write(airfoilFile+'\n')
+        proc.stdin.write('Selig\n')
+        proc.stdin.write('1.0\n')
+        proc.stdin.write('Yes\n')
+        proc.stdin.write('clockwise\n')
+        proc.stdin.close()
+        return_code = proc.wait()
+
+        restart = False
+        sys.stdout = oldstdout
+
+        config.MESH_FILENAME = meshFileName
+        state.FILES.MESH = config.MESH_FILENAME
+        Uinf = 10.0
+        Ma = Uinf / 340.29  # Speed of sound at sea level
+        config.MACH_NUMBER = Ma
+        config.REYNOLDS_NUMBER = Re
+
+        if restart:
+            config.RESTART_SOL = 'YES'
+            config.RESTART_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_AIRFOIL_parallel.dat'
+            config.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_SOLVED_AIRFOIL_parallel.dat'
+        else:
+            config.RESTART_SOL = 'NO'
+            config.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_AIRFOIL_parallel.dat'
+        cl = np.zeros(len(alphas))
+        cd = np.zeros(len(alphas))
+        alphas = np.degrees(alphas)
+        procTotal = []
+        konfigTotal = []
+        for i in range(len(alphas)):
+            x_vel = Uinf * cos(np.radians(alphas[i]))
+            y_vel = Uinf * sin(np.radians(alphas[i]))
+            config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
+            config.AoA = alphas[i]
+            config.CONV_FILENAME = basepath + os.path.sep + 'history_'+str(int(alphas[i]))
+            state = SU2.io.State(state)
+            konfig = deepcopy(config)
+            # setup direct problem
+            konfig['MATH_PROBLEM']  = 'DIRECT'
+            konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_direct'
+
+            # Run Solution
+            tempname = basepath + os.path.sep + 'config_CFD'+str(int(alphas[i]))+'.cfg'
+            konfig.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            sys.path.append( SU2_RUN )
+
+            mpi_Command = 'mpirun -n %i %s'
+
+            processes = konfig['NUMBER_PART']
+
+            the_Command = 'SU2_CFD ' + tempname
+            the_Command = base_Command % the_Command
+            if processes > 0:
+                if not mpi_Command:
+                    raise RuntimeError , 'could not find an mpi interface'
+            the_Command = mpi_Command % (processes,the_Command)
+            sys.stdout.flush()
+            cfd_output = open(basepath + os.path.sep + 'cfd_output'+str(i+1)+'.txt', 'w')
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                         stdout=cfd_output      ,
+                         stderr=subprocess.PIPE,
+                         stdin=subprocess.PIPE)
+            proc.stderr.close()
+            proc.stdin.close()
+            procTotal.append(deepcopy(proc))
+            konfigTotal.append(deepcopy(konfig))
+
+        for i in range(len(alphas)):
+            while procTotal[i].poll() is None:
+                pass
+            konfig = konfigTotal[i]
+            konfig['SOLUTION_FLOW_FILENAME'] = konfig['RESTART_FLOW_FILENAME']
+            oldstdout = sys.stdout
+            sys.stdout = oldstdout
+            plot_format      = konfig['OUTPUT_FORMAT']
+            plot_extension   = SU2.io.get_extension(plot_format)
+            history_filename = konfig['CONV_FILENAME'] + plot_extension
+            special_cases    = SU2.io.get_specialCases(konfig)
+
+            final_avg = config.get('ITER_AVERAGE_OBJ',0)
+            aerodynamics = SU2.io.read_aerodynamics( history_filename , special_cases, final_avg )
+            config.update({ 'MATH_PROBLEM' : konfig['MATH_PROBLEM']  })
+            info = SU2.io.State()
+            info.FUNCTIONS.update( aerodynamics )
+            state.update(info)
+
+            cl[i], cd[i] = info.FUNCTIONS['LIFT'], info.FUNCTIONS['DRAG']
+        return cl, cd
+
+def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
+        # Import SU2
+        sys.path.append(os.environ['SU2_RUN'])
+        import SU2
+
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+
+        config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
+        config = SU2.io.Config(config_filename)
+        state  = SU2.io.State()
+        config.NUMBER_PART = airfoil_analysis_options['CFDprocessors']
+        config.EXT_ITER    = airfoil_analysis_options['CFDiterations']
+        config.WRT_CSV_SOL = 'YES'
+
+        config.CONSOLE = 'QUIET'
+
+        cl = np.zeros(len(alphas))
+        cd = np.zeros(len(alphas))
+        alphas = np.degrees(alphas)
+        procTotal = []
+        konfigTotal = []
+        konfigDirectTotal = []
+        ztateTotal = []
+        Re = airfoil_analysis_options['Re']
+        for i in range(len(alphas)):
+            meshFileName = basepath + os.path.sep + 'mesh_airfoil'+str(i+1)+'.su2'
+            # Create airfoil coordinate file for SU2
+            afanalysis = AirfoilAnalysis(afps[i], airfoil_analysis_options)
+            x, y = afanalysis.x, afanalysis.y
+            airfoilFile = basepath + os.path.sep + 'airfoil'+str(i+1)+'_coordinates.dat'
+            coord_file = open(airfoilFile, 'w')
+            print >> coord_file, 'Airfoil Parallel'
+            for j in range(len(x)):
+                print >> coord_file, '{:<10f}\t{:<10f}'.format(x[j], y[j])
+            coord_file.close()
+
+            konfig = deepcopy(config)
+            ztate = deepcopy(state)
+            konfig.MESH_OUT_FILENAME = meshFileName
+            konfig.DV_KIND = 'AIRFOIL'
+            tempname = basepath + os.path.sep + 'config_DEF_direct.cfg'
+            konfig.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            base_Command = os.path.join(SU2_RUN,'%s')
+            the_Command = 'SU2_DEF ' + tempname
+            the_Command = base_Command % the_Command
+            sys.stdout.flush()
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                             stdout=open(basepath + os.path.sep + 'mesh_deformation_airfoil'+str(i+1)+'.txt', 'w')      ,
+                             stderr=subprocess.PIPE,
+                             stdin=subprocess.PIPE)
+            proc.stderr.close()
+            proc.stdin.write(airfoilFile+'\n')
+            proc.stdin.write('Selig\n')
+            proc.stdin.write('1.0\n')
+            proc.stdin.write('Yes\n')
+            proc.stdin.write('clockwise\n')
+            proc.stdin.close()
+            return_code = proc.wait()
+
+            restart = False
+
+            konfig.MESH_FILENAME = meshFileName
+            ztate.FILES.MESH = config.MESH_FILENAME
+            Uinf = 10.0
+            Ma = Uinf / 340.29  # Speed of sound at sea level
+            konfig.MACH_NUMBER = Ma
+            konfig.REYNOLDS_NUMBER = Re
+
+            if restart:
+                konfig.RESTART_SOL = 'YES'
+                konfig.RESTART_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_airfoil'+str(i+1)+'.dat'
+                konfig.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_airfoil'+str(i+1)+'_SOLVED.dat'
+            else:
+                konfig.RESTART_SOL = 'NO'
+                konfig.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_airfoil'+str(i+1)+'.dat'
+                konfig.SOLUTION_ADJ_FILENAME = basepath + os.path.sep + 'solution_adj_airfoil'+str(i+1)+'.dat'
+                konfig.RESTART_FLOW_FILENAME = basepath + os.path.sep + 'restart_flow_airfoil'+str(i+1)+'.dat'
+                konfig.RESTART_ADJ_FILENAME = basepath + os.path.sep + 'restart_adj_airfoil'+str(i+1)+'.dat'
+                konfig.SURFACE_ADJ_FILENAME = basepath + os.path.sep + 'surface_adjoint_airfoil' + str(i+1)
+                konfig.SURFACE_FLOW_FILENAME = basepath + os.path.sep + 'surface_flow_airfoil' + str(i+1)
+
+
+            x_vel = Uinf * cos(np.radians(alphas[i]))
+            y_vel = Uinf * sin(np.radians(alphas[i]))
+            konfig.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
+            konfig.AoA = alphas[i]
+            konfig.CONV_FILENAME = basepath + os.path.sep + 'history_airfoil'+str(i+1)
+            #state = SU2.io.State(state)
+
+            konfig_direct = deepcopy(konfig)
+            # setup direct problem
+            konfig_direct['MATH_PROBLEM']  = 'DIRECT'
+            konfig_direct['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_direct'
+
+            # Run Solution
+            tempname = basepath + os.path.sep + 'config_CFD_airfoil'+str(i+1)+'.cfg'
+            konfig_direct.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            sys.path.append( SU2_RUN )
+
+            mpi_Command = 'mpirun -n %i %s'
+
+            processes = konfig['NUMBER_PART']
+
+            the_Command = 'SU2_CFD ' + tempname
+            the_Command = base_Command % the_Command
+            if processes > 0:
+                if not mpi_Command:
+                    raise RuntimeError , 'could not find an mpi interface'
+            the_Command = mpi_Command % (processes,the_Command)
+            sys.stdout.flush()
+            cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil'+str(i+1)+'.txt', 'w')
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                         stdout=cfd_output      ,
+                         stderr=subprocess.PIPE,
+                         stdin=subprocess.PIPE)
+            proc.stderr.close()
+            proc.stdin.close()
+            procTotal.append(deepcopy(proc))
+            konfigDirectTotal.append(deepcopy(konfig_direct))
+            konfigTotal.append(deepcopy(konfig))
+            ztateTotal.append(deepcopy(state))
+
+        for i in range(len(alphas)):
+            while procTotal[i].poll() is None:
+                pass
+            konfig = konfigDirectTotal[i]
+            konfig['SOLUTION_FLOW_FILENAME'] = konfig['RESTART_FLOW_FILENAME']
+            #oldstdout = sys.stdout
+            #sys.stdout = oldstdout
+            plot_format      = konfig['OUTPUT_FORMAT']
+            plot_extension   = SU2.io.get_extension(plot_format)
+            history_filename = konfig['CONV_FILENAME'] + plot_extension
+            special_cases    = SU2.io.get_specialCases(konfig)
+
+            final_avg = config.get('ITER_AVERAGE_OBJ',0)
+            aerodynamics = SU2.io.read_aerodynamics( history_filename , special_cases, final_avg )
+            config.update({ 'MATH_PROBLEM' : konfig['MATH_PROBLEM']  })
+            info = SU2.io.State()
+            info.FUNCTIONS.update( aerodynamics )
+            ztateTotal[i].update(info)
+
+            cl[i], cd[i] = info.FUNCTIONS['LIFT'], info.FUNCTIONS['DRAG']
+
+        if airfoil_analysis_options['ComputeGradient']:
+            print "computeGradients", airfoil_analysis_options['ComputeGradient']
+            dcl_dx = []
+            dcd_dx = []
+            dcl_dafp = []
+            dcd_dafp = []
+            dcl_dalpha = []
+            dcd_dalpha = []
+            dcl_dRe = []
+            dcd_dRe = []
+            dx_dafpTotal = []
+            procTotal = []
+            konfigDragTotal = []
+            konfigLiftTotal = []
+            for i in range(len(alphas)):
+                konfig = deepcopy(konfigTotal[i])
+                ztate = ztateTotal[i]
+                konfig.RESTART_SOL = 'NO'
+                mesh_data = SU2.mesh.tools.read(konfig.MESH_FILENAME)
+                points_sorted, loop_sorted = SU2.mesh.tools.sort_airfoil(mesh_data, marker_name='airfoil')
+
+                SU2.io.restart2solution(konfig, ztate)
+                # RUN FOR DRAG GRADIENTS
+                konfig.OBJECTIVE_FUNCTION = 'DRAG'
+
+                # setup problem
+                konfig['MATH_PROBLEM']  = 'CONTINUOUS_ADJOINT'
+                konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_adjoint'
+
+                # Run Solution
+                #oldstdout = sys.stdout
+                #sys.stdout = open(basepath + os.path.sep + 'output_cfd_adjoint_airfoil_drag'+str(i+1)+'.txt', 'w')
+                tempname = basepath + os.path.sep + 'config_CFD_airfoil'+str(i+1)+'_drag.cfg'
+                konfig.dump(tempname)
+                SU2_RUN = os.environ['SU2_RUN']
+                sys.path.append( SU2_RUN )
+
+                mpi_Command = 'mpirun -n %i %s'
+
+                processes = konfig['NUMBER_PART']
+
+                the_Command = 'SU2_CFD ' + tempname
+                the_Command = base_Command % the_Command
+                if processes > 0:
+                    if not mpi_Command:
+                        raise RuntimeError , 'could not find an mpi interface'
+                the_Command = mpi_Command % (processes,the_Command)
+                sys.stdout.flush()
+                cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil'+str(i+1)+'_drag.txt', 'w')
+                proc = subprocess.Popen( the_Command, shell=True    ,
+                             stdout=cfd_output      ,
+                             stderr=subprocess.PIPE,
+                             stdin=subprocess.PIPE)
+                proc.stderr.close()
+                proc.stdin.close()
+
+                # merge
+
+                procTotal.append(deepcopy(proc))
+                konfigDragTotal.append(deepcopy(konfig))
+                # ztateTotal.append(deepcopy(state))
+
+            for i in range(len(alphas)):
+                while procTotal[i].poll() is None:
+                    pass
+                konfig = konfigDragTotal[i]
+                konfig['SOLUTION_ADJ_FILENAME'] = konfig['RESTART_ADJ_FILENAME']
+
+                # filenames
+                plot_format      = konfig['OUTPUT_FORMAT']
+                plot_extension   = SU2.io.get_extension(plot_format)
+                history_filename = konfig['CONV_FILENAME'] + plot_extension
+                special_cases    = SU2.io.get_specialCases(konfig)
+
+                # get history
+                history = SU2.io.read_history( history_filename )
+
+                # update super config
+                config.update({ 'MATH_PROBLEM' : konfig['MATH_PROBLEM'] ,
+                                'OBJECTIVE_FUNCTION'  : konfig['OBJECTIVE_FUNCTION']   })
+
+                # files out
+                objective    = konfig['OBJECTIVE_FUNCTION']
+                adj_title    = 'ADJOINT_' + objective
+                suffix       = SU2.io.get_adjointSuffix(objective)
+                restart_name = konfig['RESTART_FLOW_FILENAME']
+                restart_name = SU2.io.add_suffix(restart_name,suffix)
+
+                # info out
+                info = SU2.io.State()
+                info.FILES[adj_title] = restart_name
+                info.HISTORY[adj_title] = history
+
+                #info = SU2.run.adjoint(konfig)
+                ztate.update(info)
+                dcd_dx1, xl, xu = su2Gradient(loop_sorted, konfig.SURFACE_ADJ_FILENAME + '.csv')
+                dcd_dx.append(dcd_dx1)
+                dcd_dalpha1 = ztate.HISTORY.ADJOINT_DRAG.Sens_AoA[-1]
+                dcd_dalpha.append(dcd_dalpha1)
+                n = 8
+                m = 200
+                afanalysis = AirfoilAnalysis(afps[i], airfoil_analysis_options)
+                dy_dafp = afanalysis.getCoordinateDerivatives(xl, xu)
+                dx_dafpTotal.append(dy_dafp)
+            procTotal = []
+            for i in range(len(alphas)):
+                konfig = deepcopy(konfigTotal[i])
+                ztate = ztateTotal[i]
+
+                konfig.OBJECTIVE_FUNCTION = 'LIFT'
+
+                # setup problem
+                konfig['MATH_PROBLEM']  = 'CONTINUOUS_ADJOINT'
+                konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_adjoint'
+
+                # Run Solution
+                #oldstdout = sys.stdout
+                #sys.stdout = open('output_cfd_adjoint_airfoil_lift'+str(i+1)+'.txt', 'w')
+                tempname = basepath + os.path.sep + 'config_CFD_airfoil_lift'+str(i+1)+'.cfg'
+                konfig.dump(tempname)
+                SU2_RUN = os.environ['SU2_RUN']
+                sys.path.append( SU2_RUN )
+
+                mpi_Command = 'mpirun -n %i %s'
+
+                processes = konfig['NUMBER_PART']
+
+                the_Command = 'SU2_CFD ' + tempname
+                the_Command = base_Command % the_Command
+                if processes > 0:
+                    if not mpi_Command:
+                        raise RuntimeError , 'could not find an mpi interface'
+                the_Command = mpi_Command % (processes,the_Command)
+                sys.stdout.flush()
+                cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil'+str(i+1)+'_lift.txt', 'w')
+                proc = subprocess.Popen( the_Command, shell=True    ,
+                             stdout=cfd_output      ,
+                             stderr=subprocess.PIPE,
+                             stdin=subprocess.PIPE)
+                proc.stderr.close()
+                proc.stdin.close()
+
+                # merge
+
+                procTotal.append(deepcopy(proc))
+                konfigLiftTotal.append(deepcopy(konfig))
+                # ztateTotal.append(deepcopy(state))
+
+            for i in range(len(alphas)):
+                while procTotal[i].poll() is None:
+                    pass
+                konfig = konfigLiftTotal[i]
+                konfig['SOLUTION_ADJ_FILENAME'] = konfig['RESTART_ADJ_FILENAME']
+
+                # filenames
+                plot_format      = konfig['OUTPUT_FORMAT']
+                plot_extension   = SU2.io.get_extension(plot_format)
+                history_filename = konfig['CONV_FILENAME'] + plot_extension
+                special_cases    = SU2.io.get_specialCases(konfig)
+
+                # get history
+                history = SU2.io.read_history( history_filename )
+
+                # update super config
+                config.update({ 'MATH_PROBLEM' : konfig['MATH_PROBLEM'] ,
+                                'OBJECTIVE_FUNCTION'  : konfig['OBJECTIVE_FUNCTION']   })
+
+                # files out
+                objective    = konfig['OBJECTIVE_FUNCTION']
+                adj_title    = 'ADJOINT_' + objective
+                suffix       = SU2.io.get_adjointSuffix(objective)
+                restart_name = konfig['RESTART_FLOW_FILENAME']
+                restart_name = SU2.io.add_suffix(restart_name,suffix)
+
+                # info out
+                info = SU2.io.State()
+                info.FILES[adj_title] = restart_name
+                info.HISTORY[adj_title] = history
+                surface_adjoint = konfig.SURFACE_ADJ_FILENAME + '.csv'
+                #info = SU2.run.adjoint(konfig)
+                ztate.update(info)
+                dcl_dx1, xl, xu = su2Gradient(loop_sorted, surface_adjoint)
+                dcl_dx.append(dcl_dx1)
+                dcl_dalpha1 = ztate.HISTORY.ADJOINT_LIFT.Sens_AoA[-1]
+                dcl_dalpha.append(dcl_dalpha1)
+                # info = SU2.run.adjoint(konfig)
+                # ztate.update(info)
+
+
+                dafp_dx_ = np.matrix(dx_dafpTotal[i])
+                dcl_dx_ = np.matrix(dcl_dx[i])
+                dcd_dx_ = np.matrix(dcd_dx[i])
+
+                dcl_dafp.append(np.asarray(dafp_dx_ * dcl_dx_.T).reshape(8))
+                dcd_dafp.append(np.asarray(dafp_dx_ * dcd_dx_.T).reshape(8))
+                #sys.stdout = oldstdout
+
+                dcl_dRe.append(0.0)
+                dcd_dRe.append(0.0)
+            return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp #cl, cd, dcl_dafp, dcd_dafp, dcl_dalpha, dcd_dalpha
+
+        return cl, cd
+
+def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
+        # Import SU2
+        sys.path.append(os.environ['SU2_RUN'])
+        import SU2
+
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+
+        config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
+        config = SU2.io.Config(config_filename)
+        state  = SU2.io.State()
+        config.NUMBER_PART = airfoil_analysis_options['CFDprocessors']
+        config.EXT_ITER    = airfoil_analysis_options['CFDiterations']
+        config.WRT_CSV_SOL = 'YES'
+        meshFileName = basepath + os.path.sep + 'mesh_AIRFOIL_parallel.su2'
+        config.CONSOLE = 'QUIET'
+
+        # Create airfoil coordinate file for SU2
+        afanalysis = AirfoilAnalysis(afp, airfoil_analysis_options)
+        x, y = afanalysis.x, afanalysis.y
+        airfoilFile = basepath + os.path.sep + 'airfoil_shape_parallel.dat'
+        coord_file = open(airfoilFile, 'w')
+        print >> coord_file, 'Airfoil Parallel'
+        for i in range(len(x)):
+            print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+        coord_file.close()
+        oldstdout = sys.stdout
+        sys.stdout = open(basepath + os.path.sep + 'output_meshes_stdout.txt', 'w')
+        konfig = deepcopy(config)
+        konfig.MESH_OUT_FILENAME = meshFileName
+        konfig.DV_KIND = 'AIRFOIL'
+        tempname = 'config_DEF.cfg'
+        konfig.dump(tempname)
+        SU2_RUN = os.environ['SU2_RUN']
+        base_Command = os.path.join(SU2_RUN,'%s')
+        the_Command = 'SU2_DEF ' + tempname
+        the_Command = base_Command % the_Command
+        sys.stdout.flush()
+        proc = subprocess.Popen( the_Command, shell=True    ,
+                         stdout=sys.stdout      ,
+                         stderr=subprocess.PIPE,
+                         stdin=subprocess.PIPE)
+        proc.stderr.close()
+        proc.stdin.write(airfoilFile+'\n')
+        proc.stdin.write('Selig\n')
+        proc.stdin.write('1.0\n')
+        proc.stdin.write('Yes\n')
+        proc.stdin.write('clockwise\n')
+        proc.stdin.close()
+        return_code = proc.wait()
+
+        restart = False
+        sys.stdout = oldstdout
+
+        config.MESH_FILENAME = meshFileName
+        state.FILES.MESH = config.MESH_FILENAME
+        Uinf = 10.0
+        Ma = Uinf / 340.29  # Speed of sound at sea level
+        config.MACH_NUMBER = Ma
+        config.REYNOLDS_NUMBER = Re
+
+        if restart:
+            config.RESTART_SOL = 'YES'
+            config.RESTART_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_AIRFOIL_parallel.dat'
+            config.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_SOLVED_AIRFOIL_parallel.dat'
+        else:
+            config.RESTART_SOL = 'NO'
+            config.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_AIRFOIL_parallel.dat'
+        cl = np.zeros(len(alphas))
+        cd = np.zeros(len(alphas))
+        alphas = np.degrees(alphas)
+        procTotal = []
+        konfigTotal = []
+        for i in range(len(alphas)):
+            x_vel = Uinf * cos(np.radians(alphas[i]))
+            y_vel = Uinf * sin(np.radians(alphas[i]))
+            config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
+            config.AoA = alphas[i]
+            config.CONV_FILENAME = basepath + os.path.sep + 'history_'+str(int(alphas[i]))
+            state = SU2.io.State(state)
+            konfig = deepcopy(config)
+            # setup direct problem
+            konfig['MATH_PROBLEM']  = 'DIRECT'
+            konfig['CONV_FILENAME'] = konfig['CONV_FILENAME'] + '_direct'
+
+            # Run Solution
+            tempname = basepath + os.path.sep + 'config_CFD'+str(int(alphas[i]))+'.cfg'
+            konfig.dump(tempname)
+            SU2_RUN = os.environ['SU2_RUN']
+            sys.path.append( SU2_RUN )
+
+            mpi_Command = 'mpirun -n %i %s'
+
+            processes = konfig['NUMBER_PART']
+
+            the_Command = 'SU2_CFD ' + tempname
+            the_Command = base_Command % the_Command
+            if processes > 0:
+                if not mpi_Command:
+                    raise RuntimeError , 'could not find an mpi interface'
+            the_Command = mpi_Command % (processes,the_Command)
+            sys.stdout.flush()
+            cfd_output = open(basepath + os.path.sep + 'cfd_output'+str(i+1)+'.txt', 'w')
+            proc = subprocess.Popen( the_Command, shell=True    ,
+                         stdout=cfd_output      ,
+                         stderr=subprocess.PIPE,
+                         stdin=subprocess.PIPE)
+            proc.stderr.close()
+            proc.stdin.close()
+            procTotal.append(deepcopy(proc))
+            konfigTotal.append(deepcopy(konfig))
+
+        for i in range(len(alphas)):
+            while procTotal[i].poll() is None:
+                pass
+            konfig = konfigTotal[i]
+            konfig['SOLUTION_FLOW_FILENAME'] = konfig['RESTART_FLOW_FILENAME']
+            oldstdout = sys.stdout
+            sys.stdout = oldstdout
+            plot_format      = konfig['OUTPUT_FORMAT']
+            plot_extension   = SU2.io.get_extension(plot_format)
+            history_filename = konfig['CONV_FILENAME'] + plot_extension
+            special_cases    = SU2.io.get_specialCases(konfig)
+
+            final_avg = config.get('ITER_AVERAGE_OBJ',0)
+            aerodynamics = SU2.io.read_aerodynamics( history_filename , special_cases, final_avg )
+            config.update({ 'MATH_PROBLEM' : konfig['MATH_PROBLEM']  })
+            info = SU2.io.State()
+            info.FUNCTIONS.update( aerodynamics )
+            state.update(info)
+
+            cl[i], cd[i] = info.FUNCTIONS['LIFT'], info.FUNCTIONS['DRAG']
+        return cl, cd
+
+
+from scipy.interpolate import RectBivariateSpline, bisplev
+def evaluate_direct_parallel(alphas, Res, afs, computeAlphaGradient=False, computeAFPGradient=False):
+        indices_to_compute = []
+        n = len(alphas)
+        airfoil_analysis_options = afs[-1].airfoil_analysis_options
+        cl = np.zeros(n)
+        cd = np.zeros(n)
+        dcl_dalpha = [0]*n
+        dcd_dalpha = [0]*n
+        dcl_dafp = [0]*n
+        dcd_dafp = [0]*n
+        dcl_dRe = [0]*n
+        dcd_dRe = [0]*n
+
+        for i in range(len(alphas)):
+            alpha = alphas[i]
+            Re = Res[i]
+            af = afs[i]
+            if af.afp is not None and abs(np.degrees(alpha)) < af.airfoil_analysis_options['maxDirectAoA']:
+                if alpha in af.alpha_storage and alpha in af.dalpha_storage:
+                    index = af.alpha_storage.index(alpha)
+                    cl[i] = af.cl_storage[index]
+                    cd[i] = af.cd_storage[index]
+                    if computeAlphaGradient:
+                        index = af.dalpha_storage.index(alpha)
+                        dcl_dalpha[i] = af.dcl_storage[index]
+                        dcd_dalpha[i] = af.dcd_storage[index]
+                    if computeAFPGradient and alpha in af.dalpha_dafp_storage:
+                        index = af.dalpha_dafp_storage.index(alpha)
+                        dcl_dafp[i] = af.dcl_dafp_storage[index]
+                        dcd_dafp[i] = af.dcd_dafp_storage[index]
+                    dcl_dRe[i] = 0.0
+                    dcd_dRe[i] = 0.0
+                else:
+                    indices_to_compute.append(i)
+            else:
+                cl[i] = af.cl_spline.ev(alpha, Re)
+                cd[i] = af.cd_spline.ev(alpha, Re)
+                tck_cl = af.cl_spline.tck[:3] + af.cl_spline.degrees  # concatenate lists
+                tck_cd = af.cd_spline.tck[:3] + af.cd_spline.degrees
+
+                dcl_dalpha[i] = bisplev(alpha, Re, tck_cl, dx=1, dy=0)
+                dcd_dalpha[i] = bisplev(alpha, Re, tck_cd, dx=1, dy=0)
+
+                if af.one_Re:
+                    dcl_dRe[i] = 0.0
+                    dcd_dRe[i] = 0.0
+                else:
+                    dcl_dRe[i] = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
+                    dcd_dRe[i] = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
+                if computeAFPGradient and af.afp is not None:
+                    dcl_dafp[i], dcd_dafp[i] = af.splineFreeFormGrad(alpha, Re)
+                else:
+                    dcl_dafp[i], dcd_dafp[i] = np.zeros(8), np.zeros(8)
+        if indices_to_compute is not None:
+            alphas_to_compute = [alphas[i] for i in indices_to_compute]
+            Res_to_compute = [Res[i] for i in indices_to_compute]
+            afps_to_compute = [afs[i].afp for i in indices_to_compute]
+            if airfoil_analysis_options['ComputeGradient']:
+                cls, cds, dcls_dalpha, dcls_dRe, dcds_dalpha, dcds_dRe, dcls_dafp, dcds_dafp = cfdAirfoilsSolveParallel(alphas_to_compute, Res_to_compute, afps_to_compute, airfoil_analysis_options)
+                for j in range(len(indices_to_compute)):
+                    dcl_dalpha[indices_to_compute[j]] = dcls_dalpha[j]
+                    dcl_dRe[indices_to_compute[j]] = dcls_dRe[j]
+                    dcd_dalpha[indices_to_compute[j]] = dcds_dalpha[j]
+                    dcd_dRe[indices_to_compute[j]] = dcls_dRe[j]
+                    dcl_dafp[indices_to_compute[j]] = dcls_dafp[j]
+                    dcd_dafp[indices_to_compute[j]] = dcds_dafp[j]
+            else:
+                cls, cds = cfdAirfoilsSolveParallel(alphas_to_compute, Res_to_compute, afps_to_compute, airfoil_analysis_options)
+            for j in range(len(indices_to_compute)):
+                cl[indices_to_compute[j]] = cls[j]
+                cd[indices_to_compute[j]] = cds[j]
+
+        if computeAFPGradient:
+            try:
+                return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
+            except:
+                raise
+        elif computeAlphaGradient:
+            return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
+        else:
+            return cl, cd

@@ -442,15 +442,11 @@ class CCBlade(Component):
                     wakerotation=self.wakerotation, usecd=self.usecd, derivatives=computeGradient, airfoil_parameterization=afp, airfoil_options=self.airfoil_analysis_options)
         # try:
         if self.run_case == 'power':
-            if self.airfoil_analysis_options['ParallelAirfoils'] and self.airfoil_analysis_options['AnalysisMethod'] == 'CFD':
-                ccblade_power = self.ccblade.evaluateParallel
-            else:
-                ccblade_power = self.ccblade.evaluate
             # power, thrust, torque
             if computeGradient:
-                self.P, self.T, self.Q, self.dP, self.dT, self.dQ = ccblade_power(self.Uhub, self.Omega, self.pitch, coefficient=False)
+                self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
             else:
-                self.P, self.T, self.Q = ccblade_power(self.Uhub, self.Omega, self.pitch, coefficient=False)
+                self.P, self.T, self.Q = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
             unknowns['T'] = self.T
             unknowns['Q'] = self.Q
             unknowns['P'] = self.P

@@ -2280,7 +2280,6 @@ class ObjandCons(Component):
         unknowns['con6'] = params['freq_curvefem'][0:2] - params['nBlades']*params['ratedConditions:Omega']/60.0*1.1
         unknowns['con_freeform'] = params['airfoil_parameterization'][:, [4, 5, 6, 7]] - params['airfoil_parameterization'][:, [0, 1, 2, 3]]
         unknowns['con_power'] = (params['power'][-1] - params['control:ratedPower']) # / 1.e6
-        print "CON_POWER", unknowns['con_power'], params['power'][-1], params['control:ratedPower']
 
     def linearize(self, params, unknowns, resids):
         J = {}
