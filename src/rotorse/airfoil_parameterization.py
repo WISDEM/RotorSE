@@ -10,15 +10,19 @@ import pyXLIGHT
 
 class AirfoilAnalysis:
     """A helper class to store and evaluate airfoil coordinates"""
-    def __init__(self, afp, airfoil_analysis_options, numCoordinates=200):
+    def __init__(self, afp, airfoil_analysis_options, numCoordinates=200, computeModel=True):
         self.afp = afp
         self.parameterization_method = airfoil_analysis_options['AirfoilParameterization']
         self.analysis_method = airfoil_analysis_options['AnalysisMethod']
         self.airfoil_analysis_options = airfoil_analysis_options
         self.numCoordinates = numCoordinates
-        self.x, self.y, self.xl, self.xu, self.yl, self.yu = self.__setCoordinates()
-        self.x_c, self.y_c, self.xl_c, self.xu_c, self.yl_c, self.yu_c = self.__setCoordinatesComplex()
-
+        if self.parameterization_method != 'Precomputational:T/C':
+            self.x, self.y, self.xl, self.xu, self.yl, self.yu = self.__setCoordinates()
+            self.x_c, self.y_c, self.xl_c, self.xu_c, self.yl_c, self.yu_c = self.__setCoordinatesComplex()
+        elif computeModel:
+            self.__generatePreCompModel()
+        # else:
+        #     self.x, self.y, self.xl, self.xu, self.yl, self.yu = self.__setPreCompCoordinates()
     def getCoordinates(self, type='full'):
         if type=='full':
             return self.x, self.y
@@ -53,12 +57,217 @@ class AirfoilAnalysis:
             print >> coord_file, '{:<10f}\t{:<10f}'.format(self.x[i], self.y[i])
         coord_file.close()
 
+    def readFile(self, airfoilFile):
+        coord_file = open(airfoilFile, 'r')
+        x, y = [], []
+        for row in coord_file:
+            try:
+                row = row.split()
+                x.append(float(row[0]))
+                y.append(float(row[1]))
+            except:
+                pass
+        coord_file.close()
+        x = np.asarray(x)
+        y = np.asarray(y)
+        self.x = x
+        self.y = y
+        return x, y
+
+    def getPreCompCoordinates(self, t_c):
+        x, y = self.readFile(self.afp)
+        base_thickness = max(y) - min(y)
+        xx = np.zeros(len(x))
+        yy = np.zeros(len(y))
+        for i in range(len(x)):
+            xx[i] = x[i]
+            yy[i] = y[i] / base_thickness * t_c
+        try:
+            zerind = np.where(xx == 0)  # Used to separate upper and lower surfaces
+            zerind = zerind[0][0]
+        except:
+            zerind = len(xx)/2
+
+        xl = np.zeros(zerind)
+        xu = np.zeros(len(xx)-zerind)
+        yl = np.zeros(zerind)
+        yu = np.zeros(len(xx)-zerind)
+
+        for z in range(len(xl)):
+            xl[z] = xx[z]        # Lower surface x-coordinates
+            yl[z] = yy[z]
+        for z in range(len(xu)):
+            xu[z] = xx[z + zerind]   # Upper surface x-coordinates
+            yu[z] = yy[z + zerind]
+
+        # Get in ascending order if not already
+        if xl[int(len(xl)/4)] > 0.5:
+            xl = xl[::-1]
+            yl = yl[::-1]
+        if xu[int(len(xu)/4)] > 0.5:
+            xu = xu[::-1]
+            yu = yu[::-1]
+
+        if xu[0] != 0.0:
+            xu[0] = 0.0
+        if xl[0] != 0.0:
+            xl[0] = 0.0
+        if xu[-1] != 1.0:
+            xu[-1] = 1.0
+        if xl[-1] != 1.0:
+            xl[-1] = 1.0
+
+        if yu[0] != 0.0:
+            yu[0] = 0.0
+        if yl[0] != 0.0:
+            yl[0] = 0.0
+        if yu[-1] != 0.0:
+            yu[-1] = 0.0
+        if yl[-1] != 0.0:
+            yl[-1] = 0.0
+
+        # Get in right order for precomp
+        xl = xl[::-1]
+        yl = yl[::-1]
+
+        return xl, xu, yl, yu
+
     def setNumCoordinates(self, numCoordinates):
         self.numCoordinates = numCoordinates
+
+    def __tcCoordinates(self):
+        pass
+
+    def __generatePreCompModel(self):
+        x, y = self.readFile(self.afp)
+        base_thickness = max(y) - min(y)
+        self.thick_min = 0.12
+        self.thick_max = 0.42
+        thicknesses = np.linspace(self.thick_min, self.thick_max, 20)
+        thick_x = []
+        thick_y = []
+        for thick in thicknesses:
+            xx = np.zeros(len(x))
+            yy = np.zeros(len(y))
+            for i in range(len(x)):
+                xx[i] = x[i]
+                yy[i] = y[i] / base_thickness * thick
+            thick_x.append(xx)
+            thick_y.append(yy)
+        cls, cds, cms, alphass, failures = [], [], [], [], []
+        from airfoilprep_free import Airfoil, Polar
+        from akima import Akima
+        alphas_set = np.linspace(np.radians(-180), np.radians(180), 360)
+        clGrid = np.zeros((len(alphas_set), len(thicknesses)))
+        cdGrid = np.zeros((len(alphas_set), len(thicknesses)))
+        for i in range(len(thick_x)):
+            cl, cd, cm, alphas, failure = self.__computeSplinePreComp(thick_x[i], thick_y[i])
+
+            p1 = Polar(self.airfoil_analysis_options['Re'], alphas, cl, cd, cm)
+            af = Airfoil([p1])
+            r_over_R = 0.5
+            chord_over_r = 0.15
+            tsr = 7.55
+            cd_max = 1.5
+            af3D = af.correction3D(r_over_R, chord_over_r, tsr)
+            af_extrap1 = af3D.extrapolate(cd_max)
+            alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af_extrap1.createDataGrid()
+            cls.append(cl_ext), cds.append(cd_ext), cms.append(cm_ext), alphass.append(alpha_ext), failures.append(failure)
+            if not all(np.diff(alpha_ext)):
+                to_delete = np.zeros(0)
+                diff = np.diff(alpha_ext)
+                for z in range(len(alpha_ext)-1):
+                    if not diff[z] > 0.0:
+                        to_delete = np.append(to_delete, z)
+                alpha_ext = np.delete(alpha_ext, to_delete)
+                cl_ext = np.delete(cl_ext, to_delete)
+                cd_ext = np.delete(cd_ext, to_delete)
+            cl_spline = Akima(np.radians(alpha_ext), cl_ext)
+            cd_spline = Akima(np.radians(alpha_ext), cd_ext)
+
+            cl_set, dcl_dalpha, dcl_dalphacl, dcl_dclsub = cl_spline.interp(alphas_set)
+            cd_set, dcd_dalpha, dcd_dalphacl, dcd_dclsub = cd_spline.interp(alphas_set)
+            for j in range(len(alphas_set)):
+                clGrid[j][i] = cl_set[j]
+                cdGrid[j][i] = cd_set[j]
+        kx = min(len(alphas_set)-1, 3)
+        ky = min(len(thicknesses)-1, 3)
+        self.cl_total_spline = RectBivariateSpline(alphas_set, thicknesses, clGrid, kx=kx, ky=ky, s=0.001)
+        self.cd_total_spline = RectBivariateSpline(alphas_set, thicknesses, cdGrid, kx=kx, ky=ky, s=0.0005)
+
+    def evaluatePreCompModel(self, alpha, t_c):
+        cl = self.cl_total_spline.ev(alpha, t_c)
+        cd = self.cd_total_spline.ev(alpha, t_c)
+        return cl[0], cd[0]
+
+    def derivativesPreCompModel(self, alpha, t_c):
+        # note: direct call to bisplev will be unnecessary with latest scipy update (add derivative method)
+        tck_cl = self.cl_total_spline.tck[:3] + self.cl_total_spline.degrees  # concatenate lists
+        tck_cd = self.cd_total_spline.tck[:3] + self.cd_total_spline.degrees
+
+        dcl_dalpha = bisplev(alpha, t_c, tck_cl, dx=1, dy=0)
+        dcd_dalpha = bisplev(alpha, t_c, tck_cd, dx=1, dy=0)
+
+        dcl_dt_c = bisplev(alpha, t_c, tck_cl, dx=0, dy=1)
+        dcd_dt_c = bisplev(alpha, t_c, tck_cd, dx=0, dy=1)
+        return dcl_dalpha, dcl_dt_c, dcd_dalpha, dcd_dt_c
+
+    def plotPreCompModel(self):
+        import matplotlib.pylab as plt
+        from matplotlib import cm
+        from mpl_toolkits.mplot3d import Axes3D
+        n = 200
+        thick = np.linspace(self.thick_min, self.thick_max, n)
+        alpha = np.linspace(-np.pi, np.pi, n)
+        CL = np.zeros((n, n))
+        CD = np.zeros((n, n))
+        [X, Y] = np.meshgrid(alpha, thick)
+        for i in range(n):
+            for j in range(n):
+                CL[i, j] = self.cl_total_spline.ev(X[i, j], Y[i, j])
+                CD[i, j] = self.cd_total_spline.ev(X[i, j], Y[i, j])
+
+        font_size = 14
+        fig4 = plt.figure()
+        ax4 = fig4.gca(projection='3d')
+        surf = ax4.plot_surface(np.degrees(X), Y, CD, rstride=1, cstride=1, cmap=cm.coolwarm,
+        linewidth=0, antialiased=False)
+        plt.xlim(xmin=-180, xmax=180)
+        plt.xticks(np.arange(-180, 180+1, 60.0))
+        plt.yticks(np.arange(0.15, 0.46, 0.10))
+        ax4.set_zlabel(r'$c_d$')
+        # plt.title('C_D Surface')
+        plt.xlabel(r'$\alpha$ (deg)')
+        plt.ylabel('t/c (\%)')
+        fig4.colorbar(surf) #, shrink=0.5, aspect=5)
+        # plt.rcParams['font.size'] = font_size
+        # plt.savefig('/Users/ryanbarr/Desktop/cd_fin_surface.pdf')
+        # plt.savefig('/Users/ryanbarr/Desktop/cd_fin_surface.png')
+
+        fig5 = plt.figure()
+        ax5 = fig5.gca(projection='3d')
+        surf2 = ax5.plot_surface(np.degrees(X), Y, CL, rstride=1, cstride=1, cmap=cm.coolwarm,
+        linewidth=0, antialiased=False)
+        fig5.colorbar(surf2) #, shrink=0.5, aspect=5)
+        plt.xlim(xmin=-180, xmax=180)
+        plt.xticks(np.arange(-180, 180+1, 60.0))
+        plt.yticks(np.arange(0.15, 0.46, 0.10))
+        # plt.title('C_L Surface')
+        ax5.set_zlabel(r'$c_l$')
+        plt.xlabel(r'$\alpha$ (deg)')
+        plt.ylabel('t/c (\%)')
+        # plt.rcParams['font.size'] = font_size
+        plt.savefig('/Users/ryanbarr/Desktop/cl_fin_surface.pdf')
+        plt.savefig('/Users/ryanbarr/Desktop/cl_fin_surface.png')
+        # ax4.zaxis.set_major_locator(LinearLocator(10))
+        # ax4.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
+        plt.show()
 
     def __setCoordinates(self):
         if self.parameterization_method == 'CST':
              x, y, xl, xu, yl, yu = self.__cstCoordinates()
+        else:
+            x, y, xl, xu, yl, yu = self.__tcCoordinates()
         return x, y, xl, xu, yl, yu
 
     def __setCoordinatesComplex(self):
@@ -388,6 +597,13 @@ class AirfoilAnalysis:
         return dy_total
 
     def computeSpline(self):
+        if self.airfoil_analysis_options['BEMSpline'] == 'CFD':
+            cl, cd, cm, alphas, failure  = self.__cfdSpline()
+        else:
+            cl, cd, cm, alphas, failure  = self.__xfoilSpline()
+        return cl, cd, cm, alphas, failure
+
+    def __computeSplinePreComp(self, x, y):
         if self.airfoil_analysis_options['BEMSpline'] == 'CFD':
             cl, cd, cm, alphas, failure  = self.__cfdSpline()
         else:
