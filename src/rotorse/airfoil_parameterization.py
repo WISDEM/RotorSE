@@ -681,7 +681,10 @@ class AirfoilAnalysis:
         else:
             cl, cd, dcl_dalpha, dcd_dalpha, dcl_dafp, dcd_dafp, lexitflag = self.__xfoilDirect(alpha, Re)
         dcl_dRe, dcd_dRe = 0.0, 0.0
-        return cl, cd, dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag
+        if self.airfoil_analysis_options['ComputeGradient']:
+            return cl, cd, dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag
+        else:
+            return cl, cd
 
     def __cfdSpline(self):
         alphas = self.airfoil_analysis_options['alphas']
@@ -854,7 +857,7 @@ class AirfoilAnalysis:
         x_vel = Uinf * cos(alpha)
         y_vel = Uinf * sin(alpha)
         config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
-        config.MACH_NUMBER = Ma
+        config.MACH_NUMBER = 0.6 #TODO Change back
         config.REYNOLDS_NUMBER = airfoil_analysis_options['Re']
 
         if restart:
@@ -1107,7 +1110,7 @@ class AirfoilAnalysis:
         state.FILES.MESH = config.MESH_FILENAME
         Uinf = 10.0
         Ma = Uinf / 340.29  # Speed of sound at sea level
-        config.MACH_NUMBER = Ma
+        config.MACH_NUMBER = 0.6 #Ma
         config.REYNOLDS_NUMBER = Re
         config.RESTART_SOL = 'NO'
         config.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_AIRFOIL_parallel.dat'
@@ -1264,7 +1267,7 @@ def cfdSolveBladeParallel(self, alphas, Res, afps, airfoil_analysis_options):
         ztate.FILES.MESH = config.MESH_FILENAME
         Uinf = 10.0
         Ma = Uinf / 340.29  # Speed of sound at sea level
-        konfig.MACH_NUMBER = Ma
+        konfig.MACH_NUMBER = 0.6#  Ma
         konfig.REYNOLDS_NUMBER = Re
 
         if restart:
@@ -1625,7 +1628,7 @@ def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
         state.FILES.MESH = config.MESH_FILENAME
         Uinf = 10.0
         Ma = Uinf / 340.29  # Speed of sound at sea level
-        config.MACH_NUMBER = Ma
+        config.MACH_NUMBER = 0.6 #Ma
         config.REYNOLDS_NUMBER = Re
 
         if restart:
@@ -1711,7 +1714,7 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
         config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
-        config.NUMBER_PART = airfoil_analysis_options['CFDprocessors']
+        config.NUMBER_PART = int(airfoil_analysis_options['CFDprocessors'] / float(len(alphas)))
         config.EXT_ITER    = airfoil_analysis_options['CFDiterations']
         config.WRT_CSV_SOL = 'YES'
 
@@ -1767,7 +1770,7 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
             ztate.FILES.MESH = config.MESH_FILENAME
             Uinf = 10.0
             Ma = Uinf / 340.29  # Speed of sound at sea level
-            konfig.MACH_NUMBER = Ma
+            konfig.MACH_NUMBER = 0.6 # Ma
             konfig.REYNOLDS_NUMBER = Re
 
             if restart:
@@ -1814,6 +1817,7 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
             the_Command = mpi_Command % (processes,the_Command)
             sys.stdout.flush()
             cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil'+str(i+1)+'.txt', 'w')
+            print the_Command
             proc = subprocess.Popen( the_Command, shell=True    ,
                          stdout=cfd_output      ,
                          stderr=subprocess.PIPE,
@@ -1894,6 +1898,7 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
                         raise RuntimeError , 'could not find an mpi interface'
                 the_Command = mpi_Command % (processes,the_Command)
                 sys.stdout.flush()
+                print the_Command
                 cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil'+str(i+1)+'_drag.txt', 'w')
                 proc = subprocess.Popen( the_Command, shell=True    ,
                              stdout=cfd_output      ,
@@ -1981,6 +1986,7 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
                 the_Command = mpi_Command % (processes,the_Command)
                 sys.stdout.flush()
                 cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil'+str(i+1)+'_lift.txt', 'w')
+                print the_Command
                 proc = subprocess.Popen( the_Command, shell=True    ,
                              stdout=cfd_output      ,
                              stderr=subprocess.PIPE,
@@ -2106,7 +2112,7 @@ def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
         state.FILES.MESH = config.MESH_FILENAME
         Uinf = 10.0
         Ma = Uinf / 340.29  # Speed of sound at sea level
-        config.MACH_NUMBER = Ma
+        config.MACH_NUMBER = 0.6 #Ma
         config.REYNOLDS_NUMBER = Re
 
         if restart:
@@ -2237,7 +2243,7 @@ def evaluate_direct_parallel(alphas, Res, afs, computeAlphaGradient=False, compu
                     dcl_dafp[i], dcd_dafp[i] = af.splineFreeFormGrad(alpha, Re)
                 else:
                     dcl_dafp[i], dcd_dafp[i] = np.zeros(8), np.zeros(8)
-        if indices_to_compute is not None:
+        if indices_to_compute:
             alphas_to_compute = [alphas[i] for i in indices_to_compute]
             Res_to_compute = [Res[i] for i in indices_to_compute]
             afps_to_compute = [afs[i].afp for i in indices_to_compute]
@@ -2256,6 +2262,7 @@ def evaluate_direct_parallel(alphas, Res, afs, computeAlphaGradient=False, compu
                 cl[indices_to_compute[j]] = cls[j]
                 cd[indices_to_compute[j]] = cds[j]
 
+        print cl, cd, dcl_dalpha, dcd_dalpha, dcl_dafp, dcd_dafp
         if computeAFPGradient:
             try:
                 return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
