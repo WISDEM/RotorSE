@@ -157,7 +157,7 @@ class AirfoilAnalysis:
         thick_y = []
 
         cls, cds, cms, alphass, failures = [], [], [], [], []
-        from airfoilprep_free import Airfoil, Polar
+        from airfoilprep import Airfoil, Polar
         from akima import Akima
         alphas_set = np.linspace(np.radians(-180), np.radians(180), 360)
         clGrid = np.zeros((len(alphas_set), len(thicknesses)))
@@ -636,7 +636,7 @@ class AirfoilAnalysis:
         return cl, cd, cm, alphas, failure
 
     def __xfoilSpline(self):
-        self.airfoilShapeFile = 'airfoil_shape.dat'
+        self.airfoilShapeFile = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles') + os.sep + 'airfoil_shape.dat'
         self.saveToFile(self.airfoilShapeFile)
         alphas, Re = self.airfoil_analysis_options['alphas'], self.airfoil_analysis_options['Re']
         airfoil = pyXLIGHT.xfoilAnalysis(self.airfoilShapeFile, x=self.x, y=self.y)
@@ -784,7 +784,7 @@ class AirfoilAnalysis:
         for i in range(8):
             if lexitflag[i]:
                 from akima import Akima
-                from airfoilprep_free import Airfoil
+                from airfoilprep import Airfoil
                 af1 = Airfoil.initFromCST(self.afp, self.airfoil_analysis_options)
                 af_extrap11 = af1.extrapolate(1.5)
                 alphas_cur, Re_cur, cl_cur, cd_cur, cm_cur = af_extrap11.createDataGrid()
@@ -831,7 +831,7 @@ class AirfoilAnalysis:
         sys.path.append(os.environ['SU2_RUN'])
         import SU2
         airfoil_analysis_options = self.airfoil_analysis_options
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles')
         config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
@@ -1092,7 +1092,7 @@ class AirfoilAnalysis:
         sys.path.append(os.environ['SU2_RUN'])
         import SU2
 
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles')
         config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
@@ -1205,7 +1205,7 @@ def cfdSolveBladeParallel(self, alphas, Res, afps, airfoil_analysis_options):
     sys.path.append(os.environ['SU2_RUN'])
     import SU2
 
-    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles')
 
     config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
     config = SU2.io.Config(config_filename)
@@ -1573,7 +1573,7 @@ def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
         sys.path.append(os.environ['SU2_RUN'])
         import SU2
 
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles')
 
         config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)
@@ -1706,7 +1706,7 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
         sys.path.append(os.environ['SU2_RUN'])
         import SU2
 
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles')
 
         config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)
@@ -2054,7 +2054,7 @@ def cfdDirectSolveParallel(alphas, Re, afp, airfoil_analysis_options):
         sys.path.append(os.environ['SU2_RUN'])
         import SU2
 
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'CFDFiles')
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles')
 
         config_filename = basepath + os.path.sep + airfoil_analysis_options['cfdConfigFile']
         config = SU2.io.Config(config_filename)

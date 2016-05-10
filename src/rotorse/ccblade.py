@@ -36,10 +36,8 @@ from scipy.interpolate import RectBivariateSpline, bisplev
 from zope.interface import Interface, implements
 import warnings
 import time
-# from airfoilprep import Airfoil
-from airfoilprep_free import Airfoil
+from airfoilprep import Airfoil
 import _bem
-import pyXLIGHT
 from copy import deepcopy
 from airfoil_parameterization import AirfoilAnalysis, cfdAirfoilsSolveParallel, evaluate_direct_parallel
 
