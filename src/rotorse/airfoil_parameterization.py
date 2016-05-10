@@ -75,7 +75,10 @@ class AirfoilAnalysis:
         return x, y
 
     def getPreCompCoordinates(self, t_c):
-        x, y = self.readFile(self.afp)
+        if t_c < 0.2:
+            x, y = self.readFile(self.afp[1])
+        else:
+            x, y = self.readFile(self.afp[0])
         base_thickness = max(y) - min(y)
         xx = np.zeros(len(x))
         yy = np.zeros(len(y))
@@ -139,39 +142,60 @@ class AirfoilAnalysis:
         pass
 
     def __generatePreCompModel(self):
-        x, y = self.readFile(self.afp)
+        # self.cl_splines = []
+        # self.cd_splines = []
+
+        # for i in range(len(self.afp)):
+        x, y = self.readFile(self.afp[0])
+        x1, y1 = self.readFile(self.afp[1])
         base_thickness = max(y) - min(y)
+        base_thickness1 = max(y1) - min(y1)
         self.thick_min = 0.12
         self.thick_max = 0.42
-        thicknesses = np.linspace(self.thick_min, self.thick_max, 20)
+        thicknesses = np.asarray([0.18, 0.21, 0.25, 0.30, 0.35, 0.405]) #np.linspace(self.thick_min, self.thick_max, 20)
         thick_x = []
         thick_y = []
-        for thick in thicknesses:
-            xx = np.zeros(len(x))
-            yy = np.zeros(len(y))
-            for i in range(len(x)):
-                xx[i] = x[i]
-                yy[i] = y[i] / base_thickness * thick
-            thick_x.append(xx)
-            thick_y.append(yy)
+
         cls, cds, cms, alphass, failures = [], [], [], [], []
         from airfoilprep_free import Airfoil, Polar
         from akima import Akima
         alphas_set = np.linspace(np.radians(-180), np.radians(180), 360)
         clGrid = np.zeros((len(alphas_set), len(thicknesses)))
         cdGrid = np.zeros((len(alphas_set), len(thicknesses)))
-        for i in range(len(thick_x)):
-            cl, cd, cm, alphas, failure = self.__computeSplinePreComp(thick_x[i], thick_y[i])
+        for i in range(len(thicknesses)):
+            if self.airfoil_analysis_options['AnalysisMethod'] == 'WindTunnel':
+                aerodynFile = self.airfoil_analysis_options['BaseAirfoilsData'][5 - i]
+                af = Airfoil.initFromAerodynFile(aerodynFile)
+                alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af.createDataGrid()
+                failure = False
+            else:
 
-            p1 = Polar(self.airfoil_analysis_options['Re'], alphas, cl, cd, cm)
-            af = Airfoil([p1])
-            r_over_R = 0.5
-            chord_over_r = 0.15
-            tsr = 7.55
-            cd_max = 1.5
-            af3D = af.correction3D(r_over_R, chord_over_r, tsr)
-            af_extrap1 = af3D.extrapolate(cd_max)
-            alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af_extrap1.createDataGrid()
+                if thicknesses[i] == 0.18:
+                    xx = np.zeros(len(x1))
+                    yy = np.zeros(len(y1))
+                    for j in range(len(x1)):
+                        xx[j] = x1[j]
+                        yy[j] = y1[j] / base_thickness1 * thicknesses[i]
+                else:
+                    xx = np.zeros(len(x))
+                    yy = np.zeros(len(y))
+                    for j in range(len(x)):
+                        xx[j] = x[j]
+                        yy[j] = y[j] / base_thickness * thicknesses[i]
+                thick_x.append(xx)
+                thick_y.append(yy)
+                cl, cd, cm, alphas, failure = self.__computeSplinePreComp(thick_x[i], thick_y[i])
+
+                p1 = Polar(self.airfoil_analysis_options['Re'], alphas, cl, cd, cm)
+                af = Airfoil([p1])
+                r_over_R = 0.5
+                chord_over_r = 0.15
+                tsr = 7.55
+                cd_max = 1.5
+                af3D = af.correction3D(r_over_R, chord_over_r, tsr)
+                af_extrap1 = af3D.extrapolate(cd_max)
+                alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af_extrap1.createDataGrid()
+
             cls.append(cl_ext), cds.append(cd_ext), cms.append(cm_ext), alphass.append(alpha_ext), failures.append(failure)
             if not all(np.diff(alpha_ext)):
                 to_delete = np.zeros(0)
@@ -194,6 +218,7 @@ class AirfoilAnalysis:
         ky = min(len(thicknesses)-1, 3)
         self.cl_total_spline = RectBivariateSpline(alphas_set, thicknesses, clGrid, kx=kx, ky=ky, s=0.001)
         self.cd_total_spline = RectBivariateSpline(alphas_set, thicknesses, cdGrid, kx=kx, ky=ky, s=0.0005)
+
 
     def evaluatePreCompModel(self, alpha, t_c):
         cl = self.cl_total_spline.ev(alpha, t_c)
@@ -604,7 +629,7 @@ class AirfoilAnalysis:
         return cl, cd, cm, alphas, failure
 
     def __computeSplinePreComp(self, x, y):
-        if self.airfoil_analysis_options['BEMSpline'] == 'CFD':
+        if self.airfoil_analysis_options['AnalysisMethod'] == 'CFD':
             cl, cd, cm, alphas, failure  = self.__cfdSpline()
         else:
             cl, cd, cm, alphas, failure  = self.__xfoilSpline()

@@ -327,7 +327,7 @@ class PreCompSections(Component):
                         afanalysis = AirfoilAnalysis(pro_str[j], params['airfoil_analysis_options'])
                         xl, xu, yl, yu = afanalysis.getCoordinates(type='split')
                     else:
-                        afanalysis = AirfoilAnalysis(params['airfoil_analysis_options']['BaseAirfoil'], params['airfoil_analysis_options'], computeModel=False)
+                        afanalysis = AirfoilAnalysis(params['airfoil_analysis_options']['BaseAirfoils'], params['airfoil_analysis_options'], computeModel=False)
                         xl, xu, yl, yu = afanalysis.getPreCompCoordinates(pro_str[j])
                     # xl, xu, yl, yu = getCoordinates([pro_str[j]])
                     xu1 = np.zeros(len(xu))
@@ -881,11 +881,11 @@ class GeometrySpline(Component):
         self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print 'r_max_chord', params['r_max_chord']
-        # print 'chord_sub', params['chord_sub']
-        # print 'theta_sub', params['theta_sub']
-        # print 'sparT', params['sparT']
-        # print 'teT', params['teT']
+        print 'r_max_chord', params['r_max_chord']
+        print 'chord_sub', params['chord_sub']
+        print 'theta_sub', params['theta_sub']
+        print 'sparT', params['sparT']
+        print 'teT', params['teT']
         Rhub = params['hubFraction'] * params['bladeLength']
         Rtip = Rhub + params['bladeLength']
 

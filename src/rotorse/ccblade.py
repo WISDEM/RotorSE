@@ -217,15 +217,11 @@ class CCAirfoil:
         alpha = np.linspace(np.radians(-180), np.radians(180), n)
         for i in range(len(alpha)):
             cl[i], cd[i] = afanalysis.evaluatePreCompModel(alpha[i], t_c)
-        # import matplotlib.pylab as plt
-        # plt.figure()
-        # plt.plot(alpha, cd)
-        # plt.show()
         failure = False
         cm = np.zeros_like(cl)
         Re = airfoil_analysis_options['Re']
 
-        return cls(alpha, [Re], cl, cd, cm, afp=t_c, airfoil_analysis_options=airfoil_analysis_options, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=1)
+        return cls(np.degrees(alpha), [Re], cl, cd, cm, afp=t_c, airfoil_analysis_options=airfoil_analysis_options, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=1)
 
     @classmethod
     def initFromInput(cls, alpha, Re, cl, cd, cm=None):
@@ -291,15 +287,13 @@ class CCAirfoil:
                     dcd_dafp = np.zeros(self.airfoils_dof)
                 dcl_dRe = 0.0
                 dcd_dRe = 0.0
-                print "Reusing calculation...", alpha
+                # print "Reusing calculation...", alpha
             else:
                 if self.preCompModel is not None:
                     cl, cd = self.preCompModel.evaluatePreCompModel(alpha, self.afp)
                     dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, self.afp)
                     dcl_dRe = 0.0
                     dcd_dRe = 0.0
-                    print cl, cd
-                    print dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp
                 else:
                     afanalysis = AirfoilAnalysis(self.afp, self.airfoil_analysis_options)
                     cl, cd, dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag = afanalysis.computeDirect(alpha, Re)
@@ -322,6 +316,7 @@ class CCAirfoil:
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = self.derivatives(alpha, Re)
             dcl_dafp, dcd_dafp = self.splineFreeFormGrad(alpha, Re)
 
+        # print alpha, cl, cd, dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp
         return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
 
     def derivatives(self, alpha, Re):
