@@ -1715,6 +1715,9 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
         config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
         config.NUMBER_PART = int(airfoil_analysis_options['CFDprocessors'] / float(len(alphas)))
+        remainder = airfoil_analysis_options['CFDprocessors'] % len(alphas) - 1
+        if remainder < 0:
+            remainder = 0
         config.EXT_ITER    = airfoil_analysis_options['CFDiterations']
         config.WRT_CSV_SOL = 'YES'
 
@@ -1806,8 +1809,10 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
             sys.path.append( SU2_RUN )
 
             mpi_Command = 'mpirun -n %i %s'
-
-            processes = konfig['NUMBER_PART']
+            if i >= len(alphas) - remainder:
+                processes = konfig['NUMBER_PART'] + 1
+            else:
+                processes = konfig['NUMBER_PART']
 
             the_Command = 'SU2_CFD ' + tempname
             the_Command = base_Command % the_Command
@@ -1888,8 +1893,10 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
                 sys.path.append( SU2_RUN )
 
                 mpi_Command = 'mpirun -n %i %s'
-
-                processes = konfig['NUMBER_PART']
+                if i >= len(alphas) - remainder:
+                    processes = konfig['NUMBER_PART'] + 1
+                else:
+                    processes = konfig['NUMBER_PART']
 
                 the_Command = 'SU2_CFD ' + tempname
                 the_Command = base_Command % the_Command
@@ -1976,7 +1983,10 @@ def cfdAirfoilsSolveParallel(alphas, Res, afps, airfoil_analysis_options):
 
                 mpi_Command = 'mpirun -n %i %s'
 
-                processes = konfig['NUMBER_PART']
+                if i >= len(alphas) - remainder:
+                    processes = konfig['NUMBER_PART'] + 1
+                else:
+                    processes = konfig['NUMBER_PART']
 
                 the_Command = 'SU2_CFD ' + tempname
                 the_Command = base_Command % the_Command
