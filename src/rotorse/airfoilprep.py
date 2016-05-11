@@ -674,7 +674,7 @@ class Airfoil(object):
         polars = []
         afanalysis = AirfoilAnalysis(CST, airfoil_analysis_options)
         cl, cd, cm, alphas, failure = afanalysis.computeSpline()
-        Re = airfoil_analysis_options['Re']
+        Re = airfoil_analysis_options['SplineOptions']['Re']
         polars.append(polarType(Re, alphas, cl, cd, cm))
 
         return cls(polars, failure)
