@@ -252,7 +252,7 @@ class CCBladeAirfoils(Component):
                 airfoil_types = [0]*8
                 airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
                 airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-                cst_file = open("cst_file_tracxfoil2.txt", "a")
+                afp_file = open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles') + os.sep + "afp_tracker.txt", "a")
                 for i in range(len(airfoil_types)-2):
                     if change[i] > 0:
                         if self.airfoil_analysis_options['AirfoilParameterization'] == 'Precomputational:T/C':
@@ -263,12 +263,12 @@ class CCBladeAirfoils(Component):
                             airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], self.airfoil_analysis_options, airfoilNum=i)
                             print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
                             print params['airfoil_parameterization'][i]
-                            print >> cst_file, 'Airfoil ', str(i+1), " changed. ", params['airfoil_parameterization'][i]
+                            print >> afp_file, 'Airfoil ', str(i+1), " changed. ", params['airfoil_parameterization'][i]
 
                     else:
                         index = np.where(af_idx >= i+2)[0][0]
                         airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
-                cst_file.close()
+                afp_file.close()
                 n = len(af_idx)
                 af = [0]*n
 
