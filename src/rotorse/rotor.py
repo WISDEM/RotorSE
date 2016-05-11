@@ -159,7 +159,7 @@ class PreCompSections(Component):
 
         self.add_param('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof)))
         self.add_param('af_str_idx', val=np.zeros(nstr), pass_by_obj=True)
-        self.add_param('airfoil_analysis_options', val={}, pass_by_obj=True)
+        self.add_param('airfoilOptions', val={}, pass_by_obj=True)
 
 
         self.add_output('eps_crit_spar', shape=nstr, desc='critical strain in spar from panel buckling calculation')
@@ -306,7 +306,7 @@ class PreCompSections(Component):
         profile = self.profile
         nstr = self.nstr
 
-        if params['airfoil_analysis_options']['AnalysisMethod'] != 'Files':
+        if params['airfoilOptions']['AnalysisMethod'] != 'Files':
             airfoil_parameterization = params['airfoil_parameterization']
             af_str_idx = params['af_str_idx']
             airfoil_types_str = np.zeros((8, self.airfoils_dof))
@@ -323,11 +323,11 @@ class PreCompSections(Component):
                 if pro_str[j][0] == 0.0:
                     profile[j] = Profile.initFromPreCompFile(os.path.join(basepath, 'shape_' + str(j+1) + '.inp'))
                 else:
-                    if params['airfoil_analysis_options']['AirfoilParameterization'] != 'Precomputational:T/C':
-                        afanalysis = AirfoilAnalysis(pro_str[j], params['airfoil_analysis_options'])
+                    if params['airfoilOptions']['AirfoilParameterization'] != 'Precomputational:T/C':
+                        afanalysis = AirfoilAnalysis(pro_str[j], params['airfoilOptions'])
                         xl, xu, yl, yu = afanalysis.getCoordinates(type='split')
                     else:
-                        afanalysis = AirfoilAnalysis(params['airfoil_analysis_options']['BaseAirfoils'], params['airfoil_analysis_options'], computeModel=False)
+                        afanalysis = AirfoilAnalysis(None, params['airfoilOptions'])
                         xl, xu, yl, yu = afanalysis.getPreCompCoordinates(pro_str[j])
                     # xl, xu, yl, yu = getCoordinates([pro_str[j]])
                     xu1 = np.zeros(len(xu))
@@ -2404,7 +2404,7 @@ class RotorSE(Group):
             self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
             self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
             self.add('airfoil_parameterization', IndepVarComp('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof))), promotes=['*'])
-            self.add('airfoil_analysis_options', IndepVarComp('airfoil_analysis_options', {}, pass_by_obj=True), promotes=['*'])
+            self.add('airfoilOptions', IndepVarComp('airfoilOptions', {}, pass_by_obj=True), promotes=['*'])
             self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
             self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
             self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
@@ -2490,7 +2490,7 @@ class RotorSE(Group):
             self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
             self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
             self.add('airfoil_parameterization', IndepVarComp('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof))), promotes=['*'])
-            self.add('airfoil_analysis_options', IndepVarComp('airfoil_analysis_options', {}, pass_by_obj=True), promotes=['*'])
+            self.add('airfoilOptions', IndepVarComp('airfoilOptions', {}, pass_by_obj=True), promotes=['*'])
             self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
             self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
             self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
@@ -2670,16 +2670,16 @@ class RotorSE(Group):
 
         self.connect('airfoil_parameterization', 'airfoil_spline.airfoil_parameterization')
         self.connect('airfoil_parameterization', 'airfoil_analysis.airfoil_parameterization')
-        self.connect('airfoil_analysis_options', 'airfoil_analysis.airfoil_analysis_options')
+        self.connect('airfoilOptions', 'airfoil_analysis.airfoilOptions')
         self.connect('airfoil_files', 'airfoil_analysis.airfoil_files')
         self.connect('idx_cylinder_str', 'airfoil_spline.idx_cylinder_str')
         self.connect('idx_cylinder_aero', 'airfoil_spline.idx_cylinder_aero')
         self.connect('airfoil_spline.airfoil_parameterization_full', 'analysis.airfoil_parameterization')
-        self.connect('airfoil_analysis_options', 'analysis.airfoil_analysis_options')
+        self.connect('airfoilOptions', 'analysis.airfoilOptions')
 
         self.connect('airfoil_analysis.af', 'analysis.af')
         # self.connect('airfoil_parameterization', 'analysis.airfoil_parameterization')
-        # self.connect('airfoil_analysis_options', 'analysis.airfoil_analysis_options')
+        # self.connect('airfoilOptions', 'analysis.airfoilOptions')
 
         self.connect('nBlades', 'analysis.B')
         self.connect('rho', 'analysis.rho')
@@ -2830,11 +2830,11 @@ class RotorSE(Group):
 
         # self.connect('airfoil_files', 'aero_rated.airfoil_files')
         self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_rated.airfoil_parameterization')
-        self.connect('airfoil_analysis_options', 'aero_rated.airfoil_analysis_options')
+        self.connect('airfoilOptions', 'aero_rated.airfoilOptions')
 
         self.connect('airfoil_analysis.af', 'aero_rated.af')
         # self.connect('airfoil_parameterization', 'aero_rated.airfoil_parameterization')
-        # self.connect('airfoil_analysis_options', 'aero_rated.airfoil_analysis_options')
+        # self.connect('airfoilOptions', 'aero_rated.airfoilOptions')
 
         self.connect('nBlades', 'aero_rated.B')
         self.connect('rho', 'aero_rated.rho')
@@ -2862,10 +2862,10 @@ class RotorSE(Group):
         self.connect('yaw', 'aero_extrm.yaw')
         # self.connect('airfoil_files', 'aero_extrm.airfoil_files')
         self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_extrm.airfoil_parameterization')
-        self.connect('airfoil_analysis_options', 'aero_extrm.airfoil_analysis_options')
+        self.connect('airfoilOptions', 'aero_extrm.airfoilOptions')
         self.connect('airfoil_analysis.af', 'aero_extrm.af')
         # self.connect('airfoil_parameterization', 'aero_extrm.airfoil_parameterization')
-        # self.connect('airfoil_analysis_options', 'aero_extrm.airfoil_analysis_options')
+        # self.connect('airfoilOptions', 'aero_extrm.airfoilOptions')
         self.connect('nBlades', 'aero_extrm.B')
         self.connect('rho', 'aero_extrm.rho')
         self.connect('mu', 'aero_extrm.mu')
@@ -2891,10 +2891,10 @@ class RotorSE(Group):
         # self.connect('yaw', 'aero_extrm_forces.yaw')
         # # self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
         # self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_extrm_forces.airfoil_parameterization')
-        # self.connect('airfoil_analysis_options', 'aero_extrm_forces.airfoil_analysis_options')
+        # self.connect('airfoilOptions', 'aero_extrm_forces.airfoilOptions')
         # self.connect('airfoil_analysis.af', 'aero_extrm_forces.af')
         # # self.connect('airfoil_parameterization', 'aero_extrm_forces.airfoil_parameterization')
-        # # self.connect('airfoil_analysis_options', 'aero_extrm_forces.airfoil_analysis_options')
+        # # self.connect('airfoilOptions', 'aero_extrm_forces.airfoilOptions')
         # self.connect('nBlades', 'aero_extrm_forces.B')
         # self.connect('rho', 'aero_extrm_forces.rho')
         # self.connect('mu', 'aero_extrm_forces.mu')
@@ -2923,10 +2923,10 @@ class RotorSE(Group):
         self.connect('yaw', 'aero_defl_powercurve.yaw')
         # self.connect('airfoil_files', 'aero_defl_powercurve.airfoil_files')
         self.connect('airfoil_spline.airfoil_parameterization_full', 'aero_defl_powercurve.airfoil_parameterization')
-        self.connect('airfoil_analysis_options', 'aero_defl_powercurve.airfoil_analysis_options')
+        self.connect('airfoilOptions', 'aero_defl_powercurve.airfoilOptions')
         self.connect('airfoil_analysis.af', 'aero_defl_powercurve.af')
         # self.connect('airfoil_parameterization', 'aero_defl_powercurve.airfoil_parameterization')
-        # self.connect('airfoil_analysis_options', 'aero_defl_powercurve.airfoil_analysis_options')
+        # self.connect('airfoilOptions', 'aero_defl_powercurve.airfoilOptions')
         self.connect('nBlades', 'aero_defl_powercurve.B')
         self.connect('rho', 'aero_defl_powercurve.rho')
         self.connect('mu', 'aero_defl_powercurve.mu')
@@ -2951,7 +2951,7 @@ class RotorSE(Group):
         self.connect('sector_idx_strain_spar', 'beam.sector_idx_strain_spar')
         self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
         self.connect('airfoil_parameterization', 'beam.airfoil_parameterization')
-        self.connect('airfoil_analysis_options', 'beam.airfoil_analysis_options')
+        self.connect('airfoilOptions', 'beam.airfoilOptions')
 
 
         # connections to loads_defl

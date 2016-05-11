@@ -39,14 +39,14 @@ import time
 from airfoilprep import Airfoil
 import _bem
 from copy import deepcopy
-from airfoil_parameterization import AirfoilAnalysis, cfdAirfoilsSolveParallel, evaluate_direct_parallel
+from airfoil_parameterization import AirfoilAnalysis
 
 
 class CCAirfoil:
     """A helper class to evaluate airfoil data using a continuously
     differentiable cubic spline"""
 
-    def __init__(self, alpha, Re, cl, cd, cm, afp=None, airfoil_analysis_options=None, airfoilNum=0, failure=False, preCompModel=None, airfoils_dof=1):
+    def __init__(self, alpha, Re, cl, cd, cm, afp=None, airfoilOptions=None, airfoilNum=0, failure=False, preCompModel=None, airfoils_dof=1):
         """Setup CCAirfoil from raw airfoil data on a grid.
 
         Parameters
@@ -98,10 +98,10 @@ class CCAirfoil:
             afp = np.asarray([-0.25, -0.25, -0.25, -0.25, 0.25, 0.25, 0.25, 0.25])
 
         self.freeform = False
-        self.airfoil_analysis_options = airfoil_analysis_options
-        if airfoil_analysis_options is not None:
-            if airfoil_analysis_options['AnalysisMethod'] == 'CFD':
-                self.parallel = airfoil_analysis_options['ParallelAirfoils']
+        self.airfoilOptions = airfoilOptions
+        if airfoilOptions is not None:
+            if airfoilOptions['AnalysisMethod'] == 'CFD':
+                self.parallel = airfoilOptions['CFDOptions']['computeAirfoilsInParallel']
             else:
                 self.parallel = False
         else:
@@ -110,7 +110,7 @@ class CCAirfoil:
         if afp is not None:
             self.afp = afp
             self.airfoilNum = airfoilNum
-            self.airfoil_analysis_options = airfoil_analysis_options
+            self.airfoilOptions = airfoilOptions
             self.cl_storage = []
             self.cd_storage = []
             self.alpha_storage = []
@@ -121,7 +121,7 @@ class CCAirfoil:
             self.dcd_dafp_storage = []
             self.dalpha_dafp_storage = []
 
-            if airfoil_analysis_options['FreeFormDesign'] and airfoil_analysis_options['ComputeGradient'] and airfoil_analysis_options['AirfoilParameterization'] != 'Precomputational:T/C':
+            if airfoilOptions['GradientOptions']['FreeFormDesign'] and airfoilOptions['GradientOptions']['ComputeGradient'] and airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
                 self.freeform = True
                 self.cl_splines_new = [0]*self.airfoils_dof
                 self.cd_splines_new = [0]*self.airfoils_dof
@@ -129,7 +129,7 @@ class CCAirfoil:
                     fd_step = 1e-6
                     afp_new = deepcopy(self.afp)
                     afp_new[i] += fd_step
-                    af = Airfoil.initFromCST(afp_new, airfoil_analysis_options)
+                    af = Airfoil.initFromCST(afp_new, airfoilOptions)
                     af_extrap = af.extrapolate(1.5)
                     alphas_new, Re_new, cl_new, cd_new, cm_new = af_extrap.createDataGrid()
                     alphas_new = np.radians(alphas_new)
@@ -181,7 +181,7 @@ class CCAirfoil:
         return cls(alpha, Re, cl, cd, cm)
 
     @classmethod
-    def initFromFreeForm(cls, afp, airfoil_analysis_options, airfoilNum=0):
+    def initFromFreeForm(cls, afp, airfoilOptions, airfoilNum=0):
         """convenience method for initializing with AeroDyn formatted files
 
         Parameters
@@ -195,7 +195,7 @@ class CCAirfoil:
             a constructed CCAirfoil object
 
         """
-        af = Airfoil.initFromCST(afp, airfoil_analysis_options)
+        af = Airfoil.initFromCST(afp, airfoilOptions)
         failure = af.failure
         # For 3D Correction TODO
         # r_over_R = 0.5
@@ -206,10 +206,10 @@ class CCAirfoil:
         af_extrap1 = af.extrapolate(cd_max)
         alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
 
-        return cls(alpha, Re, cl, cd, cm, afp=afp, airfoil_analysis_options=airfoil_analysis_options, airfoilNum=airfoilNum, failure=failure, airfoils_dof=8)
+        return cls(alpha, Re, cl, cd, cm, afp=afp, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, failure=failure, airfoils_dof=8)
 
     @classmethod
-    def initFromPrecomputational(cls, t_c, airfoil_analysis_options, afanalysis, airfoilNum=0):
+    def initFromPrecomputational(cls, t_c, airfoilOptions, afanalysis, airfoilNum=0):
         n = 360
         cl, cd = np.zeros(n), np.zeros(n)
         alpha = np.linspace(np.radians(-180), np.radians(180), n)
@@ -217,9 +217,9 @@ class CCAirfoil:
             cl[i], cd[i] = afanalysis.evaluatePreCompModel(alpha[i], t_c)
         failure = False
         cm = np.zeros_like(cl)
-        Re = airfoil_analysis_options['Re']
+        Re = airfoilOptions['SplineOptions']['Re']
 
-        return cls(np.degrees(alpha), [Re], cl, cd, cm, afp=t_c, airfoil_analysis_options=airfoil_analysis_options, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=1)
+        return cls(np.degrees(alpha), [Re], cl, cd, cm, afp=t_c, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=1)
 
     @classmethod
     def initFromInput(cls, alpha, Re, cl, cd, cm=None):
@@ -267,7 +267,7 @@ class CCAirfoil:
         return cl, cd
 
     def evaluate_direct(self, alpha, Re, computeAlphaGradient=False, computeAFPGradient=False):
-        if self.afp is not None and abs(np.degrees(alpha)) < self.airfoil_analysis_options['maxDirectAoA']:
+        if self.afp is not None and abs(np.degrees(alpha)) < self.airfoilOptions['SplineOptions']['maxDirectAoA']:
             if alpha in self.alpha_storage :
                 index = self.alpha_storage.index(alpha)
                 cl = self.cl_storage[index]
@@ -293,7 +293,7 @@ class CCAirfoil:
                     dcl_dRe = 0.0
                     dcd_dRe = 0.0
                 else:
-                    afanalysis = AirfoilAnalysis(self.afp, self.airfoil_analysis_options)
+                    afanalysis = AirfoilAnalysis(self.afp, self.airfoilOptions)
                     cl, cd, dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag = afanalysis.computeDirect(alpha, Re)
                     if lexitflag or abs(cl) > 2.5 or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
                         cl, cd = self.evaluate(alpha, Re)
@@ -301,11 +301,11 @@ class CCAirfoil:
                 self.cl_storage.append(cl)
                 self.cd_storage.append(cd)
                 self.alpha_storage.append(alpha)
-                if self.airfoil_analysis_options['ComputeGradient']:
+                if self.airfoilOptions['GradientOptions']['ComputeGradient']:
                     self.dcl_storage.append(dcl_dalpha)
                     self.dcd_storage.append(dcd_dalpha)
                     self.dalpha_storage.append(alpha)
-                    if self.airfoil_analysis_options['FreeFormDesign']:
+                    if self.airfoilOptions['GradientOptions']['FreeFormDesign']:
                         self.dcl_dafp_storage.append(dcl_dafp)
                         self.dcd_dafp_storage.append(dcd_dafp)
                         self.dalpha_dafp_storage.append(alpha)
@@ -337,7 +337,7 @@ class CCAirfoil:
     def splineFreeFormGrad(self, alpha, Re):
         dcl_dafp, dcd_dafp = np.zeros(self.airfoils_dof), np.zeros(self.airfoils_dof)
         if self.freeform and self.afp is not None:
-            fd_step = self.airfoil_analysis_options['fd_step']
+            fd_step = self.airfoilOptions['GradientOptions']['fd_step']
             cl_cur = self.cl_spline.ev(alpha, Re)
             cd_cur = self.cd_spline.ev(alpha, Re)
             for i in range(self.airfoils_dof):
@@ -350,7 +350,7 @@ class CCAirfoil:
 def evaluate_direct_parallel2(alphas, Res, afs, computeAlphaGradient=False, computeAFPGradient=False):
         indices_to_compute = []
         n = len(alphas)
-        airfoil_analysis_options = afs[-1].airfoil_analysis_options
+        airfoilOptions = afs[-1].airfoilOptions
         cl = np.zeros(n)
         cd = np.zeros(n)
         dcl_dalpha = [0]*n
@@ -364,7 +364,7 @@ def evaluate_direct_parallel2(alphas, Res, afs, computeAlphaGradient=False, comp
             alpha = alphas[i]
             Re = Res[i]
             af = afs[i]
-            if af.afp is not None and abs(np.degrees(alpha)) < af.airfoil_analysis_options['maxDirectAoA']:
+            if af.afp is not None and abs(np.degrees(alpha)) < af.airfoilOptions['SplineOptions']['maxDirectAoA']:
                 if alpha in af.alpha_storage and alpha in af.dalpha_storage:
                     index = af.alpha_storage.index(alpha)
                     cl[i] = af.cl_storage[index]
@@ -404,8 +404,8 @@ def evaluate_direct_parallel2(alphas, Res, afs, computeAlphaGradient=False, comp
             alphas_to_compute = [alphas[i] for i in indices_to_compute]
             Res_to_compute = [Res[i] for i in indices_to_compute]
             afps_to_compute = [afs[i].afp for i in indices_to_compute]
-            if airfoil_analysis_options['ComputeGradient']:
-                cls, cds, dcls_dalpha, dcls_dRe, dcds_dalpha, dcds_dRe, dcls_dafp, dcds_dafp = cfdAirfoilsSolveParallel(alphas_to_compute, Res_to_compute, afps_to_compute, airfoil_analysis_options)
+            if airfoilOptions['ComputeGradient']:
+                cls, cds, dcls_dalpha, dcls_dRe, dcds_dalpha, dcds_dRe, dcls_dafp, dcds_dafp = cfdAirfoilsSolveParallel(alphas_to_compute, Res_to_compute, afps_to_compute, airfoilOptions)
                 for j in range(len(indices_to_compute)):
                     dcl_dalpha[indices_to_compute[j]] = dcls_dalpha[j]
                     dcl_dRe[indices_to_compute[j]] = dcls_dRe[j]
@@ -415,7 +415,7 @@ def evaluate_direct_parallel2(alphas, Res, afs, computeAlphaGradient=False, comp
                     dcd_dafp[indices_to_compute[j]] = dcds_dafp[j]
 
             else:
-                cls, cds = cfdAirfoilsSolveParallel(alphas_to_compute, Res_to_compute, afps_to_compute, airfoil_analysis_options)
+                cls, cds = cfdAirfoilsSolveParallel(alphas_to_compute, Res_to_compute, afps_to_compute, airfoilOptions)
             for j in range(len(indices_to_compute)):
                 cl[indices_to_compute[j]] = cls[j]
                 cd[indices_to_compute[j]] = cds[j]
@@ -441,7 +441,7 @@ class CCBlade:
                  precone=0.0, tilt=0.0, yaw=0.0, shearExp=0.2, hubHt=80.0,
                  nSector=8, precurve=None, precurveTip=0.0, presweep=None, presweepTip=0.0,
                  tiploss=True, hubloss=True, wakerotation=True, usecd=True, iterRe=1, derivatives=False,
-                 airfoil_parameterization=None, airfoil_options=None):
+                 airfoil_parameterization=None, airfoilOptions=None):
         """Constructor for aerodynamic rotor analysis
 
         Parameters
@@ -529,15 +529,15 @@ class CCBlade:
         self.derivatives = derivatives
 
         self.airfoil_parameterization = airfoil_parameterization
-        self.airfoil_analysis_options = airfoil_options
+        self.airfoilOptions = airfoilOptions
         if airfoil_parameterization is None:
             self.freeform = False
         else:
-            self.freeform = airfoil_options['FreeFormDesign']
+            self.freeform = airfoilOptions['GradientOptions']['FreeFormDesign']
 
-        if airfoil_options is not None:
-            if airfoil_options['AnalysisMethod'] == 'CFD':
-                self.parallel = airfoil_options['ParallelAirfoils']
+        if airfoilOptions is not None:
+            if airfoilOptions['AnalysisMethod'] == 'CFD':
+                self.parallel = airfoilOptions['ParallelAirfoils']
             else:
                 self.parallel = False
         else:
@@ -1661,11 +1661,11 @@ if __name__ == '__main__':
     mu = 1.81206e-5
 
     # Airfoil specifications
-    airfoil_analysis_options = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
+    airfoilOptions = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
                                 CFDiterations=10000, CFDprocessors=32, FreeFormDesign=True, BEMSpline=True,
                                 alphas=np.linspace(-15, 15, 30), Re=5e5, ComputeGradient=True)
     af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-    if airfoil_analysis_options['AnalysisMethod'] == 'Files':
+    if airfoilOptions['AnalysisMethod'] == 'Files':
         import os
         afinit = CCAirfoil.initFromAerodynFile  # just for shorthand
         basepath = '5MW_AFFiles' + os.path.sep
@@ -1698,9 +1698,9 @@ if __name__ == '__main__':
                                                [-0.17200255338600826, -0.13744743777735921, -0.24288986290945222, 0.15085289615063024, 0.20650016452789369, 0.35540642522188848, 0.32797634888819488, 0.2592276816645861]])
 
         af_input_init = CCAirfoil.initFromInput
-        if airfoil_analysis_options['AirfoilParameterization'] == 'CST':
+        if airfoilOptions['AirfoilParameterization'] == 'CST':
             af_freeform_init = CCAirfoil.initFromCST
-        elif airfoil_analysis_options['AirfoilParameterization'] == 'NACA':
+        elif airfoilOptions['AirfoilParameterization'] == 'NACA':
             af_freeform_init = CCAirfoil.initFromNACA
         else:
             af_freeform_init = CCAirfoil.initFromInput
@@ -1714,10 +1714,10 @@ if __name__ == '__main__':
         print "Generating airfoil data..."
         for i in range(len(airfoil_types)):
             if i < non_airfoils_idx:
-                airfoil_types[i] = af_input_init(non_airfoils_alphas, airfoil_analysis_options['Re'], non_airfoils_cls, non_airfoils_cds[i], non_airfoils_cls)
+                airfoil_types[i] = af_input_init(non_airfoils_alphas, airfoilOptions['Re'], non_airfoils_cls, non_airfoils_cds[i], non_airfoils_cls)
             else:
                 time0 = time.time()
-                airfoil_types[i] = af_freeform_init(airfoil_parameterization[i-2], airfoil_analysis_options)
+                airfoil_types[i] = af_freeform_init(airfoil_parameterization[i-2], airfoilOptions)
                 print "Airfoil ", str(i+1-2), " data generation complete in ", time.time() - time0, " seconds."
         print "Finished generating airfoil data"
 
@@ -1733,7 +1733,7 @@ if __name__ == '__main__':
     nSector = 8
 
     aeroanalysis = CCBlade(r, chord, theta, af, Rhub, Rtip, B, rho, mu,
-                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=airfoil_parameterization, airfoil_options=airfoil_analysis_options, derivatives=False)
+                           precone, tilt, yaw, shearExp, hubHt, nSector, airfoil_parameterization=airfoil_parameterization, airfoil_options=airfoilOptions, derivatives=False)
 
     # set conditions
     Uinf = 10.0
