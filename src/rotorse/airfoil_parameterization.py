@@ -1577,7 +1577,6 @@ class AirfoilAnalysis:
         return cl, cd
 
 
-
     def su2Gradient(self, loop_sorted, surface_adjoint):
             data = np.zeros([500, 8])
             with open(surface_adjoint, 'rb') as f1:
@@ -1606,8 +1605,6 @@ class AirfoilAnalysis:
                     yu = np.append(yu, y[index])
                     dobj_dxu = np.append(dobj_dxu, dobj_dx_raw[index])
             return np.concatenate([dobj_dxl, dobj_dxu]), xl, xu
-
-
 
     def cfdDirectSolveParallel(self, alphas, Re, afp, airfoilOptions):
             # Import SU2
@@ -1701,7 +1698,10 @@ class AirfoilAnalysis:
 
                 mpi_Command = 'mpirun -n %i %s'
 
-                processes = konfig['NUMBER_PART']
+                if i >= len(alphas) - remainder:
+                    processes = konfig['NUMBER_PART'] + 1
+                else:
+                    processes = konfig['NUMBER_PART']
 
                 the_Command = 'SU2_CFD ' + tempname
                 the_Command = base_Command % the_Command
@@ -1844,8 +1844,10 @@ class AirfoilAnalysis:
                 sys.path.append( SU2_RUN )
 
                 mpi_Command = 'mpirun -n %i %s'
-
-                processes = konfig['NUMBER_PART']
+                if i >= len(alphas) - remainder:
+                    processes = konfig['NUMBER_PART'] + 1
+                else:
+                    processes = konfig['NUMBER_PART']
 
                 the_Command = 'SU2_CFD ' + tempname
                 the_Command = base_Command % the_Command
@@ -2185,7 +2187,10 @@ class AirfoilAnalysis:
 
                 mpi_Command = 'mpirun -n %i %s'
 
-                processes = konfig['NUMBER_PART']
+                if i >= len(alphas) - remainder:
+                    processes = konfig['NUMBER_PART'] + 1
+                else:
+                    processes = konfig['NUMBER_PART']
 
                 the_Command = 'SU2_CFD ' + tempname
                 the_Command = base_Command % the_Command
