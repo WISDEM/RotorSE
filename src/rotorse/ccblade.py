@@ -544,8 +544,8 @@ class CCBlade:
             self.freeform = airfoilOptions['GradientOptions']['FreeFormDesign']
 
         if airfoilOptions is not None:
-            if airfoilOptions['AnalysisMethod'] == 'CFD':
-                self.parallel = airfoilOptions['ParallelAirfoils']
+            if airfoilOptions['AnalysisMethod'] == 'CFD' and airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
+                self.parallel = airfoilOptions['CFDOptions']['computeAirfoilsInParallel']
             else:
                 self.parallel = False
         else:
@@ -641,7 +641,10 @@ class CCBlade:
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-            dcl_dafp_R, dcd_dafp_R = af.splineFreeFormGrad(alpha, Re)
+            if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational:T/C':
+                dcl_dalpha, dcl_dafp_R, dcd_dalpha, dcd_dafp_R = af.preCompModel.derivativesPreCompModel(alpha, af.afp)
+            else:
+                dcl_dafp_R, dcd_dafp_R = af.splineFreeFormGrad(alpha, Re)
             dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
         else:
             dR_dafp = np.zeros(self.airfoils_dof)
@@ -749,7 +752,8 @@ class CCBlade:
             ap_s.append(ap)
 
         if rotating:
-            cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = evaluate_direct_parallel(alphas, Res, af, computeAlphaGradient=True, computeAFPGradient=True)
+            afanalysis = AirfoilAnalysis(af[-1].afp, self.airfoilOptions)
+            cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = afanalysis.evaluate_direct_parallel(alphas, Res, af, computeAlphaGradient=True, computeAFPGradient=True)
         else:
             cl = np.zeros(len(r))
             cd = np.zeros(len(r))

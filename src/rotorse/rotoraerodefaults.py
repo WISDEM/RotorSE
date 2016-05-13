@@ -470,7 +470,7 @@ class CCBlade(Component):
             unknowns['P'] = self.P
         elif self.run_case == 'loads':
             # distributed loads
-            if self.airfoilOptions['CFDOptions']['computeAirfoilsInParallel'] and self.airfoilOptions['AnalysisMethod'] == 'CFD':
+            if self.airfoilOptions['CFDOptions']['computeAirfoilsInParallel'] and self.airfoilOptions['AnalysisMethod'] == 'CFD' and self.airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
                 ccblade_loads = self.ccblade.distributedAeroLoadsParallel
             else:
                 ccblade_loads = self.ccblade.distributedAeroLoads
