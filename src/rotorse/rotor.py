@@ -185,6 +185,7 @@ class PreCompSections(Component):
         self.add_output('beam:y_ec_str', shape=nstr, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
 
         self.fd_options['force_fd'] = True
+        self.fd_options['form'] = 'forward'
         self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
         self.nstr = nstr

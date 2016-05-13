@@ -14,9 +14,9 @@ from airfoil_parameterization import AirfoilAnalysis
 rotor = Problem()
 
 # === airfoil parameters ===
-airfoilOptions = dict(AnalysisMethod='XFOIL', AirfoilParameterization='Precomputational:T/C',
+airfoilOptions = dict(AnalysisMethod='WindTunnel', AirfoilParameterization='Precomputational:T/C',
                                 CFDOptions=dict(iterations=1000, processors=0, configFile='inv_NACA0012.cfg', computeAirfoilsInParallel=True),
-                                GradientOptions=dict(ComputeGradient=True, FreeFormDesign=False, fd_step=1e-6, cs_step=1e-20),
+                                GradientOptions=dict(ComputeGradient=True, FreeFormDesign=True, fd_step=1e-6, cs_step=1e-20),
                                 SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=100, alphas=np.linspace(-15, 15, 30), Re=5e5),
                                 PrecomputationalOptions=dict(precomp_idx=[0.405, 0.35, 0.30, 0.25, 0.21, 0.18]))
 
@@ -36,11 +36,11 @@ if airfoilOptions['AirfoilParameterization'] == 'Precomputational:T/C':
 else:
     airfoil_param = airfoilOptions['AirfoilParameterization']
 other = ''
+description = airfoilOptions['AnalysisMethod'] + '_' + airfoil_param + '_' + type + '_' + other
 
 ## SETUP OPTIMIZATION
 rotor.driver = pyOptSparseDriver()
 rotor.driver.options['optimizer'] = 'SNOPT'
-description = airfoilOptions['AnalysisMethod'] + '_' + airfoil_param + '_' + type + '_' + other
 rotor.driver.opt_settings['Print file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_print_' + description +'.out'
 rotor.driver.opt_settings['Summary file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_summary_' + description +'.out'
 rotor.driver.opt_settings['Major feasibility tolerance'] = 1e-4
@@ -71,9 +71,9 @@ if airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
 else:
     airfoils_dof = 1
     lower = np.ones((num_airfoils,airfoils_dof))*[[0.12], [0.12], [0.12], [0.12], [0.12], [0.12]]
-    upper = np.ones((num_airfoils,airfoils_dof))*[[0.45], [0.45], [0.45], [0.45], [0.45], [0.45]]
+    upper = np.ones((num_airfoils,airfoils_dof))*[[0.42], [0.42], [0.42], [0.42], [0.42], [0.42]]
     scaler_airfoilparam = 0.1
-#rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper, scaler=scaler_airfoilparam)
+rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper, scaler=scaler_airfoilparam)
 
 ## Setup constraints
 rotor.driver.add_constraint('con1', lower=-1.0, upper=1.0)  # rotor strain sparL
@@ -355,9 +355,6 @@ rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigu
 # rotor['teT'] = np.asarray([0.04831008,  0.02986407,  0.01520491,  0.01152854,  0.005   ])
 
 
-
-
-
 # === run and outputs ===
 "Running RotorSE..."
 time0 = time.time()
@@ -401,13 +398,6 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 # print 'ad', grad
 # print 'fd', gradfd
 
-# grad = rotor.calc_gradient(['airfoil_parameterization'], ['AEP', 'aero_extrm.loads:Px'], mode='auto')
-# airfoilOptions['ComputeGradient'] = False
-# rotor['airfoilOptions'] = airfoilOptions
-# gradfd = rotor.calc_gradient(['airfoil_parameterization'], ['AEP', 'aero_extrm.loads:Px'], mode='fd')
-# print 'ad', grad
-# print 'fd', gradfd
-
 #### Check total derivatives (design variables, obj, and cons)
 # total = open('total_derivatives_' + description + '.txt', 'w')
 # rotor.check_total_derivatives(out_stream=total)
@@ -415,6 +405,7 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 # rotor.check_partial_derivatives(out_stream=total)
 # total.close()
 
+#### Check scaled gradients
 # w = rotor.calc_gradient(list(rotor.driver.get_desvars().keys()),
 #                       list(rotor.driver.get_objectives().keys()),# + list(rotor.driver.get_constraints().keys()),
 #                       dv_scale=rotor.driver.dv_conversions,

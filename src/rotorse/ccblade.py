@@ -261,11 +261,13 @@ class CCAirfoil:
         also uses a small amount of smoothing to help remove spurious multiple solutions.
 
         """
-        cl = self.cl_spline.ev(alpha, Re)
-        cd = self.cd_spline.ev(alpha, Re)
-        if self.preCompModel is not None:
+        if self.preCompModel is None:
+            cl = self.cl_spline.ev(alpha, Re)
+            cd = self.cd_spline.ev(alpha, Re)
+            if cl > 0:
+                pass
+        else:
             cl, cd = self.preCompModel.evaluatePreCompModel(alpha, self.afp)
-
         return cl, cd
 
     def evaluate_direct(self, alpha, Re, computeAlphaGradient=False, computeAFPGradient=False):
@@ -291,8 +293,7 @@ class CCAirfoil:
                 if self.preCompModel is not None:
                     cl, cd = self.preCompModel.evaluatePreCompModel(alpha, self.afp)
                     dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, self.afp)
-                    dcl_dRe = 0.0
-                    dcd_dRe = 0.0
+                    dcl_dRe, dcd_dRe = 0.0, 0.0
                 else:
                     afanalysis = AirfoilAnalysis(self.afp, self.airfoilOptions)
                     cl, cd, dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag = afanalysis.computeDirect(alpha, Re)
@@ -351,7 +352,7 @@ class CCAirfoil:
                 dcl_dafp[i] = (cl_new_fd - cl_cur) / fd_step
                 dcd_dafp[i] = (cd_new_fd - cd_cur) / fd_step
         elif self.preCompModel is not None:
-            dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, Re)
+            dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, self.afp)
         return dcl_dafp, dcd_dafp
 
 def evaluate_direct_parallel2(alphas, Res, afs, computeAlphaGradient=False, computeAFPGradient=False):
@@ -1318,6 +1319,142 @@ class CCBlade:
                 dTp['dafp'][z] = dTp_zeros.flatten()
 
             return Nps, Tps, dNp, dTp
+
+    def TEST(self, Uinf, Omega, pitch, azimuth, i ):
+        """Compute distributed aerodynamic loads along blade.
+
+        Parameters
+        ----------
+        Uinf : float or array_like (m/s)
+            hub height wind speed (float).  If desired, an array can be input which specifies
+            the velocity at each radial location along the blade (useful for analyzing loads
+            behind tower shadow for example).  In either case shear corrections will be applied.
+        Omega : float (RPM)
+        Omega : float (RPM)
+            rotor rotation speed
+        pitch : float (deg)
+            blade pitch in same direction as :ref:`twist <blade_airfoil_coord>`
+            (positive decreases angle of attack)
+        azimuth : float (deg)
+            the :ref:`azimuth angle <hub_azimuth_coord>` where aerodynamic loads should be computed at
+
+        Returns
+        -------
+        Np : ndarray (N/m)
+            force per unit length normal to the section on downwind side
+        Tp : ndarray (N/m)
+            force per unit length tangential to the section in the direction of rotation
+        dNp : dictionary containing arrays (present if ``self.derivatives = True``)
+            derivatives of normal loads.  Each item in the dictionary a 2D Jacobian.
+            The array sizes and keys are (where n = number of stations along blade):
+
+            n x n (diagonal): 'dr', 'dchord', 'dtheta', 'dpresweep'
+
+            n x n (tridiagonal): 'dprecurve'
+
+            n x 1: 'dRhub', 'dRtip', 'dprecone', 'dtilt', 'dhubHt', 'dyaw', 'dazimuth', 'dUinf', 'dOmega', 'dpitch'
+
+            for example dNp_dr = dNp['dr']  (where dNp_dr is an n x n array)
+            and dNp_dr[i, j] = dNp_i / dr_j
+        dTp : dictionary (present if ``self.derivatives = True``)
+            derivatives of tangential loads.  Same keys as dNp.
+        """
+
+        self.pitch = radians(pitch)
+        azimuth = radians(azimuth)
+
+        # component of velocity at each radial station
+        Vx, Vy, dVx_dw, dVy_dw, dVx_dcurve, dVy_dcurve = self.__windComponents(Uinf, Omega, azimuth)
+
+
+        # initialize
+        n = len(self.r)
+        Np = np.zeros(n)
+        Tp = np.zeros(n)
+
+        dNp_dVx = np.zeros(n)
+        dTp_dVx = np.zeros(n)
+        dNp_dVy = np.zeros(n)
+        dTp_dVy = np.zeros(n)
+        dNp_dz = np.zeros((6, n))
+        dTp_dz = np.zeros((6, n))
+        DNp_Dafp = np.zeros((17, self.airfoils_dof))
+        DTp_Dafp = np.zeros((17, self.airfoils_dof))
+
+        errf = self.__errorFunction
+        rotating = (Omega != 0)
+
+        # ---------------- loop across blade ------------------
+
+        # index dependent arguments
+        args = (self.r[i], self.chord[i], self.theta[i], self.af[i], Vx[i], Vy[i])
+        if not rotating:  # non-rotating
+
+            phi_star = pi/2.0
+
+        else:
+
+            # ------ BEM solution method see (Ning, doi:10.1002/we.1636) ------
+
+            # set standard limits
+            epsilon = 1e-6
+            phi_lower = epsilon
+            phi_upper = pi/2
+
+            if errf(phi_lower, *args)*errf(phi_upper, *args) > 0:  # an uncommon but possible case
+
+                if errf(-pi/4, *args) < 0 and errf(-epsilon, *args) > 0:
+                    phi_lower = -pi/4
+                    phi_upper = -epsilon
+                else:
+                    phi_lower = pi/2
+                    phi_upper = pi - epsilon
+
+            try:
+                phi_star = brentq(errf, phi_lower, phi_upper, args=args)
+
+            except ValueError:
+
+                warnings.warn('error.  check input values.')
+                phi_star = 0.0
+
+            # ----------------------------------------------------------------
+
+        # derivatives of residual
+        Np[i], Tp[i], dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp = self.__loads(phi_star, rotating, *args)
+
+        if self.derivatives:
+            # separate state vars from design vars
+            # x = [phi, chord, theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
+            dNp_dy = dNp_dx[0]
+            dNp_dx = dNp_dx[1:]
+            dTp_dy = dTp_dx[0]
+            dTp_dx = dTp_dx[1:]
+            dR_dy = dR_dx[0]
+            dR_dx = dR_dx[1:]
+
+            # direct (or adjoint) total derivatives
+            DNp_Dx = dNp_dx - dNp_dy/dR_dy*dR_dx
+            DTp_Dx = dTp_dx - dTp_dy/dR_dy*dR_dx
+            print "AD", dNp_dafp - dNp_dy/dR_dy*dR_dafp
+            DNp_Dafp[i, :] = dNp_dafp - dNp_dy/dR_dy*dR_dafp
+            DTp_Dafp[i, :] = dTp_dafp - dTp_dy/dR_dy*dR_dafp
+
+            # parse components
+            # z = [r, chord, theta, Rhub, Rtip, pitch]
+            zidx = [4, 0, 1, 5, 6, 7]
+            dNp_dz[:, i] = DNp_Dx[zidx]
+            dTp_dz[:, i] = DTp_Dx[zidx]
+
+            dNp_dVx[i] = DNp_Dx[2]
+            dTp_dVx[i] = DTp_Dx[2]
+
+            dNp_dVy[i] = DNp_Dx[3]
+            dTp_dVy[i] = DTp_Dx[3]
+
+
+
+        return Np[i], Tp[i]
 
     def evaluate(self, Uinf, Omega, pitch, coefficient=False):
         """Run the aerodynamic analysis at the specified conditions.

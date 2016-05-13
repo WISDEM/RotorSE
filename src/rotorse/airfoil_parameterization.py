@@ -85,6 +85,13 @@ class AirfoilAnalysis:
             print >> coord_file, '{:<10f}\t{:<10f}'.format(self.x[i], self.y[i])
         coord_file.close()
 
+    def saveCoordinateFileFromCoordinates(self, airfoilFile, x, y):
+        coord_file = open(airfoilFile, 'w')
+        print >> coord_file, 'Airfoil'
+        for i in range(len(x)):
+            print >> coord_file, '{:<10f}\t{:<10f}'.format(x[i], y[i])
+        coord_file.close()
+
     def readCoordinateFile(self, airfoilFile):
         coord_file = open(airfoilFile, 'r')
         x, y = [], []
@@ -546,7 +553,8 @@ class AirfoilAnalysis:
                         yy[j] = y[j] / base_thickness * thicknesses[i]
                 thick_x.append(xx)
                 thick_y.append(yy)
-                cl, cd, cm, alphas, failure = self.__computeSplinePreComp(xx, yy)
+                self.x, self.y = xx, yy
+                cl, cd, cm, alphas, failure = self.__computeSplinePreComp()
 
                 p1 = Polar(self.airfoilOptions['SplineOptions']['Re'], alphas, cl, cd, cm)
                 af = Airfoil([p1])
@@ -672,7 +680,7 @@ class AirfoilAnalysis:
             cl, cd, cm, alphas, failure  = self.__xfoilSpline()
         return cl, cd, cm, alphas, failure
 
-    def __computeSplinePreComp(self, x, y):
+    def __computeSplinePreComp(self):
         if self.analysis_method == 'CFD':
             cl, cd, cm, alphas, failure = self.__cfdSpline()
         else:
