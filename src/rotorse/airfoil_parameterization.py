@@ -511,7 +511,8 @@ class AirfoilAnalysis:
         base_thickness1 = max(y1) - min(y1)
         self.thick_min = 0.12
         self.thick_max = 0.42
-        thicknesses = np.asarray([0.18, 0.21, 0.25, 0.30, 0.35, 0.405]) #np.linspace(self.thick_min, self.thick_max, 20)
+        rangeCompute = self.airfoilOptions['PrecomputationalOptions']['precomp_idx'][::-1]
+        thicknesses = np.asarray(np.concatenate(([self.thick_min], self.airfoilOptions['PrecomputationalOptions']['precomp_idx'][::-1], [self.thick_max]))) #np.linspace(self.thick_min, self.thick_max, 20)
         thick_x = []
         thick_y = []
 
@@ -521,12 +522,14 @@ class AirfoilAnalysis:
         alphas_set = np.linspace(np.radians(-180), np.radians(180), 360)
         clGrid = np.zeros((len(alphas_set), len(thicknesses)))
         cdGrid = np.zeros((len(alphas_set), len(thicknesses)))
+        k = 0
         for i in range(len(thicknesses)):
-            if self.airfoilOptions['AnalysisMethod'] == 'WindTunnel':
-                aerodynFile = self.airfoilOptions['BaseAirfoilsData'][5 - i]
+            if self.airfoilOptions['AnalysisMethod'] == 'WindTunnel' and i != 0 and i != len(thicknesses)-1 :
+                aerodynFile = self.airfoilOptions['BaseAirfoilsData'][5 - k]
                 af = Airfoil.initFromAerodynFile(aerodynFile)
                 alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af.createDataGrid()
                 failure = False
+                k += 1
             else:
 
                 if thicknesses[i] == 0.18:
@@ -543,7 +546,7 @@ class AirfoilAnalysis:
                         yy[j] = y[j] / base_thickness * thicknesses[i]
                 thick_x.append(xx)
                 thick_y.append(yy)
-                cl, cd, cm, alphas, failure = self.__computeSplinePreComp(thick_x[i], thick_y[i])
+                cl, cd, cm, alphas, failure = self.__computeSplinePreComp(xx, yy)
 
                 p1 = Polar(self.airfoilOptions['SplineOptions']['Re'], alphas, cl, cd, cm)
                 af = Airfoil([p1])
@@ -582,7 +585,10 @@ class AirfoilAnalysis:
     def evaluatePreCompModel(self, alpha, t_c):
         cl = self.cl_total_spline.ev(alpha, t_c)
         cd = self.cd_total_spline.ev(alpha, t_c)
-        return cl[0], cd[0]
+        try:
+            return cl[0], cd[0]
+        except:
+            return cl, cd
 
     def derivativesPreCompModel(self, alpha, t_c):
         # note: direct call to bisplev will be unnecessary with latest scipy update (add derivative method)

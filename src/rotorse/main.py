@@ -14,10 +14,11 @@ from airfoil_parameterization import AirfoilAnalysis
 rotor = Problem()
 
 # === airfoil parameters ===
-airfoilOptions = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
+airfoilOptions = dict(AnalysisMethod='XFOIL', AirfoilParameterization='Precomputational:T/C',
                                 CFDOptions=dict(iterations=1000, processors=0, configFile='inv_NACA0012.cfg', computeAirfoilsInParallel=True),
-                                GradientOptions=dict(ComputeGradient=True, FreeFormDesign=True, fd_step=1e-6, cs_step=1e-20),
-                                SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=100, alphas=np.linspace(-15, 15, 30), Re=5e5))
+                                GradientOptions=dict(ComputeGradient=True, FreeFormDesign=False, fd_step=1e-6, cs_step=1e-20),
+                                SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=100, alphas=np.linspace(-15, 15, 30), Re=5e5),
+                                PrecomputationalOptions=dict(precomp_idx=[0.405, 0.35, 0.30, 0.25, 0.21, 0.18]))
 
 ##### Airfoil Options #####
 ### AnalysisMethod = None, 'XFOIL', 'CFD', 'Files', AirfoilParameterization = None, 'CST', 'Precomputational:T/C', 'NACA'
@@ -25,26 +26,39 @@ airfoilOptions = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
 ### GradientOptions: ComputeGradient = whether or not to compute gradients in CCBlade, FreeFormDesign = whether or not to calculate airfoil parameterization gradients, fd_step = finite difference step size, cs_step = complex step size
 ### SplineOptions: AnalysisMethod: 'XFOIL', 'CFD', maxDirectAoA: deg at which spline takes over, alphas: alphas to use to compute spline, Re: Reynolds number to compute spline
 
+
+if airfoilOptions['GradientOptions']['FreeFormDesign']:
+    type ='FreeForm'
+else:
+    type = 'Con'
+if airfoilOptions['AirfoilParameterization'] == 'Precomputational:T/C':
+    airfoil_param ='TC'
+else:
+    airfoil_param = airfoilOptions['AirfoilParameterization']
+other = ''
+
 ## SETUP OPTIMIZATION
 rotor.driver = pyOptSparseDriver()
 rotor.driver.options['optimizer'] = 'SNOPT'
-rotor.driver.opt_settings['Print file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_print_xfoil_scaled_xfoil_con'+'.out'
-rotor.driver.opt_settings['Summary file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_summary_xfoil_scaled_xfoil_con'+'.out'
-# recorder = SqliteRecorder("freeform_optimization_cfd_conven2.sql")
-# recorder.options['record_params'] = True
-# recorder.options['record_metadata'] = True
-# rotor.driver.add_recorder(recorder)
+description = airfoilOptions['AnalysisMethod'] + '_' + airfoil_param + '_' + type + '_' + other
+rotor.driver.opt_settings['Print file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_print_' + description +'.out'
+rotor.driver.opt_settings['Summary file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_summary_' + description +'.out'
+rotor.driver.opt_settings['Major feasibility tolerance'] = 1e-4
+recorder = SqliteRecorder(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'recorder_' + description +'.sql')
+recorder.options['record_params'] = True
+recorder.options['record_metadata'] = True
+rotor.driver.add_recorder(recorder)
 
 ## Setup design variables and objective
 rotor.driver.add_objective('obj')
 rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)#, scaler=0.1113567)
 rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3, scaler=0.5)#, scaler=np.asarray([0.02234462, 0.002056 ,  0.02063628 , 0.00910857])) # scaler=np.asarray([0.1, 0.005, 0.1, 0.1]))
-rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)#, scaler=np.asarray([0.00304422,  0.02875508,  0.01657161,  0.00333825]))#, scaler=0.1)
-rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0)#, scaler=0.00071386*100.) #scaler=0.01)
+rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0, scaler=0.5)#, scaler=np.asarray([0.00304422,  0.02875508,  0.01657161,  0.00333825]))#, scaler=0.1)
+rotor.driver.add_desvar('control:tsr', lower=3.0, upper=14.0, scaler=0.1)#, scaler=0.00071386*100.) #scaler=0.01)
 rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)#, scaler=dsparT)
 rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)#, scaler=dteT)
 
-## Setup free form optimization
+### Setup free form optimization
 num_airfoils = 6
 if airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
     airfoils_dof = 8
@@ -58,7 +72,7 @@ else:
     airfoils_dof = 1
     lower = np.ones((num_airfoils,airfoils_dof))*[[0.12], [0.12], [0.12], [0.12], [0.12], [0.12]]
     upper = np.ones((num_airfoils,airfoils_dof))*[[0.45], [0.45], [0.45], [0.45], [0.45], [0.45]]
-    scaler_airfoilparam = 0.05
+    scaler_airfoilparam = 0.1
 #rotor.driver.add_desvar('airfoil_parameterization', lower=lower, upper=upper, scaler=scaler_airfoilparam)
 
 ## Setup constraints
@@ -162,6 +176,7 @@ else:
         print "Precomputational model generation complete in ", time.time() - time0, " seconds."
         af_precomp_init = CCAirfoil.initFromPrecomputational
         airfoil_parameterization = np.asarray([[0.405], [0.35], [0.30], [0.25], [0.21], [0.18]])
+        # airfoil_parameterization = np.asarray([[0.55], [0.25], [0.400], [0.21], [0.18], [0.3518]])
     elif airfoilOptions['AirfoilParameterization'] == 'NACA':
         af_freeform_init = CCAirfoil.initFromFreeForm
         airfoil_parameterization = np.asarray([[2440], [2435], [2430], [2425], [2421], [2418]])
@@ -330,6 +345,19 @@ rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigu
 #rotor['sparT'] = np.asarray([ 0.043957,  0.040577,  0.041654,  0.030354 , 0.005     ])
 #rotor['teT'] = np.asarray([ 0.067799 , 0.030785,   0.018208 , 0.008919,  0.005     ])
 
+
+# WIND TUNNEL TC CONVENTIONAL
+# rotor['r_max_chord'] = 0.368929
+# rotor['chord_sub'] = np.asarray([2.57162738,  4.4315963,   2.72341615,  1.35513324])
+# rotor['theta_sub'] =np.asarray([11.76353702,   6.10520117,  1.56295952,  -0.96843542])
+# rotor['control:tsr'] = 7.92194881118
+# rotor['sparT'] = np.asarray([0.08526189 , 0.0394111,   0.04590213 , 0.0283686,   0.005])
+# rotor['teT'] = np.asarray([0.04831008,  0.02986407,  0.01520491,  0.01152854,  0.005   ])
+
+
+
+
+
 # === run and outputs ===
 "Running RotorSE..."
 time0 = time.time()
@@ -373,16 +401,18 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 # print 'ad', grad
 # print 'fd', gradfd
 
-# grad = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='auto')
+# grad = rotor.calc_gradient(['airfoil_parameterization'], ['AEP', 'aero_extrm.loads:Px'], mode='auto')
 # airfoilOptions['ComputeGradient'] = False
 # rotor['airfoilOptions'] = airfoilOptions
-# gradfd = rotor.calc_gradient(['airfoil_parameterization'], ['obj'], mode='fd')
+# gradfd = rotor.calc_gradient(['airfoil_parameterization'], ['AEP', 'aero_extrm.loads:Px'], mode='fd')
 # print 'ad', grad
 # print 'fd', gradfd
 
 #### Check total derivatives (design variables, obj, and cons)
-# total = open('total_derivatives_rotorse_tc3.txt', 'w')
+# total = open('total_derivatives_' + description + '.txt', 'w')
 # rotor.check_total_derivatives(out_stream=total)
+# total = open('partial_derivatives_' + description + '.txt', 'w')
+# rotor.check_partial_derivatives(out_stream=total)
 # total.close()
 
 # w = rotor.calc_gradient(list(rotor.driver.get_desvars().keys()),

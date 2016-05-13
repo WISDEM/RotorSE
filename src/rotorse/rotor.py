@@ -2289,7 +2289,7 @@ class ObjandCons(Component):
         unknowns['con6'] = params['freq_curvefem'][0:2] - params['nBlades']*params['ratedConditions:Omega']/60.0*1.1
         if self.airfoils_dof == 8:
             unknowns['con_freeform'] = params['airfoil_parameterization'][:, [4, 5, 6, 7]] - params['airfoil_parameterization'][:, [0, 1, 2, 3]]
-        unknowns['con_power'] = (params['power'][-1] - params['control:ratedPower']) # / 1.e6
+        unknowns['con_power'] = (params['power'][-1] - params['control:ratedPower']) / 1.e6
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -2339,8 +2339,8 @@ class ObjandCons(Component):
         J['con6', 'ratedConditions:Omega'] = dcon6_dOmega
         if self.airfoils_dof == 8:
             J['con_freeform', 'airfoil_parameterization'] = dcon_freeform_dafp
-        J['con_power', 'power'] = np.asarray([0.0, 0.0, 0.0, 0.0, 1.0]).reshape(1,5)
-        J['con_power', 'control:ratedPower'] = -1.0
+        J['con_power', 'power'] = np.asarray([0.0, 0.0, 0.0, 0.0, 1.0]).reshape(1,5) / 1e6
+        J['con_power', 'control:ratedPower'] = -1.0 / 1e-6
         return J
 
 
