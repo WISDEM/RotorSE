@@ -872,6 +872,7 @@ class AirfoilAnalysis:
         config.EXT_ITER    = airfoilOptions['CFDOptions']['iterations']
         config.WRT_CSV_SOL = 'YES'
         meshFileName = basepath + os.path.sep + 'mesh_AIRFOIL_serial.su2'
+        config.MESH_FILENAME = basepath + os.path.sep + config.MESH_FILENAME
 
         if GenerateMESH:
             return_code = self.__generateMesh(meshFileName, config, state, basepath)
@@ -887,7 +888,7 @@ class AirfoilAnalysis:
         x_vel = Uinf * cos(alpha)
         y_vel = Uinf * sin(alpha)
         config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
-        config.MACH_NUMBER = 0.6 #TODO Change back
+        config.MACH_NUMBER = 0.2 #TODO Change back
         config.REYNOLDS_NUMBER = airfoilOptions['SplineOptions']['Re']
 
         if restart:
@@ -924,7 +925,7 @@ class AirfoilAnalysis:
             if not mpi_Command:
                 raise RuntimeError , 'could not find an mpi interface'
         cfd_direct_output = open(basepath + os.path.sep + 'cfd_direct_output.txt', 'w')
-
+        print the_Command
         sys.stdout.flush()
         proc = subprocess.Popen( the_Command, shell=True    ,
                      stdout=cfd_direct_output,
@@ -985,7 +986,7 @@ class AirfoilAnalysis:
             if processes > 0:
                 if not mpi_Command:
                     raise RuntimeError , 'could not find an mpi interface'
-
+            print the_Command
             sys.stdout.flush()
             cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil_drag.txt', 'w')
             proc = subprocess.Popen( the_Command, shell=True    ,
@@ -1129,10 +1130,13 @@ class AirfoilAnalysis:
         config_filename = basepath + os.path.sep + airfoilOptions['CFDOptions']['configFile']
         config = SU2.io.Config(config_filename)
         state  = SU2.io.State()
-        config.NUMBER_PART = airfoilOptions['CFDOptions']['processors']
+        config.NUMBER_PART = int(airfoilOptions['CFDOptions']['processors']/ float(len(alphas)))
+        remainder =  airfoilOptions['CFDOptions']['processors'] % len(alphas) - 1
+        if remainder <= 0 or config.NUMBER_PART == 0:
+            remainder = 0
         config.EXT_ITER    = airfoilOptions['CFDOptions']['iterations']
         config.WRT_CSV_SOL = 'YES'
-        meshFileName = basepath + os.path.sep + 'mesh_AIRFOIL_parallel.su2'
+        meshFileName = basepath + os.path.sep + 'mesh_AIRFOIL_spline_parallel.su2'
         config.CONSOLE = 'QUIET'
         return_code = self.__generateMesh(meshFileName, config, state, basepath)
 
@@ -1140,7 +1144,7 @@ class AirfoilAnalysis:
         state.FILES.MESH = config.MESH_FILENAME
         Uinf = 10.0
         Ma = Uinf / 340.29  # Speed of sound at sea level
-        config.MACH_NUMBER = 0.6 #Ma
+        config.MACH_NUMBER = 0.2 #Ma
         config.REYNOLDS_NUMBER = Re
         config.RESTART_SOL = 'NO'
         config.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_AIRFOIL_parallel.dat'
@@ -1165,7 +1169,10 @@ class AirfoilAnalysis:
             SU2_RUN = os.environ['SU2_RUN']
             sys.path.append( SU2_RUN )
             mpi_Command = 'mpirun -n %i %s'
-            processes = konfig['NUMBER_PART']
+            if i <= remainder:
+                processes = konfig['NUMBER_PART'] + 1
+            else:
+                processes = konfig['NUMBER_PART']
             the_Command = 'SU2_CFD ' + tempname
             base_Command = os.path.join(SU2_RUN,'%s')
             the_Command = base_Command % the_Command
@@ -1173,9 +1180,10 @@ class AirfoilAnalysis:
                 if not mpi_Command:
                     raise RuntimeError , 'could not find an mpi interface'
             the_Command = mpi_Command % (processes,the_Command)
+            print the_Command
             sys.stdout.flush()
             proc = subprocess.Popen( the_Command, shell=True    ,
-                         stdout=sys.stdout, #open(basepath + os.path.sep + 'cfd_output'+str(i+1)+'.txt', 'w'),
+                         stdout=open(basepath + os.path.sep + 'cfd_spline'+str(i+1)+'.txt', 'w'),
                          stderr=subprocess.PIPE,
                          stdin=subprocess.PIPE)
             proc.stderr.close()
@@ -1297,7 +1305,7 @@ class AirfoilAnalysis:
             ztate.FILES.MESH = config.MESH_FILENAME
             Uinf = 10.0
             Ma = Uinf / 340.29  # Speed of sound at sea level
-            konfig.MACH_NUMBER = 0.6#  Ma
+            konfig.MACH_NUMBER = 0.2#  Ma
             konfig.REYNOLDS_NUMBER = Re
 
             if restart:
@@ -1657,7 +1665,7 @@ class AirfoilAnalysis:
             state.FILES.MESH = config.MESH_FILENAME
             Uinf = 10.0
             Ma = Uinf / 340.29  # Speed of sound at sea level
-            config.MACH_NUMBER = 0.6 #Ma
+            config.MACH_NUMBER = 0.2 #Ma
             config.REYNOLDS_NUMBER = Re
 
             if restart:
@@ -1747,6 +1755,7 @@ class AirfoilAnalysis:
             config = SU2.io.Config(config_filename)
             state  = SU2.io.State()
             config.NUMBER_PART = int(airfoilOptions['CFDOptions']['processors'] / float(len(alphas)))
+            remainder = airfoilOptions['CFDOptions']['processors'] % len(alphas)
             config.EXT_ITER    = airfoilOptions['CFDOptions']['iterations']
             config.WRT_CSV_SOL = 'YES'
 
@@ -1802,7 +1811,7 @@ class AirfoilAnalysis:
                 ztate.FILES.MESH = config.MESH_FILENAME
                 Uinf = 10.0
                 Ma = Uinf / 340.29  # Speed of sound at sea level
-                konfig.MACH_NUMBER = 0.6 # Ma
+                konfig.MACH_NUMBER = 0.2 # Ma
                 konfig.REYNOLDS_NUMBER = Re
 
                 if restart:
@@ -2146,7 +2155,7 @@ class AirfoilAnalysis:
             state.FILES.MESH = config.MESH_FILENAME
             Uinf = 10.0
             Ma = Uinf / 340.29  # Speed of sound at sea level
-            config.MACH_NUMBER = 0.6 #Ma
+            config.MACH_NUMBER = 0.2 #Ma
             config.REYNOLDS_NUMBER = Re
 
             if restart:
