@@ -263,12 +263,14 @@ class CCAirfoil:
         """
         cl = self.cl_spline.ev(alpha, Re)
         cd = self.cd_spline.ev(alpha, Re)
+        if self.preCompModel is not None:
+            cl, cd = self.preCompModel.evaluatePreCompModel(alpha, self.afp)
 
         return cl, cd
 
     def evaluate_direct(self, alpha, Re, computeAlphaGradient=False, computeAFPGradient=False):
         if self.afp is not None and abs(np.degrees(alpha)) < self.airfoilOptions['SplineOptions']['maxDirectAoA']:
-            if alpha in self.alpha_storage :
+            if alpha in self.alpha_storage and self.airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
                 index = self.alpha_storage.index(alpha)
                 cl = self.cl_storage[index]
                 cd = self.cd_storage[index]
@@ -285,7 +287,6 @@ class CCAirfoil:
                     dcd_dafp = np.zeros(self.airfoils_dof)
                 dcl_dRe = 0.0
                 dcd_dRe = 0.0
-                # print "Reusing calculation...", alpha
             else:
                 if self.preCompModel is not None:
                     cl, cd = self.preCompModel.evaluatePreCompModel(alpha, self.afp)
@@ -313,7 +314,6 @@ class CCAirfoil:
             cl, cd = self.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = self.derivatives(alpha, Re)
             dcl_dafp, dcd_dafp = self.splineFreeFormGrad(alpha, Re)
-
         # print alpha, cl, cd, dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp
         return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
 
@@ -332,6 +332,11 @@ class CCAirfoil:
         else:
             dcl_dRe = bisplev(alpha, Re, tck_cl, dx=0, dy=1)
             dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
+
+        if self.preCompModel is not None:
+            dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, self.afp)
+            dcl_dRe = 0.0
+            dcd_dRe = 0.0
         return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
 
     def splineFreeFormGrad(self, alpha, Re):
@@ -345,6 +350,8 @@ class CCAirfoil:
                 cd_new_fd = self.cd_splines_new[i].ev(alpha, self.Re)
                 dcl_dafp[i] = (cl_new_fd - cl_cur) / fd_step
                 dcd_dafp[i] = (cd_new_fd - cd_cur) / fd_step
+        elif self.preCompModel is not None:
+            dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, Re)
         return dcl_dafp, dcd_dafp
 
 def evaluate_direct_parallel2(alphas, Res, afs, computeAlphaGradient=False, computeAFPGradient=False):
@@ -684,7 +691,7 @@ class CCBlade:
             da_dx = np.zeros(9)
             dap_dx = np.zeros(9)
             dphi_dx = np.zeros(9)
-            dR_dafp, dcl_dafp, dcd_dafp = np.zeros(self.airfoils_dof), np.zeros(self.airfoils_dof), np.zeros(self.airfoils_dof)
+            dR_dafp = np.zeros(self.airfoils_dof)
 
 
         # x = [phi, chord,  theta, Vx, Vy, r, Rhub, Rtip, pitch]  (derivative order)
