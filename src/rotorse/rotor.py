@@ -54,7 +54,7 @@ class ResizeCompositeSection(Component):
         self.add_output('websCSOut', shape=nstr, desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
         self.add_output('dummy', shape=1)
         self.fd_options['force_fd'] = True
-        self.fd_options['form'] = 'central'
+        # self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -186,7 +186,7 @@ class PreCompSections(Component):
 
         self.fd_options['force_fd'] = True
         self.fd_options['form'] = 'forward'
-        self.fd_options['form'] = 'central'
+        # self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
         self.nstr = nstr
         self.num_airfoils = num_airfoils
@@ -268,7 +268,7 @@ class PreCompSections(Component):
         return eps_crit
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "PreCompSections"
+        print "PreCompSections"
         self.chord = params['chord']
         self.materials = params['materials']
         self.r = params['r']
@@ -2372,7 +2372,7 @@ class StructureGroup(Group):
         # self.add('blade_defl', BladeDeflection(nstr))
 
         self.fd_options['force_fd'] = True
-        self.fd_options['form'] = 'central'
+        # self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
 
 class OptimizeRotorSE(Group):
@@ -3173,4 +3173,4 @@ class RotorSE(Group):
         # self.connect('ratedConditions.T', 'ratedConditions_T')
         #self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
-
+        # self.fd_options['form'] = 'central'

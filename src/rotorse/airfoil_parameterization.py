@@ -82,7 +82,7 @@ class AirfoilAnalysis:
         coord_file = open(airfoilFile, 'w')
         print >> coord_file, 'Airfoil'
         for i in range(len(self.x)):
-            print >> coord_file, '{:<10f}\t{:<10f}'.format(self.x[i], self.y[i])
+            print >> coord_file, '{:<20f}\t{:<20f}'.format(self.x[i], self.y[i])
         coord_file.close()
 
     def saveCoordinateFileFromCoordinates(self, airfoilFile, x, y):
@@ -538,24 +538,30 @@ class AirfoilAnalysis:
                 failure = False
                 k += 1
             else:
-
-                if thicknesses[i] == 0.18:
-                    xx = np.zeros(len(x1))
-                    yy = np.zeros(len(y1))
-                    for j in range(len(x1)):
-                        xx[j] = x1[j]
-                        yy[j] = y1[j] / base_thickness1 * thicknesses[i]
+                if i != 0 and i != len(thicknesses)-1:
+                    xx, yy = self.readCoordinateFile(self.airfoilOptions['BaseAirfoilsData'][5 - k])
+                    k += 1
                 else:
-                    xx = np.zeros(len(x))
-                    yy = np.zeros(len(y))
-                    for j in range(len(x)):
-                        xx[j] = x[j]
-                        yy[j] = y[j] / base_thickness * thicknesses[i]
+                    if thicknesses[i] <= 0.185:
+                        xx = np.zeros(len(x1))
+                        yy = np.zeros(len(y1))
+                        for j in range(len(x1)):
+                            xx[j] = x1[j]
+                            yy[j] = y1[j] / base_thickness1 * thicknesses[i]
+                    else:
+                        xx = np.zeros(len(x))
+                        yy = np.zeros(len(y))
+                        for j in range(len(x)):
+                            xx[j] = x[j]
+                            yy[j] = y[j] / base_thickness * thicknesses[i]
                 thick_x.append(xx)
                 thick_y.append(yy)
                 self.x, self.y = xx, yy
+                if thicknesses[i] == 0.405:
+                    pass
                 cl, cd, cm, alphas, failure = self.__computeSplinePreComp()
-
+                #print cl, cd
+                #print
                 p1 = Polar(self.airfoilOptions['SplineOptions']['Re'], alphas, cl, cd, cm)
                 af = Airfoil([p1])
                 r_over_R = 0.5
@@ -564,6 +570,7 @@ class AirfoilAnalysis:
                 cd_max = 1.5
                 af3D = af.correction3D(r_over_R, chord_over_r, tsr)
                 af_extrap1 = af3D.extrapolate(cd_max)
+                # af_extrap1 = af.extrapolate(cd_max)
                 alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af_extrap1.createDataGrid()
 
             cls.append(cl_ext), cds.append(cd_ext), cms.append(cm_ext), alphass.append(alpha_ext), failures.append(failure)

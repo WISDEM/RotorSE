@@ -203,6 +203,7 @@ class CCAirfoil:
         # tsr = 7.55
         # af3D = af.correction3D(r_over_R, chord_over_r, tsr)
         cd_max = 1.5
+        # af_extrap1 = af3D.extrapolate(cd_max)
         af_extrap1 = af.extrapolate(cd_max)
         alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
 
@@ -264,23 +265,23 @@ class CCAirfoil:
         if self.preCompModel is None:
             cl = self.cl_spline.ev(alpha, Re)
             cd = self.cd_spline.ev(alpha, Re)
-            if cl > 0:
-                pass
         else:
             cl, cd = self.preCompModel.evaluatePreCompModel(alpha, self.afp)
         return cl, cd
 
-    def evaluate_direct(self, alpha, Re, computeAlphaGradient=False, computeAFPGradient=False):
+    def evaluate_direct(self, alpha, Re):
         if self.afp is not None and abs(np.degrees(alpha)) < self.airfoilOptions['SplineOptions']['maxDirectAoA']:
             if alpha in self.alpha_storage and self.airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
                 index = self.alpha_storage.index(alpha)
                 cl = self.cl_storage[index]
                 cd = self.cd_storage[index]
-                if computeAlphaGradient and alpha in self.dalpha_storage:
+                if self.airfoilOptions['GradientOptions']['ComputeGradient'] and alpha in self.dalpha_storage:
                     index = self.dalpha_storage.index(alpha)
                     dcl_dalpha = self.dcl_storage[index]
                     dcd_dalpha = self.dcd_storage[index]
-                if computeAFPGradient and alpha in self.dalpha_dafp_storage:
+                else:
+                    dcl_dalpha, dcd_dalpha = 0.0, 0.0
+                if self.airfoilOptions['GradientOptions']['FreeFormDesign'] and alpha in self.dalpha_dafp_storage:
                     index = self.dalpha_dafp_storage.index(alpha)
                     dcl_dafp = self.dcl_dafp_storage[index]
                     dcd_dafp = self.dcd_dafp_storage[index]
@@ -296,7 +297,11 @@ class CCAirfoil:
                     dcl_dRe, dcd_dRe = 0.0, 0.0
                 else:
                     afanalysis = AirfoilAnalysis(self.afp, self.airfoilOptions)
-                    cl, cd, dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag = afanalysis.computeDirect(alpha, Re)
+                    if self.airfoilOptions['GradientOptions']['ComputeGradient']:
+                        cl, cd, dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag = afanalysis.computeDirect(alpha, Re)
+                    else:
+                        cl, cd = afanalysis.computeDirect(alpha, Re)
+                        dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe, dcl_dafp, dcd_dafp, lexitflag = 0.0, 0.0, 0.0, 0.0, np.zeros(8), np.zeros(8), False
                     if lexitflag or abs(cl) > 2.5 or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
                         cl, cd = self.evaluate(alpha, Re)
                         dcl_dalpha, dcd_dalpha, dcl_dRe, dcd_dRe = self.derivatives(alpha, Re)
@@ -315,7 +320,6 @@ class CCAirfoil:
             cl, cd = self.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = self.derivatives(alpha, Re)
             dcl_dafp, dcd_dafp = self.splineFreeFormGrad(alpha, Re)
-        # print alpha, cl, cd, dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp
         return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
 
     def derivatives(self, alpha, Re):
@@ -667,7 +671,7 @@ class CCBlade:
         alpha, W, Re = _bem.relativewind(phi, a, ap, Vx, Vy, self.pitch,
                                          chord, theta, self.rho, self.mu)
         if rotating:
-            cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = af.evaluate_direct(alpha, Re, computeAlphaGradient=True, computeAFPGradient=True)
+            cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = af.evaluate_direct(alpha, Re)
         else:
             cl, cd = af.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
