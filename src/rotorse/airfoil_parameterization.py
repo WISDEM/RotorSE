@@ -520,7 +520,6 @@ class AirfoilAnalysis:
                 dnormx = dnormx3 + dnormx4
                 dnormy = dnormy3 + dnormy4
 
-
                 norm_y = dnormy / np.sqrt(dnormy**2 + dnormx**2)
 
             for j in range(0, n+1):
@@ -1223,11 +1222,15 @@ class AirfoilAnalysis:
         remainder =  airfoilOptions['CFDOptions']['processors'] % len(alphas) - 1
         if remainder <= 0 or config.NUMBER_PART == 0:
             remainder = 0
+        config.MESH_FILENAME = basepath + os.path.sep + config.MESH_FILENAME
         config.EXT_ITER    = airfoilOptions['CFDOptions']['iterations']
         config.WRT_CSV_SOL = 'YES'
         meshFileName = basepath + os.path.sep + 'mesh_AIRFOIL_spline_parallel.su2'
         config.CONSOLE = 'QUIET'
+
         return_code = self.__generateMesh(meshFileName, config, state, basepath)
+        if return_code != 0:
+            print "Error in mesh deformation."
 
         config.MESH_FILENAME = meshFileName
         state.FILES.MESH = config.MESH_FILENAME
