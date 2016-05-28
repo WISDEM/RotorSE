@@ -18,7 +18,6 @@ import _pBEAM
 import _curvefem
 import _bem  # TODO: move to rotoraero
 from enum import Enum
-# from ccblade2 import CCBlade_to_RotorSE_connection as CCBlade
 from airfoil_parameterization import AirfoilAnalysis
 
 
@@ -268,7 +267,7 @@ class PreCompSections(Component):
         return eps_crit
 
     def solve_nonlinear(self, params, unknowns, resids):
-        print "PreCompSections"
+        # print "PreCompSections"
         self.chord = params['chord']
         self.materials = params['materials']
         self.r = params['r']
@@ -324,11 +323,11 @@ class PreCompSections(Component):
                 if pro_str[j][0] == 0.0:
                     profile[j] = Profile.initFromPreCompFile(os.path.join(basepath, 'shape_' + str(j+1) + '.inp'))
                 else:
-                    if params['airfoilOptions']['AirfoilParameterization'] != 'Precomputational:T/C':
+                    if params['airfoilOptions']['AirfoilParameterization'] != 'Precomputational':
                         afanalysis = AirfoilAnalysis(pro_str[j], params['airfoilOptions'])
                         xl, xu, yl, yu = afanalysis.getCoordinates(type='split')
                     else:
-                        afanalysis = AirfoilAnalysis(None, params['airfoilOptions'])
+                        afanalysis = AirfoilAnalysis(None, params['airfoilOptions'], computeModel=False)
                         xl, xu, yl, yu = afanalysis.getPreCompCoordinates(pro_str[j])
                     # xl, xu, yl, yu = getCoordinates([pro_str[j]])
                     xu1 = np.zeros(len(xu))
@@ -502,7 +501,7 @@ class RotorWithpBEAM(Component):
         self.add_output('damageL_te', shape=nstr, desc='fatigue damage on lower surface in trailing-edge panels')
 
         self.fd_options['force_fd'] = True
-        self.fd_options['form'] = 'central'
+        #self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
 
     def principalCS(self, EIyy, EIxx, y_ec_str, x_ec_str, EA, EIxy):
@@ -725,11 +724,16 @@ class CurveFEM(Component):
         self.add_output('freq', shape=5, units='Hz', desc='first nF natural frequencies')
 
         self.fd_options['force_fd'] = True
-        self.fd_options['form'] = 'central'
+        # self.fd_options['form'] = 'forward'
         self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "CurveFEM"
+
+        #print params['beam:EIxx']
+        #print params['beam:GJ']
+        #print params['beam:EA'][0]
+
+
         r = params['beam:z']
 
         rhub = r[0]
@@ -757,13 +761,12 @@ class GridSetup(Component):
         self.add_output('idxj', val=np.zeros(nstr, dtype=np.int), desc='index of augmented aero grid corresponding to structural index', pass_by_obj=True)
 
         self.fd_options['force_fd'] = True
-        self.fd_options['form'] = 'central'
+        # self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
         self.naero = naero
         self.nstr = nstr
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "GridSetup"
         r_aero = params['initial_aero_grid']
         r_str = params['initial_str_grid']
         r_aug = np.concatenate([[0.0], r_aero, [1.0]])
@@ -801,7 +804,6 @@ class RGrid(Component):
 
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "RGrid"
         r_aug = np.concatenate([[0.0], params['r_aero'], [1.0]])
 
         nstr = len(params['fraction'])
@@ -875,18 +877,16 @@ class GeometrySpline(Component):
 
         self.add_output('diameter', shape=1, units='m')
 
-        self.fd_options['form'] = 'forward'
-        self.fd_options['step_type'] = 'absolute'
         self.fd_options['force_fd'] = True
-        self.fd_options['form'] = 'central'
+        # self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
-        print 'r_max_chord', params['r_max_chord']
-        print 'chord_sub', params['chord_sub']
-        print 'theta_sub', params['theta_sub']
-        print 'sparT', params['sparT']
-        print 'teT', params['teT']
+        # print 'r_max_chord', params['r_max_chord']
+        # print 'chord_sub', params['chord_sub']
+        # print 'theta_sub', params['theta_sub']
+        # print 'sparT', params['sparT']
+        # print 'teT', params['teT']
         Rhub = params['hubFraction'] * params['bladeLength']
         Rtip = Rhub + params['bladeLength']
 
@@ -1884,7 +1884,7 @@ class TurbineClass(Component):
         self.add_output('V_extreme', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
         self.add_output('V_extreme_full', shape=2, units='m/s', desc='IEC extreme wind speed at hub height')
         self.fd_options['force_fd'] = True
-        self.fd_options['form'] = 'central'
+        # self.fd_options['form'] = 'central'
         self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -2022,7 +2022,7 @@ class SetupPCModVarSpeed(Component):
         self.add_output('azimuth', shape=1, units='deg')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        print 'control_tsr', params['control:tsr']
+        # print 'control_tsr', params['control:tsr']
         self.Vrated = params['Vrated']
         self.R = params['R']
         self.Vfactor = params['Vfactor']
@@ -2261,17 +2261,19 @@ class ObjandCons(Component):
         self.add_param('airfoil_parameterization', val=np.zeros((num_airfoils,airfoils_dof)))
         self.add_param('power', val=np.zeros(npower))
         self.add_param('control:ratedPower', val=0.0)
+        self.add_param('ratedConditions:T', val=0.0)
 
         self.add_output('obj', val=1.0)
-        self.add_output('con1', val=np.zeros(7))
-        self.add_output('con2', val=np.zeros(8))
-        self.add_output('con3', val=np.zeros(8))
-        self.add_output('con4', val=np.zeros(8))
-        self.add_output('con5', val=np.zeros(7))
-        self.add_output('con6', val=np.zeros(2))
+        self.add_output('con_strain_spar', val=np.zeros(7))
+        self.add_output('con_strainU_te', val=np.zeros(8))
+        self.add_output('con_strainL_te', val=np.zeros(8))
+        self.add_output('con_eps_spar', val=np.zeros(8))
+        self.add_output('con_eps_te', val=np.zeros(7))
+        self.add_output('con_freq', val=np.zeros(2))
         if airfoils_dof == 8:
-            self.add_output('con_freeform', val=np.zeros((num_airfoils,airfoils_dof/2)))
+            self.add_output('con_afp', val=np.zeros((num_airfoils,airfoils_dof/2)))
         self.add_output('con_power', val=0.0)
+        self.add_output('con_thrust', val=0.0)
         self.airfoils_dof = airfoils_dof
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -2282,15 +2284,16 @@ class ObjandCons(Component):
         self.con4_indices = [10, 12, 14, 20, 23, 27, 31, 33]
         self.con5_indices = [10, 12, 13, 14, 21, 28, 33]
         unknowns['obj'] = params['COE']*100.0
-        unknowns['con1'] = params['strainU_spar'][self.con1_indices]*self.eta_strain/params['strain_ult_spar']
-        unknowns['con2'] = params['strainU_te'][self.con2_indices]*self.eta_strain/params['strain_ult_te']
-        unknowns['con3'] = params['strainL_te'][self.con3_indices]*self.eta_strain/params['strain_ult_te']
-        unknowns['con4'] = (params['eps_crit_spar'][self.con4_indices] - params['strainU_spar'][self.con4_indices]) / params['strain_ult_spar']
-        unknowns['con5'] = (params['eps_crit_te'][self.con5_indices] - params['strainU_te'][self.con5_indices]) / params['strain_ult_te']
-        unknowns['con6'] = params['freq_curvefem'][0:2] - params['nBlades']*params['ratedConditions:Omega']/60.0*1.1
+        unknowns['con_strain_spar'] = params['strainU_spar'][self.con1_indices]*self.eta_strain/params['strain_ult_spar']
+        unknowns['con_strainU_te'] = params['strainU_te'][self.con2_indices]*self.eta_strain/params['strain_ult_te']
+        unknowns['con_strainL_te'] = params['strainL_te'][self.con3_indices]*self.eta_strain/params['strain_ult_te']
+        unknowns['con_eps_spar'] = (params['eps_crit_spar'][self.con4_indices] - params['strainU_spar'][self.con4_indices]) / params['strain_ult_spar']
+        unknowns['con_eps_te'] = (params['eps_crit_te'][self.con5_indices] - params['strainU_te'][self.con5_indices]) / params['strain_ult_te']
+        unknowns['con_freq'] = params['freq_curvefem'][0:2] - params['nBlades']*params['ratedConditions:Omega']/60.0*1.1
         if self.airfoils_dof == 8:
-            unknowns['con_freeform'] = params['airfoil_parameterization'][:, [4, 5, 6, 7]] - params['airfoil_parameterization'][:, [0, 1, 2, 3]]
+            unknowns['con_afp'] = params['airfoil_parameterization'][:, [4, 5, 6, 7]] - params['airfoil_parameterization'][:, [0, 1, 2, 3]]
         unknowns['con_power'] = (params['power'][-1] - params['control:ratedPower']) / 1.e6
+        unknowns['con_thrust'] = params['ratedConditions:T'] / 1.e6
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -2324,24 +2327,25 @@ class ObjandCons(Component):
             dcon4_dstrainU_spar[i][self.con4_indices[i]] = -1.0 / params['strain_ult_spar']
 
         J['obj', 'COE'] = 100.0
-        J['con1', 'strainU_spar'] = dcon1_dstrainU_spar
-        J['con1', 'strain_ult_spar'] = dcon1_dstrain_ult_spar
-        J['con2', 'strainU_te'] = dcon2_dstrainU_te
-        J['con2', 'strain_ult_te'] = dcon2_dstrain_ult_te
-        J['con3', 'strainL_te'] = dcon3_dstrainL_te
-        J['con3', 'strain_ult_te'] = dcon3_dstrain_ult_te
-        J['con4', 'eps_crit_spar'] = dcon4_deps_crit_spar
-        J['con4', 'strainU_spar'] = dcon4_dstrainU_spar
-        J['con4', 'strain_ult_spar'] = dcon4_dstrain_ult_spar
-        J['con5', 'eps_crit_te'] = dcon5_deps_crit_te
-        J['con5', 'strainU_te'] = dcon5_dstrainU_te
-        J['con5', 'strain_ult_te'] = dcon5_dstrain_ult_te
-        J['con6', 'freq_curvefem'] = dcon6_dfreq
-        J['con6', 'ratedConditions:Omega'] = dcon6_dOmega
+        J['con_strain_spar', 'strainU_spar'] = dcon1_dstrainU_spar
+        J['con_strain_spar', 'strain_ult_spar'] = dcon1_dstrain_ult_spar
+        J['con_strainU_te', 'strainU_te'] = dcon2_dstrainU_te
+        J['con_strainU_te', 'strain_ult_te'] = dcon2_dstrain_ult_te
+        J['con_strainL_te', 'strainL_te'] = dcon3_dstrainL_te
+        J['con_strainL_te', 'strain_ult_te'] = dcon3_dstrain_ult_te
+        J['con_eps_spar', 'eps_crit_spar'] = dcon4_deps_crit_spar
+        J['con_eps_spar', 'strainU_spar'] = dcon4_dstrainU_spar
+        J['con_eps_spar', 'strain_ult_spar'] = dcon4_dstrain_ult_spar
+        J['con_eps_te', 'eps_crit_te'] = dcon5_deps_crit_te
+        J['con_eps_te', 'strainU_te'] = dcon5_dstrainU_te
+        J['con_eps_te', 'strain_ult_te'] = dcon5_dstrain_ult_te
+        J['con_freq', 'freq_curvefem'] = dcon6_dfreq
+        J['con_freq', 'ratedConditions:Omega'] = dcon6_dOmega
         if self.airfoils_dof == 8:
-            J['con_freeform', 'airfoil_parameterization'] = dcon_freeform_dafp
-        J['con_power', 'power'] = np.asarray([0.0, 0.0, 0.0, 0.0, 1.0]).reshape(1,5) / 1e6
-        J['con_power', 'control:ratedPower'] = -1.0 / 1e-6
+            J['con_afp', 'airfoil_parameterization'] = dcon_freeform_dafp
+        J['con_power', 'power'] = np.asarray([0.0, 0.0, 0.0, 0.0, 1.0]).reshape(1,5) / 1.e6
+        J['con_power', 'control:ratedPower'] = -1.0 / 1.e6
+        J['con_thrust', 'ratedConditions:T'] =  1.0 / 1.e6
         return J
 
 
@@ -2364,7 +2368,7 @@ class StructureGroup(Group):
         # self.add('loads_strain', TotalLoads(nstr))
         # self.add('damage', DamageLoads(nstr))
         # self.add('struc', RotorWithpBEAM(nstr))
-        self.add('curvefem', CurveFEM(nstr))
+        self.add('curvefem', CurveFEM(nstr)) #TODO
         # self.add('tip', TipDeflection())
         # self.add('root_moment', RootMoment(nstr))
         # self.add('mass', MassProperties())
@@ -2773,7 +2777,7 @@ class RotorSE(Group):
         self.add('loads_strain', TotalLoads(nstr))
         self.add('damage', DamageLoads(nstr))
         self.add('struc', RotorWithpBEAM(nstr))
-        # self.add('curvefem', CurveFEM(nstr))
+        #self.add('curvefem', CurveFEM(nstr))
         self.add('tip', TipDeflection())
         self.add('root_moment', RootMoment(nstr))
         self.add('mass', MassProperties())
@@ -3174,3 +3178,4 @@ class RotorSE(Group):
         #self.connect('ratedConditions:Omega', 'ratedConditions_Omega')
 
         # self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'

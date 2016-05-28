@@ -351,11 +351,14 @@ class Polar(object):
         found_zero_lift = False
 
         for i in range(len(self.cm)):
-            if abs(self.alpha[i]) < 20.0 and self.cl[i] <= 0 and self.cl[i+1] >= 0:
-                p = -self.cl[i] / (self.cl[i + 1] - self.cl[i])
-                cm0 = self.cm[i] + p * (self.cm[i+1] - self.cm[i])
-                found_zero_lift = True
-                break
+            try:
+                if abs(self.alpha[i]) < 20.0 and self.cl[i] <= 0 and self.cl[i+1] >= 0:
+                    p = -self.cl[i] / (self.cl[i + 1] - self.cl[i])
+                    cm0 = self.cm[i] + p * (self.cm[i+1] - self.cm[i])
+                    found_zero_lift = True
+                    break
+            except:
+                pass
         if not found_zero_lift:
             p = -self.cl[0] / (self.cl[1] - self.cl[0])
             cm0 = self.cm[0] + p * (self.cm[1] - self.cm[0])
@@ -674,6 +677,8 @@ class Airfoil(object):
         polars = []
         afanalysis = AirfoilAnalysis(CST, airfoil_analysis_options)
         cl, cd, cm, alphas, failure = afanalysis.computeSpline()
+        # print cl, cd
+        # print
         Re = airfoil_analysis_options['SplineOptions']['Re']
         polars.append(polarType(Re, alphas, cl, cd, cm))
 

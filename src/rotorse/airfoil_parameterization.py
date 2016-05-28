@@ -24,6 +24,7 @@ class AirfoilAnalysis:
             os.makedirs(analysisFolder)
         self.basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), analysisFolder)
 
+        # Check if methods installed
         if self.parameterization_method == 'XFOIL':
             try:
                 import pyXLIGHT
@@ -34,29 +35,31 @@ class AirfoilAnalysis:
                 import SU2
             except:
                 raise ValueError('SU2 CFD not installed corrrectly.')
+
         # Generate coordinates or precomputational model
-        if self.parameterization_method != 'Precomputational:T/C':
-            self.x, self.y, self.xl, self.xu, self.yl, self.yu = self.__setCoordinates()
+        if self.parameterization_method != 'Precomputational':
+            self.x, self.y, self.xl, self.xu, self.yl, self.yu, self.Wl, self.Wu = self.__setCoordinates()
             self.x_c, self.y_c, self.xl_c, self.xu_c, self.yl_c, self.yu_c = self.__setCoordinatesComplex()
         else:
-            if afp is None:
-                pass
-            else:
+            self.n, self.thick_max, self.thick_min = airfoilOptions['PrecomputationalOptions']['numAirfoilsToCompute'], airfoilOptions['PrecomputationalOptions']['tcMax'], airfoilOptions['PrecomputationalOptions']['tcMin']
+            self.precomp_param = airfoilOptions['PrecomputationalOptions']['AirfoilParameterization']
+            if computeModel:
                 self.__generatePreCompModel()
+
 
     ### COORDINATE METHODS ###
     def getCoordinates(self, type='full'):
-        if type=='full':
-            return self.x, self.y
-        elif type=='split':
+        if type == 'full':
+            return self.x, self.y, self.Wl, self.Wu, self.xl, self.xu
+        elif type == 'split':
             return self.xl, self.xu, self.yl, self.yu
         else:
             return self.x, self.y, self.xl, self.xu, self.yl, self.yu
 
     def getCoordinatesComplex(self, type='full'):
-        if type=='full':
+        if type == 'full':
             return self.x_c, self.y_c
-        elif type=='split':
+        elif type == 'split':
             return self.xl_c, self.xu_c, self.yl_c, self.yu_c
         else:
             return self.x_c, self.y_c, self.xl_c, self.xu_c, self.yl_c, self.yu_c
@@ -109,17 +112,32 @@ class AirfoilAnalysis:
         self.y = y
         return x, y
 
-    def getPreCompCoordinates(self, t_c):
-        if t_c < 0.2:
-            x, y = self.readCoordinateFile(self.airfoilOptions['BaseAirfoils'][1])
+    def getPreCompCoordinates(self, t_c, type='full'):
+        self.xx0, self.yy0, self.thicknesses0 = self.__generatePreCompCoordinates(0)
+        self.xx1, self.yy1, self.thicknesses1 = self.__generatePreCompCoordinates(1)
+        tc = t_c[0]
+        weight = t_c[1]
+
+        for i in range(len(self.thicknesses0)):
+            if tc >= self.thicknesses0[i] and tc < self.thicknesses0[i+1]:
+                x0 = self.xx0[i]
+                y0 = self.yy0[i]
+        yy0 = self.__convertTCCoordinates(tc, y0)
+        for i in range(len(self.thicknesses1)):
+            if tc >= self.thicknesses1[i] and tc < self.thicknesses1[i+1]:
+                x1 = self.xx1[i]
+                y1 = self.yy1[i]
+        yy1 = self.__convertTCCoordinates(tc, y1)
+
+        xx = np.zeros(len(x1))
+        yy = np.zeros(len(x1))
+        if len(x1) == len(x0):
+            for i in range(len(x0)):
+                xx[i] = x1[i]
+                yy[i] = yy0[i] + weight*(yy1[i] - yy0[i])
         else:
-            x, y = self.readCoordinateFile(self.airfoilOptions['BaseAirfoils'][0])
-        base_thickness = max(y) - min(y)
-        xx = np.zeros(len(x))
-        yy = np.zeros(len(y))
-        for i in range(len(x)):
-            xx[i] = x[i]
-            yy[i] = y[i] / base_thickness * t_c
+            print "Uneven blended airfoils"
+
         try:
             zerind = np.where(xx == 0)  # Used to separate upper and lower surfaces
             zerind = zerind[0][0]
@@ -132,11 +150,11 @@ class AirfoilAnalysis:
         yu = np.zeros(len(xx)-zerind)
 
         for z in range(len(xl)):
-            xl[z] = xx[z]        # Lower surface x-coordinates
-            yl[z] = yy[z]
+            xu[z] = xx[z]        # Lower surface x-coordinates
+            yu[z] = yy[z]
         for z in range(len(xu)):
-            xu[z] = xx[z + zerind]   # Upper surface x-coordinates
-            yu[z] = yy[z + zerind]
+            xl[z] = xx[z + zerind]   # Upper surface x-coordinates
+            yl[z] = yy[z + zerind]
 
         # Get in ascending order if not already
         if xl[int(len(xl)/4)] > 0.5:
@@ -168,14 +186,18 @@ class AirfoilAnalysis:
         xl = xl[::-1]
         yl = yl[::-1]
 
-        return xl, xu, yl, yu
+
+        if type == 'full':
+            return xl, xu, yl, yu
+        else:
+            return xx, yy
 
     def __setCoordinates(self):
         if self.parameterization_method == 'CST':
-             x, y, xl, xu, yl, yu = self.__cstCoordinates()
+             x, y, xl, xu, yl, yu, Wl, Wu = self.__cstCoordinates()
         else:
             x, y, xl, xu, yl, yu = self.__tcCoordinates()
-        return x, y, xl, xu, yl, yu
+        return x, y, xl, xu, yl, yu, Wl, Wu
 
     def __setCoordinatesComplex(self):
         if self.parameterization_method == 'CST':
@@ -216,17 +238,19 @@ class AirfoilAnalysis:
             K[i] = factorial(n)/(factorial(i)*(factorial((n)-(i))))
 
         S = np.zeros(len(x))
+        W = np.zeros((len(x), 4))
         for i in range(len(x)):
             S[i] = 0
             for j in range(0, n+1):
                 S[i] += w[j]*K[j]*x[i]**(j) * ((1-x[i])**(n-(j)))
+                W[i][j] = (w[j]*K[j]*x[i]**(j) * ((1-x[i])**(n-(j)))) * C[i]
 
         # Calculate y output
         y = np.zeros(len(x))
         for i in range(len(y)):
             y[i] = C[i] * S[i] + x[i] * dz
 
-        return y
+        return y, W
 
     def __ClassShapeComplex(self, w, x, N1, N2, dz):
 
@@ -318,8 +342,8 @@ class AirfoilAnalysis:
         for z in range(len(xu)):
             xu[z] = x[z + zerind]   # Upper surface x-coordinates
 
-        yl = self.__ClassShape(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
-        yu = self.__ClassShape(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
+        yl, Wl = self.__ClassShape(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
+        yu, Wu = self.__ClassShape(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
 
         y = np.concatenate([yl, yu])  # Combine upper and lower y coordinates
         y = y[::-1]
@@ -329,7 +353,7 @@ class AirfoilAnalysis:
         for k in range(len(x)):
             x1[k] = x[k][0]
         x = x1
-        return x, y, xl, xu, yl, yu
+        return x, y, xl, xu, yl, yu, Wl, Wu
 
     def __cstCoordinatesReal(self, wl, wu, N, dz):
 
@@ -508,71 +532,79 @@ class AirfoilAnalysis:
 
     ### PRECOMPUTATIONAL MODEL METHODS ###
     def __generatePreCompModel(self):
-        # self.cl_splines = []
-        # self.cd_splines = []
+        self.cl_total_spline0, self.cd_total_spline0, self.xx0, self.yy0, self.thicknesses0 = self.__generatePreCompSpline(0)
+        self.cl_total_spline1, self.cd_total_spline1, self.xx1, self.yy1, self.thicknesses1 = self.__generatePreCompSpline(1)
 
-        # for i in range(len(self.afp)):
-        x, y = self.readCoordinateFile(self.afp[0])
-        x1, y1 = self.readCoordinateFile(self.afp[1])
-        base_thickness = max(y) - min(y)
-        base_thickness1 = max(y1) - min(y1)
-        self.thick_min = 0.12
-        self.thick_max = 0.42
-        rangeCompute = self.airfoilOptions['PrecomputationalOptions']['precomp_idx'][::-1]
-        thicknesses = np.asarray(np.concatenate(([self.thick_min], self.airfoilOptions['PrecomputationalOptions']['precomp_idx'][::-1], [self.thick_max]))) #np.linspace(self.thick_min, self.thick_max, 20)
-        thick_x = []
-        thick_y = []
+    def __generatePreCompCoordinates(self, splineNum):
+        n = self.n
+        airfoilsSpecified = self.airfoilOptions['PrecomputationalOptions']['BaseAirfoilsCoordinates'+str(splineNum)]
 
+        xs, ys, airfoil_thicknesses = [], [], []
+
+        for i in range(len(airfoilsSpecified)):
+            x, y = self.readCoordinateFile(airfoilsSpecified[i])
+            airfoil_thickness = max(y) - min(y)
+            xs.append(x), ys.append(y), airfoil_thicknesses.append(airfoil_thickness)
+        self.airfoilsSpecified = deepcopy(airfoil_thicknesses)
+        yx = zip(airfoil_thicknesses,xs)
+        yx.sort()
+        x_sorted = [x for y, x in yx]
+        yx = zip(airfoil_thicknesses,ys)
+        yx.sort()
+        y_sorted = [x for y, x in yx]
+        airfoil_thicknesses.sort()
+        # Calculate thicknesses just past min and max because gradient at edges are zero
+        thicknesses = [self.thick_min-1e-3] + airfoil_thicknesses + [self.thick_max+1e-3]
+        yy = [self.__convertTCCoordinates(self.thick_min-1e-3, y_sorted[0])] + y_sorted + [self.__convertTCCoordinates(self.thick_max+1e-3, y_sorted[-1])]
+        xx = [x_sorted[0]] + x_sorted + [x_sorted[-1]]
+        airfoils_to_add = n - len(thicknesses)
+        if airfoils_to_add > 0:
+            to_insert = np.linspace(self.thick_min, self.thick_max, 2+airfoils_to_add)
+            for j in range(len(to_insert)-2):
+                alreadyFound = False
+                for k in range(len(thicknesses)):
+                    if to_insert[j+1] >= thicknesses[k] and to_insert[j+1] <= thicknesses[k+1] and not alreadyFound:
+                        thicknesses.insert(k+1, to_insert[j+1])
+                        yy.insert(k+1, self.__convertTCCoordinates(to_insert[j+1], yy[k]))
+                        xx.insert(k+1, xx[k])
+                        alreadyFound = True
+        return xx, yy, thicknesses
+
+    def __generatePreCompSpline(self, splineNum):
+
+        xx, yy, thicknesses = self.__generatePreCompCoordinates(splineNum)
         cls, cds, cms, alphass, failures = [], [], [], [], []
         from airfoilprep import Airfoil, Polar
         from akima import Akima
         alphas_set = np.linspace(np.radians(-180), np.radians(180), 360)
         clGrid = np.zeros((len(alphas_set), len(thicknesses)))
         cdGrid = np.zeros((len(alphas_set), len(thicknesses)))
-        k = 0
         for i in range(len(thicknesses)):
-            if self.airfoilOptions['AnalysisMethod'] == 'WindTunnel' and i != 0 and i != len(thicknesses)-1 :
-                aerodynFile = self.airfoilOptions['BaseAirfoilsData'][5 - k]
+            if self.airfoilOptions['AnalysisMethod'] == 'Files' and thicknesses[i] in self.airfoilsSpecified:
+                index = self.airfoilsSpecified.index(thicknesses[i])
+                aerodynFile = self.airfoilOptions['PrecomputationalOptions']['BaseAirfoilsData'+str(splineNum)][index]
                 af = Airfoil.initFromAerodynFile(aerodynFile)
                 alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af.createDataGrid()
                 failure = False
-                k += 1
+                if len(self.airfoilsSpecified) >= self.n:
+                    average_correction = 0.0
             else:
-                if i != 0 and i != len(thicknesses)-1:
-                    xx, yy = self.readCoordinateFile(self.airfoilOptions['BaseAirfoilsData'][5 - k])
-                    k += 1
-                else:
-                    if thicknesses[i] <= 0.185:
-                        xx = np.zeros(len(x1))
-                        yy = np.zeros(len(y1))
-                        for j in range(len(x1)):
-                            xx[j] = x1[j]
-                            yy[j] = y1[j] / base_thickness1 * thicknesses[i]
-                    else:
-                        xx = np.zeros(len(x))
-                        yy = np.zeros(len(y))
-                        for j in range(len(x)):
-                            xx[j] = x[j]
-                            yy[j] = y[j] / base_thickness * thicknesses[i]
-                thick_x.append(xx)
-                thick_y.append(yy)
-                self.x, self.y = xx, yy
-                if thicknesses[i] == 0.405:
-                    pass
+                self.x, self.y = xx[i], yy[i]
+
                 cl, cd, cm, alphas, failure = self.__computeSplinePreComp()
-                #print cl, cd
-                #print
+
                 p1 = Polar(self.airfoilOptions['SplineOptions']['Re'], alphas, cl, cd, cm)
                 af = Airfoil([p1])
-                r_over_R = 0.5
-                chord_over_r = 0.15
-                tsr = 7.55
+                # r_over_R = 0.5
+                # chord_over_r = 0.15
+                # tsr = 7.55
                 cd_max = 1.5
-                af3D = af.correction3D(r_over_R, chord_over_r, tsr)
-                af_extrap1 = af3D.extrapolate(cd_max)
-                # af_extrap1 = af.extrapolate(cd_max)
+                # af3D = af.correction3D(r_over_R, chord_over_r, tsr)
+                # af_extrap1 = af3D.extrapolate(cd_max)
+                af_extrap1 = af.extrapolate(cd_max)
                 alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af_extrap1.createDataGrid()
-
+                if self.airfoilOptions['AnalysisMethod'] == 'Files':
+                    pass
             cls.append(cl_ext), cds.append(cd_ext), cms.append(cm_ext), alphass.append(alpha_ext), failures.append(failure)
             if not all(np.diff(alpha_ext)):
                 to_delete = np.zeros(0)
@@ -593,29 +625,65 @@ class AirfoilAnalysis:
                 cdGrid[j][i] = cd_set[j]
         kx = min(len(alphas_set)-1, 3)
         ky = min(len(thicknesses)-1, 3)
-        self.cl_total_spline = RectBivariateSpline(alphas_set, thicknesses, clGrid, kx=kx, ky=ky, s=0.001)
-        self.cd_total_spline = RectBivariateSpline(alphas_set, thicknesses, cdGrid, kx=kx, ky=ky, s=0.0005)
+        cl_total_spline = RectBivariateSpline(alphas_set, thicknesses, clGrid, kx=kx, ky=ky, s=0.001)
+        cd_total_spline = RectBivariateSpline(alphas_set, thicknesses, cdGrid, kx=kx, ky=ky, s=0.0005)
+        return cl_total_spline, cd_total_spline, xx, yy, thicknesses
 
+    def __convertTCCoordinates(self, tc, y):
+        yy = np.zeros(len(y))
+        base_tc = max(y) - min(y)
+        for i in range(len(y)):
+            yy[i] = y[i] * tc / base_tc
+        return yy
 
     def evaluatePreCompModel(self, alpha, t_c):
-        cl = self.cl_total_spline.ev(alpha, t_c)
-        cd = self.cd_total_spline.ev(alpha, t_c)
-        try:
-            return cl[0], cd[0]
-        except:
-            return cl, cd
+        cl0 = self.cl_total_spline0.ev(alpha, t_c[0])
+        cd0 = self.cd_total_spline0.ev(alpha, t_c[0])
+        cl1 = self.cl_total_spline1.ev(alpha, t_c[0])
+        cd1 = self.cd_total_spline1.ev(alpha, t_c[0])
+        cl = cl0 + t_c[1]*(cl1-cl0)
+        cd = cd0 + t_c[1]*(cd1-cd0)
+        self.cl1, self.cl0, self.cd1, self.cd0 = cl1, cl0, cd1, cd0
+
+        return cl, cd
 
     def derivativesPreCompModel(self, alpha, t_c):
+
+        tc = t_c[0]
+        weight = t_c[1]
+
         # note: direct call to bisplev will be unnecessary with latest scipy update (add derivative method)
-        tck_cl = self.cl_total_spline.tck[:3] + self.cl_total_spline.degrees  # concatenate lists
-        tck_cd = self.cd_total_spline.tck[:3] + self.cd_total_spline.degrees
+        tck_cl0 = self.cl_total_spline0.tck[:3] + self.cl_total_spline0.degrees  # concatenate lists
+        tck_cd0 = self.cd_total_spline0.tck[:3] + self.cd_total_spline0.degrees
 
-        dcl_dalpha = bisplev(alpha, t_c, tck_cl, dx=1, dy=0)
-        dcd_dalpha = bisplev(alpha, t_c, tck_cd, dx=1, dy=0)
+        dcl_dalpha0 = bisplev(alpha, tc, tck_cl0, dx=1, dy=0)
+        dcd_dalpha0 = bisplev(alpha, tc, tck_cd0, dx=1, dy=0)
 
-        dcl_dt_c = bisplev(alpha, t_c, tck_cl, dx=0, dy=1)
-        dcd_dt_c = bisplev(alpha, t_c, tck_cd, dx=0, dy=1)
-        return dcl_dalpha, dcl_dt_c, dcd_dalpha, dcd_dt_c
+        dcl_dt_c0 = bisplev(alpha, tc, tck_cl0, dx=0, dy=1)
+        dcd_dt_c0 = bisplev(alpha, tc, tck_cd0, dx=0, dy=1)
+
+        tck_cl1 = self.cl_total_spline1.tck[:3] + self.cl_total_spline1.degrees  # concatenate lists
+        tck_cd1 = self.cd_total_spline1.tck[:3] + self.cd_total_spline1.degrees
+
+        dcl_dalpha1 = bisplev(alpha, tc, tck_cl1, dx=1, dy=0)
+        dcd_dalpha1 = bisplev(alpha, tc, tck_cd1, dx=1, dy=0)
+
+        dcl_dt_c1 = bisplev(alpha, tc, tck_cl1, dx=0, dy=1)
+        dcd_dt_c1 = bisplev(alpha, tc, tck_cd1, dx=0, dy=1)
+
+        dcl_dalpha = dcl_dalpha0 + weight*(dcl_dalpha1-dcl_dalpha0)
+        dcd_dalpha = dcd_dalpha0 + weight*(dcd_dalpha1-dcd_dalpha0)
+
+        dcl_dtc = dcl_dt_c0 + weight*(dcl_dt_c1-dcl_dt_c0)
+        dcd_dtc = dcd_dt_c0 + weight*(dcd_dt_c1-dcd_dt_c0)
+
+        dcl_dweight = self.cl1-self.cl0
+        dcd_dweight = self.cd1-self.cd0
+
+        dcl_dafp = np.asarray([dcl_dtc, dcl_dweight])
+        dcd_dafp = np.asarray([dcd_dtc, dcd_dweight])
+
+        return dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp
 
     def plotPreCompModel(self):
         import matplotlib.pylab as plt
