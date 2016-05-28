@@ -223,7 +223,7 @@ class CCAirfoil:
         return cls(np.degrees(alpha), [Re], cl, cd, cm, afp=t_c, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=2)
 
     @classmethod
-    def initFromInput(cls, alpha, Re, cl, cd, cm=None):
+    def initFromInput(cls, alpha, Re, cl, cd, cm=None, afp=None, airfoilOptions=None, airfoilNum=0):
         """convenience method for initializing with AeroDyn formatted files
 
         Parameters
@@ -237,7 +237,18 @@ class CCAirfoil:
             a constructed CCAirfoil object
 
         """
-        return cls(alpha, [Re], cl, cd, cm)
+        from airfoilprep import Polar
+        if afp is not None:
+            af = Airfoil([Polar(Re, alpha, cl, cd, cm=np.zeros(len(cl)))])
+            r_over_R = 0.5
+            chord_over_r = 0.15
+            tsr = 7.55
+            af3D = af.correction3D(r_over_R, chord_over_r, tsr)
+            cd_max = 1.5
+            af_extrap1 = af3D.extrapolate(cd_max)
+            #af_extrap1 = af.extrapolate(cd_max)
+            alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
+        return cls(alpha, [Re], cl, cd, cm, afp=afp, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, airfoils_dof=8)
 
     def evaluate(self, alpha, Re):
         """Get lift/drag coefficient at the specified angle of attack and Reynolds number.
