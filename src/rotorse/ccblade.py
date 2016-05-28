@@ -121,7 +121,7 @@ class CCAirfoil:
             self.dcd_dafp_storage = []
             self.dalpha_dafp_storage = []
 
-            if airfoilOptions['GradientOptions']['FreeFormDesign'] and airfoilOptions['GradientOptions']['ComputeGradient'] and airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
+            if airfoilOptions['GradientOptions']['FreeFormDesign'] and airfoilOptions['GradientOptions']['ComputeGradient'] and airfoilOptions['AirfoilParameterization'] != 'Precomputational':
                 self.freeform = True
                 self.cl_splines_new = [0]*self.airfoils_dof
                 self.cd_splines_new = [0]*self.airfoils_dof
@@ -220,7 +220,7 @@ class CCAirfoil:
         cm = np.zeros_like(cl)
         Re = airfoilOptions['SplineOptions']['Re']
 
-        return cls(np.degrees(alpha), [Re], cl, cd, cm, afp=t_c, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=1)
+        return cls(np.degrees(alpha), [Re], cl, cd, cm, afp=t_c, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=2)
 
     @classmethod
     def initFromInput(cls, alpha, Re, cl, cd, cm=None):
@@ -271,7 +271,7 @@ class CCAirfoil:
 
     def evaluate_direct(self, alpha, Re):
         if self.afp is not None and abs(np.degrees(alpha)) < self.airfoilOptions['SplineOptions']['maxDirectAoA']:
-            if alpha in self.alpha_storage and self.airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
+            if alpha in self.alpha_storage and self.airfoilOptions['AirfoilParameterization'] != 'Precomputational':
                 index = self.alpha_storage.index(alpha)
                 cl = self.cl_storage[index]
                 cd = self.cd_storage[index]
@@ -320,6 +320,7 @@ class CCAirfoil:
             cl, cd = self.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = self.derivatives(alpha, Re)
             dcl_dafp, dcd_dafp = self.splineFreeFormGrad(alpha, Re)
+
         return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
 
     def derivatives(self, alpha, Re):
@@ -548,7 +549,7 @@ class CCBlade:
             self.freeform = airfoilOptions['GradientOptions']['FreeFormDesign']
 
         if airfoilOptions is not None:
-            if airfoilOptions['AnalysisMethod'] == 'CFD' and airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
+            if airfoilOptions['AnalysisMethod'] == 'CFD' and airfoilOptions['AirfoilParameterization'] != 'Precomputational':
                 self.parallel = airfoilOptions['CFDOptions']['computeAirfoilsInParallel']
             else:
                 self.parallel = False
@@ -645,7 +646,7 @@ class CCBlade:
                 phi, cl, 1, cd, 0, self.B, Vx, Vy, **self.bemoptions)
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
-            if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational:T/C':
+            if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational':
                 dcl_dalpha, dcl_dafp_R, dcd_dalpha, dcd_dafp_R = af.preCompModel.derivativesPreCompModel(alpha, af.afp)
             else:
                 dcl_dafp_R, dcd_dafp_R = af.splineFreeFormGrad(alpha, Re)

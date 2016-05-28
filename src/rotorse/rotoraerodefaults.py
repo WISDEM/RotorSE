@@ -234,7 +234,7 @@ class CCBladeAirfoils(Component):
         n = self.n
         af = [0]*n
         afinit = CCAirfoil.initFromAerodynFile
-        if self.airfoilOptions['AnalysisMethod'] == 'Files':
+        if self.airfoilOptions['AnalysisMethod'] is None:
                 for i in range(n):
                     af[i] = afinit(self.airfoil_files[i])
                 self.airfoil_parameterization = None
@@ -255,7 +255,7 @@ class CCBladeAirfoils(Component):
                 afp_file = open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles') + os.sep + "afp_tracker.txt", "a")
                 for i in range(len(airfoil_types)-2):
                     if change[i] > 0:
-                        if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational:T/C':
+                        if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational':
                             preComp = params['airfoil_files'][-1].preCompModel
                             airfoil_types[i+2] = CCAirfoil.initFromPrecomputational(params['airfoil_parameterization'][i], self.airfoilOptions, preComp, airfoilNum=i)
                         else:
@@ -470,7 +470,7 @@ class CCBlade(Component):
             unknowns['P'] = self.P
         elif self.run_case == 'loads':
             # distributed loads
-            if self.airfoilOptions['CFDOptions']['computeAirfoilsInParallel'] and self.airfoilOptions['AnalysisMethod'] == 'CFD' and self.airfoilOptions['AirfoilParameterization'] != 'Precomputational:T/C':
+            if self.airfoilOptions['CFDOptions']['computeAirfoilsInParallel'] and self.airfoilOptions['AnalysisMethod'] == 'CFD' and self.airfoilOptions['AirfoilParameterization'] != 'Precomputational':
                 ccblade_loads = self.ccblade.distributedAeroLoadsParallel
             else:
                 ccblade_loads = self.ccblade.distributedAeroLoads
