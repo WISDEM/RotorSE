@@ -579,20 +579,20 @@ class AirfoilAnalysis:
         alphas_set = np.linspace(np.radians(-180), np.radians(180), 360)
         clGrid = np.zeros((len(alphas_set), len(thicknesses)))
         cdGrid = np.zeros((len(alphas_set), len(thicknesses)))
-        for i in range(len(thicknesses)):
-            if self.airfoilOptions['AnalysisMethod'] == 'Files' and thicknesses[i] in self.airfoilsSpecified:
-                index = self.airfoilsSpecified.index(thicknesses[i])
-                aerodynFile = self.airfoilOptions['PrecomputationalOptions']['BaseAirfoilsData'+str(splineNum)][index]
-                af = Airfoil.initFromAerodynFile(aerodynFile)
-                alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af.createDataGrid()
-                failure = False
-                if len(self.airfoilsSpecified) >= self.n:
-                    average_correction = 0.0
-            else:
+        if self.airfoilOptions['AnalysisMethod'] == 'Files' and self.n > len(self.airfoilsSpecified):
+            computeCorrection = True
+            compute = True
+        elif self.airfoilOptions['AnalysisMethod'] != 'Files':
+            computeCorrection = False
+            compute = True
+        else:
+            computeCorrection = False
+            compute = False
+
+        if compute:
+            for i in range(len(thicknesses)):
                 self.x, self.y = xx[i], yy[i]
-
                 cl, cd, cm, alphas, failure = self.__computeSplinePreComp()
-
                 p1 = Polar(self.airfoilOptions['SplineOptions']['Re'], alphas, cl, cd, cm)
                 af = Airfoil([p1])
                 # r_over_R = 0.5
@@ -603,23 +603,63 @@ class AirfoilAnalysis:
                 # af_extrap1 = af3D.extrapolate(cd_max)
                 af_extrap1 = af.extrapolate(cd_max)
                 alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af_extrap1.createDataGrid()
-                if self.airfoilOptions['AnalysisMethod'] == 'Files':
-                    pass
-            cls.append(cl_ext), cds.append(cd_ext), cms.append(cm_ext), alphass.append(alpha_ext), failures.append(failure)
-            if not all(np.diff(alpha_ext)):
+                cls.append(cl_ext), cds.append(cd_ext), cms.append(cm_ext), alphass.append(alpha_ext), failures.append(failure)
+
+        # Do XFOIL correction on file inputs if there is not enough data
+        cl_correction = np.zeros(len(alphas_set))
+        cd_correction = np.zeros(len(alphas_set))
+        cls_files, cds_files, cms_files, alphass_files, failures_files = [], [], [], [], []
+        if computeCorrection:
+            for i in range(len(self.airfoilsSpecified)):
+                aerodynFile = self.airfoilOptions['PrecomputationalOptions']['BaseAirfoilsData'+str(splineNum)][i]
+                af = Airfoil.initFromAerodynFile(aerodynFile)
+                alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af.createDataGrid()
+                failure = False
+                cls_files.append(cl_ext), cds_files.append(cd_ext), cms_files.append(cm_ext), alphass_files.append(alpha_ext), failures_files.append(failure)
+                index = thicknesses.index(self.airfoilsSpecified[i])
+
+                cl_spline_xfoil = Akima(np.radians(alphass[index]), cls[index], delta_x=0)
+                cl_set_xfoil, _ = cl_spline_xfoil.interp(alphas_set)
+                cd_spline_xfoil = Akima(np.radians(alphass[index]), cds[index], delta_x=0)
+                cd_set_xfoil, _, = cd_spline_xfoil.interp(alphas_set)
+                cl_spline_files = Akima(np.radians(alpha_ext), cl_ext, delta_x=0)
+                cl_set_files, _, = cl_spline_files.interp(alphas_set)
+                cd_spline_files = Akima(np.radians(alpha_ext), cd_ext, delta_x=0)
+                cd_set_files, _, = cd_spline_files.interp(alphas_set)
+                for k in range(len(alphas_set)):
+                    cl_correction[k] += cl_set_files[k] - cl_set_xfoil[k]
+                    cd_correction[k] += cd_set_files[k] - cd_set_xfoil[k]
+            cl_correction /= float(len(self.airfoilsSpecified))
+            cd_correction /= float(len(self.airfoilsSpecified))
+
+        for i in range(len(thicknesses)):
+            if not all(np.diff(alphass[i])):
                 to_delete = np.zeros(0)
-                diff = np.diff(alpha_ext)
-                for z in range(len(alpha_ext)-1):
+                diff = np.diff(alphass[i])
+                for z in range(len(alphass[i])-1):
                     if not diff[z] > 0.0:
                         to_delete = np.append(to_delete, z)
-                alpha_ext = np.delete(alpha_ext, to_delete)
-                cl_ext = np.delete(cl_ext, to_delete)
-                cd_ext = np.delete(cd_ext, to_delete)
-            cl_spline = Akima(np.radians(alpha_ext), cl_ext)
-            cd_spline = Akima(np.radians(alpha_ext), cd_ext)
+                alphass[i] = np.delete(alphass[i], to_delete)
+                cls[i] = np.delete(cls[i], to_delete)
+                cds[i] = np.delete(cds[i], to_delete)
+            cl_spline = Akima(np.radians(alphass[i]), cls[i])
+            cd_spline = Akima(np.radians(alphass[i]), cds[i])
 
-            cl_set, dcl_dalpha, dcl_dalphacl, dcl_dclsub = cl_spline.interp(alphas_set)
-            cd_set, dcd_dalpha, dcd_dalphacl, dcd_dclsub = cd_spline.interp(alphas_set)
+            cl_set, _, _, _ = cl_spline.interp(alphas_set)
+            cd_set, _, _, _ = cd_spline.interp(alphas_set)
+            if computeCorrection:
+                for w in range(len(cl_set)):
+                    cl_set[w] += cl_correction[w]
+                    cd_set[w] += cd_correction[w]
+            if thicknesses[i] in self.airfoilsSpecified and self.airfoilOptions['AnalysisMethod'] == 'Files':
+
+                index = self.airfoilsSpecified.index(thicknesses[i])
+                cl_spline = Akima(np.radians(alphass_files[index]), cls_files[index])
+                cd_spline = Akima(np.radians(alphass_files[index]), cds_files[index])
+
+                cl_set, _, _, _ = cl_spline.interp(alphas_set)
+                cd_set, _, _, _ = cd_spline.interp(alphas_set)
+
             for j in range(len(alphas_set)):
                 clGrid[j][i] = cl_set[j]
                 cdGrid[j][i] = cd_set[j]
@@ -679,6 +719,12 @@ class AirfoilAnalysis:
 
         dcl_dweight = self.cl1-self.cl0
         dcd_dweight = self.cd1-self.cd0
+
+        # To only optimize t/c instead of the blended family factor as well
+        if self.airfoilOptions['PrecomputationalOptions']['AirfoilParameterization'] == 'TC':
+            dcl_dweight = 0.0
+            dcd_dweight = 0.0
+
 
         dcl_dafp = np.asarray([dcl_dtc, dcl_dweight])
         dcd_dafp = np.asarray([dcd_dtc, dcd_dweight])
