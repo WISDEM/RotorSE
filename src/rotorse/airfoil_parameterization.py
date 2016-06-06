@@ -38,7 +38,7 @@ class AirfoilAnalysis:
 
         # Generate coordinates or precomputational model
         if self.parameterization_method != 'Precomputational':
-            self.x, self.y, self.xl, self.xu, self.yl, self.yu, self.Wl, self.Wu = self.__setCoordinates()
+            self.x, self.y, self.xl, self.xu, self.yl, self.yu = self.__setCoordinates()
             self.x_c, self.y_c, self.xl_c, self.xu_c, self.yl_c, self.yu_c = self.__setCoordinatesComplex()
         else:
             self.n, self.thick_max, self.thick_min = airfoilOptions['PrecomputationalOptions']['numAirfoilsToCompute'], airfoilOptions['PrecomputationalOptions']['tcMax'], airfoilOptions['PrecomputationalOptions']['tcMin']
@@ -50,7 +50,7 @@ class AirfoilAnalysis:
     ### COORDINATE METHODS ###
     def getCoordinates(self, type='full'):
         if type == 'full':
-            return self.x, self.y, self.Wl, self.Wu, self.xl, self.xu
+            return self.x, self.y
         elif type == 'split':
             return self.xl, self.xu, self.yl, self.yu
         else:
@@ -194,10 +194,10 @@ class AirfoilAnalysis:
 
     def __setCoordinates(self):
         if self.parameterization_method == 'CST':
-             x, y, xl, xu, yl, yu, Wl, Wu = self.__cstCoordinates()
+             x, y, xl, xu, yl, yu = self.__cstCoordinates()
         else:
             x, y, xl, xu, yl, yu = self.__tcCoordinates()
-        return x, y, xl, xu, yl, yu, Wl, Wu
+        return x, y, xl, xu, yl, yu
 
     def __setCoordinatesComplex(self):
         if self.parameterization_method == 'CST':
@@ -243,14 +243,13 @@ class AirfoilAnalysis:
             S[i] = 0
             for j in range(0, n+1):
                 S[i] += w[j]*K[j]*x[i]**(j) * ((1-x[i])**(n-(j)))
-                W[i][j] = (w[j]*K[j]*x[i]**(j) * ((1-x[i])**(n-(j)))) * C[i]
 
         # Calculate y output
         y = np.zeros(len(x))
         for i in range(len(y)):
             y[i] = C[i] * S[i] + x[i] * dz
 
-        return y, W
+        return y
 
     def __ClassShapeComplex(self, w, x, N1, N2, dz):
 
@@ -342,8 +341,8 @@ class AirfoilAnalysis:
         for z in range(len(xu)):
             xu[z] = x[z + zerind]   # Upper surface x-coordinates
 
-        yl, Wl = self.__ClassShape(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
-        yu, Wu = self.__ClassShape(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
+        yl = self.__ClassShape(wl, xl, N1, N2, -dz) # Call ClassShape function to determine lower surface y-coordinates
+        yu = self.__ClassShape(wu, xu, N1, N2, dz)  # Call ClassShape function to determine upper surface y-coordinates
 
         y = np.concatenate([yl, yu])  # Combine upper and lower y coordinates
         y = y[::-1]
@@ -353,7 +352,7 @@ class AirfoilAnalysis:
         for k in range(len(x)):
             x1[k] = x[k][0]
         x = x1
-        return x, y, xl, xu, yl, yu, Wl, Wu
+        return x, y, xl, xu, yl, yu
 
     def __cstCoordinatesReal(self, wl, wu, N, dz):
 
@@ -976,7 +975,7 @@ class AirfoilAnalysis:
         x_vel = Uinf * cos(alpha)
         y_vel = Uinf * sin(alpha)
         config.FREESTREAM_VELOCITY = '( ' + str(x_vel) + ', ' + str(y_vel) + ', 0.00 )'
-        config.MACH_NUMBER = 0.2 #TODO Change back
+        config.MACH_NUMBER = 0.15 #TODO Change back
         config.REYNOLDS_NUMBER = airfoilOptions['SplineOptions']['Re']
 
         if restart:
@@ -1116,9 +1115,11 @@ class AirfoilAnalysis:
             surface_adjoint = konfig.SURFACE_ADJ_FILENAME + '.csv'
             #info = SU2.run.adjoint(konfig)
             ztate.update(info)
-            dcd_dx, xl, xu = self.su2Gradient(loop_sorted, surface_adjoint)
+            dcd_dx, xl, xu = self.su2Gradient(points_sorted, surface_adjoint)
+            # dcd_dx, xl, xu = self.su2Gradient(loop_sorted, surface_adjoint)
+
             dcd_dalpha = ztate.HISTORY.ADJOINT_DRAG.Sens_AoA[-1]
-            dy_dafp = self.__cstYDerivatives(self.wl, self.wu, self.numCoordinates, self.dz, xl, xu)
+            dy_dafp = self.__cstYDerivatives(self.wl, self.wu, len(dcd_dx), self.dz, xl, xu)
             # info = SU2.run.adjoint(konfig)
             # ztate.update(info)
             konfig = deepcopy(config)
@@ -1195,7 +1196,8 @@ class AirfoilAnalysis:
             surface_adjoint = konfig.SURFACE_ADJ_FILENAME + '.csv'
             #info = SU2.run.adjoint(konfig)
             ztate.update(info)
-            dcl_dx, xl, xu = self.su2Gradient(loop_sorted, surface_adjoint)
+            dcl_dx, xl, xu = self.su2Gradient(points_sorted, surface_adjoint)
+            #dcl_dx, xl, xu = self.su2Gradient(loop_sorted, surface_adjoint)
             dcl_dalpha = ztate.HISTORY.ADJOINT_LIFT.Sens_AoA[-1]
 
             dafp_dx_ = np.matrix(dy_dafp)
@@ -1236,7 +1238,7 @@ class AirfoilAnalysis:
         state.FILES.MESH = config.MESH_FILENAME
         Uinf = 10.0
         Ma = Uinf / 340.29  # Speed of sound at sea level
-        config.MACH_NUMBER = 0.2 #Ma
+        config.MACH_NUMBER = 0.15 #Ma
         config.REYNOLDS_NUMBER = Re
         config.RESTART_SOL = 'NO'
         config.SOLUTION_FLOW_FILENAME = basepath + os.path.sep + 'solution_flow_AIRFOIL_parallel.dat'
@@ -1397,7 +1399,7 @@ class AirfoilAnalysis:
             ztate.FILES.MESH = config.MESH_FILENAME
             Uinf = 10.0
             Ma = Uinf / 340.29  # Speed of sound at sea level
-            konfig.MACH_NUMBER = 0.2#  Ma
+            konfig.MACH_NUMBER = 0.15#  Ma
             konfig.REYNOLDS_NUMBER = Re
 
             if restart:
@@ -1681,7 +1683,7 @@ class AirfoilAnalysis:
                         data[i, :] = row[0:8]
                     i += 1
                 f1.close()
-            N = 200
+            N = len(loop_sorted)
             dobj_dx_raw = data[:, 1][1:N+1].reshape(N,1)
             point_ids = data[:, 0][1:N+1].reshape(N,1)
             x = data[:, 6][1:N+1].reshape(N,1)
@@ -1757,7 +1759,7 @@ class AirfoilAnalysis:
             state.FILES.MESH = config.MESH_FILENAME
             Uinf = 10.0
             Ma = Uinf / 340.29  # Speed of sound at sea level
-            config.MACH_NUMBER = 0.2 #Ma
+            config.MACH_NUMBER = 0.15 #Ma
             config.REYNOLDS_NUMBER = Re
 
             if restart:
@@ -1903,7 +1905,7 @@ class AirfoilAnalysis:
                 ztate.FILES.MESH = config.MESH_FILENAME
                 Uinf = 10.0
                 Ma = Uinf / 340.29  # Speed of sound at sea level
-                konfig.MACH_NUMBER = 0.2 # Ma
+                konfig.MACH_NUMBER = 0.15 # Ma
                 konfig.REYNOLDS_NUMBER = Re
 
                 if restart:
@@ -2247,7 +2249,7 @@ class AirfoilAnalysis:
             state.FILES.MESH = config.MESH_FILENAME
             Uinf = 10.0
             Ma = Uinf / 340.29  # Speed of sound at sea level
-            config.MACH_NUMBER = 0.2 #Ma
+            config.MACH_NUMBER = 0.15 #Ma
             config.REYNOLDS_NUMBER = Re
 
             if restart:
