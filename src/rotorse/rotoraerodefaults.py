@@ -247,6 +247,8 @@ class CCBladeAirfoils(Component):
                 for j in range(self.num_airfoils):
                     index = np.where(af_idx >= j+2)[0][0]
                     change[j] = max(abs(self.airfoil_files[index].afp - self.airfoil_parameterization[j]))
+                    if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational' and self.airfoilOptions['PrecomputationalOptions']['AirfoilParameterization'] == 'TC':
+                        change[j] = max(abs(self.airfoil_files[index].afp[0] - self.airfoil_parameterization[j]))
                 basepath = '5MW_AFFiles' + os.path.sep
                 af_freeform_init = CCAirfoil.initFromFreeForm
                 airfoil_types = [0]*8
@@ -450,7 +452,7 @@ class CCBlade(Component):
         self.azimuth_load = params['azimuth_load']
         computeGradient = self.airfoilOptions['GradientOptions']['ComputeGradient']
 
-        if self.airfoilOptions['GradientOptions']['FreeFormDesign'] and self.airfoilOptions['AnalysisMethod'] != 'Files':
+        if self.airfoilOptions['GradientOptions']['ComputeAirfoilGradients'] and self.airfoilOptions['AnalysisMethod'] != 'Files':
             afp = self.airfoil_parameterization
         else:
             afp = None

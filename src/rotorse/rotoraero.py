@@ -438,8 +438,8 @@ class RegulatedPowerCurveGroup(Group):
         self.nl_solver.options['var_lower_bound'] = 'powercurve.control:Vin'
         self.nl_solver.options['var_upper_bound'] = 'powercurve.control:Vout'
         self.nl_solver.options['state_var'] = 'Vrated'
-        # self.fd_options['form'] = 'central'
-        # self.fd_options['step_type'] = 'relative'
+        self.fd_options['form'] = 'central'
+        self.fd_options['step_type'] = 'relative'
         self.fd_options['force_fd'] = True
 
     def list_deriv_vars(self):
