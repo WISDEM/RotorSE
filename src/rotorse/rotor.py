@@ -267,7 +267,6 @@ class PreCompSections(Component):
         return eps_crit
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "PreCompSections"
         self.chord = params['chord']
         self.materials = params['materials']
         self.r = params['r']
@@ -309,9 +308,14 @@ class PreCompSections(Component):
         if params['airfoilOptions']['AnalysisMethod'] != 'Files':
             airfoil_parameterization = params['airfoil_parameterization']
             af_str_idx = params['af_str_idx']
-            airfoil_types_str = np.zeros((8, self.airfoils_dof))
-            for z in range(6):
-                airfoil_types_str[z+2, :] = airfoil_parameterization[z]
+            if params['airfoilOptions']['PrecomputationalOptions']['AirfoilParameterization'] == 'TC' and params['airfoilOptions']['AirfoilParameterization'] == 'Precomputational':
+                airfoil_types_str = np.zeros((8, self.airfoils_dof+1))
+                for z in range(6):
+                    airfoil_types_str[z+2, :] = (airfoil_parameterization[z], params['airfoilOptions']['PrecomputationalOptions']['AirfoilFamilySpecification'][z])
+            else:
+                airfoil_types_str = np.zeros((8, self.airfoils_dof))
+                for z in range(6):
+                    airfoil_types_str[z+2, :] = airfoil_parameterization[z]
             import os
             basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
 
@@ -2353,6 +2357,7 @@ class StructureGroup(Group):
     def __init__(self, naero, nstr, num_airfoils, airfoils_dof):
         super(StructureGroup, self).__init__()
         # self.add('curvature', BladeCurvature(nstr))
+        self.add('spline1', GeometrySpline(naero, nstr))
         self.add('resize', ResizeCompositeSection(nstr, num_airfoils, airfoils_dof))
         # self.add('gust', GustETM())
         # self.add('setuppc',  SetupPCModVarSpeed())
@@ -2385,183 +2390,182 @@ class OptimizeRotorSE(Group):
         self.add('rotor', RotorSE(naero, nstr, False), promotes=['r_max_chord', 'chord_sub', 'theta_sub', 'control:tsr', 'mass_all_blades', 'AEP', 'obj', 'powercurve.control:Vin', 'powercurve.control:Vout', 'con1', 'con2', 'con3', 'con4', 'con5', 'con6', 'airfoil_parameterization', 'con_freeform', 'concon'])
 
 class RotorSE(Group):
-    def __init__(self, naero, nstr, npower, num_airfoils, airfoils_dof, vars=True):
+    def __init__(self, naero, nstr, npower, num_airfoils, airfoils_dof):
         super(RotorSE, self).__init__()
         """rotor model"""
         n3 = 4
         n5 = 5
-        if vars:
-            self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero)), promotes=['*'])
-            self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr)), promotes=['*'])
-            self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 1), promotes=['*'])
-            self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 1), promotes=['*'])
-            self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
-            self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero)), promotes=['*'])
-            self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
-            self.add('chord_sub', IndepVarComp('chord_sub', np.zeros(n3),units='m'), promotes=['*'])
-            self.add('theta_sub', IndepVarComp('theta_sub', np.zeros(n3), units='deg'), promotes=['*'])
-            self.add('precurve_sub', IndepVarComp('precurve_sub', np.zeros(3), units='m'), promotes=['*'])
-            self.add('delta_precurve_sub', IndepVarComp('delta_precurve_sub', np.zeros(3)), promotes=['*'])
-            self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
-            self.add('precone', IndepVarComp('precone', 0.0, units='deg'), promotes=['*'])
-            self.add('tilt', IndepVarComp('tilt', 0.0, units='deg'), promotes=['*'])
-            self.add('yaw', IndepVarComp('yaw', 0.0, units='deg'), promotes=['*'])
-            self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
-            self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
-            self.add('airfoil_parameterization', IndepVarComp('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof))), promotes=['*'])
-            self.add('airfoilOptions', IndepVarComp('airfoilOptions', {}, pass_by_obj=True), promotes=['*'])
-            self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
-            self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
-            self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
-            self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
-            self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
-            self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
-            self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
-            self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=np.zeros(1), units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
-            self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation'), promotes=['*'])
+        self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero)), promotes=['*'])
+        self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr)), promotes=['*'])
+        self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 1), promotes=['*'])
+        self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 1), promotes=['*'])
+        self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
+        self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero)), promotes=['*'])
+        self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
+        self.add('chord_sub', IndepVarComp('chord_sub', np.zeros(n3),units='m'), promotes=['*'])
+        self.add('theta_sub', IndepVarComp('theta_sub', np.zeros(n3), units='deg'), promotes=['*'])
+        self.add('precurve_sub', IndepVarComp('precurve_sub', np.zeros(3), units='m'), promotes=['*'])
+        self.add('delta_precurve_sub', IndepVarComp('delta_precurve_sub', np.zeros(3)), promotes=['*'])
+        self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
+        self.add('precone', IndepVarComp('precone', 0.0, units='deg'), promotes=['*'])
+        self.add('tilt', IndepVarComp('tilt', 0.0, units='deg'), promotes=['*'])
+        self.add('yaw', IndepVarComp('yaw', 0.0, units='deg'), promotes=['*'])
+        self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
+        self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
+        self.add('airfoil_parameterization', IndepVarComp('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof))), promotes=['*'])
+        self.add('airfoilOptions', IndepVarComp('airfoilOptions', {}, pass_by_obj=True), promotes=['*'])
+        self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
+        self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
+        self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
+        self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
+        self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
+        self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
+        self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
+        self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=np.zeros(1), units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
+        self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation'), promotes=['*'])
 
-            # --- composite sections ---
-            self.add('sparT', IndepVarComp('sparT', val=np.zeros(n5), units='m', desc='spar cap thickness parameters'), promotes=['*'])
-            self.add('teT', IndepVarComp('teT', val=np.zeros(n5), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
-            self.add('chord_str_ref', IndepVarComp('chord_str_ref', val=np.zeros(nstr), units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)'), promotes=['*'])
-            self.add('leLoc', IndepVarComp('leLoc', val=np.zeros(nstr), desc='array of leading-edge positions from a reference blade axis \
-                (usually blade pitch axis). locations are normalized by the local chord length.  \
-                e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
-                positive in -x direction for airfoil-aligned coordinate system'), promotes=['*'])
+        # --- composite sections ---
+        self.add('sparT', IndepVarComp('sparT', val=np.zeros(n5), units='m', desc='spar cap thickness parameters'), promotes=['*'])
+        self.add('teT', IndepVarComp('teT', val=np.zeros(n5), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
+        self.add('chord_str_ref', IndepVarComp('chord_str_ref', val=np.zeros(nstr), units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)'), promotes=['*'])
+        self.add('leLoc', IndepVarComp('leLoc', val=np.zeros(nstr), desc='array of leading-edge positions from a reference blade axis \
+            (usually blade pitch axis). locations are normalized by the local chord length.  \
+            e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
+            positive in -x direction for airfoil-aligned coordinate system'), promotes=['*'])
 
-            self.add('profile', IndepVarComp('profile', val=np.zeros(nstr), desc='airfoil shape at each radial position', pass_by_obj=True), promotes=['*'])
-            self.add('materials', IndepVarComp('materials', val=np.zeros(6),
-                desc='list of all Orthotropic2DMaterial objects used in defining the geometry', pass_by_obj=True), promotes=['*'])
-            self.add('upperCS', IndepVarComp('upperCS', val=np.zeros(nstr),
-                desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True), promotes=['*'])
-            self.add('lowerCS', IndepVarComp('lowerCS', val=np.zeros(nstr),
-                desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True), promotes=['*'])
-            self.add('websCS', IndepVarComp('websCS', val=np.zeros(nstr),
-                desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True), promotes=['*'])
-            self.add('sector_idx_strain_spar', IndepVarComp('sector_idx_strain_spar', val=np.zeros(38,  dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
-            self.add('sector_idx_strain_te', IndepVarComp('sector_idx_strain_te', val=np.zeros(38,  dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
+        self.add('profile', IndepVarComp('profile', val=np.zeros(nstr), desc='airfoil shape at each radial position', pass_by_obj=True), promotes=['*'])
+        self.add('materials', IndepVarComp('materials', val=np.zeros(6),
+            desc='list of all Orthotropic2DMaterial objects used in defining the geometry', pass_by_obj=True), promotes=['*'])
+        self.add('upperCS', IndepVarComp('upperCS', val=np.zeros(nstr),
+            desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True), promotes=['*'])
+        self.add('lowerCS', IndepVarComp('lowerCS', val=np.zeros(nstr),
+            desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True), promotes=['*'])
+        self.add('websCS', IndepVarComp('websCS', val=np.zeros(nstr),
+            desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True), promotes=['*'])
+        self.add('sector_idx_strain_spar', IndepVarComp('sector_idx_strain_spar', val=np.zeros(38,  dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
+        self.add('sector_idx_strain_te', IndepVarComp('sector_idx_strain_te', val=np.zeros(38,  dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
 
-            # --- control ---
-            self.add('c_Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
-            self.add('c_Vout', IndepVarComp('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed'), promotes=['*'])
-            self.add('c_ratedPower', IndepVarComp('control:ratedPower', val=0.0,  units='W', desc='rated power'), promotes=['*'])
-            self.add('c_minOmega', IndepVarComp('control:minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed'), promotes=['*'])
-            self.add('c_maxOmega', IndepVarComp('control:maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed'), promotes=['*'])
-            self.add('c_tsr', IndepVarComp('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
-            self.add('c_pitch', IndepVarComp('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
-            self.add('pitch_extreme', IndepVarComp('pitch_extreme', val=0.0, units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
-            self.add('pitch_extreme_full', IndepVarComp('pitch_extreme_full', val=np.array([0.0, 90.0]), units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
-            self.add('azimuth_extreme', IndepVarComp('azimuth_extreme', val=0.0, units='deg', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
-            self.add('Omega_load', IndepVarComp('Omega_load', val=0.0, units='rpm', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
+        # --- control ---
+        self.add('c_Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
+        self.add('c_Vout', IndepVarComp('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed'), promotes=['*'])
+        self.add('c_ratedPower', IndepVarComp('control:ratedPower', val=0.0,  units='W', desc='rated power'), promotes=['*'])
+        self.add('c_minOmega', IndepVarComp('control:minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed'), promotes=['*'])
+        self.add('c_maxOmega', IndepVarComp('control:maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed'), promotes=['*'])
+        self.add('c_tsr', IndepVarComp('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
+        self.add('c_pitch', IndepVarComp('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
+        self.add('pitch_extreme', IndepVarComp('pitch_extreme', val=0.0, units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
+        self.add('pitch_extreme_full', IndepVarComp('pitch_extreme_full', val=np.array([0.0, 90.0]), units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
+        self.add('azimuth_extreme', IndepVarComp('azimuth_extreme', val=0.0, units='deg', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
+        self.add('Omega_load', IndepVarComp('Omega_load', val=0.0, units='rpm', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
 
-            # --- drivetrain efficiency ---
-            self.add('drivetrainType', IndepVarComp('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
+        # --- drivetrain efficiency ---
+        self.add('drivetrainType', IndepVarComp('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
 
-            # --- fatigue ---
-            self.add('rstar_damage', IndepVarComp('rstar_damage', val=np.zeros(18), desc='nondimensional radial locations of damage equivalent moments'), promotes=['*'])
-            self.add('Mxb_damage', IndepVarComp('Mxb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. x-direction'), promotes=['*'])
-            self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. y-direction'), promotes=['*'])
-            self.add('strain_ult_spar', IndepVarComp('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap'), promotes=['*'])
-            self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
-            self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
-            self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
-            self.add('N_damage', IndepVarComp('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis'), promotes=['*'])
+        # --- fatigue ---
+        self.add('rstar_damage', IndepVarComp('rstar_damage', val=np.zeros(18), desc='nondimensional radial locations of damage equivalent moments'), promotes=['*'])
+        self.add('Mxb_damage', IndepVarComp('Mxb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. x-direction'), promotes=['*'])
+        self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. y-direction'), promotes=['*'])
+        self.add('strain_ult_spar', IndepVarComp('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap'), promotes=['*'])
+        self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
+        self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
+        self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
+        self.add('N_damage', IndepVarComp('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis'), promotes=['*'])
 
-            # --- options ---
-            self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True), promotes=['*'])
-            self.add('npts_coarse_power_curve', IndepVarComp('npts_coarse_power_curve', val=20, desc='number of points to evaluate aero analysis at', pass_by_obj=True), promotes=['*'])
-            self.add('npts_spline_power_curve', IndepVarComp('npts_spline_power_curve', val=200, desc='number of points to use in fitting spline to power curve', pass_by_obj=True), promotes=['*'])
-            self.add('AEP_loss_factor', IndepVarComp('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)'), promotes=['*'])
-            self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
-            self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
+        # --- options ---
+        self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True), promotes=['*'])
+        self.add('npts_coarse_power_curve', IndepVarComp('npts_coarse_power_curve', val=20, desc='number of points to evaluate aero analysis at', pass_by_obj=True), promotes=['*'])
+        self.add('npts_spline_power_curve', IndepVarComp('npts_spline_power_curve', val=200, desc='number of points to use in fitting spline to power curve', pass_by_obj=True), promotes=['*'])
+        self.add('AEP_loss_factor', IndepVarComp('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)'), promotes=['*'])
+        self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
+        self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
 
-            self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0), promotes=['*'])
-        else:
-            self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero), pass_by_obj=True), promotes=['*'])
-            self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr), pass_by_obj=True), promotes=['*'])
-            self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 1, pass_by_obj=True), promotes=['*'])
-            self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 1, pass_by_obj=True), promotes=['*'])
-            self.add('hubFraction', IndepVarComp('hubFraction', 0.0, pass_by_obj=True), promotes=['*'])
-            self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero), pass_by_obj=True), promotes=['*'])
-            self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
-            self.add('chord_sub', IndepVarComp('chord_sub', np.zeros(n3),units='m'), promotes=['*'])
-            self.add('theta_sub', IndepVarComp('theta_sub', np.zeros(n3), units='deg'), promotes=['*'])
-            self.add('precurve_sub', IndepVarComp('precurve_sub', np.zeros(3), units='m', pass_by_obj=True), promotes=['*'])
-            self.add('delta_precurve_sub', IndepVarComp('delta_precurve_sub', np.zeros(3), pass_by_obj=True), promotes=['*'])
-            self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m', pass_by_obj=True), promotes=['*'])
-            self.add('precone', IndepVarComp('precone', 0.0, units='deg', pass_by_obj=True), promotes=['*'])
-            self.add('tilt', IndepVarComp('tilt', 0.0, units='deg', pass_by_obj=True), promotes=['*'])
-            self.add('yaw', IndepVarComp('yaw', 0.0, units='deg', pass_by_obj=True), promotes=['*'])
-            self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
-            self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
-            self.add('airfoil_parameterization', IndepVarComp('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof))), promotes=['*'])
-            self.add('airfoilOptions', IndepVarComp('airfoilOptions', {}, pass_by_obj=True), promotes=['*'])
-            self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
-            self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
-            self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
-            self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
-            self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
-            self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
-            self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
-            self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=np.zeros(1), units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)', pass_by_obj=True), promotes=['*'])
-            self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation', pass_by_obj=True), promotes=['*'])
-
-            # --- composite sections ---
-            self.add('sparT', IndepVarComp('sparT', val=np.zeros(n5), units='m', desc='spar cap thickness parameters'), promotes=['*'])
-            self.add('teT', IndepVarComp('teT', val=np.zeros(n5), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
-            self.add('chord_str_ref', IndepVarComp('chord_str_ref', val=np.zeros(nstr), units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)', pass_by_obj=True), promotes=['*'])
-            self.add('leLoc', IndepVarComp('leLoc', val=np.zeros(nstr), desc='array of leading-edge positions from a reference blade axis \
-                (usually blade pitch axis). locations are normalized by the local chord length.  \
-                e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
-                positive in -x direction for airfoil-aligned coordinate system', pass_by_obj=True), promotes=['*'])
-
-            self.add('profile', IndepVarComp('profile', val=np.zeros(nstr), desc='airfoil shape at each radial position', pass_by_obj=True), promotes=['*'])
-            self.add('materials', IndepVarComp('materials', val=np.zeros(6),
-                desc='list of all Orthotropic2DMaterial objects used in defining the geometry', pass_by_obj=True), promotes=['*'])
-            self.add('upperCS', IndepVarComp('upperCS', val=np.zeros(nstr),
-                desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True), promotes=['*'])
-            self.add('lowerCS', IndepVarComp('lowerCS', val=np.zeros(nstr),
-                desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True), promotes=['*'])
-            self.add('websCS', IndepVarComp('websCS', val=np.zeros(nstr),
-                desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True), promotes=['*'])
-            self.add('sector_idx_strain_spar', IndepVarComp('sector_idx_strain_spar', val=np.zeros(38,  dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
-            self.add('sector_idx_strain_te', IndepVarComp('sector_idx_strain_te', val=np.zeros(38,  dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
-
-            # --- control ---
-            self.add('c_Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed', pass_by_obj=True), promotes=['*'])
-            self.add('c_Vout', IndepVarComp('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed', pass_by_obj=True), promotes=['*'])
-            self.add('c_ratedPower', IndepVarComp('control:ratedPower', val=0.0,  units='W', desc='rated power', pass_by_obj=True), promotes=['*'])
-            self.add('c_minOmega', IndepVarComp('control:minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed', pass_by_obj=True), promotes=['*'])
-            self.add('c_maxOmega', IndepVarComp('control:maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed', pass_by_obj=True), promotes=['*'])
-            self.add('c_tsr', IndepVarComp('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
-            self.add('c_pitch', IndepVarComp('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
-            self.add('pitch_extreme', IndepVarComp('pitch_extreme', val=0.0, units='deg', desc='worst-case pitch at survival wind condition', pass_by_obj=True), promotes=['*'])
-            self.add('pitch_extreme_full', IndepVarComp('pitch_extreme_full', val=np.array([0.0, 90.0]), units='deg', desc='worst-case pitch at survival wind condition', pass_by_obj=True), promotes=['*'])
-            self.add('azimuth_extreme', IndepVarComp('azimuth_extreme', val=0.0, units='deg', desc='worst-case azimuth at survival wind condition', pass_by_obj=True), promotes=['*'])
-            self.add('Omega_load', IndepVarComp('Omega_load', val=0.0, units='rpm', desc='worst-case azimuth at survival wind condition', pass_by_obj=True), promotes=['*'])
-
-            # --- drivetrain efficiency ---
-            self.add('drivetrainType', IndepVarComp('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
-
-            # --- fatigue ---
-            self.add('rstar_damage', IndepVarComp('rstar_damage', val=np.zeros(18), desc='nondimensional radial locations of damage equivalent moments', pass_by_obj=True), promotes=['*'])
-            self.add('Mxb_damage', IndepVarComp('Mxb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. x-direction', pass_by_obj=True), promotes=['*'])
-            self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. y-direction', pass_by_obj=True), promotes=['*'])
-            self.add('strain_ult_spar', IndepVarComp('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap'), promotes=['*'])
-            self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
-            self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
-            self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis', pass_by_obj=True), promotes=['*'])
-            self.add('N_damage', IndepVarComp('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis', pass_by_obj=True), promotes=['*'])
-
-            # --- options ---
-            self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True), promotes=['*'])
-            self.add('npts_coarse_power_curve', IndepVarComp('npts_coarse_power_curve', val=20, desc='number of points to evaluate aero analysis at', pass_by_obj=True), promotes=['*'])
-            self.add('npts_spline_power_curve', IndepVarComp('npts_spline_power_curve', val=200, desc='number of points to use in fitting spline to power curve', pass_by_obj=True), promotes=['*'])
-            self.add('AEP_loss_factor', IndepVarComp('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)', pass_by_obj=True), promotes=['*'])
-            self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation', pass_by_obj=True), promotes=['*'])
-            self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
-
-            self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0, pass_by_obj=True), promotes=['*'])
+        self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0), promotes=['*'])
+        # else:
+        #     self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero), pass_by_obj=True), promotes=['*'])
+        #     self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr), pass_by_obj=True), promotes=['*'])
+        #     self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 1, pass_by_obj=True), promotes=['*'])
+        #     self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 1, pass_by_obj=True), promotes=['*'])
+        #     self.add('hubFraction', IndepVarComp('hubFraction', 0.0, pass_by_obj=True), promotes=['*'])
+        #     self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero), pass_by_obj=True), promotes=['*'])
+        #     self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
+        #     self.add('chord_sub', IndepVarComp('chord_sub', np.zeros(n3),units='m'), promotes=['*'])
+        #     self.add('theta_sub', IndepVarComp('theta_sub', np.zeros(n3), units='deg'), promotes=['*'])
+        #     self.add('precurve_sub', IndepVarComp('precurve_sub', np.zeros(3), units='m', pass_by_obj=True), promotes=['*'])
+        #     self.add('delta_precurve_sub', IndepVarComp('delta_precurve_sub', np.zeros(3), pass_by_obj=True), promotes=['*'])
+        #     self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m', pass_by_obj=True), promotes=['*'])
+        #     self.add('precone', IndepVarComp('precone', 0.0, units='deg', pass_by_obj=True), promotes=['*'])
+        #     self.add('tilt', IndepVarComp('tilt', 0.0, units='deg', pass_by_obj=True), promotes=['*'])
+        #     self.add('yaw', IndepVarComp('yaw', 0.0, units='deg', pass_by_obj=True), promotes=['*'])
+        #     self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
+        #     self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
+        #     self.add('airfoil_parameterization', IndepVarComp('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof))), promotes=['*'])
+        #     self.add('airfoilOptions', IndepVarComp('airfoilOptions', {}, pass_by_obj=True), promotes=['*'])
+        #     self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
+        #     self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
+        #     self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
+        #     self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
+        #     self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
+        #     self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
+        #     self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
+        #     self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=np.zeros(1), units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)', pass_by_obj=True), promotes=['*'])
+        #     self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation', pass_by_obj=True), promotes=['*'])
+        #
+        #     # --- composite sections ---
+        #     self.add('sparT', IndepVarComp('sparT', val=np.zeros(n5), units='m', desc='spar cap thickness parameters'), promotes=['*'])
+        #     self.add('teT', IndepVarComp('teT', val=np.zeros(n5), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
+        #     self.add('chord_str_ref', IndepVarComp('chord_str_ref', val=np.zeros(nstr), units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)', pass_by_obj=True), promotes=['*'])
+        #     self.add('leLoc', IndepVarComp('leLoc', val=np.zeros(nstr), desc='array of leading-edge positions from a reference blade axis \
+        #         (usually blade pitch axis). locations are normalized by the local chord length.  \
+        #         e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
+        #         positive in -x direction for airfoil-aligned coordinate system', pass_by_obj=True), promotes=['*'])
+        #
+        #     self.add('profile', IndepVarComp('profile', val=np.zeros(nstr), desc='airfoil shape at each radial position', pass_by_obj=True), promotes=['*'])
+        #     self.add('materials', IndepVarComp('materials', val=np.zeros(6),
+        #         desc='list of all Orthotropic2DMaterial objects used in defining the geometry', pass_by_obj=True), promotes=['*'])
+        #     self.add('upperCS', IndepVarComp('upperCS', val=np.zeros(nstr),
+        #         desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True), promotes=['*'])
+        #     self.add('lowerCS', IndepVarComp('lowerCS', val=np.zeros(nstr),
+        #         desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True), promotes=['*'])
+        #     self.add('websCS', IndepVarComp('websCS', val=np.zeros(nstr),
+        #         desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True), promotes=['*'])
+        #     self.add('sector_idx_strain_spar', IndepVarComp('sector_idx_strain_spar', val=np.zeros(38,  dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
+        #     self.add('sector_idx_strain_te', IndepVarComp('sector_idx_strain_te', val=np.zeros(38,  dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
+        #
+        #     # --- control ---
+        #     self.add('c_Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed', pass_by_obj=True), promotes=['*'])
+        #     self.add('c_Vout', IndepVarComp('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed', pass_by_obj=True), promotes=['*'])
+        #     self.add('c_ratedPower', IndepVarComp('control:ratedPower', val=0.0,  units='W', desc='rated power', pass_by_obj=True), promotes=['*'])
+        #     self.add('c_minOmega', IndepVarComp('control:minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed', pass_by_obj=True), promotes=['*'])
+        #     self.add('c_maxOmega', IndepVarComp('control:maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed', pass_by_obj=True), promotes=['*'])
+        #     self.add('c_tsr', IndepVarComp('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
+        #     self.add('c_pitch', IndepVarComp('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
+        #     self.add('pitch_extreme', IndepVarComp('pitch_extreme', val=0.0, units='deg', desc='worst-case pitch at survival wind condition', pass_by_obj=True), promotes=['*'])
+        #     self.add('pitch_extreme_full', IndepVarComp('pitch_extreme_full', val=np.array([0.0, 90.0]), units='deg', desc='worst-case pitch at survival wind condition', pass_by_obj=True), promotes=['*'])
+        #     self.add('azimuth_extreme', IndepVarComp('azimuth_extreme', val=0.0, units='deg', desc='worst-case azimuth at survival wind condition', pass_by_obj=True), promotes=['*'])
+        #     self.add('Omega_load', IndepVarComp('Omega_load', val=0.0, units='rpm', desc='worst-case azimuth at survival wind condition', pass_by_obj=True), promotes=['*'])
+        #
+        #     # --- drivetrain efficiency ---
+        #     self.add('drivetrainType', IndepVarComp('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
+        #
+        #     # --- fatigue ---
+        #     self.add('rstar_damage', IndepVarComp('rstar_damage', val=np.zeros(18), desc='nondimensional radial locations of damage equivalent moments', pass_by_obj=True), promotes=['*'])
+        #     self.add('Mxb_damage', IndepVarComp('Mxb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. x-direction', pass_by_obj=True), promotes=['*'])
+        #     self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(18), units='N*m', desc='damage equivalent moments about blade c.s. y-direction', pass_by_obj=True), promotes=['*'])
+        #     self.add('strain_ult_spar', IndepVarComp('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap'), promotes=['*'])
+        #     self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
+        #     self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
+        #     self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis', pass_by_obj=True), promotes=['*'])
+        #     self.add('N_damage', IndepVarComp('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis', pass_by_obj=True), promotes=['*'])
+        #
+        #     # --- options ---
+        #     self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True), promotes=['*'])
+        #     self.add('npts_coarse_power_curve', IndepVarComp('npts_coarse_power_curve', val=20, desc='number of points to evaluate aero analysis at', pass_by_obj=True), promotes=['*'])
+        #     self.add('npts_spline_power_curve', IndepVarComp('npts_spline_power_curve', val=200, desc='number of points to use in fitting spline to power curve', pass_by_obj=True), promotes=['*'])
+        #     self.add('AEP_loss_factor', IndepVarComp('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)', pass_by_obj=True), promotes=['*'])
+        #     self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation', pass_by_obj=True), promotes=['*'])
+        #     self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
+        #
+        #     self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0, pass_by_obj=True), promotes=['*'])
         self.add('thick_str_ref', IndepVarComp('thick_str_ref', val=np.zeros(nstr), units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)', pass_by_obj=True), promotes=['*'])
         self.add('af_idx', IndepVarComp('af_idx', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
         self.add('af_str_idx', IndepVarComp('af_str_idx', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
@@ -2613,7 +2617,21 @@ class RotorSE(Group):
         self.connect('hubFraction', 'spline0.hubFraction')
         self.connect('sparT', 'spline0.sparT')
         self.connect('teT', 'spline0.teT')
-        # self.connect('precurve_sub', 'spline0.precurve_sub')
+        self.connect('precurve_sub', 'spline0.precurve_sub')
+
+        # connections to spline1
+        self.connect('r_aero', 'spline1.r_aero_unit')
+        self.connect('grid.r_str', 'spline1.r_str_unit')
+        self.connect('r_max_chord', 'spline1.r_max_chord')
+        self.connect('chord_sub', 'spline1.chord_sub')
+        self.connect('theta_sub', 'spline1.theta_sub')
+        self.connect('precurve_sub', 'spline1.precurve_sub')
+        self.connect('bladeLength', 'spline1.bladeLength')
+        self.connect('idx_cylinder_aero', 'spline1.idx_cylinder_aero')
+        self.connect('idx_cylinder_str', 'spline1.idx_cylinder_str')
+        self.connect('hubFraction', 'spline1.hubFraction')
+        self.connect('sparT', 'spline1.sparT')
+        self.connect('teT', 'spline1.teT')
 
         # connections to spline
         self.connect('r_aero', 'spline.r_aero_unit')
@@ -2802,9 +2820,9 @@ class RotorSE(Group):
         self.connect('chord_str_ref', 'resize.chord_str_ref')
         self.connect('sector_idx_strain_spar', 'resize.sector_idx_strain_spar')
         self.connect('sector_idx_strain_te', 'resize.sector_idx_strain_te')
-        self.connect('spline.chord_str', 'resize.chord_str')
-        self.connect('spline.sparT_str', 'resize.sparT_str')
-        self.connect('spline.teT_str', 'resize.teT_str')
+        self.connect('spline1.chord_str', 'resize.chord_str')
+        self.connect('spline1.sparT_str', 'resize.sparT_str')
+        self.connect('spline1.teT_str', 'resize.teT_str')
         self.connect('airfoil_spline.airfoil_str_parameterization_full', 'resize.afp_str')
         self.connect('idx_cylinder_str', 'resize.idx_cylinder_str')
 
@@ -2944,9 +2962,9 @@ class RotorSE(Group):
         # self.aero_defl_powercurve.azimuth_load = 0.0
 
         # connections to beam
-        self.connect('spline.r_str', 'beam.r')
-        self.connect('spline.chord_str', 'beam.chord')
-        self.connect('spline.theta_str', 'beam.theta')
+        self.connect('spline1.r_str', 'beam.r')
+        self.connect('spline1.chord_str', 'beam.chord')
+        self.connect('spline1.theta_str', 'beam.theta')
         self.connect('leLoc', 'beam.leLoc')
         self.connect('profile', 'beam.profile')
         self.connect('materials', 'beam.materials')
@@ -3075,9 +3093,9 @@ class RotorSE(Group):
         self.connect('beam.beam:rhoJ', 'curvefem.beam:rhoJ')
         self.connect('beam.beam:x_ec_str', 'curvefem.beam:x_ec_str')
         self.connect('beam.beam:y_ec_str', 'curvefem.beam:y_ec_str')
-        self.connect('spline.theta_str', 'curvefem.theta_str')
-        self.connect('spline.precurve_str', 'curvefem.precurve_str')
-        self.connect('spline.presweep_str', 'curvefem.presweep_str')
+        self.connect('spline1.theta_str', 'curvefem.theta_str')
+        self.connect('spline1.precurve_str', 'curvefem.precurve_str')
+        self.connect('spline1.presweep_str', 'curvefem.presweep_str')
         self.connect('nF', 'curvefem.nF')
 
         # connections to tip

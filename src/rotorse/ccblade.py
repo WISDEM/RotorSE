@@ -108,7 +108,10 @@ class CCAirfoil:
             self.parallel = False
         self.airfoils_dof = airfoils_dof
         if afp is not None:
-            self.afp = afp
+            if airfoilOptions['PrecomputationalOptions']['AirfoilParameterization'] == 'TC' and airfoilOptions['AirfoilParameterization'] == 'Precomputational':
+                self.afp = np.append(afp, airfoilOptions['PrecomputationalOptions']['AirfoilFamilySpecification'][airfoilNum])
+            else:
+                self.afp = afp
             self.airfoilNum = airfoilNum
             self.airfoilOptions = airfoilOptions
             self.cl_storage = []
@@ -121,7 +124,7 @@ class CCAirfoil:
             self.dcd_dafp_storage = []
             self.dalpha_dafp_storage = []
 
-            if airfoilOptions['GradientOptions']['FreeFormDesign'] and airfoilOptions['GradientOptions']['ComputeGradient'] and airfoilOptions['AirfoilParameterization'] != 'Precomputational':
+            if airfoilOptions['GradientOptions']['ComputeAirfoilGradients'] and airfoilOptions['GradientOptions']['ComputeGradient'] and airfoilOptions['AirfoilParameterization'] != 'Precomputational':
                 self.freeform = True
                 self.cl_splines_new = [0]*self.airfoils_dof
                 self.cd_splines_new = [0]*self.airfoils_dof
@@ -130,7 +133,9 @@ class CCAirfoil:
                     afp_new = deepcopy(self.afp)
                     afp_new[i] += fd_step
                     af = Airfoil.initFromCST(afp_new, airfoilOptions)
-                    af_extrap = af.extrapolate(1.5)
+                    if self.airfoilOptions['SplineOptions']['correction3D']:
+                        af = af.correction3D(self.airfoilOptions['SplineOptions']['r_over_R'], self.airfoilOptions['SplineOptions']['chord_over_r'], self.airfoilOptions['SplineOptions']['tsr'])
+                    af_extrap = af.extrapolate(self.airfoilOptions['SplineOptions']['cd_max'])
                     alphas_new, Re_new, cl_new, cd_new, cm_new = af_extrap.createDataGrid()
                     alphas_new = np.radians(alphas_new)
 
@@ -197,30 +202,33 @@ class CCAirfoil:
         """
         af = Airfoil.initFromCST(afp, airfoilOptions)
         failure = af.failure
-        # For 3D Correction TODO
-        # r_over_R = 0.5
-        # chord_over_r = 0.15
-        # tsr = 7.55
-        # af3D = af.correction3D(r_over_R, chord_over_r, tsr)
-        cd_max = 1.5
-        # af_extrap1 = af3D.extrapolate(cd_max)
-        af_extrap1 = af.extrapolate(cd_max)
-        alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
+        if airfoilOptions['SplineOptions']['correction3D']:
+            af = af.correction3D(airfoilOptions['SplineOptions']['r_over_R'], airfoilOptions['SplineOptions']['chord_over_r'], airfoilOptions['SplineOptions']['tsr'])
+        af_extrap = af.extrapolate(airfoilOptions['SplineOptions']['cd_max'])
+        alpha, Re, cl, cd, cm = af_extrap.createDataGrid()
 
         return cls(alpha, Re, cl, cd, cm, afp=afp, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, failure=failure, airfoils_dof=8)
 
     @classmethod
     def initFromPrecomputational(cls, t_c, airfoilOptions, afanalysis, airfoilNum=0):
+        if airfoilOptions['PrecomputationalOptions']['AirfoilParameterization'] == 'Blended':
+            airfoils_dof = 2
+            afp = t_c
+        else:
+            airfoils_dof = 1
+            afp = np.append(t_c, airfoilOptions['PrecomputationalOptions']['AirfoilFamilySpecification'][airfoilNum])
+
         n = 360
         cl, cd = np.zeros(n), np.zeros(n)
         alpha = np.linspace(np.radians(-180), np.radians(180), n)
         for i in range(len(alpha)):
-            cl[i], cd[i] = afanalysis.evaluatePreCompModel(alpha[i], t_c)
+            cl[i], cd[i] = afanalysis.evaluatePreCompModel(alpha[i], afp)
         failure = False
         cm = np.zeros_like(cl)
         Re = airfoilOptions['SplineOptions']['Re']
 
-        return cls(np.degrees(alpha), [Re], cl, cd, cm, afp=t_c, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=2)
+
+        return cls(np.degrees(alpha), [Re], cl, cd, cm, afp=t_c, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, failure=failure, preCompModel=afanalysis, airfoils_dof=airfoils_dof)
 
     @classmethod
     def initFromInput(cls, alpha, Re, cl, cd, cm=None, afp=None, airfoilOptions=None, airfoilNum=0):
@@ -240,14 +248,10 @@ class CCAirfoil:
         from airfoilprep import Polar
         if afp is not None:
             af = Airfoil([Polar(Re, alpha, cl, cd, cm=np.zeros(len(cl)))])
-            r_over_R = 0.5
-            chord_over_r = 0.15
-            tsr = 7.55
-            af3D = af.correction3D(r_over_R, chord_over_r, tsr)
-            cd_max = 1.5
-            af_extrap1 = af3D.extrapolate(cd_max)
-            #af_extrap1 = af.extrapolate(cd_max)
-            alpha, Re, cl, cd, cm = af_extrap1.createDataGrid()
+            if airfoilOptions['SplineOptions']['correction3D']:
+                af = af.correction3D(airfoilOptions['SplineOptions']['r_over_R'], airfoilOptions['SplineOptions']['chord_over_r'], airfoilOptions['SplineOptions']['tsr'])
+            af_extrap = af.extrapolate(airfoilOptions['SplineOptions']['cd_max'])
+            alpha, Re, cl, cd, cm = af_extrap.createDataGrid()
         return cls(alpha, [Re], cl, cd, cm, afp=afp, airfoilOptions=airfoilOptions, airfoilNum=airfoilNum, airfoils_dof=8)
 
     def evaluate(self, alpha, Re):
@@ -292,7 +296,7 @@ class CCAirfoil:
                     dcd_dalpha = self.dcd_storage[index]
                 else:
                     dcl_dalpha, dcd_dalpha = 0.0, 0.0
-                if self.airfoilOptions['GradientOptions']['FreeFormDesign'] and alpha in self.dalpha_dafp_storage:
+                if self.airfoilOptions['GradientOptions']['ComputeAirfoilGradients'] and alpha in self.dalpha_dafp_storage:
                     index = self.dalpha_dafp_storage.index(alpha)
                     dcl_dafp = self.dcl_dafp_storage[index]
                     dcd_dafp = self.dcd_dafp_storage[index]
@@ -323,7 +327,7 @@ class CCAirfoil:
                     self.dcl_storage.append(dcl_dalpha)
                     self.dcd_storage.append(dcd_dalpha)
                     self.dalpha_storage.append(alpha)
-                    if self.airfoilOptions['GradientOptions']['FreeFormDesign']:
+                    if self.airfoilOptions['GradientOptions']['ComputeAirfoilGradients']:
                         self.dcl_dafp_storage.append(dcl_dafp)
                         self.dcd_dafp_storage.append(dcd_dafp)
                         self.dalpha_dafp_storage.append(alpha)
@@ -359,7 +363,7 @@ class CCAirfoil:
     def splineFreeFormGrad(self, alpha, Re):
         dcl_dafp, dcd_dafp = np.zeros(self.airfoils_dof), np.zeros(self.airfoils_dof)
         if self.freeform and self.afp is not None:
-            fd_step = self.airfoilOptions['GradientOptions']['fd_step']
+            fd_step = 1.e-6
             cl_cur = self.cl_spline.ev(alpha, Re)
             cd_cur = self.cd_spline.ev(alpha, Re)
             for i in range(self.airfoils_dof):
@@ -557,7 +561,7 @@ class CCBlade:
         if airfoil_parameterization is None:
             self.freeform = False
         else:
-            self.freeform = airfoilOptions['GradientOptions']['FreeFormDesign']
+            self.freeform = airfoilOptions['GradientOptions']['ComputeAirfoilGradients']
 
         if airfoilOptions is not None:
             if airfoilOptions['AnalysisMethod'] == 'CFD' and airfoilOptions['AirfoilParameterization'] != 'Precomputational':
@@ -741,7 +745,7 @@ class CCBlade:
         dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
         dNp_dafp = Np*(1.0/cn*dcn_dafp)
         dTp_dafp = Tp*(1.0/ct*dct_dafp)
-
+        print Np, Tp, af.afp, np.degrees(alpha), cl, cd
         return Np, Tp, dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp
 
     def __loadsParallel(self, phi, rotating, r, chord, theta, af, Vx, Vy, airfoil_parameterization=None):
@@ -1826,7 +1830,7 @@ if __name__ == '__main__':
 
     # Airfoil specifications
     airfoilOptions = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
-                                CFDiterations=10000, CFDprocessors=32, FreeFormDesign=True, BEMSpline=True,
+                                CFDiterations=10000, CFDprocessors=32, ComputeAirfoilGradients=True, BEMSpline=True,
                                 alphas=np.linspace(-15, 15, 30), Re=5e5, ComputeGradient=True)
     af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
     if airfoilOptions['AnalysisMethod'] == 'Files':

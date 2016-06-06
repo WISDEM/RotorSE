@@ -577,47 +577,100 @@ class AirfoilAnalysis:
         alphas_set = np.linspace(np.radians(-180), np.radians(180), 360)
         clGrid = np.zeros((len(alphas_set), len(thicknesses)))
         cdGrid = np.zeros((len(alphas_set), len(thicknesses)))
-        for i in range(len(thicknesses)):
-            if self.airfoilOptions['AnalysisMethod'] == 'Files' and thicknesses[i] in self.airfoilsSpecified:
-                index = self.airfoilsSpecified.index(thicknesses[i])
-                aerodynFile = self.airfoilOptions['PrecomputationalOptions']['BaseAirfoilsData'+str(splineNum)][index]
+        if self.airfoilOptions['AnalysisMethod'] == 'Files' and self.n > len(self.airfoilsSpecified):
+            computeCorrection = True
+            compute = True
+        elif self.airfoilOptions['AnalysisMethod'] != 'Files':
+            computeCorrection = False
+            compute = True
+        else:
+            computeCorrection = False
+            compute = False
+
+        if compute:
+            for i in range(len(thicknesses)):
+                self.x, self.y = xx[i], yy[i]
+                cl, cd, cm, alphas, failure = self.__computeSplinePreComp()
+                p1 = Polar(self.airfoilOptions['SplineOptions']['Re'], alphas, cl, cd, cm)
+                af = Airfoil([p1])
+                if self.airfoilOptions['SplineOptions']['correction3D']:
+                    af = af.correction3D(self.airfoilOptions['SplineOptions']['r_over_R'], self.airfoilOptions['SplineOptions']['chord_over_r'], self.airfoilOptions['SplineOptions']['tsr'])
+                af_extrap = af.extrapolate(self.airfoilOptions['SplineOptions']['cd_max'])
+                alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af_extrap.createDataGrid()
+                if not all(np.diff(alpha_ext)):
+                    to_delete = np.zeros(0)
+                    diff = np.diff(alpha_ext)
+                    for z in range(len(alpha_ext)-1):
+                        if not diff[z] > 0.0:
+                            to_delete = np.append(to_delete, z)
+                    alpha_ext = np.delete(alpha_ext, to_delete)
+                    cl_ext = np.delete(cl_ext, to_delete)
+                    cd_ext = np.delete(cd_ext, to_delete)
+                cls.append(cl_ext), cds.append(cd_ext), cms.append(cm_ext), alphass.append(alpha_ext), failures.append(failure)
+
+        # Do XFOIL correction on file inputs if there is not enough data
+        cl_correction = np.zeros(len(alphas_set))
+        cd_correction = np.zeros(len(alphas_set))
+        cls_files, cds_files, cms_files, alphass_files, failures_files = [], [], [], [], []
+        if computeCorrection:
+            for i in range(len(self.airfoilsSpecified)):
+                aerodynFile = self.airfoilOptions['PrecomputationalOptions']['BaseAirfoilsData'+str(splineNum)][i]
                 af = Airfoil.initFromAerodynFile(aerodynFile)
                 alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af.createDataGrid()
                 failure = False
-                if len(self.airfoilsSpecified) >= self.n:
-                    average_correction = 0.0
-            else:
-                self.x, self.y = xx[i], yy[i]
+                index = thicknesses.index(self.airfoilsSpecified[i])
+                if not all(np.diff(alpha_ext)):
+                    to_delete = np.zeros(0)
+                    diff = np.diff(alpha_ext)
+                    for z in range(len(alpha_ext)-1):
+                        if not diff[z] > 0.0:
+                            to_delete = np.append(to_delete, z)
+                    alpha_ext = np.delete(alpha_ext, to_delete)
+                    cl_ext = np.delete(cl_ext, to_delete)
+                    cd_ext = np.delete(cd_ext, to_delete)
+                cls_files.append(cl_ext), cds_files.append(cd_ext), cms_files.append(cm_ext), alphass_files.append(alpha_ext), failures_files.append(failure)
 
-                cl, cd, cm, alphas, failure = self.__computeSplinePreComp()
+                cl_spline_xfoil = Akima(np.radians(alphass[index]), cls[index], delta_x=0)
+                cl_set_xfoil, _ = cl_spline_xfoil.interp(alphas_set)
+                cd_spline_xfoil = Akima(np.radians(alphass[index]), cds[index], delta_x=0)
+                cd_set_xfoil, _, = cd_spline_xfoil.interp(alphas_set)
+                cl_spline_files = Akima(np.radians(alpha_ext), cl_ext, delta_x=0)
+                cl_set_files, _, = cl_spline_files.interp(alphas_set)
+                cd_spline_files = Akima(np.radians(alpha_ext), cd_ext, delta_x=0)
+                cd_set_files, _, = cd_spline_files.interp(alphas_set)
+                for k in range(len(alphas_set)):
+                    cl_correction[k] += cl_set_files[k] - cl_set_xfoil[k]
+                    cd_correction[k] += cd_set_files[k] - cd_set_xfoil[k]
+            cl_correction /= float(len(self.airfoilsSpecified))
+            cd_correction /= float(len(self.airfoilsSpecified))
 
-                p1 = Polar(self.airfoilOptions['SplineOptions']['Re'], alphas, cl, cd, cm)
-                af = Airfoil([p1])
-                # r_over_R = 0.5
-                # chord_over_r = 0.15
-                # tsr = 7.55
-                cd_max = 1.5
-                # af3D = af.correction3D(r_over_R, chord_over_r, tsr)
-                # af_extrap1 = af3D.extrapolate(cd_max)
-                af_extrap1 = af.extrapolate(cd_max)
-                alpha_ext, Re_ext, cl_ext, cd_ext, cm_ext = af_extrap1.createDataGrid()
-                if self.airfoilOptions['AnalysisMethod'] == 'Files':
-                    pass
-            cls.append(cl_ext), cds.append(cd_ext), cms.append(cm_ext), alphass.append(alpha_ext), failures.append(failure)
-            if not all(np.diff(alpha_ext)):
+        for i in range(len(thicknesses)):
+            if not all(np.diff(alphass[i])):
                 to_delete = np.zeros(0)
-                diff = np.diff(alpha_ext)
-                for z in range(len(alpha_ext)-1):
+                diff = np.diff(alphass[i])
+                for z in range(len(alphass[i])-1):
                     if not diff[z] > 0.0:
                         to_delete = np.append(to_delete, z)
-                alpha_ext = np.delete(alpha_ext, to_delete)
-                cl_ext = np.delete(cl_ext, to_delete)
-                cd_ext = np.delete(cd_ext, to_delete)
-            cl_spline = Akima(np.radians(alpha_ext), cl_ext)
-            cd_spline = Akima(np.radians(alpha_ext), cd_ext)
+                alphass[i] = np.delete(alphass[i], to_delete)
+                cls[i] = np.delete(cls[i], to_delete)
+                cds[i] = np.delete(cds[i], to_delete)
+            cl_spline = Akima(np.radians(alphass[i]), cls[i])
+            cd_spline = Akima(np.radians(alphass[i]), cds[i])
 
-            cl_set, dcl_dalpha, dcl_dalphacl, dcl_dclsub = cl_spline.interp(alphas_set)
-            cd_set, dcd_dalpha, dcd_dalphacl, dcd_dclsub = cd_spline.interp(alphas_set)
+            cl_set, _, _, _ = cl_spline.interp(alphas_set)
+            cd_set, _, _, _ = cd_spline.interp(alphas_set)
+            if computeCorrection:
+                for w in range(len(cl_set)):
+                    cl_set[w] += cl_correction[w]
+                    cd_set[w] += cd_correction[w]
+            if thicknesses[i] in self.airfoilsSpecified and self.airfoilOptions['AnalysisMethod'] == 'Files':
+                index = self.airfoilsSpecified.index(thicknesses[i])
+                cl_spline = Akima(np.radians(alphass_files[index]), cls_files[index])
+                cd_spline = Akima(np.radians(alphass_files[index]), cds_files[index])
+
+                cl_set, _, _, _ = cl_spline.interp(alphas_set)
+                cd_set, _, _, _ = cd_spline.interp(alphas_set)
+
             for j in range(len(alphas_set)):
                 clGrid[j][i] = cl_set[j]
                 cdGrid[j][i] = cd_set[j]
@@ -634,21 +687,24 @@ class AirfoilAnalysis:
             yy[i] = y[i] * tc / base_tc
         return yy
 
-    def evaluatePreCompModel(self, alpha, t_c):
-        cl0 = self.cl_total_spline0.ev(alpha, t_c[0])
-        cd0 = self.cd_total_spline0.ev(alpha, t_c[0])
-        cl1 = self.cl_total_spline1.ev(alpha, t_c[0])
-        cd1 = self.cd_total_spline1.ev(alpha, t_c[0])
-        cl = cl0 + t_c[1]*(cl1-cl0)
-        cd = cd0 + t_c[1]*(cd1-cd0)
+    def evaluatePreCompModel(self, alpha, afp):
+        tc = afp[0]
+        bf = afp[1]
+
+        cl0 = self.cl_total_spline0.ev(alpha, tc)
+        cd0 = self.cd_total_spline0.ev(alpha, tc)
+        cl1 = self.cl_total_spline1.ev(alpha, tc)
+        cd1 = self.cd_total_spline1.ev(alpha, tc)
+        cl = cl0 + bf*(cl1-cl0)
+        cd = cd0 + bf*(cd1-cd0)
         self.cl1, self.cl0, self.cd1, self.cd0 = cl1, cl0, cd1, cd0
 
         return cl, cd
 
-    def derivativesPreCompModel(self, alpha, t_c):
+    def derivativesPreCompModel(self, alpha, afp):
 
-        tc = t_c[0]
-        weight = t_c[1]
+        tc = afp[0]
+        bf = afp[1]
 
         # note: direct call to bisplev will be unnecessary with latest scipy update (add derivative method)
         tck_cl0 = self.cl_total_spline0.tck[:3] + self.cl_total_spline0.degrees  # concatenate lists
@@ -669,17 +725,20 @@ class AirfoilAnalysis:
         dcl_dt_c1 = bisplev(alpha, tc, tck_cl1, dx=0, dy=1)
         dcd_dt_c1 = bisplev(alpha, tc, tck_cd1, dx=0, dy=1)
 
-        dcl_dalpha = dcl_dalpha0 + weight*(dcl_dalpha1-dcl_dalpha0)
-        dcd_dalpha = dcd_dalpha0 + weight*(dcd_dalpha1-dcd_dalpha0)
+        dcl_dalpha = dcl_dalpha0 + bf*(dcl_dalpha1-dcl_dalpha0)
+        dcd_dalpha = dcd_dalpha0 + bf*(dcd_dalpha1-dcd_dalpha0)
 
-        dcl_dtc = dcl_dt_c0 + weight*(dcl_dt_c1-dcl_dt_c0)
-        dcd_dtc = dcd_dt_c0 + weight*(dcd_dt_c1-dcd_dt_c0)
+        dcl_dtc = dcl_dt_c0 + bf*(dcl_dt_c1-dcl_dt_c0)
+        dcd_dtc = dcd_dt_c0 + bf*(dcd_dt_c1-dcd_dt_c0)
 
         dcl_dweight = self.cl1-self.cl0
         dcd_dweight = self.cd1-self.cd0
-
-        dcl_dafp = np.asarray([dcl_dtc, dcl_dweight])
-        dcd_dafp = np.asarray([dcd_dtc, dcd_dweight])
+        if self.airfoilOptions['PrecomputationalOptions']['AirfoilParameterization'] == 'Blended':
+            dcl_dafp = np.asarray([dcl_dtc, dcl_dweight])
+            dcd_dafp = np.asarray([dcd_dtc, dcd_dweight])
+        else:
+            dcl_dafp = np.asarray([dcl_dtc])
+            dcd_dafp = np.asarray([dcd_dtc])
 
         return dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp
 
@@ -831,7 +890,7 @@ class AirfoilAnalysis:
             dcl_dalpha, dcd_dalpha = 180.0/np.pi*np.imag(deepcopy(cl))/ cs_step, 180.0/np.pi*np.imag(deepcopy(cd)) / cs_step
             cl, cd = np.real(np.asscalar(cl)), np.real(np.asscalar(cd))
             if abs(dcl_dalpha) > 10.0 or abs(dcd_dalpha) > 10.0:
-                fd_step = self.airfoilOptions['GradientOptions']['fd_step']
+                fd_step = 1.e-6
                 cl, cd, cm, lexitflag = airfoil.solveAlpha(np.degrees(alpha))
                 if lexitflag or abs(cl) > 2.5 or cd < 0.000001 or cd > 1.5 or not np.isfinite(cd) or not np.isfinite(cl):
                     print "flag1", self.afp, "alpha", np.degrees(alpha)
@@ -842,7 +901,7 @@ class AirfoilAnalysis:
                     print "flag2", self.afp, "alpha", np.degrees(alpha)
                 cl2, cd2 = np.asscalar(cl2), np.asscalar(cd2)
                 dcl_dalpha, dcd_dalpha = (cl2-cl)/ fd_step, (cd2-cd)/ fd_step
-            if self.airfoilOptions['GradientOptions']['FreeFormDesign']:
+            if self.airfoilOptions['GradientOptions']['ComputeAirfoilGradients']:
                 dcl_dafp, dcd_dafp = self.xfoilGradients(alpha, Re)
                 if np.any(abs(dcl_dafp)) > 100.0 or np.any(abs(dcd_dafp) > 100.0):
                     print "Error in complex step splines"
@@ -870,7 +929,7 @@ class AirfoilAnalysis:
             cl_complex, cd_complex, lexitflag[i+4] = self.xfoilFlowComplex(alpha, wl_complex, wu_complex, N, dz)
             dcl_dafp[i+4], dcd_dafp[i+4] = np.imag(cl_complex)/step_size, np.imag(cd_complex)/step_size
             if lexitflag[i] or lexitflag[i+4] or abs(dcl_dafp[i+4]) > 100.0 or abs(dcd_dafp[i+4]) > 100.0 or abs(dcl_dafp[i]) > 100.0 or abs(dcd_dafp[i]) > 100.0:
-                fd_step = self.airfoilOptions['GradientOptions']['fd_step']
+                fd_step = 1.e-6 #self.airfoilOptions['GradientOptions']['fd_step']
                 wl_fd1 = np.real(deepcopy(wl))
                 wl_fd2 = np.real(deepcopy(wl))
                 wl_fd1[i] -= 0.0#fd_step
