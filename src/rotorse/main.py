@@ -3,7 +3,7 @@
 from openmdao.api import Problem, SqliteRecorder
 from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
 import numpy as np
-from rotor import RotorSE, OptimizeRotorSE
+from rotor import RotorSE
 import os
 import matplotlib.pyplot as plt
 from precomp import Orthotropic2DMaterial, CompositeSection, Profile
@@ -14,12 +14,12 @@ from airfoil_parameterization import AirfoilAnalysis
 rotor = Problem()
 
 # === airfoil parameters ===
-airfoilOptions = dict(AnalysisMethod='Files', AirfoilParameterization='Precomputational',
-                                CFDOptions=dict(iterations=1000, processors=0, configFile='inv_NACA0012.cfg', computeAirfoilsInParallel=True),
+airfoilOptions = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
+                                CFDOptions=dict(iterations=7000, processors=60, configFile='discrete_check.cfg', computeAirfoilsInParallel=True, CFDGradType='AutoDiff'),
                                 GradientOptions=dict(ComputeGradient=True, ComputeAirfoilGradients=True),
-                                SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=0, alphas=np.linspace(-15, 15, 30), Re=5e5, cd_max=1.5,
+                                SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=10, alphas=np.linspace(-5, 15, 12), Re=5e5, cd_max=1.5,
                                                    correction3D=False, r_over_R=0.5, chord_over_r=0.15, tsr=7.55),
-                                PrecomputationalOptions=dict(AirfoilParameterization='TC', numAirfoilsToCompute=10, tcMax=0.42, tcMin=0.13))
+                                PrecomputationalOptions=dict(AirfoilParameterization='Blended', numAirfoilsToCompute=1, tcMax=0.42, tcMin=0.13))
 
 ########### Airfoil Options ###########
 # AnalysisMethod = None, 'XFOIL', 'CFD', 'Files', AirfoilParameterization = None, 'CST', 'Precomputational', 'NACA'
@@ -27,6 +27,7 @@ airfoilOptions = dict(AnalysisMethod='Files', AirfoilParameterization='Precomput
 # GradientOptions: ComputeGradient = whether or not to compute gradients in CCBlade, ComputeAirfoilGradients = whether or not to calculate airfoil parameterization gradients, fd_step = finite difference step size, cs_step = complex step size
 # SplineOptions: AnalysisMethod: 'XFOIL', 'CFD', maxDirectAoA: deg at which spline takes over, alphas: alphas to use to compute spline, Re: Reynolds number to compute spline
 # PrecomputationalOptions: AirfoilParameterization = 'TC' (thickness-to-chord ratio), 'Blended' (thickness-to-chord ratio with blended airfoil families)
+# CFDGradType='AutoDiff', 'FiniteDiff', 'ContAdjoint'
 
 # Create name for optimization files
 if airfoilOptions['GradientOptions']['ComputeAirfoilGradients']:
@@ -37,16 +38,18 @@ if airfoilOptions['AirfoilParameterization'] == 'Precomputational':
         airfoil_param = airfoilOptions['AirfoilParameterization'] + '_' + airfoilOptions['PrecomputationalOptions']['AirfoilParameterization']
 else:
         airfoil_param = airfoilOptions['AirfoilParameterization']
-other = '6_6_integrated2'
-description = airfoilOptions['AnalysisMethod'] + '_' + airfoil_param + '_' + opt_type + '_' + other
-
+other = '6_16_5'
+if airfoilOptions['AnalysisMethod'] is not None:
+    description = airfoilOptions['AnalysisMethod'] + '_' + airfoil_param + '_' + opt_type + '_' + other
+else:
+    description = ''
 ## SETUP OPTIMIZATION
 rotor.driver = pyOptSparseDriver()
 rotor.driver.options['optimizer'] = 'SNOPT'
 rotor.driver.opt_settings['Print file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_print_' + description +'.out'
 rotor.driver.opt_settings['Summary file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_summary_' + description +'.out'
 rotor.driver.opt_settings['Major feasibility tolerance'] = 5e-4
-#rotor.driver.opt_settings['Verify level'] = 3
+# rotor.driver.opt_settings['Verify level'] = 3
 recorder = SqliteRecorder(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'recorder_' + description +'.sql')
 recorder.options['record_params'] = True
 recorder.options['record_metadata'] = True
@@ -100,12 +103,12 @@ rotor.driver.add_constraint('con_strainU_te', lower=-1.0, upper=1.0)  # rotor st
 rotor.driver.add_constraint('con_strainL_te', upper=1.0)
 rotor.driver.add_constraint('con_eps_spar', upper=0.0)  # rotor buckling spar
 rotor.driver.add_constraint('con_eps_te', upper=0.0)  # rotor buckling te
-rotor.driver.add_constraint('con_freq', lower=0.0)  # flap/edge freq
+#rotor.driver.add_constraint('con_freq', lower=0.0)  # flap/edge freq
 if airfoilOptions['AirfoilParameterization'] == 'CST':
     rotor.driver.add_constraint('con_afp', lower=0.03) # To prevent overlapping airfoils shapes
 rotor.driver.add_constraint('obj', lower=3.0) # To insure that COE does not go negative with negative AEP
 rotor.driver.add_constraint('con_power', lower=0.0)#, scaler=1e-6)
-rotor.driver.add_constraint('con_thrust', upper=0.675) # Constrain to scaled initial thrust so that other components of turbine remain constant
+#rotor.driver.add_constraint('con_thrust', upper=0.675) # Constrain to scaled initial thrust so that other components of turbine remain constant
 
 print "Setting up RotorSE...\n"
 initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
@@ -156,17 +159,26 @@ rotor['af_idx'] = np.asarray(af_idx)
 rotor['af_str_idx'] = np.asarray(af_str_idx)
 basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles/')
 
-if airfoilOptions['AirfoilParameterization'] == None:
+if airfoilOptions['AnalysisMethod'] == None:
     # === airfoil files ===
     airfoil_types = [0]*8
+    # airfoil_types[0] = os.path.join(basepath, 'Cylinder1.dat')
+    # airfoil_types[1] = os.path.join(basepath, 'Cylinder2.dat')
+    # airfoil_types[2] = os.path.join(basepath, 'DU40_A17.dat')
+    # airfoil_types[3] = os.path.join(basepath, 'DU35_A17.dat')
+    # airfoil_types[4] = os.path.join(basepath, 'DU30_A17.dat')
+    # airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
+    # airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
+    # airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
+
     airfoil_types[0] = os.path.join(basepath, 'Cylinder1.dat')
     airfoil_types[1] = os.path.join(basepath, 'Cylinder2.dat')
-    airfoil_types[2] = os.path.join(basepath, 'DU40_A17.dat')
-    airfoil_types[3] = os.path.join(basepath, 'DU35_A17.dat')
-    airfoil_types[4] = os.path.join(basepath, 'DU30_A17.dat')
-    airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
-    airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
-    airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
+    airfoil_types[2] = os.path.join(basepath, 'DU40_A17')
+    airfoil_types[3] = os.path.join(basepath, 'DU35_A17')
+    airfoil_types[4] = os.path.join(basepath, 'DU30_A17')
+    airfoil_types[5] = os.path.join(basepath, 'DU25_A17')
+    airfoil_types[6] = os.path.join(basepath, 'DU21_A17')
+    airfoil_types[7] = os.path.join(basepath, 'NACA64_A17')
 
     # place at appropriate radial stations
     n = len(af_idx)
@@ -252,6 +264,7 @@ else:
     non_airfoils_idx = 2
     airfoil_types = [0]*(num_airfoils+non_airfoils_idx)
     non_airfoils_alphas, non_airfoils_cls, non_airfoils_cds = [-180.0, 0.0, 180.0], [0.0, 0.0, 0.0], [[0.5, 0.5, 0.5],[0.35, 0.35, 0.35]]
+    #afanalysis.plotPreCompModel()
     print "Generating initial airfoil data..."
     for i in range(len(airfoil_types)):
         if i < non_airfoils_idx:
@@ -398,14 +411,41 @@ rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigu
 #                                                 [-0.14143763, -0.1395226 , -0.2235385 ,  0.171756  ,  0.19729459,  0.39172983,   0.34186528,  0.24913183]])
 
 ## WIND TUNNEL SEQUENTIAL PRECOMP
-rotor['r_max_chord'] = 0.362730389616
-rotor['chord_sub'] = np.asarray([ 2.48038535,  4.21313897  ,2.39517919  ,1.3       ])
-rotor['theta_sub'] =np.asarray([ 10.11568347 ,  6.24530378  , 1.65649693,  -1.66688645])
-rotor['control:tsr'] = 8.72078746507
-rotor['sparT'] = np.asarray([ 0.08258899,  0.03849649 , 0.0433979 ,  0.02711884 , 0.005     ])
-rotor['teT'] = np.asarray([ 0.04901721,  0.02797307 , 0.01577557  ,0.0087453 ,  0.005     ])
+# rotor['r_max_chord'] = 0.362730389616
+# rotor['chord_sub'] = np.asarray([ 2.48038535,  4.21313897  ,2.39517919  ,1.3       ])
+# rotor['theta_sub'] =np.asarray([ 10.11568347 ,  6.24530378  , 1.65649693,  -1.66688645])
+# rotor['control:tsr'] = 8.72078746507
+# rotor['sparT'] = np.asarray([ 0.08258899,  0.03849649 , 0.0433979 ,  0.02711884 , 0.005     ])
+# rotor['teT'] = np.asarray([ 0.04901721,  0.02797307 , 0.01577557  ,0.0087453 ,  0.005     ])
 # rotor['airfoil_parameterization'] = np.asarray([[0.416], [0.376], [0.291], [0.22], [0.177], [0.170]])
 
+## CFD SEQUENTIAL PRECOMP*
+# rotor['r_max_chord'] = 0.337403328198
+# rotor['chord_sub'] = np.asarray([ 2.62783842,  5.3 ,        3.17906231,  1.3       ])
+# rotor['theta_sub'] =np.asarray([ 13.84094714 ,  7.89939298,   4.38008742,   2.67636968])
+# rotor['control:tsr'] = 6.92194720297
+# rotor['sparT'] = np.asarray([ 0.0280493 ,  0.04275217 , 0.03990218 , 0.03125918,  0.005    ])
+# rotor['teT'] = np.asarray([ 0.10398376  ,0.02872634 , 0.02068796 , 0.00780592  , 0.005     ])
+
+rotor['r_max_chord'] = 0.337403328198
+rotor['chord_sub'] = np.asarray([ 2.62783842,  5.3 ,        3.17906231,  1.3       ])
+rotor['theta_sub'] =np.asarray([ 13.84094714 ,  7.89939298,   4.38008742,   2.67636968])
+rotor['control:tsr'] = 6.92194720297
+rotor['sparT'] = np.asarray([ 0.0280493 ,  0.04275217 , 0.03990218 , 0.03125918,  0.005    ])
+rotor['teT'] = np.asarray([ 0.10398376  ,0.02872634 , 0.02068796 , 0.00780592  , 0.005     ])
+
+# r_max_chord = 0.5
+# chord_sub = [ 2.85014334  5.3         2.8970185   1.3       ]
+# theta_sub = [ 16.19903195   4.497619     3.61676888   1.82262644]
+# control:tsr = 8.38634480806
+# sparT = [ 0.07715639  0.04509293  0.03503564  0.0473798   0.005     ]
+# teT = [ 0.0402252   0.03742472  0.01091087  0.00711263  0.00817813]
+# airfoil_parameterization =  [[ 0.36402902  0.00127083]
+#  [ 0.32085978  0.00471985]
+#  [ 0.38057649  0.03870216]
+#  [ 0.38319624  0.28605152]
+#  [ 0.3966964   0.56574417]
+#  [ 0.13        0.82064758]]
 # === run and outputs ===
 "Running RotorSE..."
 time0 = time.time()
@@ -455,9 +495,10 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 # grad = grad.flatten()
 # gradfd = rotor.calc_gradient(['r_max_chord'], ['beam.beam:z', 'beam.beam:EIxx', 'beam.beam:EIyy', 'beam.beam:EIxy', 'beam.beam:EA', 'beam.beam:rhoJ', 'beam.beam:x_ec_str', 'beam.beam:y_ec_str', 'spline.theta_str'], mode='fd')
 # gradfd = gradfd.flatten()
-# grad = rotor.calc_gradient(['r_max_chord'], ['curvefem.freq'], mode='auto')
+# grad = rotor.calc_gradient(['r_max_chord', 'airfoil_parameterization'], ['obj'], mode='auto')
 # grad = grad.flatten()
-# gradfd = rotor.calc_gradient(['r_max_chord'], ['curvefem.freq'], mode='fd')
+# rotor['airfoilOptions']['GradientOptions']['ComputeGradient'] = False
+# gradfd = rotor.calc_gradient(['r_max_chord', 'airfoil_parameterization'], ['obj'], mode='fd')
 # gradfd = gradfd.flatten()
 # print 'ad', grad
 # print 'fd', gradfd
@@ -474,11 +515,11 @@ print 'airfoil_parameterization = ', rotor['airfoil_parameterization']
 
 
 #### Check total derivatives (design variables, obj, and cons)
-#total = open('total_derivatives_' + description + '.txt', 'w')
-#rotor.check_total_derivatives(out_stream=total)
+# total = open('total_derivatives_' + description + '.txt', 'w')
+# rotor.check_total_derivatives(out_stream=total)
 # # total = open('partial_derivatives_' + description + '.txt', 'w')
 # rotor.check_partial_derivatives(out_stream=total)
-#total.close()
+# total.close()
 #
 # #### Check scaled gradients
 # w = rotor.calc_gradient(list(rotor.driver.get_desvars().keys()),

@@ -114,15 +114,7 @@ class CCAirfoil:
                 self.afp = afp
             self.airfoilNum = airfoilNum
             self.airfoilOptions = airfoilOptions
-            self.cl_storage = []
-            self.cd_storage = []
-            self.alpha_storage = []
-            self.dcl_storage = []
-            self.dcd_storage = []
-            self.dalpha_storage = []
-            self.dcl_dafp_storage = []
-            self.dcd_dafp_storage = []
-            self.dalpha_dafp_storage = []
+
 
             if airfoilOptions['GradientOptions']['ComputeAirfoilGradients'] and airfoilOptions['GradientOptions']['ComputeGradient'] and airfoilOptions['AirfoilParameterization'] != 'Precomputational':
                 self.freeform = True
@@ -163,7 +155,15 @@ class CCAirfoil:
             self.afp = afp
 
         self.preCompModel = preCompModel
-
+        self.cl_storage = []
+        self.cd_storage = []
+        self.alpha_storage = []
+        self.dcl_storage = []
+        self.dcd_storage = []
+        self.dalpha_storage = []
+        self.dcl_dafp_storage = []
+        self.dcd_dafp_storage = []
+        self.dalpha_dafp_storage = []
 
     @classmethod
     def initFromAerodynFile(cls, aerodynFile):
@@ -222,7 +222,7 @@ class CCAirfoil:
         cl, cd = np.zeros(n), np.zeros(n)
         alpha = np.linspace(np.radians(-180), np.radians(180), n)
         for i in range(len(alpha)):
-            cl[i], cd[i] = afanalysis.evaluatePreCompModel(alpha[i], afp)
+            cl[i], cd[i] = afanalysis.evaluatePreCompModel(alpha[i], afp, bem=True)
         failure = False
         cm = np.zeros_like(cl)
         Re = airfoilOptions['SplineOptions']['Re']
@@ -281,7 +281,7 @@ class CCAirfoil:
             cl = self.cl_spline.ev(alpha, Re)
             cd = self.cd_spline.ev(alpha, Re)
         else:
-            cl, cd = self.preCompModel.evaluatePreCompModel(alpha, self.afp)
+            cl, cd = self.preCompModel.evaluatePreCompModel(alpha, self.afp, bem=True)
         return cl, cd
 
     def evaluate_direct(self, alpha, Re):
@@ -355,7 +355,7 @@ class CCAirfoil:
             dcd_dRe = bisplev(alpha, Re, tck_cd, dx=0, dy=1)
 
         if self.preCompModel is not None:
-            dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, self.afp)
+            dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, self.afp, bem=True)
             dcl_dRe = 0.0
             dcd_dRe = 0.0
         return dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe
@@ -372,7 +372,7 @@ class CCAirfoil:
                 dcl_dafp[i] = (cl_new_fd - cl_cur) / fd_step
                 dcd_dafp[i] = (cd_new_fd - cd_cur) / fd_step
         elif self.preCompModel is not None:
-            dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, self.afp)
+            dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp = self.preCompModel.derivativesPreCompModel(alpha, self.afp, bem=True)
         return dcl_dafp, dcd_dafp
 
 def evaluate_direct_parallel2(alphas, Res, afs, computeAlphaGradient=False, computeAFPGradient=False):
@@ -662,7 +662,7 @@ class CCBlade:
             fzero_cd, dR_dcd, a, ap,  = _bem.coefficients_dv(r, chord, self.Rhub, self.Rtip,
                 phi, cl, 0, cd, 1, self.B, Vx, Vy, **self.bemoptions)
             if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational':
-                dcl_dalpha, dcl_dafp_R, dcd_dalpha, dcd_dafp_R = af.preCompModel.derivativesPreCompModel(alpha, af.afp)
+                dcl_dalpha, dcl_dafp_R, dcd_dalpha, dcd_dafp_R = af.preCompModel.derivativesPreCompModel(alpha, af.afp, bem=True)
             else:
                 dcl_dafp_R, dcd_dafp_R = af.splineFreeFormGrad(alpha, Re)
             dR_dafp = dR_dcl*dcl_dafp_R + dR_dcd*dcd_dafp_R
@@ -692,7 +692,7 @@ class CCBlade:
             cl, cd = af.evaluate(alpha, Re)
             dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = af.derivatives(alpha, Re)
             dcl_dafp, dcd_dafp = af.splineFreeFormGrad(alpha, Re)
-
+        print cl, cd, np.degrees(alpha)
         cn = cl*cphi + cd*sphi  # these expressions should always contain drag
         ct = cl*sphi - cd*cphi
         q = 0.5*self.rho*W**2
@@ -745,7 +745,6 @@ class CCBlade:
         dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
         dNp_dafp = Np*(1.0/cn*dcn_dafp)
         dTp_dafp = Tp*(1.0/ct*dct_dafp)
-        print Np, Tp, af.afp, np.degrees(alpha), cl, cd
         return Np, Tp, dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp
 
     def __loadsParallel(self, phi, rotating, r, chord, theta, af, Vx, Vy, airfoil_parameterization=None):
@@ -773,11 +772,17 @@ class CCBlade:
 
         if rotating:
             afanalysis = AirfoilAnalysis(af[-1].afp, self.airfoilOptions)
-            cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = afanalysis.evaluate_direct_parallel(alphas, Res, af, computeAlphaGradient=True, computeAFPGradient=True)
+            if self.airfoilOptions['GradientOptions']['ComputeGradient']:
+                if self.airfoilOptions['GradientOptions']['ComputeAirfoilGradients']:
+                    cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = afanalysis.evaluate_direct_parallel(alphas, Res, af)
+                else:
+                    cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = afanalysis.evaluate_direct_parallel(alphas, Res, af)
+            else:
+                cl, cd = afanalysis.evaluate_direct_parallel(alphas, Res, af)
         else:
             cl = np.zeros(len(r))
             cd = np.zeros(len(r))
-            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe = [], [], [], []
+            dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp = [], [], [], [], [], []
             for i in range(len(alphas)):
                 cl[i], cd[i] = af[i].evaluate(alphas[i], Res[i])
                 dcl_dalpha1, dcl_dRe1, dcd_dalpha1, dcd_dRe1 = af[i].derivatives(alphas[i], Res[i])
@@ -785,8 +790,8 @@ class CCBlade:
                 dcl_dRe.append(dcl_dRe1)
                 dcd_dalpha.append(dcd_dalpha1)
                 dcd_dRe.append(dcd_dRe1)
-            dcl_dafp = np.zeros((len(r), self.airfoils_dof))
-            dcd_dafp = np.zeros((len(r), self.airfoils_dof))
+                dcl_dafp1, dcd_dafp1 = af[i].splineFreeFormGrad(alphas[i], Res[i])
+                dcl_dafp.append(dcl_dafp1), dcd_dafp.append(dcd_dafp1)
         Nps = np.zeros(len(r))
         Tps = np.zeros(len(r))
         n = len(r)
@@ -799,6 +804,8 @@ class CCBlade:
         for i in range(len(r)):
             cphi = cos(phi[i])
             sphi = sin(phi[i])
+            if np.degrees(alphas[i]) < 10.0:
+                print cl[i], cd[i], np.degrees(alphas[i])
             cn = cl[i]*cos(phi[i]) + cd[i]*sin(phi[i])  # these expressions should always contain drag
             ct = cl[i]*sin(phi[i]) - cd[i]*cos(phi[i])
             q = 0.5*self.rho*Ws[i]**2
