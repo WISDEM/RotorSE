@@ -1432,6 +1432,8 @@ class AirfoilAnalysis:
             konfigDirectTotal = []
             ztateTotal = []
             Re = airfoilOptions['SplineOptions']['Re']
+            cores_count = 0
+            host_count = 0
             for i in range(len(alphas)):
                 meshFileName = basepath + os.path.sep + 'mesh_airfoil'+str(i+1)+'.su2'
                 # Create airfoil coordinate file for SU2
@@ -1506,19 +1508,48 @@ class AirfoilAnalysis:
                 konfig_direct.dump(tempname)
                 SU2_RUN = os.environ['SU2_RUN']
                 sys.path.append( SU2_RUN )
+                slurm_job = os.environ.has_key('SLURM_JOBID')
+                if slurm_job:
+                    host_names = os.environ.get('SLURM_JOB_NODELIST')
+                    host_names_array = host_names.split()
+                    nodes_per_host = os.environ.get('SLURM_TASKS_PER_NODE')
+                    nodes_per_host_array = host_names.split(',')
+                    node_sum = sum(nodes_per_host_array)
+                    node_len = len(nodes_per_host_array)
+                    num = len(alphas)
+                    processes_1 = node_sum / num
+                    remainder1 = node_sum % num
 
-                mpi_Command = 'mpirun -n %i %s'
-                if i >= len(alphas) - remainder:
-                    processes = konfig['NUMBER_PART'] + 1
+                    if node_len >= num:
+                        node = host_names_array[i]
+                        processes = nodes_per_host_array[i]
+                    else:
+                        if processes_1 < nodes_per_host_array[host_count]:
+                            node = host_names_array[host_count]
+                            processes = nodes_per_host_array[host_count]
+                            host_count += 1
+                            cores_count += processes
+                        else:
+                            node = host_names_array[host_count]
+                            processes = nodes_per_host_array[host_count] - processes_1
+                            cores_count += processes
+                    mpi_Command = 'mpirun -n %i --map-by node -host %s %s'
                 else:
-                    processes = konfig['NUMBER_PART']
+                    mpi_Command = 'mpirun -n %i %s'
+                    if i >= len(alphas) - remainder:
+                        processes = konfig['NUMBER_PART'] + 1
+                    else:
+                        processes = konfig['NUMBER_PART']
 
                 the_Command = 'SU2_CFD ' + tempname
                 the_Command = base_Command % the_Command
                 if processes > 0:
                     if not mpi_Command:
                         raise RuntimeError , 'could not find an mpi interface'
-                the_Command = mpi_Command % (processes,the_Command)
+                if slurm_job:
+                    the_Command = mpi_Command % (processes, node, the_Command)
+                else:
+                    the_Command = mpi_Command % (processes,the_Command)
                 sys.stdout.flush()
                 cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil'+str(i+1)+'.txt', 'w')
                 print the_Command, alphas[i]
@@ -1715,6 +1746,8 @@ class AirfoilAnalysis:
         df_dafps = []
         SU2_RUN = os.environ['SU2_RUN']
         base_Command = os.path.join(SU2_RUN,'%s')
+        host_count = 0
+        cores_count = 0
         for i in range(len(konfigTotal)):
             konfig = deepcopy(konfigTotal[i])
             ztate = ztateTotal[i]
@@ -1739,8 +1772,34 @@ class AirfoilAnalysis:
             konfig.dump(tempname)
             SU2_RUN = os.environ['SU2_RUN']
             sys.path.append( SU2_RUN )
+            slurm_job = os.environ.has_key('SLURM_JOBID')
+            if slurm_job:
+                host_names = os.environ.get('SLURM_JOB_NODELIST')
+                host_names_array = host_names.split()
+                nodes_per_host = os.environ.get('SLURM_TASKS_PER_NODE')
+                nodes_per_host_array = host_names.split(',')
+                node_sum = sum(nodes_per_host_array)
+                node_len = len(nodes_per_host_array)
+                num = len(konfigTotal)
+                processes_1 = node_sum / num
+                remainder1 = node_sum % num
 
-            mpi_Command = 'mpirun -n %i %s'
+                if node_len >= num:
+                    node = host_names_array[i]
+                    processes = nodes_per_host_array[i]
+                else:
+                    if processes_1 < nodes_per_host_array[host_count]:
+                        node = host_names_array[host_count]
+                        processes = nodes_per_host_array[host_count]
+                        host_count += 1
+                        cores_count += processes
+                    else:
+                        node = host_names_array[host_count]
+                        processes = nodes_per_host_array[host_count] - processes_1
+                        cores_count += processes
+                    mpi_Command = 'mpirun -n %i --map-by node -host %s %s'
+            else:
+                mpi_Command = 'mpirun -n %i %s'
 
             processes = konfig['NUMBER_PART']
             if self.airfoilOptions['CFDOptions']['CFDGradType'] == 'AutoDiff':
@@ -1752,7 +1811,10 @@ class AirfoilAnalysis:
             if processes > 0:
                 if not mpi_Command:
                     raise RuntimeError , 'could not find an mpi interface'
-            the_Command = mpi_Command % (processes,the_Command)
+            if slurm_job:
+                the_Command = mpi_Command % (processes, node, the_Command)
+            else:
+                the_Command = mpi_Command % (processes,the_Command)
             sys.stdout.flush()
             print the_Command
             cfd_output = open(basepath + os.path.sep + 'cfd_output_airfoil'+str(i+1)+'_'+objective+'.txt', 'w')
