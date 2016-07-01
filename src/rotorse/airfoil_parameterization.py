@@ -587,6 +587,7 @@ class AirfoilAnalysis:
                     cl, cd, cm, alphas, failure = self.__computeBEMSplinePreComp()
                 else:
                     cl, cd, cm, alphas, failure = self.__computeSplinePreComp()
+                    print thicknesses[i], cl, cd, cm, alphas
 
                 p1 = Polar(self.airfoilOptions['SplineOptions']['Re'], alphas, cl, cd, cm)
                 af = Airfoil([p1])
@@ -701,6 +702,8 @@ class AirfoilAnalysis:
             cd1 = self.cd_total_spline1.ev(alpha, tc)
         cl = cl0 + bf*(cl1-cl0)
         cd = cd0 + bf*(cd1-cd0)
+        if cl > 1.4:
+            print "OVER", cl, cl0, cl1, np.degrees(alpha), tc
         self.cl1, self.cl0, self.cd1, self.cd0 = cl1, cl0, cd1, cd0
 
         return cl, cd
@@ -755,7 +758,7 @@ class AirfoilAnalysis:
 
 
 
-    def plotPreCompModel(self):
+    def plotPreCompModel(self, splineNum=0, bem=False):
         import matplotlib.pylab as plt
         from matplotlib import cm
         from mpl_toolkits.mplot3d import Axes3D
@@ -767,9 +770,20 @@ class AirfoilAnalysis:
         [X, Y] = np.meshgrid(alpha, thick)
         for i in range(n):
             for j in range(n):
-                CL[i, j] = self.cl_total_spline0.ev(X[i, j], Y[i, j])
-                CD[i, j] = self.cd_total_spline0.ev(X[i, j], Y[i, j])
-
+                if splineNum == 0:
+                    if not bem:
+                        CL[i, j] = self.cl_total_spline0.ev(X[i, j], Y[i, j])
+                        CD[i, j] = self.cd_total_spline0.ev(X[i, j], Y[i, j])
+                    else:
+                        CL[i, j] = self.cl_total_spline0_bem.ev(X[i, j], Y[i, j])
+                        CD[i, j] = self.cd_total_spline0_bem.ev(X[i, j], Y[i, j])
+                else:
+                    if not bem:
+                        CL[i, j] = self.cl_total_spline1.ev(X[i, j], Y[i, j])
+                        CD[i, j] = self.cd_total_spline1.ev(X[i, j], Y[i, j])
+                    else:
+                        CL[i, j] = self.cl_total_spline1_bem.ev(X[i, j], Y[i, j])
+                        CD[i, j] = self.cd_total_spline1_bem.ev(X[i, j], Y[i, j])
         font_size = 14
         fig4 = plt.figure()
         ax4 = fig4.gca(projection='3d')
@@ -836,6 +850,8 @@ class AirfoilAnalysis:
         if self.airfoilOptions['SplineOptions']['AnalysisMethod'] == 'CFD':
             cl, cd, cm, alphas, failure  = self.__cfdSpline()
         else:
+            cl, cd, cm, alphas, failure  = self.__xfoilSpline()
+        if np.any(abs(cl) > 100):
             cl, cd, cm, alphas, failure  = self.__xfoilSpline()
         return cl, cd, cm, alphas, failure
 
@@ -1748,12 +1764,14 @@ class AirfoilAnalysis:
         base_Command = os.path.join(SU2_RUN,'%s')
         host_count = 0
         cores_count = 0
+        remainder = self.airfoilOptions['CFDOptions']['processors'] % len(konfigTotal)
+
         for i in range(len(konfigTotal)):
             konfig = deepcopy(konfigTotal[i])
             ztate = ztateTotal[i]
             konfig.RESTART_SOL = 'NO'
-            konfig.EXT_ITER    = self.airfoilOptions['CFDOptions']['iterations'] + 6000
-            konfig.RESIDUAL_MINVAL = -6
+            konfig.EXT_ITER    = self.airfoilOptions['CFDOptions']['iterations'] + 4000
+            konfig.RESIDUAL_MINVAL = -5.8
             mesh_data = SU2.mesh.tools.read(konfig.MESH_FILENAME)
             points_sorted, loop_sorted = SU2.mesh.tools.sort_airfoil(mesh_data, marker_name='airfoil')
 
@@ -1800,8 +1818,11 @@ class AirfoilAnalysis:
                     mpi_Command = 'mpirun -n %i --map-by node -host %s %s'
             else:
                 mpi_Command = 'mpirun -n %i %s'
+            if i >= len(konfigTotal) - remainder:
+                processes = konfig['NUMBER_PART'] + 1
+            else:
+                processes = konfig['NUMBER_PART']
 
-            processes = konfig['NUMBER_PART']
             if self.airfoilOptions['CFDOptions']['CFDGradType'] == 'AutoDiff':
                 the_Command = 'SU2_CFD_AD ' + tempname
             else:
