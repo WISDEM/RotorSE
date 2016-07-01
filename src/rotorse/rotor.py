@@ -331,7 +331,7 @@ class PreCompSections(Component):
                         afanalysis = AirfoilAnalysis(pro_str[j], params['airfoilOptions'])
                         xl, xu, yl, yu = afanalysis.getCoordinates(type='split')
                     else:
-                        afanalysis = AirfoilAnalysis(None, params['airfoilOptions'], computeModel=False)
+                        afanalysis = AirfoilAnalysis(None, params['airfoilOptions'], generatePreCompModel=False)
                         xl, xu, yl, yu = afanalysis.getPreCompCoordinates(pro_str[j])
                     # xl, xu, yl, yu = getCoordinates([pro_str[j]])
                     xu1 = np.zeros(len(xu))
