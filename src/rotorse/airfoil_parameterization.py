@@ -657,10 +657,12 @@ class AirfoilAnalysis:
 
             cl_set, _, _, _ = cl_spline.interp(alphas_set)
             cd_set, _, _, _ = cd_spline.interp(alphas_set)
-            if computeCorrection:
-                for w in range(len(cl_set)):
-                    cl_set[w] += cl_correction[w]
-                    cd_set[w] += cd_correction[w]
+            # if computeCorrection:
+            #     for w in range(len(cl_set)):
+            #         cl_set[w] += cl_correction[w]
+            #         cd_set[w] += cd_correction[w]
+            #         if cd_set[w] < 0.0001:
+            #             cd_set[w] = 0.001
             if thicknesses[i] in self.airfoilsSpecified and self.airfoilOptions['AnalysisMethod'] == 'Files':
                 index = self.airfoilsSpecified.index(thicknesses[i])
                 cl_spline = Akima(np.radians(alphass_files[index]), cls_files[index])
@@ -675,8 +677,9 @@ class AirfoilAnalysis:
         kx = min(len(alphas_set)-1, 3)
         ky = min(len(thicknesses)-1, 3)
 
-        cl_total_spline = RectBivariateSpline(alphas_set, thicknesses, clGrid, kx=kx, ky=ky)#, s=0.1)
-        cd_total_spline = RectBivariateSpline(alphas_set, thicknesses, cdGrid, kx=kx, ky=ky)#, s=0.001)
+        cl_total_spline = RectBivariateSpline(alphas_set, thicknesses, clGrid, kx=kx, ky=ky)#, s=0.001)
+        cd_total_spline = RectBivariateSpline(alphas_set, thicknesses, cdGrid, kx=kx, ky=ky)#, s=0.0005)
+
         return cl_total_spline, cd_total_spline, xx, yy, thicknesses
 
     def __convertTCCoordinates(self, tc, y):
@@ -755,8 +758,6 @@ class AirfoilAnalysis:
             dcd_dafp = np.asarray([dcd_dtc])
 
         return dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp
-
-
 
     def plotPreCompModel(self, splineNum=0, bem=False):
         import matplotlib.pylab as plt
@@ -1932,7 +1933,6 @@ class AirfoilAnalysis:
 
         return df_dafps, df_dalphas
 
-    from scipy.interpolate import RectBivariateSpline, bisplev
     def evaluate_direct_parallel(self, alphas, Res, afs):
             indices_to_compute = []
             n = len(alphas)
@@ -2018,6 +2018,7 @@ class AirfoilAnalysis:
                     afs[i].dcd_storage.append(dcd_dalpha[i])
                     afs[i].dcl_dafp_storage.append(dcl_dafp[i])
                     afs[i].dcd_dafp_storage.append(dcd_dafp[i])
+
             if computeAFPGradient:
                 if computeAlphaGradient:
                     return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp
