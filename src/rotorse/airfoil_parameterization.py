@@ -50,7 +50,7 @@ class AirfoilAnalysis:
     ### COORDINATE METHODS ###
     def getCoordinates(self, type='full'):
         if type == 'full':
-            return self.x, self.y, self.Wl, self.Wu, self.xl, self.xu
+            return self.x, self.y
         elif type == 'split':
             return self.xl, self.xu, self.yl, self.yu
         else:
@@ -194,7 +194,7 @@ class AirfoilAnalysis:
 
     def __setCoordinates(self):
         if self.parameterization_method == 'CST':
-             x, y, xl, xu, yl, yu, Wl, Wu = self.__cstCoordinates()
+            x, y, xl, xu, yl, yu, Wl, Wu = self.__cstCoordinates()
         else:
             x, y, xl, xu, yl, yu = self.__tcCoordinates()
         return x, y, xl, xu, yl, yu, Wl, Wu
@@ -660,10 +660,12 @@ class AirfoilAnalysis:
 
             cl_set, _, _, _ = cl_spline.interp(alphas_set)
             cd_set, _, _, _ = cd_spline.interp(alphas_set)
-            if computeCorrection:
-                for w in range(len(cl_set)):
-                    cl_set[w] += cl_correction[w]
-                    cd_set[w] += cd_correction[w]
+            # if computeCorrection:
+            #     for w in range(len(cl_set)):
+            #         cl_set[w] += cl_correction[w]
+            #         cd_set[w] += cd_correction[w]
+            #         if cd_set[w] < 0.0001:
+            #             cd_set[w] = 0.001
             if thicknesses[i] in self.airfoilsSpecified and self.airfoilOptions['AnalysisMethod'] == 'Files':
                 index = self.airfoilsSpecified.index(thicknesses[i])
                 cl_spline = Akima(np.radians(alphass_files[index]), cls_files[index])
@@ -677,8 +679,8 @@ class AirfoilAnalysis:
                 cdGrid[j][i] = cd_set[j]
         kx = min(len(alphas_set)-1, 3)
         ky = min(len(thicknesses)-1, 3)
-        cl_total_spline = RectBivariateSpline(alphas_set, thicknesses, clGrid, kx=kx, ky=ky, s=0.001)
-        cd_total_spline = RectBivariateSpline(alphas_set, thicknesses, cdGrid, kx=kx, ky=ky, s=0.0005)
+        cl_total_spline = RectBivariateSpline(alphas_set, thicknesses, clGrid, kx=kx, ky=ky)#, s=0.001)
+        cd_total_spline = RectBivariateSpline(alphas_set, thicknesses, cdGrid, kx=kx, ky=ky)#, s=0.0005)
         return cl_total_spline, cd_total_spline, xx, yy, thicknesses
 
     def __convertTCCoordinates(self, tc, y):
@@ -743,7 +745,7 @@ class AirfoilAnalysis:
 
         return dcl_dalpha, dcl_dafp, dcd_dalpha, dcd_dafp
 
-    def plotPreCompModel(self):
+    def plotPreCompModel(self, splineNum=0, bem=False):
         import matplotlib.pylab as plt
         from matplotlib import cm
         from mpl_toolkits.mplot3d import Axes3D
@@ -755,8 +757,20 @@ class AirfoilAnalysis:
         [X, Y] = np.meshgrid(alpha, thick)
         for i in range(n):
             for j in range(n):
-                CL[i, j] = self.cl_total_spline.ev(X[i, j], Y[i, j])
-                CD[i, j] = self.cd_total_spline.ev(X[i, j], Y[i, j])
+                if splineNum == 0:
+                    if not bem:
+                        CL[i, j] = self.cl_total_spline0.ev(X[i, j], Y[i, j])
+                        CD[i, j] = self.cd_total_spline0.ev(X[i, j], Y[i, j])
+                    else:
+                        CL[i, j] = self.cl_total_spline0_bem.ev(X[i, j], Y[i, j])
+                        CD[i, j] = self.cd_total_spline0_bem.ev(X[i, j], Y[i, j])
+                else:
+                    if not bem:
+                        CL[i, j] = self.cl_total_spline1.ev(X[i, j], Y[i, j])
+                        CD[i, j] = self.cd_total_spline1.ev(X[i, j], Y[i, j])
+                    else:
+                        CL[i, j] = self.cl_total_spline1_bem.ev(X[i, j], Y[i, j])
+                        CD[i, j] = self.cd_total_spline1_bem.ev(X[i, j], Y[i, j])
 
         font_size = 14
         fig4 = plt.figure()
@@ -2459,7 +2473,6 @@ class AirfoilAnalysis:
                     cl[indices_to_compute[j]] = cls[j]
                     cd[indices_to_compute[j]] = cds[j]
 
-            print cl, cd, dcl_dalpha, dcd_dalpha, dcl_dafp, dcd_dafp
             if computeAFPGradient:
                 try:
                     return cl, cd, dcl_dalpha, dcl_dRe, dcd_dalpha, dcd_dRe, dcl_dafp, dcd_dafp

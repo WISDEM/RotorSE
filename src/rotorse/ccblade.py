@@ -745,7 +745,7 @@ class CCBlade:
         dct_dafp = dcl_dafp*sphi + cl*cphi*dphi_dafp - dcd_dafp*cphi + cd*sphi*dphi_dafp
         dNp_dafp = Np*(1.0/cn*dcn_dafp)
         dTp_dafp = Tp*(1.0/ct*dct_dafp)
-        print Np, Tp, af.afp, np.degrees(alpha), cl, cd
+
         return Np, Tp, dNp_dx, dTp_dx, dR_dx, dNp_dafp, dTp_dafp, dR_dafp
 
     def __loadsParallel(self, phi, rotating, r, chord, theta, af, Vx, Vy, airfoil_parameterization=None):
