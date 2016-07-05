@@ -10,15 +10,15 @@ from rotoraerodefaults import CCBladeGeometry, CSMDrivetrain, RayleighCDF, Weibu
 
 from scipy.interpolate import RectBivariateSpline
 from akima import Akima, akima_interp_with_derivs
-from csystem import DirectionVector
-from utilities import hstack, vstack, trapz_deriv, interp_with_deriv
-from environment import PowerWind
+from commonse.csystem import DirectionVector
+from commonse.utilities import hstack, vstack, trapz_deriv, interp_with_deriv
+from commonse.environment import PowerWind
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 import _pBEAM
 import _curvefem
 import _bem  # TODO: move to rotoraero
 from enum import Enum
-from airfoil_parameterization import AirfoilAnalysis
+from airfoilprep import AirfoilAnalysis
 
 
 
@@ -332,7 +332,7 @@ class PreCompSections(Component):
                         xl, xu, yl, yu = afanalysis.getCoordinates(type='split')
                     else:
                         afanalysis = AirfoilAnalysis(None, params['airfoilOptions'], generatePreCompModel=False)
-                        xl, xu, yl, yu = afanalysis.getPreCompCoordinates(pro_str[j])
+                        xl, xu, yl, yu = afanalysis.getPreCompCoordinates(pro_str[j], form='split')
                     # xl, xu, yl, yu = getCoordinates([pro_str[j]])
                     xu1 = np.zeros(len(xu))
                     xl1 = np.zeros(len(xl))
@@ -2446,7 +2446,7 @@ class RotorSE(Group):
         self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
         self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
-        self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=np.zeros(1), units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
+        self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
         self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation'), promotes=['*'])
 
         # --- composite sections ---
@@ -2608,7 +2608,7 @@ class RotorSE(Group):
 
         self.add('dt', CSMDrivetrain(npower))
         self.add('powercurve', RegulatedPowerCurveGroup(npower))
-        self.add('wind', PowerWind())
+        self.add('wind', PowerWind(1))
         self.add('cdf', WeibullWithMeanCDF(200))
         # self.add('cdf', RayleighCDF())
         self.add('aep', AEP())

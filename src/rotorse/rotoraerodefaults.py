@@ -13,7 +13,7 @@ from openmdao.api import Component, Group
 #from openmdao.core.system import AnalysisError
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
 
-from utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
+from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import common_configure
 from akima import Akima
 from enum import Enum

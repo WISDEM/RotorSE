@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from precomp import Orthotropic2DMaterial, CompositeSection, Profile
 from ccblade import CCAirfoil
 import time
-from airfoil_parameterization import AirfoilAnalysis
+from airfoilprep import AirfoilAnalysis
 
 rotor = Problem()
 
@@ -21,7 +21,7 @@ rotor = Problem()
 #                                                    correction3D=False, r_over_R=0.5, chord_over_r=0.15, tsr=7.55),
 #                                 PrecomputationalOptions=dict(AirfoilParameterization='Blended', numAirfoilsToCompute=10, tcMax=0.42, tcMin=0.13))
 
-airfoilOptions = dict(AnalysisMethod='Data', AirfoilParameterization='Precomputational', DirectSpline=True,
+airfoilOptions = dict(AnalysisMethod='XFOIL', AirfoilParameterization='Precomputational', DirectSpline=True,
                                 CFDOptions=dict(iterations=5000, processors=64, configFile='discrete_check.cfg', computeAirfoilsInParallel=True, CFDGradType='AutoDiff'),
                                 GradientOptions=dict(ComputeGradient=True, ComputeAirfoilGradients=True),
                                 SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=180, alphas=np.linspace(-5, 15, 10), Re=1e6, cd_max=1.5,
@@ -57,16 +57,16 @@ else:
     description = ''
 
 ## SETUP OPTIMIZATION
-rotor.driver = pyOptSparseDriver()
-rotor.driver.options['optimizer'] = 'SNOPT'
-rotor.driver.opt_settings['Print file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_print_' + description +'.out'
-rotor.driver.opt_settings['Summary file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_summary_' + description +'.out'
-rotor.driver.opt_settings['Major optimality tolerance'] = 5e-4
-rotor.driver.opt_settings['Verify level'] = -1 # 3
-recorder = SqliteRecorder(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'recorder_' + description +'.sql')
-recorder.options['record_params'] = True
-recorder.options['record_metadata'] = True
-rotor.driver.add_recorder(recorder)
+# rotor.driver = pyOptSparseDriver()
+# rotor.driver.options['optimizer'] = 'SNOPT'
+# rotor.driver.opt_settings['Print file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_print_' + description +'.out'
+# rotor.driver.opt_settings['Summary file'] = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'SNOPT_summary_' + description +'.out'
+# rotor.driver.opt_settings['Major optimality tolerance'] = 5e-4
+# rotor.driver.opt_settings['Verify level'] = -1 # 3
+# recorder = SqliteRecorder(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'SNOPToutputs') + os.sep + 'recorder_' + description +'.sql')
+# recorder.options['record_params'] = True
+# recorder.options['record_metadata'] = True
+# rotor.driver.add_recorder(recorder)
 
 ## Setup design variables and objective
 rotor.driver.add_objective('obj')
@@ -257,23 +257,23 @@ else:
             # Specify precomputational airfoil shapes starting point
             airfoil_parameterization = np.asarray([[0.404458, 0.0], [0.349012, 0.0], [0.29892, 0.0], [0.251105, 0.0], [0.211299, 0.0], [0.179338, 1.0]])
 
-            airfoil_parameterization = np.asarray([[ 0.39654312,  0.        ],
-                                     [ 0.29664731,  0.        ],
-                                     [ 0.26664731,  0.        ],
-                                     [ 0.23664731,  0.        ],
-                                     [ 0.20664731 , 0.        ],
-                                     [ 0.17664731 , 1.0]])
+            # airfoil_parameterization = np.asarray([[ 0.39654312,  0.        ],
+            #                          [ 0.29664731,  0.        ],
+            #                          [ 0.26664731,  0.        ],
+            #                          [ 0.23664731,  0.        ],
+            #                          [ 0.20664731 , 0.        ],
+            #                          [ 0.17664731 , 1.0]])
             #airfoil_parameterization = np.asarray([[0.404458, 1.0], [0.349012, 1.0], [0.29892, 1.0], [0.251105, 1.0], [0.211299, 1.0], [0.179338, 1.0]])
             #airfoil_parameterization = np.asarray([[0.419, 0.5], [0.38, 0.5], [0.35, 0.5], [0.32, 0.5], [0.30, 0.5], [0.24, 0.5]])
 
         else:
             airfoil_parameterization = np.asarray([[0.404458], [0.349012], [0.29892], [0.251105], [0.211299], [0.179338]])
-            airfoil_parameterization = np.asarray([[ 0.39654312],
-                         [ 0.29664731 ],
-                         [ 0.26664731  ],
-                         [ 0.23664731       ],
-                         [ 0.20664731      ],
-                         [ 0.17664731]])
+            # airfoil_parameterization = np.asarray([[ 0.39654312],
+            #              [ 0.29664731 ],
+            #              [ 0.26664731  ],
+            #              [ 0.23664731       ],
+            #              [ 0.20664731      ],
+            #              [ 0.17664731]])
             airfoilOptions['PrecomputationalOptions']['AirfoilFamilySpecification'] = [0., 0., 0., 0., 0., 1.]
         # Generate precomputational model
         print "Generating precomputational model"

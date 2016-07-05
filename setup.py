@@ -17,7 +17,7 @@ setup(
     license='Apache License, Version 2.0',
     dependency_links=['https://github.com/WISDEM/CCBlade/tarball/master#egg=ccblade',
         'https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam',
-        'https://github.com/WISDEM/CommonSE/tarball/master#egg=commonse'],
+        'https://github.com/WISDEM/CommonSE/tarball/openmdao1#egg=commonse'],
     zip_safe=False
 )
 

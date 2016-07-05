@@ -13,7 +13,7 @@ from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder
 from openmdao.api import ScipyGMRES
 # from brent import Brent
 
-from utilities import hstack, vstack, linspace_with_deriv, smooth_min, trapz_deriv
+from commonse.utilities import hstack, vstack, linspace_with_deriv, smooth_min, trapz_deriv
 from akima import Akima
 
 # convert between rotations/minute and radians/second
