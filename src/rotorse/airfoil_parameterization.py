@@ -1527,28 +1527,25 @@ class AirfoilAnalysis:
                 sys.path.append( SU2_RUN )
                 slurm_job = os.environ.has_key('SLURM_JOBID')
                 if slurm_job:
-                    host_names = os.environ.get('SLURM_JOB_NODELIST')
-                    host_names_array = host_names.split()
-                    nodes_per_host = os.environ.get('SLURM_TASKS_PER_NODE')
-                    nodes_per_host_array = host_names.split(',')
-                    node_sum = sum(nodes_per_host_array)
-                    node_len = len(nodes_per_host_array)
+                    hosts, all_nodes = self.__slurm()
+                    node_sum = sum(all_nodes)
+                    node_len = len(all_nodes)
                     num = len(alphas)
                     processes_1 = node_sum / num
                     remainder1 = node_sum % num
 
                     if node_len >= num:
-                        node = host_names_array[i]
-                        processes = nodes_per_host_array[i]
+                        node = hosts[i]
+                        processes = all_nodes[i]
                     else:
-                        if processes_1 < nodes_per_host_array[host_count]:
-                            node = host_names_array[host_count]
-                            processes = nodes_per_host_array[host_count]
+                        if processes_1 < all_nodes[host_count]:
+                            node = hosts[host_count]
+                            processes = all_nodes[host_count]
                             host_count += 1
                             cores_count += processes
                         else:
-                            node = host_names_array[host_count]
-                            processes = nodes_per_host_array[host_count] - processes_1
+                            node = hosts[host_count]
+                            processes = all_nodes[host_count] - processes_1
                             cores_count += processes
                     mpi_Command = 'mpirun -n %i --map-by node -host %s %s'
                 else:
@@ -1753,6 +1750,22 @@ class AirfoilAnalysis:
                 return cl, cd, dcl_dalphas, dcl_dRes, dcd_dalphas, dcd_dRes, dcl_dafps, dcd_dafps
 
             return cl, cd
+
+        def __slurm(self):
+            hosts = os.environ.get('NODEFILE').split()
+            all_nodes = []
+            nodes_per_host = os.environ.get('SLURM_TASKS_PER_NODE')
+            nodes_per_host_array1 = nodes_per_host.split(',')
+            for yy in range(len(nodes_per_host_array1)):
+                test1 = nodes_per_host_array1[yy].split('x')
+                if len(test1) > 1:
+                    test2 = test1[0][:-1]
+                    test3 = test1[1][:-1]
+                    for zz in range(int(test3)):
+                        all_nodes.append(int(test2))
+                else:
+                    all_nodes.append(int(test1[0]))
+            return hosts, all_nodes
 
     def __cfdGradientsParallel(self, basepath, konfigTotal, ztateTotal, objective):
         sys.path.append(os.environ['SU2_RUN'])
