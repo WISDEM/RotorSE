@@ -15,7 +15,7 @@ setup(
     package_dir={'': 'src'},
     packages=['rotorse','rotorse.test','rotorse.5MW_AFFiles','rotorse.5MW_PreCompFiles'],
     license='Apache License, Version 2.0',
-    dependency_links=['https://github.com/BYUFLOWLab/CCBlade/tarball/master#egg=ccblade',
+    dependency_links=['https://github.com/byuflowlab/CCBlade-1/tarball/master#egg=ccblade',
         'https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam',
         'https://github.com/WISDEM/CommonSE/tarball/openmdao1#egg=commonse'],
     zip_safe=False

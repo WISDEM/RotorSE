@@ -14,16 +14,9 @@ from airfoilprep import AirfoilAnalysis
 rotor = Problem()
 
 # === airfoil parameters ===
-# airfoilOptions = dict(AnalysisMethod='CFD', AirfoilParameterization='CST', DirectSpline=True,
-#                                 CFDOptions=dict(iterations=5000, processors=64, configFile='discrete_check.cfg', computeAirfoilsInParallel=True, CFDGradType='AutoDiff'),
-#                                 GradientOptions=dict(ComputeGradient=True, ComputeAirfoilGradients=False),
-#                                 SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=180, alphas=np.linspace(-5, 15, 10), Re=1e6, cd_max=1.5,
-#                                                    correction3D=False, r_over_R=0.5, chord_over_r=0.15, tsr=7.55),
-#                                 PrecomputationalOptions=dict(AirfoilParameterization='Blended', numAirfoilsToCompute=10, tcMax=0.42, tcMin=0.13))
-
-airfoilOptions = dict(AnalysisMethod='XFOIL', AirfoilParameterization='Precomputational', DirectSpline=True,
-                                CFDOptions=dict(iterations=5000, processors=64, configFile='discrete_check.cfg', computeAirfoilsInParallel=True, CFDGradType='AutoDiff'),
-                                GradientOptions=dict(ComputeGradient=True, ComputeAirfoilGradients=True),
+airfoilOptions = dict(AnalysisMethod='CFD', AirfoilParameterization='CST',
+                                CFDOptions=dict(iterations=5000, processors=64, configFile='cfd_comp_RANS.cfg', configDir='5MW_AFFiles', computeAirfoilsInParallel=True, CFDGradType='AutoDiff'),
+                                GradientOptions=dict(ComputeGradient=False, ComputeAirfoilGradients=True),
                                 SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=0, alphas=np.linspace(-5, 15, 10), Re=1e6, cd_max=1.5,
                                                    correction3D=False, r_over_R=0.5, chord_over_r=0.15, tsr=7.55),
                                 PrecomputationalOptions=dict(AirfoilParameterization='Blended', numAirfoilsToCompute=10, tcMax=0.42, tcMin=0.13))
