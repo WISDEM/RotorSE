@@ -6,11 +6,10 @@ aerodefaults.py
 Created by Andrew Ning on 2013-10-07.
 Copyright (c) NREL. All rights reserved.
 """
-
+from __future__ import print_function
 import numpy as np
 from math import pi, gamma
 from openmdao.api import Component, Group
-#from openmdao.core.system import AnalysisError
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
 
 from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
@@ -21,10 +20,6 @@ from copy import deepcopy
 import time
 import os
 
-global linearizeCount
-linearizeCount = 0
-global solveNonLinearCount
-solveNonLinearCount = 0
 # ---------------------
 # Map Design Variables to Discretization
 # ---------------------
@@ -254,7 +249,6 @@ class CCBladeAirfoils(Component):
                 airfoil_types = [0]*8
                 airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
                 airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-                afp_file = open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'AirfoilAnalysisFiles') + os.sep + "afp_tracker.txt", "a")
                 for i in range(len(airfoil_types)-2):
                     if change[i] > 0:
                         if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational':
@@ -263,14 +257,12 @@ class CCBladeAirfoils(Component):
                         else:
                             time0 = time.time()
                             airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], self.airfoilOptions, airfoilNum=i)
-                            print "Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds."
-                            print params['airfoil_parameterization'][i]
-                            print >> afp_file, 'Airfoil ', str(i+1), " changed. ", params['airfoil_parameterization'][i]
+                            print("Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds.")
+                            print(params['airfoil_parameterization'][i])
 
                     else:
                         index = np.where(af_idx >= i+2)[0][0]
                         airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
-                afp_file.close()
                 n = len(af_idx)
                 af = [0]*n
 
@@ -417,9 +409,6 @@ class CCBlade(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        global solveNonLinearCount
-        solveNonLinearCount += 1
-        print "Solve NonLinear Count", solveNonLinearCount
         self.r = params['r']
         self.chord = params['chord']
         self.theta = params['theta']
@@ -528,9 +517,7 @@ class CCBlade(Component):
             elif self.run_case == 'loads':
                 # distributed loads
                 Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
-        global linearizeCount
-        linearizeCount += 1
-        print "Linearize Count", linearizeCount
+
         J = {}
         if self.run_case == 'power':
 
@@ -1223,17 +1210,17 @@ if __name__ == '__main__':
     # === run and outputs ===
     rotor.run()
 
-    print 'AEP =', rotor['AEP']
-    print 'diameter =', rotor['diameter']
-    print 'ratedConditions:V =', rotor['ratedConditions:V']
-    print 'ratedConditions:Omega =', rotor['ratedConditions:Omega']
-    print 'ratedConditions:pitch =', rotor['ratedConditions:pitch']
-    print 'ratedConditions:T =', rotor['ratedConditions:T']
-    print 'ratedConditions:Q =', rotor['ratedConditions:Q']
-    print 'mass_one_blade =', rotor['mass_one_blade']
-    print 'mass_all_blades =', rotor['mass_all_blades']
-    print 'I_all_blades =', rotor['I_all_blades']
-    print 'freq =', rotor['freq']
-    print 'tip_deflection =', rotor['tip_deflection']
-    print 'root_bending_moment =', rotor['root_bending_moment']
+    print('AEP =', rotor['AEP'])
+    print('diameter =', rotor['diameter'])
+    print('ratedConditions:V =', rotor['ratedConditions:V'])
+    print('ratedConditions:Omega =', rotor['ratedConditions:Omega'])
+    print('ratedConditions:pitch =', rotor['ratedConditions:pitch'])
+    print('ratedConditions:T =', rotor['ratedConditions:T'])
+    print('ratedConditions:Q =', rotor['ratedConditions:Q'])
+    print('mass_one_blade =', rotor['mass_one_blade'])
+    print('mass_all_blades =', rotor['mass_all_blades'])
+    print('I_all_blades =', rotor['I_all_blades'])
+    print('freq =', rotor['freq'])
+    print('tip_deflection =', rotor['tip_deflection'])
+    print('root_bending_moment =', rotor['root_bending_moment'])
 

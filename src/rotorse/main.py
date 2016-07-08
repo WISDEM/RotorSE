@@ -24,9 +24,9 @@ rotor = Problem()
 airfoilOptions = dict(AnalysisMethod='XFOIL', AirfoilParameterization='Precomputational', DirectSpline=True,
                                 CFDOptions=dict(iterations=5000, processors=64, configFile='discrete_check.cfg', computeAirfoilsInParallel=True, CFDGradType='AutoDiff'),
                                 GradientOptions=dict(ComputeGradient=True, ComputeAirfoilGradients=True),
-                                SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=180, alphas=np.linspace(-5, 15, 10), Re=1e6, cd_max=1.5,
+                                SplineOptions=dict(AnalysisMethod='XFOIL', maxDirectAoA=0, alphas=np.linspace(-5, 15, 10), Re=1e6, cd_max=1.5,
                                                    correction3D=False, r_over_R=0.5, chord_over_r=0.15, tsr=7.55),
-                                PrecomputationalOptions=dict(AirfoilParameterization='TC', numAirfoilsToCompute=10, tcMax=0.42, tcMin=0.13))
+                                PrecomputationalOptions=dict(AirfoilParameterization='Blended', numAirfoilsToCompute=10, tcMax=0.42, tcMin=0.13))
 
 
 
@@ -278,7 +278,7 @@ else:
         # Generate precomputational model
         print "Generating precomputational model"
         time0 = time.time()
-        afanalysis = AirfoilAnalysis(None, airfoilOptions)
+        afanalysis = AirfoilAnalysis([0.25, 0.0], airfoilOptions)
         print "Precomputational model generation complete in ", time.time() - time0, " seconds."
         af_precomp_init = CCAirfoil.initFromPrecomputational
 

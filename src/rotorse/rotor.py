@@ -1,4 +1,4 @@
-# from __future__ import print_function
+from __future__ import print_function
 
 import numpy as np
 import math
@@ -57,7 +57,7 @@ class ResizeCompositeSection(Component):
         self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "ResizeCompositeSection"
+
         chord_str_ref = params['chord_str_ref']
         thick_str_ref = params['thick_str_ref']
         upperCSIn = params['upperCSIn']
@@ -329,10 +329,10 @@ class PreCompSections(Component):
                 else:
                     if params['airfoilOptions']['AirfoilParameterization'] != 'Precomputational':
                         afanalysis = AirfoilAnalysis(pro_str[j], params['airfoilOptions'])
-                        xl, xu, yl, yu = afanalysis.getCoordinates(type='split')
+                        xl, xu, yl, yu = afanalysis.getCoordinates(form='split')
                     else:
-                        afanalysis = AirfoilAnalysis(None, params['airfoilOptions'], generatePreCompModel=False)
-                        xl, xu, yl, yu = afanalysis.getPreCompCoordinates(pro_str[j], form='split')
+                        afanalysis = AirfoilAnalysis([0.25, 0.0], params['airfoilOptions'], generatePreCompModel=False)
+                        xl, xu, yl, yu = afanalysis.getCoordinates(pro_str[j], form='split')
                     # xl, xu, yl, yu = getCoordinates([pro_str[j]])
                     xu1 = np.zeros(len(xu))
                     xl1 = np.zeros(len(xl))
@@ -733,11 +733,6 @@ class CurveFEM(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        #print params['beam:EIxx']
-        #print params['beam:GJ']
-        #print params['beam:EA'][0]
-
-
         r = params['beam:z']
 
         rhub = r[0]
@@ -886,11 +881,7 @@ class GeometrySpline(Component):
         self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print 'r_max_chord', params['r_max_chord']
-        # print 'chord_sub', params['chord_sub']
-        # print 'theta_sub', params['theta_sub']
-        # print 'sparT', params['sparT']
-        # print 'teT', params['teT']
+
         Rhub = params['hubFraction'] * params['bladeLength']
         Rtip = Rhub + params['bladeLength']
 
@@ -960,7 +951,6 @@ class BladeCurvature(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        # print "BladeCurvature"
         # self.x_az, self.y_az, self.z_az, cone, s = \
         #     _bem.definecurvature(self.r, self.precurve, self.presweep, 0.0)
         self.r = params['r']
@@ -1057,7 +1047,7 @@ class DamageLoads(Component):
         self.add_output('Mya', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil c.s. y-direction')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "DamageLoads"
+
         self.rstar = params['rstar']
         self.Mxb = params['Mxb']
         self.Myb = params['Myb']
@@ -1162,7 +1152,7 @@ class TotalLoads(Component):
         self.add_output('Pz_af', shape=nstr, desc='total distributed loads in airfoil z-direction')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "TotalLoads"
+
         self.r = params['r']
         self.theta = params['theta']
         self.tilt = params['tilt']
@@ -1381,7 +1371,7 @@ class TipDeflection(Component):
         self.add_output('tip_deflection', shape=1, units='m', desc='deflection at tip in yaw x-direction')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "TipDeflection"
+
         self.dx = params['dx']
         self.dy = params['dy']
         self.dz = params['dz']
@@ -1453,7 +1443,7 @@ class BladeDeflection(Component):
         self.add_output('delta_precurve_sub', shape=3,  units='m', desc='adjustment to precurve to account for curvature from loading')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "BladeDeflection"
+
         self.dx = params['dx']
         self.dy = params['dy']
         self.dz = params['dz']
@@ -1624,7 +1614,7 @@ class RootMoment(Component):
         self.add_output('root_bending_moment', shape=1, units='N*m', desc='total magnitude of bending moment at root of blade')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "RootMoment"
+
         self.r_str = params['r_str']
         self.totalCone = params['totalCone']
         self.x_az = params['x_az']
@@ -1826,7 +1816,7 @@ class MassProperties(Component):
         self.add_output('I_all_blades', shape=6, desc='mass moments of inertia of all blades in yaw c.s. order:Ixx, Iyy, Izz, Ixy, Ixz, Iyz')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "MassProperties"
+
         self.blade_mass = params['blade_mass']
         self.blade_moment_of_inertia = params['blade_moment_of_inertia']
         self.tilt = params['tilt']
@@ -1922,7 +1912,7 @@ class ExtremeLoads(Component):
         self.add_output('Q_extreme', shape=1, units='N*m', desc='rotor torque at survival wind condition')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "ExtremeLoads"
+
         n = float(params['nBlades'])
         self.T = params['T']
         self.Q = params['Q']
@@ -1967,7 +1957,7 @@ class GustETM(Component):
 
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "GustETM"
+
         self.V_mean = params['V_mean']
         self.V_hub = params['V_hub']
         self.turbulence_class = params['turbulence_class']
@@ -2026,7 +2016,7 @@ class SetupPCModVarSpeed(Component):
         self.add_output('azimuth', shape=1, units='deg')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print 'control_tsr', params['control:tsr']
+
         self.Vrated = params['Vrated']
         self.R = params['R']
         self.Vfactor = params['Vfactor']
@@ -2204,7 +2194,7 @@ class OutputsStructures(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['mass_one_blade'] = params['mass_one_blade_in']
-        print "mass_all_blades", params['mass_all_blades_in']
+        print("mass_all_blades", params['mass_all_blades_in'])
         unknowns['mass_all_blades'] = params['mass_all_blades_in']
         unknowns['I_all_blades'] = params['I_all_blades_in']
         unknowns['freq'] = params['freq_in']

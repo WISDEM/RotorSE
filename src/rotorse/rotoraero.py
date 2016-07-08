@@ -6,12 +6,12 @@ rotoraero.py
 Created by Andrew Ning on 2013-10-07.
 Copyright (c) NREL. All rights reserved.
 """
-
+from __future__ import print_function
 import numpy as np
 from math import pi
-from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder, Brent
+from openmdao.api import Component, Group, Brent
 from openmdao.api import ScipyGMRES
-# from brent import Brent
+
 
 from commonse.utilities import hstack, vstack, linspace_with_deriv, smooth_min, trapz_deriv
 from akima import Akima
@@ -157,7 +157,7 @@ class SetupRunFixedSpeed(Component):
         self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "SEtupRunFixedSpeed"
+
         ctrl = params['control']
         n = ctrl.n
 
@@ -263,7 +263,7 @@ class UnregulatedPowerCurve(Component):
         self.add_output('P', units='W', desc='power')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "Unregulated power curve"
+
         ctrl = params['control']
         n = ctrl.n
 
@@ -348,7 +348,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             resids1 = P1- params['control:ratedPower']
             resids2 = P2 - params['control:ratedPower']
             if ((resids1<0) == (resids2<0)):
-                #print "Powercurve, Vcoarse: ", params['Vcoarse'], "Pcoarse", params['Pcoarse']
                 if Vrated == params['control:Vout']:
                     resids['Vrated'] = 10000
                 elif Vrated != params['control:Vin']:
@@ -466,9 +465,9 @@ class AEP(Component):
         self.fd_options['step_size'] = 1.0
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # print "AEP"
+
         unknowns['AEP'] = params['lossFactor']*np.trapz(params['P'], params['CDF_V'])/1e3*365.0*24.0  # in kWh
-        print "AEP: ", unknowns['AEP']
+        print("AEP: ", unknowns['AEP'])
 
     def list_deriv_vars(self):
 
@@ -542,7 +541,7 @@ class COE(Component):
         self.dcoe_dmass_all_blades = fixed_charge_rate * turbine_multiplier * (slope/3.0*ppi_mat) / net_aep
         self.dcoe_dAEP = -fixed_charge_rate*(turbine_cost+bos)/(losses*(params['AEP']**2))
 
-        print "COE: ", unknowns['COE']
+        print("COE: ", unknowns['COE'])
 
     def linearize(self, params, unknowns, resids):
 
