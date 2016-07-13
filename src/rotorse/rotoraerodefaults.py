@@ -54,7 +54,7 @@ class GeometrySpline(Component):
         # self.add_output('r_af_spacing', shape=16)  # deprecated: not used anymore
 
         self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
+        self.fd_options['step_calc'] = 'relative'
         #
         self.fd_options['force_fd'] = True
         
@@ -208,71 +208,86 @@ class CCBladeGeometry(Component):
         return J
 
 class CCBladeAirfoils(Component):
-    def __init__(self, n, num_airfoils, airfoils_dof):
+    def __init__(self, naero, nstr, num_airfoils, airfoils_dof):
         super(CCBladeAirfoils, self).__init__()
         self.add_param('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof)))
-        self.add_param('airfoilOptions', val={}, pass_by_obj=True)
-        self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
-        self.add_param('af_idx', val=np.zeros(n), pass_by_obj=True)
-        self.add_output('af', shape=n, desc='names of airfoil file', pass_by_obj=True)
+        self.add_param('afOptions', val={}, pass_by_obj=True)
+        self.add_param('airfoil_types', shape=naero, desc='names of airfoil file', pass_by_obj=True)
+        self.add_param('af_idx', val=np.zeros(naero), pass_by_obj=True)
+        self.add_param('af_str_idx', val=np.zeros(nstr), pass_by_obj=True)
+        self.add_output('af', shape=naero, desc='airfoils along aero sections', pass_by_obj=True)
+        self.add_output('af_str', shape=nstr, desc='airfoils along structural section', pass_by_obj=True)
         self.add_output('dummy', shape=1)
 
-        self.n = n
+        self.naero = naero
+        self.nstr = nstr
         self.num_airfoils = num_airfoils
         self.airfoil_dof = airfoils_dof
-        # self.add_output('')
 
     def solve_nonlinear(self, params, unknowns, resids):
-        self.airfoil_files = params['airfoil_files']
+        airfoil_types = params['airfoil_types']
         self.airfoil_parameterization = params['airfoil_parameterization']
-        self.airfoilOptions = params['airfoilOptions']
-        n = self.n
-        af = [0]*n
-        afinit = CCAirfoil.initFromAerodynFile
-        if self.airfoilOptions['AnalysisMethod'] is None:
-                for i in range(n):
-                    af[i] = afinit(self.airfoil_files[i])
-                self.airfoil_parameterization = None
-                self.airfoilOptions = None
-                unknowns['af'] = af
+        self.afOptions = params['afOptions']
+        if np.all(self.airfoil_parameterization == 0.):
+            af = [0]*self.naero
+            af_str = [0]*self.nstr
+            afinit = CCAirfoil.initFromAerodynFile
+            for i in range(self.naero):
+                af[i] = afinit(airfoil_types[params['af_idx'][i]])
+            for i in range(self.nstr):
+                af_str[i] = afinit(airfoil_types[params['af_str_idx'][i]])
+            self.airfoil_parameterization = None
+            self.afOptions = None
+            unknowns['af'] = af
+            unknowns['af_str'] = af_str
         else:
-            if self.airfoilOptions['SplineOptions']['AnalysisMethod']:
-                af_idx = params['af_idx']
-                change = np.zeros(self.num_airfoils)
-                for j in range(self.num_airfoils):
-                    index = np.where(af_idx >= j+2)[0][0]
-                    change[j] = max(abs(self.airfoil_files[index].afp - self.airfoil_parameterization[j]))
-                    if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational' and self.airfoilOptions['PrecomputationalOptions']['AirfoilParameterization'] == 'TC':
-                        change[j] = max(abs(self.airfoil_files[index].afp[0] - self.airfoil_parameterization[j]))
-                basepath = '5MW_AFFiles' + os.path.sep
-                af_freeform_init = CCAirfoil.initFromFreeForm
-                airfoil_types = [0]*8
-                airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
-                airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
-                for i in range(len(airfoil_types)-2):
-                    if change[i] > 0:
-                        if self.airfoilOptions['AirfoilParameterization'] == 'Precomputational':
-                            preComp = params['airfoil_files'][-1].preCompModel
-                            airfoil_types[i+2] = CCAirfoil.initFromPrecomputational(params['airfoil_parameterization'][i], self.airfoilOptions, preComp, airfoilNum=i)
-                        else:
-                            time0 = time.time()
-                            airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], self.airfoilOptions, airfoilNum=i)
-                            print("Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds.")
-                            print(params['airfoil_parameterization'][i])
-
-                    else:
-                        index = np.where(af_idx >= i+2)[0][0]
-                        airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
-                n = len(af_idx)
-                af = [0]*n
-
-                for i in range(n):
-                    af[i] = airfoil_types[af_idx[i]]
-
-                unknowns['af'] = deepcopy(af)
-                params['airfoil_files'] = deepcopy(af)
+            n = self.naero
+            af = [0]*n
+            afinit = CCAirfoil.initFromAerodynFile
+            if self.afOptions['AnalysisMethod'] is None or self.afOptions['AirfoilParameterization'] is None:
+                    for i in range(n):
+                        af[i] = afinit(self.airfoil_files[i])
+                    self.airfoil_parameterization = None
+                    self.afOptions = None
+                    unknowns['af'] = af
             else:
-                unknowns['af'] = params['airfoil_files']
+                if self.afOptions['SplineOptions']['AnalysisMethod']:
+                    af_idx = params['af_idx']
+                    change = np.zeros(self.num_airfoils)
+                    for j in range(self.num_airfoils):
+                        index = np.where(af_idx >= j+2)[0][0]
+                        change[j] = max(abs(self.airfoil_files[index].Saf - self.airfoil_parameterization[j]))
+                        if self.afOptions['AirfoilParameterization'] == 'Precomputational' and self.afOptions['PrecomputationalOptions']['AirfoilParameterization'] == 'TC':
+                            change[j] = max(abs(self.airfoil_files[index].Saf[0] - self.airfoil_parameterization[j]))
+                    basepath = '5MW_AFFiles' + os.path.sep
+                    af_freeform_init = CCAirfoil.initFromAirfoilAnalysis
+                    airfoil_types = [0]*8
+                    airfoil_types[0] = afinit(basepath + 'Cylinder1.dat')
+                    airfoil_types[1] = afinit(basepath + 'Cylinder2.dat')
+                    for i in range(len(airfoil_types)-2):
+                        if change[i] > 0:
+                            if self.afOptions['AirfoilParameterization'] == 'Precomputational':
+                                preComp = params['airfoil_files'][-1].preCompModel
+                                airfoil_types[i+2] = CCAirfoil.initFromPrecomputational(params['airfoil_parameterization'][i], self.afOptions, preComp, airfoilNum=i)
+                            else:
+                                time0 = time.time()
+                                airfoil_types[i+2] = af_freeform_init(params['airfoil_parameterization'][i], self.airfoil_files[i].afanalysis)
+                                print("Airfoil ", str(i+1), " parameterization has changed. Data regeneration complete in ", time.time() - time0, " seconds.")
+                                print(params['airfoil_parameterization'][i])
+
+                        else:
+                            index = np.where(af_idx >= i+2)[0][0]
+                            airfoil_types[i+2] = deepcopy(self.airfoil_files[index])
+                    n = len(af_idx)
+                    af = [0]*n
+
+                    for i in range(n):
+                        af[i] = airfoil_types[af_idx[i]]
+
+                    unknowns['af'] = deepcopy(af)
+                    params['airfoil_files'] = deepcopy(af)
+                else:
+                    unknowns['af'] = params['airfoil_files']
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -350,7 +365,7 @@ class CCBlade(Component):
         # parameters
         # self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
         self.add_param('airfoil_parameterization', val=np.zeros((n, airfoils_dof)))
-        self.add_param('airfoilOptions', val={}, pass_by_obj=True)
+        self.add_param('afOptions', val={}, pass_by_obj=True)
         self.add_param('af', shape=n, desc='names of airfoil file', pass_by_obj=True)
         self.add_param('B', val=3, desc='number of blades', pass_by_obj=True)
         self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
@@ -402,10 +417,9 @@ class CCBlade(Component):
         self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
 
         self.run_case = run_case
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
         self.num_airfoils = num_airfoils
         self.airfoils_dof = airfoils_dof
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -422,7 +436,7 @@ class CCBlade(Component):
         self.precurveTip = params['precurveTip']
         self.af = params['af'] #airfoil_files']
         self.airfoil_parameterization = params['airfoil_parameterization']
-        self.airfoilOptions = params['airfoilOptions']
+        self.afOptions = params['afOptions']
         self.B = params['B']
         self.rho = params['rho']
         self.mu = params['mu']
@@ -439,16 +453,15 @@ class CCBlade(Component):
         self.Omega_load = params['Omega_load']
         self.pitch_load = params['pitch_load']
         self.azimuth_load = params['azimuth_load']
-        computeGradient = self.airfoilOptions['GradientOptions']['ComputeGradient']
-
-        if self.airfoilOptions['GradientOptions']['ComputeAirfoilGradients'] and self.airfoilOptions['AnalysisMethod'] != 'Files':
-            afp = self.airfoil_parameterization
-        else:
-            afp = None
+        self.parallel = False
+        try:
+            computeGradient = self.afOptions['GradientOptions']['ComputeGradient']
+        except:
+            computeGradient = False
         self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
                     self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                     self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                    wakerotation=self.wakerotation, usecd=self.usecd, derivatives=computeGradient, airfoil_parameterization=afp, airfoilOptions=self.airfoilOptions)
+                    wakerotation=self.wakerotation, usecd=self.usecd, derivatives=computeGradient)
         # try:
         if self.run_case == 'power':
             # power, thrust, torque
@@ -461,7 +474,7 @@ class CCBlade(Component):
             unknowns['P'] = self.P
         elif self.run_case == 'loads':
             # distributed loads
-            if self.airfoilOptions['CFDOptions']['computeAirfoilsInParallel'] and self.airfoilOptions['AnalysisMethod'] == 'CFD' and self.airfoilOptions['AirfoilParameterization'] != 'Precomputational':
+            if self.parallel:
                 ccblade_loads = self.ccblade.distributedAeroLoadsParallel
             else:
                 ccblade_loads = self.ccblade.distributedAeroLoads
@@ -484,32 +497,13 @@ class CCBlade(Component):
             unknowns['loads:Omega'] = self.Omega_load
             unknowns['loads:pitch'] = self.pitch_load
             unknowns['loads:azimuth'] = self.azimuth_load
-        # except:
-        #     raise AnalysisError
-
-    def list_deriv_vars(self):
-
-        if self.run_case == 'power':
-            inputs = ('precone', 'tilt', 'hubHt', 'Rhub', 'Rtip', 'yaw',
-                'Uhub', 'Omega', 'pitch', 'r', 'chord', 'theta', 'precurve', 'precurveTip')
-            outputs = ('P', 'T', 'Q')
-
-        elif self.run_case == 'loads':
-
-            inputs = ('r', 'chord', 'theta', 'Rhub', 'Rtip', 'hubHt', 'precone',
-                'tilt', 'yaw', 'V_load', 'Omega_load', 'pitch_load', 'azimuth_load', 'precurve')
-            outputs = ('loads:r', 'loads:Px', 'loads:Py', 'loads:Pz', 'loads:V',
-                'loads:Omega', 'loads:pitch', 'loads:azimuth')
-
-        return inputs, outputs
-
 
     def linearize(self, params, unknowns, resids):
-        if not self.airfoilOptions['GradientOptions']['ComputeGradient']:
+        if not self.afOptions['GradientOptions']['ComputeGradient']:
             self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
                 self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                 self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True, airfoil_parameterization=self.airfoil_parameterization, airfoilOptions=self.airfoilOptions)
+                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
             if self.run_case == 'power':
                 # power, thrust, torque
                 self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
@@ -571,9 +565,9 @@ class CCBlade(Component):
             J['Q', 'precurveTip'] = dQ['dprecurveTip']
 
 
-            J['P', 'airfoil_parameterization'] = dP['dafp']
-            J['T', 'airfoil_parameterization'] = dT['dafp']
-            J['Q', 'airfoil_parameterization'] = dQ['dafp']
+            J['P', 'airfoil_parameterization'] = dP['dSaf']
+            J['T', 'airfoil_parameterization'] = dT['dSaf']
+            J['Q', 'airfoil_parameterization'] = dQ['dSaf']
 
         elif self.run_case == 'loads':
 
@@ -633,9 +627,9 @@ class CCBlade(Component):
             J['loads:pitch', 'pitch_load'] = 1.0
             J['loads:azimuth', 'azimuth_load'] = 1.0
 
-            zero_afp = np.zeros((n*self.airfoils_dof))
-            J['loads:Px', 'airfoil_parameterization'] = np.vstack([zero_afp, dNp['dafp'], zero_afp])
-            J['loads:Py', 'airfoil_parameterization'] = np.vstack([zero_afp, -dTp['dafp'], zero_afp])
+            zero_Saf = np.zeros((n*self.airfoils_dof))
+            J['loads:Px', 'airfoil_parameterization'] = np.vstack([zero_Saf, dNp['dSaf'], zero_Saf])
+            J['loads:Py', 'airfoil_parameterization'] = np.vstack([zero_Saf, -dTp['dSaf'], zero_Saf])
 
         return J
 
@@ -806,7 +800,7 @@ class WeibullWithMeanCDF(Component):
 #
 #         self.add_output('F', shape=20)
 #         self.fd_options['form'] = 'central'
-#         self.fd_options['step_type'] = 'relative'
+#         self.fd_options['step_calc'] = 'relative'
 #
 #     def solve_nonlinear(self, params, unknowns, resids):
 #

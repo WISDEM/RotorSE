@@ -20,6 +20,53 @@ from akima import Akima
 RPM2RS = pi/30.0
 RS2RPM = 30.0/pi
 
+class VarSpeedMachine(Component):
+    """variable speed machines"""
+    def __init__(self):
+        super(VarSpeedMachine, self).__init__()
+
+        self.add_param('Vin', shape=1, units='m/s', desc='cut-in wind speed')
+        self.add_param('Vout', shape=1, units='m/s', desc='cut-out wind speed')
+        self.add_param('ratedPower', shape=1, units='W', desc='rated power')
+        self.add_param('minOmega', shape=1, units='rpm', desc='minimum allowed rotor rotation speed')
+        self.add_param('maxOmega', shape=1, units='rpm', desc='maximum allowed rotor rotation speed')
+        self.add_param('tsr', shape=1, desc='tip-speed ratio in Region 2 (should be optimized externally)')
+        self.add_param('pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+
+class FixedSpeedMachine(Component):
+    """fixed speed machines"""
+    def __init__(self):
+        super(FixedSpeedMachine, self).__init__()
+        self.add_param('Vin', shape=1, units='m/s', desc='cut-in wind speed')
+        self.add_param('Vout', shape=1, units='m/s', desc='cut-out wind speed')
+        self.add_param('ratedPower', shape=1, units='W', desc='rated power')
+        self.add_param('Omega', shape=1, units='rpm', desc='fixed rotor rotation speed')
+        self.add_param('maxOmega', shape=1, units='rpm', desc='maximum allowed rotor rotation speed')
+        self.add_param('pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+
+class RatedConditions(Component):
+    """aerodynamic conditions at the rated wind speed"""
+    def __init__(self):
+        super(RatedConditions, self).__init__()
+        self.add_param('V', shape=1, units='m/s', desc='rated wind speed')
+        self.add_param('Omega', shape=1, units='rpm', desc='rotor rotation speed at rated')
+        self.add_param('pitch', shape=1, units='deg', desc='pitch setting at rated')
+        self.add_param('T', shape=1, units='N', desc='rotor aerodynamic thrust at rated')
+        self.add_param('T', shape=1, units='N*m', desc='rotor aerodynamic torque at rated')
+
+class AeroLoads(Component):
+    def __init__(self):
+        super(AeroLoads, self).__init__()
+        self.add_param('r', shape=1, units='m', desc='radial positions along blade going toward tip')
+        self.add_param('Px', shape=1, units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('Py', shape=1, units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('Pz', shape=1, units='N/m', desc='distributed loads in blade-aligned z-direction')
+
+        self.add_param('V', shape=1, units='m/s', desc='hub height wind speed')
+        self.add_param('Omega', shape=1, units='rpm', desc='rotor rotation speed')
+        self.add_param('pitch', shape=1, units='deg', desc='pitch angle')
+        self.add_param('T', shape=1, units='deg', desc='azimuthal angle')
+
 # ---------------------
 # Components
 # ---------------------
@@ -152,9 +199,9 @@ class SetupRunFixedSpeed(Component):
         self.add_output('Omega', units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', units='deg', desc='pitch angles to run')
 
-        self.fd_options['form'] = 'forward'
-        self.fd_options['step_type'] = 'absolute'
-        self.fd_options['force_fd'] = True
+        self.fd_options['step_calc'] = 'absolute' #TODO
+        self.deriv_options['type'] = 'fd'
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -190,7 +237,8 @@ class SetupRunVarSpeed(Component):
         self.add_output('Omega', shape=npower, units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', shape=npower, units='deg', desc='pitch angles to run')
 
-        self.fd_options['force_fd'] = True #TODO
+        self.deriv_options['type'] = 'fd' #TODO
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -225,13 +273,6 @@ class SetupRunVarSpeed(Component):
         J['Omega', 'control:maxOmega'] = dOmega_dmaxOmega
 
         self.J = J
-
-    def list_deriv_vars(self):
-
-        inputs = ('control:tsr', 'R', 'control:maxOmega')
-        outputs = ('Uhub', 'Omega', 'pitch', )
-
-        return inputs, outputs
 
     def linearize(self, params, unknowns, resids):
 
@@ -325,10 +366,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('ratedConditions:Q', shape=1, units='N*m', desc='rotor aerodynamic torque at rated')
 
         self.add_output('azimuth', shape=1, units='deg', desc='azimuth load')
-
-        # self.fd_options['form'] = 'central'
-        # self.fd_options['step_type'] = 'relative'
-        # self.fd_options['force_fd'] = True
 
     def solve_nonlinear(self, params, unknowns, resids):
         pass
@@ -437,17 +474,10 @@ class RegulatedPowerCurveGroup(Group):
         self.nl_solver.options['var_lower_bound'] = 'powercurve.control:Vin'
         self.nl_solver.options['var_upper_bound'] = 'powercurve.control:Vout'
         self.nl_solver.options['state_var'] = 'Vrated'
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
-        self.fd_options['force_fd'] = True
 
-    def list_deriv_vars(self):
-
-        inputs = ('control:tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R', 'control:maxOmega')
-        outputs = ('Vrated', 'V', 'P', 'ratedConditions:V', 'ratedConditions:Omega',
-            'ratedConditions:pitch', 'ratedConditions:T', 'ratedConditions:Q')
-
-        return inputs, outputs
+        self.deriv_options['form'] = 'central'
+        self.deriv_options['type'] = 'fd'
+        self.deriv_options['step_calc'] = 'relative'
 
 class AEP(Component):
     def __init__(self):
@@ -462,20 +492,11 @@ class AEP(Component):
         # outputs
         self.add_output('AEP', shape=1, units='kW*h', desc='annual energy production')
 
-        self.fd_options['step_size'] = 1.0
+        self.deriv_options['step_size'] = 1.0
 
     def solve_nonlinear(self, params, unknowns, resids):
 
         unknowns['AEP'] = params['lossFactor']*np.trapz(params['P'], params['CDF_V'])/1e3*365.0*24.0  # in kWh
-        print("AEP: ", unknowns['AEP'])
-
-    def list_deriv_vars(self):
-
-        inputs = ('CDF_V', 'P', 'lossFactor')
-        outputs = ('AEP',)
-
-        return inputs, outputs
-
 
     def linearize(self, params, unknowns, resids):
 
@@ -506,7 +527,7 @@ class COE(Component):
         self.add_param('AEP', shape=1, units='kW*h', desc='annual energy production')
         # outputs
         self.add_output('COE', shape=1, units='$/kW*h', desc='cost of energy')
-        self.fd_options['step_size'] = 1.0
+        self.deriv_options['step_size'] = 1.0
 
     def solve_nonlinear(self, params, unknowns, resids):
         # fixed cost assumptions from NREL 5MW land-based turbine (update as needed)
@@ -537,11 +558,10 @@ class COE(Component):
         parts_cost = (rotor_cost + nacelle_cost + tower_cost)
         turbine_multiplier = (1 + transportMultiplier + profitMultiplier) * (1 + overheadCostMultiplier + assemblyCostMultiplier)
         turbine_cost = turbine_multiplier * parts_cost
-        unknowns['COE'] = fixed_charge_rate*(turbine_cost+bos)/net_aep + 0.0122*(1-tax_rate)
+        opex = 0.0122 * net_aep #19566000
+        unknowns['COE'] = fixed_charge_rate*(turbine_cost+bos)/net_aep + opex*(1-tax_rate)/net_aep
         self.dcoe_dmass_all_blades = fixed_charge_rate * turbine_multiplier * (slope/3.0*ppi_mat) / net_aep
         self.dcoe_dAEP = -fixed_charge_rate*(turbine_cost+bos)/(losses*(params['AEP']**2))
-
-        print("COE: ", unknowns['COE'])
 
     def linearize(self, params, unknowns, resids):
 
