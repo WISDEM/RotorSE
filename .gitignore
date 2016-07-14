@@ -88,3 +88,5 @@ nosetests.xml
 Icon?
 ehthumbs.db
 Thumbs.db
+
+src/rotorse/AirfoilAnalysisFiles/
