@@ -26,7 +26,6 @@ from enum import Enum
 import _pBEAM
 import _curvefem
 import _bem  # TODO: move to rotoraero
-from airfoilprep import AirfoilAnalysis # TODO: move to ccblade
 
 
 # ---------------------
@@ -3140,7 +3139,9 @@ if __name__ == '__main__':
     af = [0]*n
     for i in range(n):
         af[i] = airfoil_types[rotor['af_idx'][i]]
-    rotor['airfoil_types'] = airfoil_types  # (List): names of airfoil file
+    rotor['airfoil_types'] = airfoil_types  # (List): names of airfoil file or initialized CCAirfoils
+    rotor['airfoil_parameterization'] = None # (Array): airfoil shape parameters
+    rotor['airfoilOptions'] = None # (Dict): dictionary of options for airfoil shape parameterization and analysis
     # ----------------------
 
     # === atmosphere ===
