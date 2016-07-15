@@ -3140,8 +3140,8 @@ if __name__ == '__main__':
     for i in range(n):
         af[i] = airfoil_types[rotor['af_idx'][i]]
     rotor['airfoil_types'] = airfoil_types  # (List): names of airfoil file or initialized CCAirfoils
-    rotor['airfoil_parameterization'] = None # (Array): airfoil shape parameters
-    rotor['airfoilOptions'] = None # (Dict): dictionary of options for airfoil shape parameterization and analysis
+    rotor['airfoil_parameterization'] = np.zeros((6, 1)) # (Array): airfoil shape parameters
+    rotor['afOptions'] = dict() # (Dict): dictionary of options for airfoil shape parameterization and analysis
     # ----------------------
 
     # === atmosphere ===
