@@ -72,30 +72,29 @@ class AeroLoads(Component):
 # Base Components
 # ---------------------
 
-class GeomtrySetupBase(Component):
+class GeometrySetupBase(Component):
     """a base component that computes the rotor radius from the geometry"""
-    def __init__(self, n):
-        super(GeomtrySetupBase, self).__init__()
+    def __init__(self):
+        super(GeometrySetupBase, self).__init__()
         self.add_output('R', shape=1, units='m', desc='rotor radius')
 
 
 class AeroBase(Component):
     """A base component for a rotor aerodynamics code."""
-    def __init__(self, n):
+    def __init__(self, n, n2):
         super(AeroBase, self).__init__()
-        self.add_param('run_case', val=Enum('power', ('power', 'loads')))
 
         # --- use these if (run_case == 'power') ---
 
         # inputs
-        self.add_param('Uhub', val=np.array([1.0]), units='m/s', desc='hub height wind speed')
-        self.add_param('Omega', val=np.array([0.0]), units='rpm', desc='rotor rotation speed')
-        self.add_param('pitch', val=np.array([0.0]), units='deg', desc='blade pitch setting')
+        self.add_param('Uhub', shape=n2, units='m/s', desc='hub height wind speed')
+        self.add_param('Omega', shape=n2, units='rpm', desc='rotor rotation speed')
+        self.add_param('pitch', shape=n2, units='deg', desc='blade pitch setting')
 
         # outputs
-        self.add_output('T', val=np.array([0.0]), units='N', desc='rotor aerodynamic thrust')
-        self.add_output('Q', val=np.array([0.0]), units='N*m', desc='rotor aerodynamic torque')
-        self.add_output('P', val=np.array([0.0]), units='W', desc='rotor aerodynamic power')
+        self.add_output('T', shape=n2, units='N', desc='rotor aerodynamic thrust')
+        self.add_output('Q', shape=n2, units='N*m', desc='rotor aerodynamic torque')
+        self.add_output('P', shape=n2, units='W', desc='rotor aerodynamic power')
 
 
         # --- use these if (run_case == 'loads') ---
@@ -110,38 +109,48 @@ class AeroBase(Component):
         self.add_param('azimuth_load', shape=1, units='deg', desc='blade azimuthal location')
 
         # outputs
-        # loads = VarTree(AeroLoads(), iotype='out', desc='loads in blade-aligned coordinate system') # TODO
+        self.add_output('loads:r', shape=n+2, units='m', desc='radial positions along blade going toward tip')
+        self.add_output('loads:Px', shape=n+2, units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_output('loads:Py', shape=n+2, units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_output('loads:Pz', shape=n+2, units='N/m', desc='distributed loads in blade-aligned z-direction')
+
+        # corresponding setting for loads
+        self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
+        self.add_output('loads:Omega', shape=1, units='rpm', desc='rotor rotation speed')
+        self.add_output('loads:pitch', shape=1, units='deg', desc='pitch angle')
+        self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
 
 
 class DrivetrainLossesBase(Component):
     """base component for drivetrain efficiency losses"""
     def __init__(self, n):
         super(DrivetrainLossesBase, self).__init__()
-        self.add_param('aeroPower', units='W', desc='aerodynamic power')
-        self.add_param('aeroTorque', units='N*m', desc='aerodynamic torque')
-        self.add_param('aeroThrust', units='N', desc='aerodynamic thrust')
-        self.add_param('ratedPower', units='W', desc='rated power')
+        self.add_param('aeroPower', shape=n, units='W', desc='aerodynamic power')
+        self.add_param('aeroTorque', shape=n, units='N*m', desc='aerodynamic torque')
+        self.add_param('aeroThrust', shape=n, units='N', desc='aerodynamic thrust')
+        self.add_param('ratedPower', shape=1, units='W', desc='rated power')
 
-        self.add_output('power', units='W', desc='total power after drivetrain losses')
-        self.add_output('rpm', units='rpm', desc='rpm curve after drivetrain losses')
+        self.add_output('power', shape=n, units='W', desc='total power after drivetrain losses')
+        self.add_output('rpm', shape=n, units='rpm', desc='rpm curve after drivetrain losses')
 
 
 class PDFBase(Component):
     """probability distribution function"""
-    def __init__(self, n):
+    def __init__(self, nspline):
         super(PDFBase, self).__init__()
-        self.add_param('x', shape=1)
+        self.add_param('x', shape=nspline)
 
-        self.add_output('f', shape=1)
+        self.add_output('f', shape=nspline)
 
 
 class CDFBase(Component):
     """cumulative distribution function"""
-    def __init__(self, n):
+    def __init__(self, nspline):
         super(CDFBase, self).__init__()
-        self.add_param('x', shape=1)
 
-        self.add_output('F', shape=1)
+        self.add_param('x', shape=nspline,  units='m/s', desc='corresponding reference height')
+
+        self.add_output('F', shape=nspline, units='m/s', desc='magnitude of wind speed at each z location')
 
 # ---------------------
 # Components

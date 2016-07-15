@@ -919,8 +919,11 @@ class Profile:
 
     @staticmethod
     def initFromCoordinates(x, y, LEtoLE = True):
-        x = x.tolist()
-        y = y.tolist()
+        try:
+            x = x.tolist()
+            y = y.tolist()
+        except:
+            pass
         if LEtoLE:
             x.append(x[0])
             y.append(y[0])

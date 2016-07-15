@@ -29,6 +29,89 @@ import _bem  # TODO: move to rotoraero
 
 
 # ---------------------
+# Base Components
+# ---------------------
+
+class BeamPropertiesBase(Component):
+    def __init__(self, nstr):
+        super(BeamPropertiesBase, self).__init__()
+        self.add_output('beam:z', shape=nstr, units='m', desc='locations of properties along beam')
+        self.add_output('beam:EA', shape=nstr, units='N', desc='axial stiffness')
+        self.add_output('beam:EIxx', shape=nstr, units='N*m**2', desc='edgewise stiffness (bending about :ref:`x-direction of airfoil aligned coordinate system <blade_airfoil_coord>`)')
+        self.add_output('beam:EIyy', shape=nstr, units='N*m**2', desc='flatwise stiffness (bending about y-direction of airfoil aligned coordinate system)')
+        self.add_output('beam:EIxy', shape=nstr, units='N*m**2', desc='coupled flap-edge stiffness')
+        self.add_output('beam:GJ', shape=nstr, units='N*m**2', desc='torsional stiffness (about axial z-direction of airfoil aligned coordinate system)')
+        self.add_output('beam:rhoA', shape=nstr, units='kg/m', desc='mass per unit length')
+        self.add_output('beam:rhoJ', shape=nstr, units='kg*m', desc='polar mass moment of inertia per unit length')
+        self.add_output('beam:x_ec_str', shape=nstr, units='m', desc='x-distance to elastic center from point about which above structural properties are computed (airfoil aligned coordinate system)')
+        self.add_output('beam:y_ec_str', shape=nstr, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
+
+class StrucBase(Component):
+    def __init__(self, nstr):
+        super(StrucBase, self).__init__()
+        # all inputs/outputs in airfoil coordinate system
+        self.add_param('nF', val=5, desc='number of natural frequencies to return', pass_by_obj=True)
+
+        self.add_param('Px_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil x-direction at max deflection condition')
+        self.add_param('Py_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil y-direction at max deflection condition')
+        self.add_param('Pz_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil z-direction at max deflection condition')
+
+        self.add_param('Px_strain', shape=nstr, desc='distributed load (force per unit length) in airfoil x-direction at max strain condition')
+        self.add_param('Py_strain', shape=nstr, desc='distributed load (force per unit length) in airfoil y-direction at max strain condition')
+        self.add_param('Pz_strain', shape=nstr, desc='distributed load (force per unit length) in airfoil z-direction at max strain condition')
+
+        self.add_param('Px_pc_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil x-direction for deflection used in generated power curve')
+        self.add_param('Py_pc_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil y-direction for deflection used in generated power curve')
+        self.add_param('Pz_pc_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil z-direction for deflection used in generated power curve')
+
+        self.add_param('xu_strain_spar', shape=nstr, desc='x-position of midpoint of spar cap on upper surface for strain calculation')
+        self.add_param('xl_strain_spar', shape=nstr, desc='x-position of midpoint of spar cap on lower surface for strain calculation')
+        self.add_param('yu_strain_spar', shape=nstr, desc='y-position of midpoint of spar cap on upper surface for strain calculation')
+        self.add_param('yl_strain_spar', shape=nstr, desc='y-position of midpoint of spar cap on lower surface for strain calculation')
+        self.add_param('xu_strain_te', shape=nstr, desc='x-position of midpoint of trailing-edge panel on upper surface for strain calculation')
+        self.add_param('xl_strain_te', shape=nstr, desc='x-position of midpoint of trailing-edge panel on lower surface for strain calculation')
+        self.add_param('yu_strain_te', shape=nstr, desc='y-position of midpoint of trailing-edge panel on upper surface for strain calculation')
+        self.add_param('yl_strain_te', shape=nstr, desc='y-position of midpoint of trailing-edge panel on lower surface for strain calculation')
+
+        self.add_param('Mx_damage', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil x-direction')
+        self.add_param('My_damage', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil y-direction')
+        self.add_param('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap')
+        self.add_param('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels')
+        self.add_param('eta_damage', val=1.755, desc='safety factor for fatigue')
+        self.add_param('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis')
+        self.add_param('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis')
+
+        self.add_param('beam:z', shape=nstr, units='m', desc='locations of properties along beam')
+        self.add_param('beam:EA', shape=nstr, units='N', desc='axial stiffness')
+        self.add_param('beam:EIxx', shape=nstr, units='N*m**2', desc='edgewise stiffness (bending about :ref:`x-direction of airfoil aligned coordinate system <blade_airfoil_coord>`)')
+        self.add_param('beam:EIyy', shape=nstr, units='N*m**2', desc='flatwise stiffness (bending about y-direction of airfoil aligned coordinate system)')
+        self.add_param('beam:EIxy', shape=nstr, units='N*m**2', desc='coupled flap-edge stiffness')
+        self.add_param('beam:GJ', shape=nstr, units='N*m**2', desc='torsional stiffness (about axial z-direction of airfoil aligned coordinate system)')
+        self.add_param('beam:rhoA', shape=nstr, units='kg/m', desc='mass per unit length')
+        self.add_param('beam:rhoJ', shape=nstr, units='kg*m', desc='polar mass moment of inertia per unit length')
+        self.add_param('beam:x_ec_str', shape=nstr, units='m', desc='x-distance to elastic center from point about which above structural properties are computed (airfoil aligned coordinate system)')
+        self.add_param('beam:y_ec_str', shape=nstr, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
+
+        # outputs
+        self.add_output('blade_mass', shape=1, units='kg', desc='mass of one blades')
+        self.add_output('blade_moment_of_inertia', shape=1, units='kg*m**2', desc='out of plane moment of inertia of a blade')
+        self.add_output('freq', shape=5, units='Hz', desc='first nF natural frequencies of blade')
+        self.add_output('dx_defl', shape=nstr, desc='deflection of blade section in airfoil x-direction under max deflection loading')
+        self.add_output('dy_defl', shape=nstr, desc='deflection of blade section in airfoil y-direction under max deflection loading')
+        self.add_output('dz_defl', shape=nstr, desc='deflection of blade section in airfoil z-direction under max deflection loading')
+        self.add_output('dx_pc_defl', shape=nstr, desc='deflection of blade section in airfoil x-direction under power curve loading')
+        self.add_output('dy_pc_defl', shape=nstr, desc='deflection of blade section in airfoil y-direction under power curve loading')
+        self.add_output('dz_pc_defl', shape=nstr, desc='deflection of blade section in airfoil z-direction under power curve loading')
+        self.add_output('strainU_spar', shape=nstr, desc='strain in spar cap on upper surface at location xu,yu_strain with loads P_strain')
+        self.add_output('strainL_spar', shape=nstr, desc='strain in spar cap on lower surface at location xl,yl_strain with loads P_strain')
+        self.add_output('strainU_te', shape=nstr, desc='strain in trailing-edge panels on upper surface at location xu,yu_te with loads P_te')
+        self.add_output('strainL_te', shape=nstr, desc='strain in trailing-edge panels on lower surface at location xl,yl_te with loads P_te')
+        self.add_output('damageU_spar', shape=nstr, desc='fatigue damage on upper surface in spar cap')
+        self.add_output('damageL_spar', shape=nstr, desc='fatigue damage on lower surface in spar cap')
+        self.add_output('damageU_te', shape=nstr, desc='fatigue damage on upper surface in trailing-edge panels')
+        self.add_output('damageL_te', shape=nstr, desc='fatigue damage on lower surface in trailing-edge panels')
+
+# ---------------------
 # Components
 # ---------------------
 
@@ -192,9 +275,9 @@ class ResizeCompositeSection(Component):
         unknowns['lowerCSOut'] = lowerCSOut
         unknowns['websCSOut'] = websCSOut
 
-class PreCompSections(Component):
+class PreCompSections(BeamPropertiesBase):
     def __init__(self, nstr, num_airfoils, af_dof):
-        super(PreCompSections, self).__init__()
+        super(PreCompSections, self).__init__(nstr)
         self.add_param('r', shape=nstr, units='m', desc='radial positions. r[0] should be the hub location \
             while r[-1] should be the blade tip. Any number \
             of locations can be specified between these in ascending order.')
@@ -225,17 +308,6 @@ class PreCompSections(Component):
         self.add_output('xl_strain_te', shape=nstr, desc='x-position of midpoint of trailing-edge panel on lower surface for strain calculation')
         self.add_output('yu_strain_te', shape=nstr, desc='y-position of midpoint of trailing-edge panel on upper surface for strain calculation')
         self.add_output('yl_strain_te', shape=nstr, desc='y-position of midpoint of trailing-edge panel on lower surface for strain calculation')
-
-        self.add_output('beam:z', shape=nstr, units='m', desc='locations of properties along beam')
-        self.add_output('beam:EA', shape=nstr, units='N', desc='axial stiffness')
-        self.add_output('beam:EIxx', shape=nstr, units='N*m**2', desc='edgewise stiffness (bending about :ref:`x-direction of airfoil aligned coordinate system <blade_airfoil_coord>`)')
-        self.add_output('beam:EIyy', shape=nstr, units='N*m**2', desc='flatwise stiffness (bending about y-direction of airfoil aligned coordinate system)')
-        self.add_output('beam:EIxy', shape=nstr, units='N*m**2', desc='coupled flap-edge stiffness')
-        self.add_output('beam:GJ', shape=nstr, units='N*m**2', desc='torsional stiffness (about axial z-direction of airfoil aligned coordinate system)')
-        self.add_output('beam:rhoA', shape=nstr, units='kg/m', desc='mass per unit length')
-        self.add_output('beam:rhoJ', shape=nstr, units='kg*m', desc='polar mass moment of inertia per unit length')
-        self.add_output('beam:x_ec_str', shape=nstr, units='m', desc='x-distance to elastic center from point about which above structural properties are computed (airfoil aligned coordinate system)')
-        self.add_output('beam:y_ec_str', shape=nstr, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
 
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
@@ -350,7 +422,7 @@ class PreCompSections(Component):
         # update the profile coordinates if applicable
         for i in range(nstr):
             if params['af_str'][i].Saf is not None:
-                xl, xu, yl, yu = params['af_str'][i].afanalysis.getCoordinates(form='split')
+                x, y, xl, xu, yl, yu = params['af_str'][i].afanalysis.getCoordinates(form='all')
                 xu1 = np.zeros(len(xu))
                 xl1 = np.zeros(len(xl))
                 yu1 = np.zeros(len(xu))
@@ -361,10 +433,10 @@ class PreCompSections(Component):
                 for k in range(len(xl)):
                     xl1[k] = float(xl[k])
                     yl1[k] = float(yl[k])
-                x = np.append(xu1, xl1)
-                y = np.append(yu1, yl1)
+                # x = np.append(xu1, xl1)
+                # y = np.append(yu1, yl1)
                 # TODO : check if necessary
-                profile[i] = Profile.initFromCoordinates(x, y)
+                profile[i] = Profile.initFromCoordinates(x, y, LEtoLE=False)
                 self.profile = profile
 
         mat = self.materials
@@ -456,71 +528,11 @@ class PreCompSections(Component):
         unknowns['eps_crit_spar'] = self.panelBucklingStrain(self.sector_idx_strain_spar)
         unknowns['eps_crit_te'] = self.panelBucklingStrain(self.sector_idx_strain_te)
 
-class RotorWithpBEAM(Component):
+class RotorWithpBEAM(StrucBase):
 
     def __init__(self, nstr):
-        super(RotorWithpBEAM, self).__init__()
+        super(RotorWithpBEAM, self).__init__(nstr)
 
-        self.add_param('nF', val=5, desc='number of natural frequencies to return', pass_by_obj=True)
-
-        self.add_param('Px_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil x-direction at max deflection condition')
-        self.add_param('Py_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil y-direction at max deflection condition')
-        self.add_param('Pz_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil z-direction at max deflection condition')
-
-        self.add_param('Px_strain', shape=nstr, desc='distributed load (force per unit length) in airfoil x-direction at max strain condition')
-        self.add_param('Py_strain', shape=nstr, desc='distributed load (force per unit length) in airfoil y-direction at max strain condition')
-        self.add_param('Pz_strain', shape=nstr, desc='distributed load (force per unit length) in airfoil z-direction at max strain condition')
-
-        self.add_param('Px_pc_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil x-direction for deflection used in generated power curve')
-        self.add_param('Py_pc_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil y-direction for deflection used in generated power curve')
-        self.add_param('Pz_pc_defl', shape=nstr, desc='distributed load (force per unit length) in airfoil z-direction for deflection used in generated power curve')
-
-        self.add_param('xu_strain_spar', shape=nstr, desc='x-position of midpoint of spar cap on upper surface for strain calculation')
-        self.add_param('xl_strain_spar', shape=nstr, desc='x-position of midpoint of spar cap on lower surface for strain calculation')
-        self.add_param('yu_strain_spar', shape=nstr, desc='y-position of midpoint of spar cap on upper surface for strain calculation')
-        self.add_param('yl_strain_spar', shape=nstr, desc='y-position of midpoint of spar cap on lower surface for strain calculation')
-        self.add_param('xu_strain_te', shape=nstr, desc='x-position of midpoint of trailing-edge panel on upper surface for strain calculation')
-        self.add_param('xl_strain_te', shape=nstr, desc='x-position of midpoint of trailing-edge panel on lower surface for strain calculation')
-        self.add_param('yu_strain_te', shape=nstr, desc='y-position of midpoint of trailing-edge panel on upper surface for strain calculation')
-        self.add_param('yl_strain_te', shape=nstr, desc='y-position of midpoint of trailing-edge panel on lower surface for strain calculation')
-
-        self.add_param('Mx_damage', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil x-direction')
-        self.add_param('My_damage', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil y-direction')
-        self.add_param('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap')
-        self.add_param('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels')
-        self.add_param('eta_damage', val=1.755, desc='safety factor for fatigue')
-        self.add_param('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis')
-        self.add_param('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis')
-
-        self.add_param('beam:z', shape=nstr, units='m', desc='locations of properties along beam')
-        self.add_param('beam:EA', shape=nstr, units='N', desc='axial stiffness')
-        self.add_param('beam:EIxx', shape=nstr, units='N*m**2', desc='edgewise stiffness (bending about :ref:`x-direction of airfoil aligned coordinate system <blade_airfoil_coord>`)')
-        self.add_param('beam:EIyy', shape=nstr, units='N*m**2', desc='flatwise stiffness (bending about y-direction of airfoil aligned coordinate system)')
-        self.add_param('beam:EIxy', shape=nstr, units='N*m**2', desc='coupled flap-edge stiffness')
-        self.add_param('beam:GJ', shape=nstr, units='N*m**2', desc='torsional stiffness (about axial z-direction of airfoil aligned coordinate system)')
-        self.add_param('beam:rhoA', shape=nstr, units='kg/m', desc='mass per unit length')
-        self.add_param('beam:rhoJ', shape=nstr, units='kg*m', desc='polar mass moment of inertia per unit length')
-        self.add_param('beam:x_ec_str', shape=nstr, units='m', desc='x-distance to elastic center from point about which above structural properties are computed (airfoil aligned coordinate system)')
-        self.add_param('beam:y_ec_str', shape=nstr, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
-
-        # outputs
-        self.add_output('blade_mass', shape=1, units='kg', desc='mass of one blades')
-        self.add_output('blade_moment_of_inertia', shape=1, units='kg*m**2', desc='out of plane moment of inertia of a blade')
-        self.add_output('freq', shape=5, units='Hz', desc='first nF natural frequencies of blade')
-        self.add_output('dx_defl', shape=nstr, desc='deflection of blade section in airfoil x-direction under max deflection loading')
-        self.add_output('dy_defl', shape=nstr, desc='deflection of blade section in airfoil y-direction under max deflection loading')
-        self.add_output('dz_defl', shape=nstr, desc='deflection of blade section in airfoil z-direction under max deflection loading')
-        self.add_output('dx_pc_defl', shape=nstr, desc='deflection of blade section in airfoil x-direction under power curve loading')
-        self.add_output('dy_pc_defl', shape=nstr, desc='deflection of blade section in airfoil y-direction under power curve loading')
-        self.add_output('dz_pc_defl', shape=nstr, desc='deflection of blade section in airfoil z-direction under power curve loading')
-        self.add_output('strainU_spar', shape=nstr, desc='strain in spar cap on upper surface at location xu,yu_strain with loads P_strain')
-        self.add_output('strainL_spar', shape=nstr, desc='strain in spar cap on lower surface at location xl,yl_strain with loads P_strain')
-        self.add_output('strainU_te', shape=nstr, desc='strain in trailing-edge panels on upper surface at location xu,yu_te with loads P_te')
-        self.add_output('strainL_te', shape=nstr, desc='strain in trailing-edge panels on lower surface at location xl,yl_te with loads P_te')
-        self.add_output('damageU_spar', shape=nstr, desc='fatigue damage on upper surface in spar cap')
-        self.add_output('damageL_spar', shape=nstr, desc='fatigue damage on lower surface in spar cap')
-        self.add_output('damageU_te', shape=nstr, desc='fatigue damage on upper surface in trailing-edge panels')
-        self.add_output('damageL_te', shape=nstr, desc='fatigue damage on lower surface in trailing-edge panels')
 
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
@@ -2461,7 +2473,7 @@ class RotorSE(Group):
         self.add('powercurve', RegulatedPowerCurveGroup(npower))
         self.add('wind', PowerWind(1))
         # self.add('cdf', WeibullWithMeanCDF(200))
-        self.add('cdf', RayleighCDF())
+        self.add('cdf', RayleighCDF(200))
         self.add('aep', AEP())
         self.add('outputs_aero', OutputsAero(), promotes=['*'])
 
@@ -3079,7 +3091,7 @@ if __name__ == '__main__':
 
     # -------------------
     rotor = Problem()
-    rotor.root = RotorSE(naero=17, nstr=38, npower=20)
+    rotor.root = RotorSE(naero=17, nstr=38, npower=20, num_airfoils=6, af_dof=2)
     rotor.setup(check=False)
 
     # === blade grid ===
@@ -3134,14 +3146,22 @@ if __name__ == '__main__':
     # place at appropriate radial stations
     rotor['af_idx'] = np.array([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
     rotor['af_str_idx'] = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7])
+    rotor['airfoil_parameterization'] = np.asarray([[0.404458, 0.0], [0.349012, 0.0], [0.29892, 0.0], [0.251105, 0.0], [0.211299, 0.0], [0.179338, 1.0]])
+    rotor['afOptions'] = dict(AnalysisMethod='XFOIL', AirfoilParameterization='Precomputational', SplineOptions=dict(maxDirectAoA=0), PrecomputationalOptions=dict())#airfoilShapeMethod='NACA'))  # (Dict): dictionary of options for airfoil shape parameterization and analysis
 
-    n = len(rotor['af_idx'])
-    af = [0]*n
-    for i in range(n):
-        af[i] = airfoil_types[rotor['af_idx'][i]]
+    baseAirfoilsCoordindates0 = [0]*5
+    baseAirfoilsCoordindates0[0] = os.path.join(basepath, 'DU40.dat')
+    baseAirfoilsCoordindates0[1] = os.path.join(basepath, 'DU35.dat')
+    baseAirfoilsCoordindates0[2] = os.path.join(basepath, 'DU30.dat')
+    baseAirfoilsCoordindates0[3] = os.path.join(basepath, 'DU25.dat')
+    baseAirfoilsCoordindates0[4] = os.path.join(basepath, 'DU21.dat')
+    # Corresponding to blended airfoil family factor of 1.0
+    baseAirfoilsCoordindates1 = [0]*1
+    baseAirfoilsCoordindates1[0] = os.path.join(basepath, 'NACA64.dat')
+    rotor['afOptions']['PrecomputationalOptions']['BaseAirfoilsCoordinates0'] = baseAirfoilsCoordindates0
+    rotor['afOptions']['PrecomputationalOptions']['BaseAirfoilsCoordinates1'] = baseAirfoilsCoordindates1
     rotor['airfoil_types'] = airfoil_types  # (List): names of airfoil file or initialized CCAirfoils
-    rotor['airfoil_parameterization'] = np.zeros((6, 1)) # (Array): airfoil shape parameters
-    rotor['afOptions'] = dict() # (Dict): dictionary of options for airfoil shape parameterization and analysis
+
     # ----------------------
 
     # === atmosphere ===
