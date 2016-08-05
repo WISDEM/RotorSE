@@ -229,36 +229,36 @@ class CCBladeAirfoils(Component):
         return J
 
 class AirfoilSpline(Component):
-    def __init__(self, n, nstr, num_airfoils, airfoils_dof):
+    def __init__(self, naero, nstr, num_airfoils, airfoils_dof):
         super(AirfoilSpline, self).__init__()
         self.add_param('airfoil_parameterization', val=np.zeros((num_airfoils, airfoils_dof)))
-        self.add_param('af_idx', val=np.zeros(n), pass_by_obj=True)
+        self.add_param('af_idx', val=np.zeros(naero), pass_by_obj=True)
         self.add_param('af_str_idx', val=np.zeros(nstr), pass_by_obj=True)
         self.add_param('idx_cylinder_str', val=1, pass_by_obj=True)
         self.add_param('idx_cylinder_aero', val=1, pass_by_obj=True)
-        self.add_output('airfoil_parameterization_full', val=np.zeros((n, airfoils_dof)))
+        self.add_output('airfoil_parameterization_full', val=np.zeros((naero, airfoils_dof)))
         self.add_output('airfoil_str_parameterization_full', val=np.zeros((nstr, airfoils_dof)))
-        self.n = n
+        self.naero = naero
         self.nstr = nstr
         self.num_airfoils = num_airfoils
         self.airfoil_dof = airfoils_dof
 
     def solve_nonlinear(self, params, unknowns, resids):
         self.airfoil_parameterization = params['airfoil_parameterization']
-        n = self.n
+        naero = self.naero
         nstr = self.nstr
-        CST = np.zeros((n,self.airfoil_dof))
+        CST = np.zeros((naero,self.airfoil_dof))
         af_idx = params['af_idx']
-        self.daf_daf = np.zeros((n*self.airfoil_dof,self.num_airfoils*self.airfoil_dof))
+        self.daf_daf = np.zeros((naero*self.airfoil_dof,self.num_airfoils*self.airfoil_dof))
         self.daf_daf_str = np.zeros((nstr*self.airfoil_dof,self.num_airfoils*self.airfoil_dof))
         aero_idx = params['idx_cylinder_aero']
-        for i in range(n-aero_idx):
+        for i in range(naero-aero_idx):
             for j in range(self.airfoil_dof):
                 CST[i+aero_idx][j] = self.airfoil_parameterization[af_idx[i+aero_idx]-2][j]
             self.daf_daf[np.ix_(range((i+aero_idx)*self.airfoil_dof, (i+aero_idx)*self.airfoil_dof+self.airfoil_dof), range((af_idx[i+aero_idx]-2)*self.airfoil_dof,((af_idx[i+aero_idx]-2)*self.airfoil_dof)+self.airfoil_dof))] += np.diag(np.ones(self.airfoil_dof))
         unknowns['airfoil_parameterization_full'] = CST
 
-        airfoil_types_str = np.zeros((8,self.airfoil_dof))
+        airfoil_types_str = np.zeros((8,self.airfoil_dof)) #TODO
         for z in range(self.num_airfoils):
             airfoil_types_str[z+2, :] = self.airfoil_parameterization[z]
         pro_str = [0]*nstr
@@ -277,14 +277,14 @@ class AirfoilSpline(Component):
         return J
 
 class CCBlade(AeroBase):
-    def __init__(self, run_case, n, n2, num_airfoils, airfoils_dof):
-        super(CCBlade, self).__init__(n, n2)
+    def __init__(self, run_case, naero, npower, num_airfoils, airfoils_dof):
+        super(CCBlade, self).__init__(naero, npower)
         """blade element momentum code"""
 
         # (potential) variables
-        self.add_param('r', shape=n, units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
-        self.add_param('chord', shape=n, units='m', desc='chord length at each section')
-        self.add_param('theta', shape=n,  units='deg', desc='twist angle at each section (positive decreases angle of attack)')
+        self.add_param('r', shape=naero, units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
+        self.add_param('chord', shape=naero, units='m', desc='chord length at each section')
+        self.add_param('theta', shape=naero,  units='deg', desc='twist angle at each section (positive decreases angle of attack)')
         self.add_param('Rhub', shape=1, units='m', desc='hub radius')
         self.add_param('Rtip', shape=1, units='m', desc='tip radius')
         self.add_param('hubHt', val=np.zeros(1), units='m', desc='hub height')
@@ -293,13 +293,13 @@ class CCBlade(AeroBase):
         self.add_param('yaw', shape=1, desc='yaw error', units='deg')
 
         # TODO: I've not hooked up the gradients for these ones yet.
-        self.add_param('precurve', shape=n, units='m', desc='precurve at each section')
+        self.add_param('precurve', shape=naero, units='m', desc='precurve at each section')
         self.add_param('precurveTip', val=0.0, units='m', desc='precurve at tip')
 
         # parameters
-        self.add_param('airfoil_parameterization', val=np.zeros((n, airfoils_dof)))
+        self.add_param('airfoil_parameterization', val=np.zeros((naero, airfoils_dof)))
         self.add_param('afOptions', val={}, pass_by_obj=True)
-        self.add_param('af', shape=n, desc='names of airfoil file', pass_by_obj=True)
+        self.add_param('af', shape=naero, desc='names of airfoil file', pass_by_obj=True)
         self.add_param('B', val=3, desc='number of blades', pass_by_obj=True)
         self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
         self.add_param('mu', val=1.81206e-5, units='kg/(m*s)', desc='dynamic viscosity of air')
@@ -311,25 +311,6 @@ class CCBlade(AeroBase):
         self.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors', pass_by_obj=True)
 
         self.add_param('run_case', val=Enum('power', 'loads'), pass_by_obj=True)
-
-
-        # inputs
-        # self.add_param('V_load', shape=1, units='m/s', desc='hub height wind speed')
-        # self.add_param('Omega_load', shape=1, units='rpm', desc='rotor rotation speed')
-        # self.add_param('pitch_load', shape=1, units='deg', desc='blade pitch setting')
-        # self.add_param('azimuth_load', shape=1, units='deg', desc='blade azimuthal location')
-        #
-        # # outputs
-        # self.add_output('loads:r', shape=n+2, units='m', desc='radial positions along blade going toward tip')
-        # self.add_output('loads:Px', shape=n+2, units='N/m', desc='distributed loads in blade-aligned x-direction')
-        # self.add_output('loads:Py', shape=n+2, units='N/m', desc='distributed loads in blade-aligned y-direction')
-        # self.add_output('loads:Pz', shape=n+2, units='N/m', desc='distributed loads in blade-aligned z-direction')
-        #
-        # # corresponding setting for loads
-        # self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
-        # self.add_output('loads:Omega', shape=1, units='rpm', desc='rotor rotation speed')
-        # self.add_output('loads:pitch', shape=1, units='deg', desc='pitch angle')
-        # self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
 
         self.run_case = run_case
         self.num_airfoils = num_airfoils
@@ -551,8 +532,8 @@ class CCBlade(AeroBase):
 
 
 class CSMDrivetrain(DrivetrainLossesBase):
-    def __init__(self, n):
-        super(CSMDrivetrain, self).__init__(n)
+    def __init__(self, npower):
+        super(CSMDrivetrain, self).__init__(npower)
         """drivetrain losses from NREL cost and scaling model"""
 
         self.add_param('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True)
@@ -763,14 +744,14 @@ def common_configure_with_ccblade(group, varspeed, varpitch, cdf_type):
     common_configure(group, varspeed, varpitch)
 
     # put in parameterization for CCBlade
-    group.add('spline', GeometrySpline())
+    group.add('spline', GeometrySpline(naero))
     group.replace('geom', CCBladeGeometry())
-    group.replace('analysis', CCBlade())
-    group.replace('dt', CSMDrivetrain())
+    group.replace('analysis', CCBlade('power', naero, npower, nm_airfoils, af_dof))
+    group.replace('dt', CSMDrivetrain(npower))
     if cdf_type == 'rayleigh':
-        group.replace('cdf', RayleighCDF())
+        group.replace('cdf', RayleighCDF(nspline))
     elif cdf_type == 'weibull':
-        group.replace('cdf', WeibullWithMeanCDF())
+        group.replace('cdf', WeibullWithMeanCDF(nspline))
 
 
     # add spline to workflow

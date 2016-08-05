@@ -156,73 +156,95 @@ class ResizeCompositeSection(Component):
         lowerCSIn = params['lowerCSIn']
         websCSIn = params['websCSIn']
 
-        # radius location of control points
+        # # radius location of control points
         x = [0.0, 0.18, 0.48, 0.75, 1.0]
         capTriaxAkima = Akima(x, params['capTriaxThk']*.01)
         capCarbAkima = Akima(x, params['capCarbThk']*.01)
         tePanelTriaxAkima = Akima(x, params['tePanelTriaxThk']*.01)
         tePanelFoamAkima = Akima(x, params['tePanelFoamThk']*.01)
         initial_str_grid = params['initial_str_grid']
+        # import copy
+        # lowerCSplot = copy.deepcopy(lowerCSIn)
+        # for i in range(nstr):
+        #     if (i < 8 or (i > 12 and i < 36)):
+        #         # set thicknesses for UpperCS spar cap
+        #         upperCSIn[i].t[2][1], _, _, _ = capTriaxAkima.interp(initial_str_grid[i]) # cap triax
+        #         upperCSIn[i].t[2][3] = upperCSIn[i].t[2][1] # cap triax
+        #         upperCSIn[i].t[2][2], _, _, _ = capCarbAkima.interp(initial_str_grid[i]) # cap carbon
+        #
+        #         # same for lowerCS spar cap
+        #         lowerCSIn[i].t[2][1] = upperCSIn[i].t[2][1] # cap triax
+        #         lowerCSIn[i].t[2][3] = upperCSIn[i].t[2][3] # cap triax
+        #         lowerCSIn[i].t[2][2] = upperCSIn[i].t[2][2] # cap carbon
+        #
+        #         #set thicknesses for UpperCS te panel
+        #         upperCSIn[i].t[3][1], _, _, _ = tePanelTriaxAkima.interp(initial_str_grid[i]) # triax
+        #         upperCSIn[i].t[3][3] = upperCSIn[i].t[3][1] # triax
+        #         upperCSIn[i].t[3][2], _, _, _ = tePanelFoamAkima.interp(initial_str_grid[i]) # foam
+        #
+        #         # same for lowerCS te panel
+        #         lowerCSIn[i].t[3][1] = upperCSIn[i].t[3][1] # triax
+        #         lowerCSIn[i].t[3][3] = upperCSIn[i].t[3][3] # triax
+        #         lowerCSIn[i].t[3][2] = upperCSIn[i].t[3][2] # foam
+        #     elif (i >= 8 and i <= 12):
+        #         # set thicknesses for UpperCS spar cap
+        #         upperCSIn[i].t[2][1], _, _, _ = capTriaxAkima.interp(initial_str_grid[i]) # cap triax
+        #         upperCSIn[i].t[2][4] = upperCSIn[i].t[2][1] # cap triax
+        #         upperCSIn[i].t[2][3], _, _, _ = capCarbAkima.interp(initial_str_grid[i]) # cap carbon
+        #
+        #         # same for lowerCS spar cap
+        #         lowerCSIn[i].t[2][1] = upperCSIn[i].t[2][1] # cap triax
+        #         lowerCSIn[i].t[2][4] = upperCSIn[i].t[2][4] # cap triax
+        #         lowerCSIn[i].t[2][3] = upperCSIn[i].t[2][3] # cap carbon
+        #
+        #         #set thicknesses for UpperCS te panel
+        #         upperCSIn[i].t[3][1], _, _, _ = tePanelTriaxAkima.interp(initial_str_grid[i]) # triax
+        #         upperCSIn[i].t[3][4] = upperCSIn[i].t[3][1] # triax
+        #         upperCSIn[i].t[3][3], _, _, _ = tePanelFoamAkima.interp(initial_str_grid[i]) # foam
+        #
+        #         # same for lowerCS te panel
+        #         lowerCSIn[i].t[3][1] = upperCSIn[i].t[3][1] # triax
+        #         lowerCSIn[i].t[3][4] = upperCSIn[i].t[3][4] # triax
+        #         lowerCSIn[i].t[3][3] = upperCSIn[i].t[3][3] # foam
+        #     elif (i >= 36):
+        #         # set thicknesses for UpperCS spar cap
+        #         upperCSIn[i].t[2][1], _, _, _ = capTriaxAkima.interp(initial_str_grid[i]) # cap triax
+        #         upperCSIn[i].t[2][2] = upperCSIn[i].t[2][1] # cap triax
+        #
+        #         # same for lowerCS spar cap
+        #         lowerCSIn[i].t[2][1] = upperCSIn[i].t[2][1] # cap triax
+        #         lowerCSIn[i].t[2][2] = upperCSIn[i].t[2][2] # cap triax
+        #
+        #         #set thicknesses for UpperCS te panel
+        #         upperCSIn[i].t[3][1], _, _, _ = tePanelTriaxAkima.interp(initial_str_grid[i]) # triax
+        #         upperCSIn[i].t[3][2] = upperCSIn[i].t[3][1] # triax
+        #
+        #         # same for lowerCS te panel
+        #         lowerCSIn[i].t[3][1] = upperCSIn[i].t[3][1] # triax
+        #         lowerCSIn[i].t[3][2] = upperCSIn[i].t[3][2] # triax
 
-        for i in range(nstr):
-            if (i < 8 or (i > 12 and i < 36)):
-                # set thicknesses for UpperCS spar cap
-                upperCSIn[i].t[2][1], _, _, _ = capTriaxAkima.interp(initial_str_grid[i]) # cap triax
-                upperCSIn[i].t[2][3] = upperCSIn[i].t[2][1] # cap triax
-                upperCSIn[i].t[2][2], _, _, _ = capCarbAkima.interp(initial_str_grid[i]) # cap carbon
-
-                # same for lowerCS spar cap
-                lowerCSIn[i].t[2][1] = upperCSIn[i].t[2][1] # cap triax
-                lowerCSIn[i].t[2][3] = upperCSIn[i].t[2][3] # cap triax
-                lowerCSIn[i].t[2][2] = upperCSIn[i].t[2][2] # cap carbon
-
-                #set thicknesses for UpperCS te panel
-                upperCSIn[i].t[3][1], _, _, _ = tePanelTriaxAkima.interp(initial_str_grid[i]) # triax
-                upperCSIn[i].t[3][3] = upperCSIn[i].t[3][1] # triax
-                upperCSIn[i].t[3][2], _, _, _ = tePanelFoamAkima.interp(initial_str_grid[i]) # foam
-
-                # same for lowerCS te panel
-                lowerCSIn[i].t[3][1] = upperCSIn[i].t[3][1] # triax
-                lowerCSIn[i].t[3][3] = upperCSIn[i].t[3][3] # triax
-                lowerCSIn[i].t[3][2] = upperCSIn[i].t[3][2] # foam
-            elif (i >= 8 and i <= 12):
-                # set thicknesses for UpperCS spar cap
-                upperCSIn[i].t[2][1], _, _, _ = capTriaxAkima.interp(initial_str_grid[i]) # cap triax
-                upperCSIn[i].t[2][4] = upperCSIn[i].t[2][1] # cap triax
-                upperCSIn[i].t[2][3], _, _, _ = capCarbAkima.interp(initial_str_grid[i]) # cap carbon
-
-                # same for lowerCS spar cap
-                lowerCSIn[i].t[2][1] = upperCSIn[i].t[2][1] # cap triax
-                lowerCSIn[i].t[2][4] = upperCSIn[i].t[2][4] # cap triax
-                lowerCSIn[i].t[2][3] = upperCSIn[i].t[2][3] # cap carbon
-
-                #set thicknesses for UpperCS te panel
-                upperCSIn[i].t[3][1], _, _, _ = tePanelTriaxAkima.interp(initial_str_grid[i]) # triax
-                upperCSIn[i].t[3][4] = upperCSIn[i].t[3][1] # triax
-                upperCSIn[i].t[3][3], _, _, _ = tePanelFoamAkima.interp(initial_str_grid[i]) # foam
-
-                # same for lowerCS te panel
-                lowerCSIn[i].t[3][1] = upperCSIn[i].t[3][1] # triax
-                lowerCSIn[i].t[3][4] = upperCSIn[i].t[3][4] # triax
-                lowerCSIn[i].t[3][3] = upperCSIn[i].t[3][3] # foam
-            elif (i >= 36):
-                # set thicknesses for UpperCS spar cap
-                upperCSIn[i].t[2][1], _, _, _ = capTriaxAkima.interp(initial_str_grid[i]) # cap triax
-                upperCSIn[i].t[2][2] = upperCSIn[i].t[2][1] # cap triax
-
-                # same for lowerCS spar cap
-                lowerCSIn[i].t[2][1] = upperCSIn[i].t[2][1] # cap triax
-                lowerCSIn[i].t[2][2] = upperCSIn[i].t[2][2] # cap triax
-
-                #set thicknesses for UpperCS te panel
-                upperCSIn[i].t[3][1], _, _, _ = tePanelTriaxAkima.interp(initial_str_grid[i]) # triax
-                upperCSIn[i].t[3][2] = upperCSIn[i].t[3][1] # triax
-
-                # same for lowerCS te panel
-                lowerCSIn[i].t[3][1] = upperCSIn[i].t[3][1] # triax
-                lowerCSIn[i].t[3][2] = upperCSIn[i].t[3][2] # triax
-
-        # copy data acrosss
+        # import matplotlib.pylab as plt
+        # t_before = []
+        # t_after = []
+        # x = range(len(lowerCSIn))
+        # for z in range(4):
+        #     for q in range(5):
+        #         for k in range(len(lowerCSIn)):
+        #             try:
+        #                 if abs(lowerCSIn[k].t[q][z] - lowerCSplot[k].t[q][z]) > 0:
+        #                     print(str(q) + ' ' + str(k) + ' ' + str(z) + str(abs(lowerCSIn[k].t[q][z] - lowerCSplot[k].t[q][z])))
+        #             except:
+        #                 pass
+        # for z in range(4):
+        #     for k in range(len(lowerCSIn)):
+        #         t_before.append(lowerCSplot[k].t[2][z])
+        #         t_after.append(lowerCSIn[k].t[2][z])
+        # x = range(len(t_before))
+        # plt.figure()
+        # plt.plot(x, t_before)
+        # plt.plot(x, t_after)
+        # plt.show()
+        # copy data across
         upperCSOut = []
         lowerCSOut = []
         websCSOut = []
@@ -423,16 +445,16 @@ class PreCompSections(BeamPropertiesBase):
         for i in range(nstr):
             if params['af_str'][i].Saf is not None:
                 x, y, xl, xu, yl, yu = params['af_str'][i].afanalysis.getCoordinates(form='all')
-                xu1 = np.zeros(len(xu))
-                xl1 = np.zeros(len(xl))
-                yu1 = np.zeros(len(xu))
-                yl1 = np.zeros(len(xl))
-                for k in range(len(xu)):
-                    xu1[k] = float(xu[k])
-                    yu1[k] = float(yu[k])
-                for k in range(len(xl)):
-                    xl1[k] = float(xl[k])
-                    yl1[k] = float(yl[k])
+                # xu1 = np.zeros(len(xu))
+                # xl1 = np.zeros(len(xl))
+                # yu1 = np.zeros(len(xu))
+                # yl1 = np.zeros(len(xl))
+                # for k in range(len(xu)):
+                #     xu1[k] = float(xu[k])
+                #     yu1[k] = float(yu[k])
+                # for k in range(len(xl)):
+                #     xl1[k] = float(xl[k])
+                #     yl1[k] = float(yl[k])
                 # x = np.append(xu1, xl1)
                 # y = np.append(yu1, yl1)
                 # TODO : check if necessary
@@ -2354,7 +2376,7 @@ class StructureGroup(Group):
         self.deriv_options['step_calc'] = 'relative'
 
 class RotorSE(Group):
-    def __init__(self, naero=17, nstr=38, npower=20, num_airfoils=6, af_dof=1):
+    def __init__(self, naero=17, nstr=38, npower=20, num_airfoils=6, af_dof=1, nspline=200):
         super(RotorSE, self).__init__()
         """rotor model"""
 
@@ -2470,11 +2492,11 @@ class RotorSE(Group):
         self.add('analysis', CCBlade('power', naero, npower, num_airfoils, af_dof))
 
         self.add('dt', CSMDrivetrain(npower))
-        self.add('powercurve', RegulatedPowerCurveGroup(npower))
+        self.add('powercurve', RegulatedPowerCurveGroup(npower, nspline))
         self.add('wind', PowerWind(1))
-        # self.add('cdf', WeibullWithMeanCDF(200))
-        self.add('cdf', RayleighCDF(200))
-        self.add('aep', AEP())
+        # self.add('cdf', WeibullWithMeanCDF(nspline))
+        self.add('cdf', RayleighCDF(nspline))
+        self.add('aep', AEP(nspline))
         self.add('outputs_aero', OutputsAero(), promotes=['*'])
 
         # connections to turbineclass
@@ -3115,7 +3137,6 @@ if __name__ == '__main__':
         0.97777724])  # (Array): new aerodynamic grid on unit radius
     rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
     rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-    rotor['chord_sub'] = np.array([2.2612, 4.5709, 3.3178, 1.4621])
     rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317, -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
     rotor['precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
     rotor['delta_precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading
@@ -3146,20 +3167,20 @@ if __name__ == '__main__':
     # place at appropriate radial stations
     rotor['af_idx'] = np.array([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
     rotor['af_str_idx'] = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7])
-    rotor['airfoil_parameterization'] = np.asarray([[0.404458, 0.0], [0.349012, 0.0], [0.29892, 0.0], [0.251105, 0.0], [0.211299, 0.0], [0.179338, 1.0]])
-    rotor['afOptions'] = dict(AnalysisMethod='XFOIL', AirfoilParameterization='Precomputational', SplineOptions=dict(maxDirectAoA=0), PrecomputationalOptions=dict())#airfoilShapeMethod='NACA'))  # (Dict): dictionary of options for airfoil shape parameterization and analysis
-
-    baseAirfoilsCoordindates0 = [0]*5
-    baseAirfoilsCoordindates0[0] = os.path.join(basepath, 'DU40.dat')
-    baseAirfoilsCoordindates0[1] = os.path.join(basepath, 'DU35.dat')
-    baseAirfoilsCoordindates0[2] = os.path.join(basepath, 'DU30.dat')
-    baseAirfoilsCoordindates0[3] = os.path.join(basepath, 'DU25.dat')
-    baseAirfoilsCoordindates0[4] = os.path.join(basepath, 'DU21.dat')
-    # Corresponding to blended airfoil family factor of 1.0
-    baseAirfoilsCoordindates1 = [0]*1
-    baseAirfoilsCoordindates1[0] = os.path.join(basepath, 'NACA64.dat')
-    rotor['afOptions']['PrecomputationalOptions']['BaseAirfoilsCoordinates0'] = baseAirfoilsCoordindates0
-    rotor['afOptions']['PrecomputationalOptions']['BaseAirfoilsCoordinates1'] = baseAirfoilsCoordindates1
+    # rotor['airfoil_parameterization'] = np.asarray([[0.404458, 0.0], [0.349012, 0.0], [0.29892, 0.0], [0.251105, 0.0], [0.211299, 0.0], [0.179338, 1.0]])
+    # rotor['afOptions'] = dict(AnalysisMethod='XFOIL', AirfoilParameterization='Precomputational', SplineOptions=dict(maxDirectAoA=0), PrecomputationalOptions=dict())#airfoilShapeMethod='NACA'))  # (Dict): dictionary of options for airfoil shape parameterization and analysis
+    #
+    # baseAirfoilsCoordindates0 = [0]*5
+    # baseAirfoilsCoordindates0[0] = os.path.join(basepath, 'DU40.dat')
+    # baseAirfoilsCoordindates0[1] = os.path.join(basepath, 'DU35.dat')
+    # baseAirfoilsCoordindates0[2] = os.path.join(basepath, 'DU30.dat')
+    # baseAirfoilsCoordindates0[3] = os.path.join(basepath, 'DU25.dat')
+    # baseAirfoilsCoordindates0[4] = os.path.join(basepath, 'DU21.dat')
+    # # Corresponding to blended airfoil family factor of 1.0
+    # baseAirfoilsCoordindates1 = [0]*1
+    # baseAirfoilsCoordindates1[0] = os.path.join(basepath, 'NACA64.dat')
+    # rotor['afOptions']['PrecomputationalOptions']['BaseAirfoilsCoordinates0'] = baseAirfoilsCoordindates0
+    # rotor['afOptions']['PrecomputationalOptions']['BaseAirfoilsCoordinates1'] = baseAirfoilsCoordindates1
     rotor['airfoil_types'] = airfoil_types  # (List): names of airfoil file or initialized CCAirfoils
 
     # ----------------------

@@ -81,20 +81,20 @@ class GeometrySetupBase(Component):
 
 class AeroBase(Component):
     """A base component for a rotor aerodynamics code."""
-    def __init__(self, n, n2):
+    def __init__(self, naero, npower):
         super(AeroBase, self).__init__()
 
         # --- use these if (run_case == 'power') ---
 
         # inputs
-        self.add_param('Uhub', shape=n2, units='m/s', desc='hub height wind speed')
-        self.add_param('Omega', shape=n2, units='rpm', desc='rotor rotation speed')
-        self.add_param('pitch', shape=n2, units='deg', desc='blade pitch setting')
+        self.add_param('Uhub', shape=npower, units='m/s', desc='hub height wind speed')
+        self.add_param('Omega', shape=npower, units='rpm', desc='rotor rotation speed')
+        self.add_param('pitch', shape=npower, units='deg', desc='blade pitch setting')
 
         # outputs
-        self.add_output('T', shape=n2, units='N', desc='rotor aerodynamic thrust')
-        self.add_output('Q', shape=n2, units='N*m', desc='rotor aerodynamic torque')
-        self.add_output('P', shape=n2, units='W', desc='rotor aerodynamic power')
+        self.add_output('T', shape=npower, units='N', desc='rotor aerodynamic thrust')
+        self.add_output('Q', shape=npower, units='N*m', desc='rotor aerodynamic torque')
+        self.add_output('P', shape=npower, units='W', desc='rotor aerodynamic power')
 
 
         # --- use these if (run_case == 'loads') ---
@@ -109,10 +109,10 @@ class AeroBase(Component):
         self.add_param('azimuth_load', shape=1, units='deg', desc='blade azimuthal location')
 
         # outputs
-        self.add_output('loads:r', shape=n+2, units='m', desc='radial positions along blade going toward tip')
-        self.add_output('loads:Px', shape=n+2, units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_output('loads:Py', shape=n+2, units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_output('loads:Pz', shape=n+2, units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_output('loads:r', shape=naero+2, units='m', desc='radial positions along blade going toward tip')
+        self.add_output('loads:Px', shape=naero+2, units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_output('loads:Py', shape=naero+2, units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_output('loads:Pz', shape=naero+2, units='N/m', desc='distributed loads in blade-aligned z-direction')
 
         # corresponding setting for loads
         self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
@@ -123,15 +123,15 @@ class AeroBase(Component):
 
 class DrivetrainLossesBase(Component):
     """base component for drivetrain efficiency losses"""
-    def __init__(self, n):
+    def __init__(self, npower):
         super(DrivetrainLossesBase, self).__init__()
-        self.add_param('aeroPower', shape=n, units='W', desc='aerodynamic power')
-        self.add_param('aeroTorque', shape=n, units='N*m', desc='aerodynamic torque')
-        self.add_param('aeroThrust', shape=n, units='N', desc='aerodynamic thrust')
+        self.add_param('aeroPower', shape=npower, units='W', desc='aerodynamic power')
+        self.add_param('aeroTorque', shape=npower, units='N*m', desc='aerodynamic torque')
+        self.add_param('aeroThrust', shape=npower, units='N', desc='aerodynamic thrust')
         self.add_param('ratedPower', shape=1, units='W', desc='rated power')
 
-        self.add_output('power', shape=n, units='W', desc='total power after drivetrain losses')
-        self.add_output('rpm', shape=n, units='rpm', desc='rpm curve after drivetrain losses')
+        self.add_output('power', shape=npower, units='W', desc='total power after drivetrain losses')
+        self.add_output('rpm', shape=npower, units='rpm', desc='rpm curve after drivetrain losses')
 
 
 class PDFBase(Component):
@@ -185,24 +185,24 @@ class CDFBase(Component):
 
 # This Component is now no longer used, but I'll keep it around for now in case that changes.
 class Coefficients(Component):
-    def __init__(self, n):
+    def __init__(self, npower):
         super(Coefficients, self).__init__()
         """convert power, thrust, torque into nondimensional coefficient form"""
 
         # inputs
-        self.add_param('V', shape=n, units='m/s', desc='wind speed')
-        self.add_param('T', shape=n, units='N', desc='rotor aerodynamic thrust')
-        self.add_param('Q', shape=n, units='N*m', desc='rotor aerodynamic torque')
-        self.add_param('P', shape=n, units='W', desc='rotor aerodynamic power')
+        self.add_param('V', shape=npower, units='m/s', desc='wind speed')
+        self.add_param('T', shape=npower, units='N', desc='rotor aerodynamic thrust')
+        self.add_param('Q', shape=npower, units='N*m', desc='rotor aerodynamic torque')
+        self.add_param('P', shape=npower, units='W', desc='rotor aerodynamic power')
 
         # inputs used in normalization
         self.add_param('R', shape=1, units='m', desc='rotor radius')
         self.add_param('rho', shape=1, units='kg/m**3', desc='density of fluid')
 
         # outputs
-        self.add_output('CT', shape=n, desc='rotor aerodynamic thrust')
-        self.add_output('CQ', shape=n, desc='rotor aerodynamic torque')
-        self.add_output('CP', shape=n, desc='rotor aerodynamic power')
+        self.add_output('CT', shape=npower, desc='rotor aerodynamic thrust')
+        self.add_output('CQ', shape=npower, desc='rotor aerodynamic torque')
+        self.add_output('CP', shape=npower, desc='rotor aerodynamic power')
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -390,7 +390,7 @@ class UnregulatedPowerCurve(Component):
 
 
 class RegulatedPowerCurve(Component): # Implicit COMPONENT
-    def __init__(self, npower):
+    def __init__(self, npower, nspline):
         super(RegulatedPowerCurve, self).__init__()
 
         """Fit a spline to the coarse sampled power curve (and thrust curve),
@@ -410,14 +410,14 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('Pcoarse', shape=npower, units='W', desc='unregulated power curve (but after drivetrain losses)')
         self.add_param('Tcoarse', shape=npower, units='N', desc='unregulated thrust curve')
         self.add_param('R', shape=1, units='m', desc='rotor radius')
-        self.add_param('npts', val=200, desc='number of points for splined power curve', pass_by_obj=True)
+        self.add_param('npts', val=nspline, desc='number of points for splined power curve', pass_by_obj=True)
 
         # state
         self.add_state('Vrated', val=11.0, units='m/s', desc='rated wind speed', lower=-1e-15, upper=1e15)
 
         # outputs
-        self.add_output('V', shape=200, units='m/s', desc='wind speeds')
-        self.add_output('P', shape=200, units='W', desc='power')
+        self.add_output('V', shape=nspline, units='m/s', desc='wind speeds')
+        self.add_output('P', shape=nspline, units='W', desc='power')
 
         self.add_output('ratedConditions:V', shape=1, units='m/s', desc='rated wind speed')
         self.add_output('ratedConditions:Omega', shape=1, units='rpm', desc='rotor rotation speed at rated')
@@ -525,9 +525,9 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         return self.J
 
 class RegulatedPowerCurveGroup(Group):
-    def __init__(self, npower):
+    def __init__(self, npower, nspline):
         super(RegulatedPowerCurveGroup, self).__init__()
-        self.add('powercurve_comp', RegulatedPowerCurve(npower), promotes=['*'])
+        self.add('powercurve_comp', RegulatedPowerCurve(npower, nspline), promotes=['*'])
         self.nl_solver = Brent()
         self.ln_solver = ScipyGMRES()
         self.nl_solver.options['var_lower_bound'] = 'powercurve.control:Vin'
@@ -539,13 +539,13 @@ class RegulatedPowerCurveGroup(Group):
         self.deriv_options['step_calc'] = 'relative'
 
 class AEP(Component):
-    def __init__(self):
+    def __init__(self, nspline):
         super(AEP, self).__init__()
         """integrate to find annual energy production"""
 
         # inputs
-        self.add_param('CDF_V', shape=200, units='m/s', desc='cumulative distribution function evaluated at each wind speed')
-        self.add_param('P', shape=200, units='W', desc='power curve (power)')
+        self.add_param('CDF_V', shape=nspline, units='m/s', desc='cumulative distribution function evaluated at each wind speed')
+        self.add_param('P', shape=nspline, units='W', desc='power curve (power)')
         self.add_param('lossFactor', shape=1, desc='multiplicative factor for availability and other losses (soiling, array, etc.)')
 
         # outputs
@@ -584,6 +584,7 @@ class COE(Component):
         # inputs
         self.add_param('mass_all_blades', shape=1, units='kg', desc='mass of all blades')
         self.add_param('AEP', shape=1, units='kW*h', desc='annual energy production')
+        self.add_param('nBlades', val=3)
 
         # outputs
         self.add_output('COE', shape=1, units='$/kW*h', desc='cost of energy')
@@ -591,38 +592,46 @@ class COE(Component):
         self.deriv_options['step_size'] = 1.0
 
     def solve_nonlinear(self, params, unknowns, resids):
-        # fixed cost assumptions from NREL 5MW land-based turbine (update as needed)
-        fixed_charge_rate = 0.095
-        tax_rate = 0.4
-        ppi_mat   = 1.0465528035
-        slope   = 13.0
-        intercept     = 5813.9
-        bos = 559. * 5e3
-        array_losses = 0.059
-        other_losses = 0.0
-        availability = 0.94
-        losses = availability * (1-array_losses) * (1-other_losses)
-        net_aep = (losses * params['AEP'])
-        advanced_blade = True
-        offshore = False
+        # fixed cost assumptions from NREL 5-MW land-based turbine (update as needed)
+
+        # compute the blade cost based on blade mass
+        slope = 13.0
+        intercept = 5813.9
+        ppi_mat = 1.0465528035
+        blade_cost = ((slope*params['mass_all_blades']/params['nBlades'] + intercept)*ppi_mat)
+
+        # compute the parts costs
+        hub_cost = 3.80 * 31644.5  # hub mass coefficient * hub mass
+        rotor_cost = hub_cost + blade_cost*params['nBlades']
+        nacelle_cost = 3495861.  # updated so that initial TCC matches tip-speed paper 1702*5e3
+        tower_cost = 3.08 * 349644  # tower mass coefficient * tower mass
+        parts_cost = (rotor_cost + nacelle_cost + tower_cost)
+
+        # compute the turbine capital cost (TCC) with multipliers
         assemblyCostMultiplier = 0.30
         profitMultiplier = 0.20
         overheadCostMultiplier = 0.0
         transportMultiplier = 0.0
-        #turbine_cost = 1702*5e3
-
-        blade_cost = ((slope*params['mass_all_blades']/3.0 + intercept)*ppi_mat)
-        rotor_cost = 1505102.53 - 250342.93 + blade_cost
-        nacelle_cost = 3000270. #1834848.89
-        tower_cost = 1390588.80
-
-        parts_cost = (rotor_cost + nacelle_cost + tower_cost)
         turbine_multiplier = (1 + transportMultiplier + profitMultiplier) * (1 + overheadCostMultiplier + assemblyCostMultiplier)
         turbine_cost = turbine_multiplier * parts_cost
-        opex = 0.0122 * net_aep #19566000
-        unknowns['COE'] = fixed_charge_rate*(turbine_cost+bos)/net_aep + opex*(1-tax_rate)/net_aep
-        self.dcoe_dmass_all_blades = fixed_charge_rate * turbine_multiplier * (slope/3.0*ppi_mat) / net_aep
-        self.dcoe_dAEP = -fixed_charge_rate*(turbine_cost+bos)/(losses*(params['AEP']**2))
+
+        # compute net annual energy production (AEP)
+        array_losses = 0.059
+        other_losses = 0.058  # used to make initial COE match tip-speed paper 6.22
+        availability = 0.94
+        losses = availability * (1-array_losses) * (1-other_losses)
+        net_aep = (losses * params['AEP'])
+
+        # compute cost of energy (COE)
+        fixed_charge_rate = 0.095
+        tax_deduction_rate = 0.4
+        bos = 559. * 5e3  # $/kW * kW
+        opex = 0.0122 * 19566000  # $/kWh * kWh
+        unknowns['COE'] = (fixed_charge_rate*(turbine_cost+bos) + (1-tax_deduction_rate)*opex)/net_aep
+
+        # analytic gradients
+        self.dcoe_dmass_all_blades = fixed_charge_rate * turbine_multiplier * (slope/params['nBlades']*ppi_mat) / net_aep
+        self.dcoe_dAEP = -fixed_charge_rate*(turbine_cost+bos) / (losses*(params['AEP']**2)) - ((1-tax_deduction_rate)*opex) / (losses*(params['AEP']**2))
 
     def linearize(self, params, unknowns, resids):
 
