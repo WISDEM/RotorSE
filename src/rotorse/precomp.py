@@ -1082,12 +1082,12 @@ if __name__ == '__main__':
     plt.figure(1)
     plt.semilogy(rstar, EIxx)
     plt.xlabel('blade fraction')
-    plt.ylabel('flapwise stifness ($N m^2$)')
+    plt.ylabel('Edgewise Stiffness ($N m^2$)')
 
     plt.figure(2)
     plt.semilogy(rstar, EIyy)
     plt.xlabel('blade fraction')
-    plt.ylabel('edgewise stifness ($N m^2$)')
+    plt.ylabel('Flapwise Stiffness ($N m^2$)')
 
     plt.figure(3)
     plt.semilogy(rstar, EA)
