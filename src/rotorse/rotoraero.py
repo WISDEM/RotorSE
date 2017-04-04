@@ -628,7 +628,7 @@ class COE(Component):
         bos = 559. * 5e3  # $/kW * kW
         opex = 0.0122 * 19566000  # $/kWh * kWh
         unknowns['COE'] = (fixed_charge_rate*(turbine_cost+bos) + (1-tax_deduction_rate)*opex)/net_aep
-
+        print("COE", unknowns['COE'])
         # analytic gradients
         self.dcoe_dmass_all_blades = fixed_charge_rate * turbine_multiplier * (slope/params['nBlades']*ppi_mat) / net_aep
         self.dcoe_dAEP = -fixed_charge_rate*(turbine_cost+bos) / (losses*(params['AEP']**2)) - ((1-tax_deduction_rate)*opex) / (losses*(params['AEP']**2))

@@ -353,7 +353,7 @@ class CCBlade(AeroBase):
         try:
             computeGradient = self.afOptions['GradientOptions']['ComputeGradient']
         except:
-            computeGradient = False
+            computeGradient = True
         self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
                     self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
                     self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
@@ -395,18 +395,18 @@ class CCBlade(AeroBase):
             unknowns['loads:azimuth'] = self.azimuth_load
 
     def linearize(self, params, unknowns, resids):
-        if not self.afOptions['GradientOptions']['ComputeGradient']:
-            self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
-                self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
-                self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
-                wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
-            if self.run_case == 'power':
-                # power, thrust, torque
-                self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
-
-            elif self.run_case == 'loads':
-                # distributed loads
-                Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
+        # if not self.afOptions['GradientOptions']['ComputeGradient']:
+        #     self.ccblade = CCBlade_PY(self.r, self.chord, self.theta, self.af, self.Rhub, self.Rtip, self.B,
+        #         self.rho, self.mu, self.precone, self.tilt, self.yaw, self.shearExp, self.hubHt,
+        #         self.nSector, self.precurve, self.precurveTip, tiploss=self.tiploss, hubloss=self.hubloss,
+        #         wakerotation=self.wakerotation, usecd=self.usecd, derivatives=True)
+        #     if self.run_case == 'power':
+        #         # power, thrust, torque
+        #         self.P, self.T, self.Q, self.dP, self.dT, self.dQ = self.ccblade.evaluate(self.Uhub, self.Omega, self.pitch, coefficient=False)
+        #
+        #     elif self.run_case == 'loads':
+        #         # distributed loads
+        #         Np, Tp, self.dNp, self.dTp = self.ccblade.distributedAeroLoads(self.V_load, self.Omega_load, self.pitch_load, self.azimuth_load)
 
         J = {}
         if self.run_case == 'power':
