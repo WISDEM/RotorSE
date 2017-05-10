@@ -2221,7 +2221,7 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
               FAST_precurve_Aero, FAST_precurve_Str, FAST_Rhub, FAST_Rtip, WindSpeed, Nfoil, FoilNm, BldFlDmp1,
               BldFlDmp2, BldEdDmp1, FlStTunr1, FlStTunr2, AdjBlMs, AdjFlSt, AdjEdSt, SysUnits, StallMod, UseCm, InfModel,
               AToler, TwrShad, ShadHWid, T_Shad_Refpt, IndModel, TLModel, HLModel, Input, Check_SS, Tmax, DT, r_max_chord,
-              chord_sub, theta_sub, idx_cylinder_aero, initial_aero_grid, DLCwindfile):
+              chord_sub, theta_sub, idx_cylinder_aero, initial_aero_grid, DLCwindfile, dp):
 
     # Hacky way of doing relative imports
     import os, sys
@@ -2243,13 +2243,13 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
     if Input is '5MW_Check':
         config['fst_masterfile'] = 'NRELOffshrBsline5MW_Onshore.fst'
         config[
-            'fst_masterdir'] = '/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/'
+            'fst_masterdir'] = ''.join((dp,'RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/'))
         config['fst_runfile'] = caseid
 
         config[
-            'fst_rundir'] = '/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/'
+            'fst_rundir'] = ''.join((dp,'RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/'))
 
-        config['fst_exe'] = '/Users/bingersoll/Dropbox/GradPrograms/FAST_glin64'
+        config['fst_exe'] = ''.join((dp,'RotorSE_FAST/FAST_glin64'))
         config['fst_file_type'] = 0
         config['ad_file_type'] = 1
 
@@ -2260,9 +2260,9 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
                               [0.10000, WindSpeed, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000],
                               [999.90000, WindSpeed, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000]])
 
-        # np.savetxt('/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/FST7inputfiles/test.wnd', wind_file)
+        # np.savetxt('/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/FST7inputfiles/test.wnd', wind_file)
         np.savetxt(
-            '/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/test_wnd', wind_file)
+            ''.join((dp,'RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/test_wnd')), wind_file)
 
         config['WindFile'] = 'test.wnd'
 
@@ -2281,15 +2281,15 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
         #config['fst_masterfile'] = 'Match.fst'
 
         config[
-            'fst_masterdir'] = '/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/' \
-                               'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/'
+            'fst_masterdir'] = ''.join((dp,'RotorSE_FAST/' \
+                               'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/'))
         config['fst_runfile'] = caseid
 
         config[
-            'fst_rundir'] = '/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/' \
-                            'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/'
+            'fst_rundir'] = ''.join((dp,'RotorSE_FAST/' \
+                            'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/'))
 
-        config['fst_exe'] = '/Users/bingersoll/Dropbox/GradPrograms/FAST_glin64'
+        config['fst_exe'] = ''.join((dp,'FAST_glin64'))
         config['fst_file_type'] = 0
         config['ad_file_type'] = 1
 
@@ -2300,8 +2300,8 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
         #             [0.10000,	WindSpeed,	0.00000,	0.00000,	0.00000,	0.00000,	0.00000,	0.00000],
         #            [999.90000,	WindSpeed,	0.00000,	0.00000,	0.00000,	0.00000,	0.00000,	0.00000]])
         #
-        # #np.savetxt('/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/FST7inputfiles/test.wnd', wind_file)
-        # np.savetxt('/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/test.wnd', wind_file)
+        # #np.savetxt('../../../RotorSE_FAST/RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/FST7inputfiles/test.wnd', wind_file)
+        # np.savetxt('/../../../RotorSE_FAST/RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/test.wnd', wind_file)
 
 
         # Add DLC .wnd file name to Aerodyn.ipt input file
@@ -2312,10 +2312,10 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
             out.writelines(lines)
             out.close()
 
-        replace_line('/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/AeroelasticSE/src/AeroelasticSE/'
-                     'FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/NRELOffshrBsline5MW_AeroDyn.ipt', 9, '"' + DLCwindfile + '"' + '\n')
+        replace_line(''.join((dp,'/RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/'
+                         'FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/NRELOffshrBsline5MW_AeroDyn.ipt')),
+                         9, '"' + DLCwindfile + '"' + '\n')
 
-        #quit()
 
         # Main AeroDyn File
         test_rotorse = 1.0
@@ -2358,10 +2358,10 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
 
         theta_sub_spline = Akima(r_val_twist_sub,theta_sub)
         BladeAerodynamicProperties = np.loadtxt('BladeAerodynamicProperties.txt')
-        FAST_Theta = theta_sub_spline.interp(BladeAerodynamicProperties[:,0])[0]
-
-        print (FAST_Theta)
-        quit()
+        FAST_Theta = theta_sub_spline.interp(BladeAerodynamicProperties[3:len(BladeAerodynamicProperties),0])[0]
+        FAST_Theta = np.append([FAST_Theta[0], FAST_Theta[0], FAST_Theta[0]], FAST_Theta)
+        # print (FAST_Theta)
+        # quit()
 
         # set values to aerodyn inputs
         config['AeroTwst'] = FAST_Theta
@@ -2393,9 +2393,10 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
 
 
         # calculate c flapwise and c edgewise
-        airfoilpath = '/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/' \
+
+        airfoilpath = ''.join((dp,'RotorSE_FAST/' \
                       'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/' \
-                      'NRELOffshrBsline5MW_Onshore_v7_RotorSE/5MW_AFFiles_FAST/'
+                      'NRELOffshrBsline5MW_Onshore_v7_RotorSE/5MW_AFFiles_FAST/'))
 
 
         airfoil1 = np.loadtxt(''.join((airfoilpath,'Cylinder.pfl')),skiprows=2)
@@ -2789,7 +2790,7 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
     sigma_x_Triax = eps_x*Ex_Triax
 
     # MLife input file
-    run_MLife_check = 1
+    run_MLife_check = 0
 
     run_MLife_constraints = 0
 
@@ -2864,25 +2865,29 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
                             "   (sec)	(m/sec)	(kW)	(rpm)	(m)	(m)	(m)	(m)	(m)	(m)	(kN)	(kN)	(kN)	"
                             "(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm) (kNm)"])
 
-        np.savetxt('/Users/bingersoll/Dropbox/GradPrograms/Mlife/Data/mlifeFAST.out', mlifedata, header=header, comments ='')
+        np.savetxt(''.join((dp,'RotorSE_FAST/Mlife/Data/mlifeFAST.out')), mlifedata, header=header, comments ='')
 
         eng = matlab.engine.start_matlab()
-        eng.addpath('/Users/bingersoll/Dropbox/GradPrograms/Mlife/Source', nargout=0)
-        eng.addpath('/Users/bingersoll/Dropbox/GradPrograms/Mlife/Source/datatablepackage', nargout=0)
-        eng.addpath('/Users/bingersoll/Dropbox/GradPrograms/Mlife/Source/rainflow', nargout=0)
-        eng.mlife('/Users/bingersoll/Dropbox/GradPrograms/Mlife/CertTest/newFAST.mlif',
-                '/Users/bingersoll/Dropbox/GradPrograms/Mlife/Data',
-                  '/Users/bingersoll/Dropbox/GradPrograms/Mlife/Results/FAST_5MW/', nargout=0)
+        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source')), nargout=0)
+        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source/datatablepackage')), nargout=0)
+        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source/rainflow')), nargout=0)
+        eng.mlife(''.join((dp,'RotorSE_FAST/Mlife/CertTest/newFAST.mlif')),
+                ''.join((dp,'RotorSE_FAST/Mlife/Data')),
+                  ''.join((dp,'RotorSE_FAST/Mlife/Results/FAST_5MW/')), nargout=0)
 
-        quit()
+
+        #quit()
 
         # Extract MLife outputs
-        fp = open("/Users/bingersoll/Dropbox/GradPrograms/Mlife/Results/DLC_1_2/FAST_Constraints_Lifetime_Damage.txt")
+        fp = open("../../../RotorSE_FAST/Mlife/Results/DLC_1_2/FAST_Constraints_Lifetime_Damage.txt")
         line = fp.readlines()
 
         mlife_results  = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[22])
 
         LifeTimeDamage = float( mlife_results[1] )
+
+    else:
+        LifeTimeDamage = 0.0
 
 
     if run_MLife_check == 1:
@@ -2927,18 +2932,18 @@ def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStf
 
 
 
-        np.savetxt('/Users/bingersoll/Dropbox/GradPrograms/Mlife/Data/mlifetest.out', mlifedata, header=header, comments ='')
+        np.savetxt(''.join((dp,'RotorSE_FAST/Mlife/Data/mlifetest.out')), mlifedata, header=header, comments ='')
 
         eng = matlab.engine.start_matlab()
-        eng.addpath('/Users/bingersoll/Dropbox/GradPrograms/Mlife/Source', nargout=0)
-        eng.addpath('/Users/bingersoll/Dropbox/GradPrograms/Mlife/Source/datatablepackage', nargout=0)
-        eng.addpath('/Users/bingersoll/Dropbox/GradPrograms/Mlife/Source/rainflow', nargout=0)
-        eng.mlife('/Users/bingersoll/Dropbox/GradPrograms/Mlife/CertTest/Test_FAST.mlif',
-                '/Users/bingersoll/Dropbox/GradPrograms/Mlife/Data',
-                  '/Users/bingersoll/Dropbox/GradPrograms/Mlife/Results/FAST_5MW/', nargout=0)
+        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source')), nargout=0)
+        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source/datatablepackage')), nargout=0)
+        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source/rainflow')), nargout=0)
+        eng.mlife(''.join((dp,'RotorSE_FAST/Mlife/CertTest/Test_FAST.mlif')),
+                ''.join((dp,'RotorSE_FAST/Mlife/Data')),
+                  ''.join((dp,'RotorSE_FAST/Mlife/Results/FAST_5MW/')), nargout=0)
 
         # Extract MLife outputs
-        fp = open("/Users/bingersoll/Dropbox/GradPrograms/Mlife/Results/FAST_5MW/FAST_Constraints_Lifetime_Damage.txt")
+        fp = open("../../../RotorSE_FAST/Mlife/Results/FAST_5MW/FAST_Constraints_Lifetime_Damage.txt")
         line = fp.readlines()
 
         mlife_results  = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[22])
@@ -3160,43 +3165,48 @@ class ObjandCons(Component):
         TLModel = 'PRANDtl'
         HLModel = 'PRANDtl'
 
-        airfoil_types_FAST = ['/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/RotorSE/src/rotorse/5MW_AFFiles_FAST/Cylinder1.dat',
-                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/RotorSE/src/rotorse/5MW_AFFiles_FAST/Cylinder2.dat',
-                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU40_A17.dat',
-                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU35_A17.dat',
-                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU30_A17.dat',
-                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU25_A17.dat',
-                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU21_A17.dat',
-                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST_coupling/RotorSE/src/rotorse/5MW_AFFiles_FAST/NACA64_A17.dat']
+        airfoil_types_FAST = ['/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/RotorSE/src/rotorse/5MW_AFFiles_FAST/Cylinder1.dat',
+                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/RotorSE/src/rotorse/5MW_AFFiles_FAST/Cylinder2.dat',
+                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU40_A17.dat',
+                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU35_A17.dat',
+                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU30_A17.dat',
+                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU25_A17.dat',
+                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/RotorSE/src/rotorse/5MW_AFFiles_FAST/DU21_A17.dat',
+                              '/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/RotorSE/src/rotorse/5MW_AFFiles_FAST/NACA64_A17.dat']
 
         # TODO: change back to FoilNm=params['airfoil_types']
 
-        #print('check for FAST')
+        # Platform
+        run_sc = 0
+        if run_sc == 1:
+            dp = '/fslhome/ingerbry/programs/'
+        else:
+            dp = '/Users/bingersoll/Dropbox/GradPrograms/'
 
-        DLC_List = ['/Users/bingersoll/Dropbox/GradPrograms/WND_Files/ECD+R+1.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/ECD+R+2.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/ECD+R-1.8.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/ECD+R.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/ECD-R+2.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/ECD-R-2.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/ECD-R.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EOGO.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EOGR+2.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EOGR-2.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EWM01.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EWM50.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EWSH+12.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EWSH+24.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EWSH-12.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EWSH-24.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EWSV+12.0.wnd',
-                    '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/EWSV-12.0.wnd']
-                    # '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/DLC_1_2.wnd',
-                    # '/Users/bingersoll/Dropbox/GradPrograms/WND_Files/DLC_1_3.wnd']
+        DLC_List = [''.join((dp,'WND_Files/ECD+R+1.0.wnd')),
+                    ''.join((dp,'WND_Files/ECD+R+2.0.wnd')),
+                    ''.join((dp,'WND_Files/ECD+R-1.8.wnd')),
+                    ''.join((dp,'WND_Files/ECD+R.wnd')),
+                    ''.join((dp,'WND_Files/ECD-R+2.0.wnd')),
+                    ''.join((dp,'WND_Files/ECD-R-2.0.wnd')),
+                    ''.join((dp,'WND_Files/ECD-R.wnd')),
+                    ''.join((dp,'WND_Files/EOGO.wnd')),
+                    ''.join((dp,'WND_Files/EOGR+2.0.wnd')),
+                    ''.join((dp,'WND_Files/EOGR-2.0.wnd')),
+                    ''.join((dp,'WND_Files/EWM01.wnd')),
+                    ''.join((dp,'WND_Files/EWM50.wnd')),
+                    ''.join((dp,'WND_Files/EWSH+12.0.wnd')),
+                    ''.join((dp,'WND_Files/EWSH+24.0.wnd')),
+                    ''.join((dp,'WND_Files/EWSH-12.0.wnd')),
+                    ''.join((dp,'WND_Files/EWSH-24.0.wnd')),
+                    ''.join((dp,'WND_Files/EWSV+12.0.wnd')),
+                    ''.join((dp,'WND_Files/EWSV-12.0.wnd'))]
+                    # ''.join((dp,'WND_Files/DLC_1_2.wnd))',
+                    # ''.join((dp,'WND_Files/DLC_1_3.wnd))']
 
         run_FAST = 0
         run_FAST_multiple_times = 0
-        run_FAST_with_dynamic_constraints = 1
+        run_FAST_with_dynamic_constraints =1
 
 
         if run_FAST_with_dynamic_constraints ==1:
@@ -3241,7 +3251,7 @@ class ObjandCons(Component):
                                      Input='RotorSE', Check_SS='none', Tmax=100.0, DT=0.0125,
                                      r_max_chord=r_max_chord, chord_sub=params['chord_sub'],
                                      theta_sub=params['theta_sub'], idx_cylinder_aero=params['idx_cylinder_aero'],
-                                     initial_aero_grid=params['initial_aero_grid'], DLCwindfile=DLC_List[i])
+                                     initial_aero_grid=params['initial_aero_grid'], DLCwindfile=DLC_List[i], dp=dp)
 
                     critical_deflection.append(crit_def)
                     ELTx.append(sigma_x_ELT5500)
@@ -3297,7 +3307,7 @@ class ObjandCons(Component):
             life_time_damage= np.asarray(life_time_damage)
 
 
-            quit()
+            # quit()
 
             unknowns['ELT5500_sigma_x'] = ELTx_2
             unknowns['ELT5500_sigma_y'] = ELTy_2
@@ -3373,7 +3383,7 @@ class ObjandCons(Component):
                                         Input='5MW_Check',Check_SS='none', Tmax=50.0, DT = 0.0125,
                                         r_max_chord = params['r_max_chord'], chord_sub =params['chord_sub'],
                                         theta_sub = params['theta_sub'], idx_cylinder_aero = params['idx_cylinder_aero'],
-                                        initial_aero_grid = params['initial_aero_grid'],DLCwindfile=DLC_List[0])
+                                        initial_aero_grid = params['initial_aero_grid'],DLCwindfile=DLC_List[0], dp=dp)
 
                     Results[i,:] = FAST_con
 
@@ -3403,7 +3413,7 @@ class ObjandCons(Component):
                                      Input='5MW_Check', Check_SS='none', Tmax=50.0, DT = 0.0125,
                                      r_max_chord = params['r_max_chord'], chord_sub =params['chord_sub'],
                                      theta_sub=params['theta_sub'], idx_cylinder_aero = params['idx_cylinder_aero'],
-                                     initial_aero_grid = params['initial_aero_grid'],DLCwindfile=DLC_List[0])
+                                     initial_aero_grid = params['initial_aero_grid'],DLCwindfile=DLC_List[0], dp = dp)
             #
             #unknowns['con_Test_FAST'] = FAST_con
             #print(FAST_con)

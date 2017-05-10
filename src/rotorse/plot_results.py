@@ -12,10 +12,10 @@ plot_constraints = 0
 plotcurves = 0
 plot_instance = 0
 plot_lin_reg = 0
-plot_chord = 0
+plot_chord = 1
 plot_span_moments = 0
 plot_ltd = 0
-plot_theta = 1
+plot_theta = 0
 
 if plot_ltd == 1:
     r_max_chord = np.linspace(0.1, 0.5, 20)
@@ -104,15 +104,13 @@ if plot_chord == 1:
     chord_opt = [ 3.2182206,   3.69902692,  4.1312615,   4.58993873,  4.99808184,  5.22315577,
   5.2356485,   5.00602254,  4.49234017, 3.78968888,  3.06783205,  2.49653305,
   2.13420411,  1.81104443,  1.58270451,  1.43764649,  1.33433803]
-    chord_fast = 1.05*(np.array(chord0) + np.array(chord_opt))/2.0
-    print chord_fast
 
 
     plt.figure()
     plt.title('Optimize Chord Distribution')
-    plt.plot(r,chord0,'-*', label = 'original design')
+    #plt.plot(r,chord0,'-*', label = 'original design')
     plt.plot(r,chord_opt,'-*', label = 'optimized design using RotorSE')
-    plt.plot(r,chord_fast,'-*', label='optimized design w/FAST constraints')
+    plt.plot(r,chord_opt,'-*', label='optimized design w/FAST constraints')
     plt.xlabel('Blade Location (m)')
     plt.ylabel('Chord (m)')
     # plt.ylabel('Generated Power (kW)')
@@ -125,15 +123,14 @@ if plot_chord == 1:
     quit()
 
 if plot_theta == 1:
-    theta0 = [ 16.22439788,  15.13860793,  14.08852061,  12.82406512,  11.37397181,
+    theta0 = [ 12.00829859,  12.00829859,  12.00829859,  12.00829859,  11.37397181,
    9.99299004,   8.67663126,   7.42041502,   6.22929502,   5.11206596,
-   4.07146573,   3.11023224,   2.23640415,   1.46081228,   0.88587252,
+   4.07146573,   3.11023224,   2.23640415,   1.46081228 ,  0.88587252,
    0.47028779,   0.09230388]
-    theta_opt = [  7.76695530e-01,   6.48816713e-01,   5.31156706e-01 ,  3.98691171e-01,
-   2.61575484e-01,   1.48793038e-01,   6.08799725e-02,  -1.61638005e-03,
-  -2.99598234e-02,  -2.81760127e-02,  -1.28667125e-02,  -6.33687473e-04,
-   0.00000000e+00,   0.00000000e+00,   0.00000000e+00,   0.00000000e+00,
-   0.00000000e+00,]
+    theta_opt = [ 12.08138836 , 12.08138836,  12.08138836,  12.08138836 , 10.31557938,
+   8.68131875,   7.16479699  , 5.7522359    ,4.46370386,   3.32471881,
+   2.33528076  , 1.4953897  ,  0.82687696 ,  0.37134189 ,  0.14267032,
+   0.05072835  , 0.03365287]
     theta_fast = 1.2*(np.array(theta_opt))
     r = [2.8667,   5.6,      8.3333,  11.75,    15.85,    19.95,    24.05,    28.15,
      32.25,    36.35,    40.45,   44.55,    48.65,    52.75,    56.1667,  58.9,
@@ -142,9 +139,9 @@ if plot_theta == 1:
 
     plt.figure()
     plt.title('Optimize Twist Distribution')
-    plt.plot(r,theta0,'-*', label = 'original design')
+    #plt.plot(r,theta0,'-*', label = 'original design')
     plt.plot(r,theta_opt,'-*', label = 'optimized design using RotorSE')
-    plt.plot(r,theta_fast,'-*', label='optimized design w/FAST constraints')
+    plt.plot(r,theta_opt,'-*', label='optimized design w/FAST constraints')
     plt.xlabel('Blade Location (m)')
     plt.ylabel('Twist (deg)')
     # plt.ylabel('Generated Power (kW)')
@@ -154,7 +151,7 @@ if plot_theta == 1:
     #plt.ylim([0,6000])
     plt.legend(loc=1)
     plt.show()
-    quit()
+    #quit()
 
 if plotcurves == 1:
 
