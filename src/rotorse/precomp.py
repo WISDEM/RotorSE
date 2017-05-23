@@ -917,7 +917,20 @@ class Profile:
             return Profile.initWithTEtoTEdata(x, y)
 
 
+    @staticmethod
+    def initFromCoordinates(x, y, LEtoLE = True):
+        try:
+            x = x.tolist()
+            y = y.tolist()
+        except:
+            pass
+        if LEtoLE:
+            x.append(x[0])
+            y.append(y[0])
+            return Profile.initWithLEtoLEdata(x, y)
 
+        else:
+            return Profile.initWithTEtoTEdata(x, y)
 
     def _preCompFormat(self):
         """
@@ -1027,6 +1040,7 @@ if __name__ == '__main__':
 
 
     # -------- materials and composite layup  -----------------
+    #basepath = os.path.join('5MW_files', '5MW_PrecompFiles')
     basepath = os.path.join('5MW_files', '5MW_PrecompFiles')
 
     materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
