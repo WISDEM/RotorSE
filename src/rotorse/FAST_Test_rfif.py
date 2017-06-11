@@ -4,24 +4,23 @@ import os
 import matplotlib.pyplot as plt
 from openmdao.api import Problem, pyOptSparseDriver, SqliteRecorder
 from rotor import RotorSE  # (include this line)
-
+import re
 
 import numpy as np
 
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
-
 # -------------------
 rotor = Problem()
 rotor.root = RotorSE(naero=17, nstr=38, npower=20)#, af_dof=2)
 
-description = 'bryce'
+description = 'FAST_Test'
 
 ## SETUP OPTIMIZATION
-# rotor.driver = pyOptSparseDriver()
-# rotor.driver.options['optimizer'] = 'SNOPT'
-# rotor.driver.opt_settings['Print file'] = 'SNOPT_print_' + description +'.out'
-# rotor.driver.opt_settings['Summary file'] = 'SNOPT_summary_' + description +'.out'
-# rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
+rotor.driver = pyOptSparseDriver()
+rotor.driver.options['optimizer'] = 'SNOPT'
+rotor.driver.opt_settings['Print file'] = 'SNOPT_print_' + description +'.out'
+rotor.driver.opt_settings['Summary file'] = 'SNOPT_summary_' + description +'.out'
+rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
 
 # recorder = SqliteRecorder(os.sep + 'recorder_' + description +'.sql')
 # recorder.options['record_params'] = True
@@ -31,10 +30,10 @@ description = 'bryce'
 ## Setup design variables and objective
 rotor.driver.add_objective('obj')
 
-# rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-# rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
-# rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
-rotor.driver.add_desvar('control:tsr', lower=3.0, upper=9.0)
+rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
+rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+# rotor.driver.add_desvar('control:tsr', lower=3.0, upper=9.0)
 # rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)
 # rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)
 
@@ -49,43 +48,87 @@ rotor.driver.add_constraint('obj', lower=5)  # To insure that COE does not go ne
 rotor.driver.add_constraint('con_power', lower=0.0)  #, scaler=1e-6)
 rotor.driver.add_constraint('con_thrust', upper=0.73)  # Constrain to scaled initial thrust so that other components of turbine remain constant
 
-# Test FAST constraint
-rotor.driver.add_constraint('con_Test_FAST', lower=np.ones(20)*(-0.3))#lower=-0.2988)
+# FAST constraints
+dlc_list_length = 20
+gage_loc_num = 7
+
+# ultimate strength
+ELT5500_UTS = 972.0*10.0**6.0 # Pa
+ELT5500_UCS = 702.0*10.0**6.0 # Pa
+Triax_UTS = 700.0*10**6.0 # Pa
+Carbon_UTS = 1546.0*10**6.0
+Carbon_UCS = 1546.0*10**6.0
+
+# rotor.driver.add_constraint('ELT5500_sigma_x', lower=-ELT5500_UCS,upper=ELT5500_UTS)
+# rotor.driver.add_constraint('ELT5500_sigma_y', lower=-ELT5500_UCS,upper=ELT5500_UTS)
+# rotor.driver.add_constraint('Carbon_sigma_y', lower=-Carbon_UCS,upper=Carbon_UTS)
+# rotor.driver.add_constraint('Triax_sigma_x', lower=-Triax_UTS,upper=Triax_UTS) # unsure what Triax_UCS is; maybe 0?
+
+# critical deflection
+tsf = 1.35*1.1*1.0  # from Sandia paper
+avail_clearance = 10.50  # from Sandia paper
+
+# rotor.driver.add_constraint('crit_def', lower=-avail_clearance/tsf, upper=avail_clearance/tsf)
+
+# fatigue
+# rotor.driver.add_constraint('fatigue', upper=1.0)#lower=-0.2988)
+
+
+#rotor.driver.add_constraint('con_Test_FAST', lower=0.2)#lower=-0.2988)
+#rotor.driver.add_constraint('con_Test_FAST', lower=6.25)#lower=-0.2988)
 
 rotor.setup(check=False)
 
+# Extract MLife outputs
+fp = open("RotorSE_InputFiles/Nom_Case/main.txt")
+line = fp.readlines()
+
+float_var_pos = [3, 4, 7, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+               28, 29, 30, 31, 34, 35, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50,
+               53, 56] # numeric variable positions
+
+for i in range(0,max(float_var_pos)+1):
+    if i in float_var_pos:
+        globals()['testvar%s' % i] = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[i])
+
+        globals()['num_input_var%s' % i] = np.zeros(len(globals()['testvar%s' % i]))
+        for j in range(0, len(globals()['testvar%s' % i])):
+            globals()['num_input_var%s' % i][j] = float(globals()['testvar%s' % i][j])
+
+
+int_var_pos = [5, 6, 23, 50, 51, 52, 55]
+
+for i in range(0,max(float_var_pos)+1):
+    if i in int_var_pos:
+        globals()['testvar%s' % i] = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[i])
+
+        globals()['num_input_var%s' % i] = int(globals()['testvar%s' % i][0])
+
 # === blade grid ===
-rotor['initial_aero_grid'] = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
-    0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
-    0.97777724])  # (Array): initial aerodynamic grid on unit radius
-rotor['initial_str_grid'] = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
-    0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
-    0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
-    0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
-    0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
-    1.0])  # (Array): initial structural grid on unit radius
-rotor['idx_cylinder_aero'] = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
-rotor['idx_cylinder_str'] = 14  # (Int): first idx in r_str_unit of non-cylindrical section
-rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
+
+rotor['initial_aero_grid'] = num_input_var3 # (Array): initial aerodynamic grid on unit radius
+
+rotor['initial_str_grid'] =  num_input_var4 # (Array): initial structural grid on unit radius
+rotor['idx_cylinder_aero'] = num_input_var5  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
+rotor['idx_cylinder_str'] = num_input_var6  # (Int): first idx in r_str_unit of non-cylindrical section
+rotor['hubFraction'] = num_input_var7  # (Float): hub location as fraction of radius
 # ------------------
 
 # === blade geometry ===
-rotor['r_aero'] = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333,
-    0.5, 0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333,
-    0.97777724])  # (Array): new aerodynamic grid on unit radius
-rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
-rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317, -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-rotor['precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-rotor['delta_precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading
-rotor['sparT'] = np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
-rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
-rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
-rotor['precone'] = 2.5  # (Float, deg): precone angle
-rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
-rotor['yaw'] = 0.0  # (Float, deg): yaw error
-rotor['nBlades'] = 3  # (Int): number of blades
+rotor['r_aero'] =  num_input_var10 # (Array): new aerodynamic grid on unit radius
+rotor['r_max_chord'] = num_input_var11  # (Float): location of max chord on unit radius
+rotor['chord_sub'] = num_input_var12  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+rotor['theta_sub'] = num_input_var13  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
+rotor['precurve_sub'] = num_input_var14  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
+rotor['delta_precurve_sub'] = num_input_var15  # (Array, m): adjustment to precurve to account for curvature from loading
+rotor['sparT'] = num_input_var16  # (Array, m): spar cap thickness parameters
+rotor['teT'] = num_input_var17  # (Array, m): trailing-edge thickness parameters
+rotor['bladeLength'] = num_input_var18  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+rotor['delta_bladeLength'] = num_input_var19  # (Float, m): adjustment to blade length to account for curvature from loading
+rotor['precone'] = num_input_var20  # (Float, deg): precone angle
+rotor['tilt'] = num_input_var21  # (Float, deg): shaft tilt
+rotor['yaw'] = num_input_var22  # (Float, deg): yaw error
+rotor['nBlades'] = num_input_var23  # (Int): number of blades
 # ------------------
 
 # === airfoil files ===
@@ -111,37 +154,37 @@ rotor['airfoil_types'] = airfoil_types  # (List): names of airfoil file or initi
 # ----------------------
 
 # === atmosphere ===
-rotor['rho'] = 1.225  # (Float, kg/m**3): density of air
-rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
-rotor['shearExp'] = 0.25  # (Float): shear exponent
-rotor['hubHt'] = np.array([90.0])  # (Float, m): hub height
+rotor['rho'] = num_input_var28  # (Float, kg/m**3): density of air
+rotor['mu'] = num_input_var29  # (Float, kg/m/s): dynamic viscosity of air
+rotor['shearExp'] = num_input_var30  # (Float): shear exponent
+rotor['hubHt'] = np.array(num_input_var31)  # (Float, m): hub height
 rotor['turbine_class'] = 'I'  # (Enum): IEC turbine class
 rotor['turbulence_class'] = 'B'  # (Enum): IEC turbulence class class
-rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
-rotor['g'] = 9.81  # (Float, m/s**2): acceleration of gravity
+rotor['cdf_reference_height_wind_speed'] = num_input_var34  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
+rotor['g'] = num_input_var35  # (Float, m/s**2): acceleration of gravity
 # ----------------------
 
 # === control ===
-rotor['control:Vin'] = 3.0  # (Float, m/s): cut-in wind speed
-rotor['control:Vout'] = 25.0  # (Float, m/s): cut-out wind speed
-rotor['control:ratedPower'] = 5e6  # (Float, W): rated power
-rotor['control:minOmega'] = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
-rotor['control:maxOmega'] = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
-rotor['control:tsr'] = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-rotor['control:pitch'] = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
-rotor['pitch_extreme'] = 0.0  # (Float, deg): worst-case pitch at survival wind condition
-rotor['azimuth_extreme'] = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
-rotor['VfactorPC'] = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
+rotor['control:Vin'] = num_input_var38  # (Float, m/s): cut-in wind speed
+rotor['control:Vout'] = num_input_var39  # (Float, m/s): cut-out wind speed
+rotor['control:ratedPower'] = num_input_var40  # (Float, W): rated power
+rotor['control:minOmega'] = num_input_var41  # (Float, rpm): minimum allowed rotor rotation speed
+rotor['control:maxOmega'] = num_input_var42  # (Float, rpm): maximum allowed rotor rotation speed
+rotor['control:tsr'] = num_input_var43  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+rotor['control:pitch'] = num_input_var44  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+rotor['pitch_extreme'] = num_input_var45  # (Float, deg): worst-case pitch at survival wind condition
+rotor['azimuth_extreme'] = num_input_var46  # (Float, deg): worst-case azimuth at survival wind condition
+rotor['VfactorPC'] = num_input_var47  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
 # ----------------------
 
 # === aero and structural analysis options ===
-rotor['nSector'] = 1  # (Int): number of sectors to divide rotor face into in computing thrust and power
-rotor['npts_coarse_power_curve'] = 20  # (Int): number of points to evaluate aero analysis at
-rotor['npts_spline_power_curve'] = 200  # (Int): number of points to use in fitting spline to power curve
-rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
+rotor['nSector'] = num_input_var50  # (Int): number of sectors to divide rotor face into in computing thrust and power
+rotor['npts_coarse_power_curve'] = num_input_var51  # (Int): number of points to evaluate aero analysis at
+rotor['npts_spline_power_curve'] = num_input_var52  # (Int): number of points to use in fitting spline to power curve
+rotor['AEP_loss_factor'] = num_input_var53  # (Float): availability and other losses (soiling, array, etc.)
 rotor['drivetrainType'] = 'geared'  # (Enum)
-rotor['nF'] = 5  # (Int): number of natural frequencies to compute
-rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
+rotor['nF'] = num_input_var55  # (Int): number of natural frequencies to compute
+rotor['dynamic_amplication_tip_deflection'] = num_input_var56  # (Float): a dynamic amplification factor to adjust the static deflection calculation
 # ----------------------
 
 # === materials and composite layup  ===
