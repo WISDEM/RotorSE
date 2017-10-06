@@ -10,6 +10,14 @@
  
  SNMEMB EXIT 100 -- finished successfully
  SNMEMB INFO 104 -- memory requirements estimated
+
+         ==============================
+         S N O P T  7.2-12.3 (Aug 2014)
+         ==============================
+      Major optimality tolerance  1.00000000E-06
+      Print file 18
+      Summary file 19
+      Derivative level               3
 1
  
  Parameters
@@ -33,17 +41,17 @@
  Scale tolerance........     0.900       Minor feasibility tol..  1.00E-06       Iteration limit........     10000
  Scale option...........         0       Minor optimality  tol..  5.00E-07       Minor print level......         1
  Crash tolerance........     0.100       Pivot tolerance........  3.25E-11       Partial price..........         1
- Crash option...........         3       Elastic weight.........  1.00E+04       Prtl price section ( A)         1
-                                         New superbasics........        99       Prtl price section (-I)       583
+ Crash option...........         3       Elastic weight.........  1.00E+04       Prtl price section ( A)         9
+                                         New superbasics........        99       Prtl price section (-I)        43
 
  The SQP Method
  --------------
  Minimize...............                 Cold start.............                 Proximal Point method..         1
- Nonlinear objectiv vars         1       Major optimality tol...  1.00E-06       Function precision.....  3.00E-13
- Unbounded step size....  1.00E+20       Superbasics limit......         1       Difference interval....  5.48E-07
- Unbounded objective....  1.00E+15       Reduced Hessian dim....         1       Central difference int.  6.70E-05
+ Nonlinear objectiv vars         9       Major optimality tol...  1.00E-06       Function precision.....  3.00E-13
+ Unbounded step size....  1.00E+20       Superbasics limit......         9       Difference interval....  5.48E-07
+ Unbounded objective....  1.00E+15       Reduced Hessian dim....         9       Central difference int.  6.70E-05
  Major step limit.......  2.00E+00       Derivative linesearch..                 Derivative level.......         3
- Major iterations limit.      1749       Linesearch tolerance...   0.90000       Verify level...........         0
+ Major iterations limit.      1000       Linesearch tolerance...   0.90000       Verify level...........         0
  Minor iterations limit.       500       Penalty parameter......  0.00E+00       Major Print Level......         1
 
  Hessian Approximation
@@ -53,8 +61,8 @@
 
  Nonlinear constraints
  ---------------------
- Nonlinear constraints..       583       Major feasibility tol..  1.00E-06       Violation limit........  1.00E+06
- Nonlinear Jacobian vars         1
+ Nonlinear constraints..        43       Major feasibility tol..  1.00E-06       Violation limit........  1.00E+06
+ Nonlinear Jacobian vars         9
 
  Miscellaneous
  -------------
@@ -70,20 +78,40 @@
  Matrix statistics
  -----------------
                Total      Normal        Free       Fixed     Bounded
- Rows            583          46           0           0         537
- Columns           1           0           0           0           1
+ Rows             43          28           0           0          15
+ Columns           9           0           0           0           9
 
- No. of matrix elements                  583     Density     100.000
+ No. of matrix elements                  387     Density     100.000
  Biggest  constant element        0.0000E+00  (excluding fixed columns,
  Smallest constant element        0.0000E+00   free rows, and RHS)
 
  No. of objective coefficients             0
 
- Nonlinear constraints     583     Linear constraints       0
- Nonlinear variables         1     Linear variables         0
- Jacobian  variables         1     Objective variables      1
- Total constraints         583     Total variables          1
+ Nonlinear constraints      43     Linear constraints       0
+ Nonlinear variables         9     Linear variables         0
+ Jacobian  variables         9     Objective variables      9
+ Total constraints          43     Total variables          9
 1
  
 
  
+ The user has defined     387   out of     387   constraint gradients.
+ The user has defined       9   out of       9   objective  gradients.
+
+ Cheap test of user-supplied problem derivatives...
+
+ XXX  The constraint gradients seem to be incorrect.
+
+ -->  The largest discrepancy was    1.05E-01  in constraint    49
+ 
+
+ The objective  gradients seem to be OK.
+
+ Gradient projected in one direction  -1.64395747372E-02
+ Difference approximation             -1.57790379100E-02
+1
+ 
+ 
+
+   Itns Major Minors    Step   nCon Feasible  Optimal  MeritFunction     L+U BSwap     nS  condHz Penalty
+     10     0     10              1  1.6E-03  7.1E-03  6.2186607E+00      85            6 1.1E+00         _  r
