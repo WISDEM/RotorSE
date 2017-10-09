@@ -17,7 +17,7 @@ FASTinfo = dict()
 FASTinfo['use_FAST'] = 'false'
 
 # FAST Run Time
-FASTinfo['Tmax'] = 120.0
+FASTinfo['Tmax'] = 5.0
 FASTinfo['dT'] = 0.0125
 
 # DLC List
