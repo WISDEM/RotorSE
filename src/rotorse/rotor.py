@@ -36,7 +36,12 @@ import matplotlib.pyplot as plt
 
 # Import AeroelasticSE
 import sys
-sys.path.insert(0, '/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao')
+
+# AeroelasticSE
+sys.path.insert(0, '../../../AeroelasticSE/src/AeroelasticSE/FAST_mdao')
+
+# rainflow
+sys.path.insert(0, '../../../AeroelasticSE/src/AeroelasticSE/rainflow')
 
 # ---------------------
 # Base Components
@@ -3067,31 +3072,41 @@ class CreateFASTConstraints(Component):
 
             config = params['cfg_master']['DLC{0}'.format(i)]
 
+            # fatigue constraints
+
+            files = ['/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/' + 'DLC{0}'.format(i) + '.outb']
+            files = ['../../../AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/' + 'DLC{0}'.format(i) + '.outb']
+
+            ##get DELs for Blade edge:53 and flap:54 bending moment, tower SS:92 and FA:93, and
+            ##anchor tension:100. Note: these might be different for different FAST
+            ##output files
+            ## these are literally the indices in the FAST output table of the fields of interest
+            ## (in python they are 0-based)
+            output_array = [20,21,22,23,24,25]
+            ## these are the powers that the cycles are raised to in order to get the final fatigue.
+            ## they are properties of the materials of the corresponding fields (so they are tied
+            ## to the indices in "output_array"
+            SNslope = np.array([[1,1,1,1,1,1], [8,8,8,8,8,8],
+                                [10,10,10,10,10,10],
+                                [12,12,12,12,12,12]], dtype="double")
+
+            # SNslope = np.array([[1], [8], [10], [12]], dtype="double")
+
+            from rainflow import do_rainflow
+
+            allres = do_rainflow(files, output_array, SNslope)
+
+            print(allres)
+
+            quit()
+
             # Deflection Constraint
             #results = max(top['ParallelFASTCases.pg.DLC1.OoPDefl1'])
 
-            #deflection = max(resultsdict['OoPDefl1'])
-            deflection = resultsdict['OoPDefl1']
+            deflection = max(resultsdict['OoPDefl1'])
+            deflection = min(resultsdict['OoPDefl1'])
 
-            # np.savetxt('OoPDefl1.txt', results)
-            #
-            # results2 = top['fast_component.GenTq']
-            # np.savetxt('GenTq.txt', results2)
-            #
-            # results3 = top['fast_component.GenPwr']
-            # np.savetxt('GenPwr.txt', results3)
-            #
-            # results4 = top['fast_component.WindVxi']
-            # np.savetxt('WindVxi.txt', results4)
-            #
-            # results5 = top['fast_component.RootMxc1']
-            # np.savetxt('RootMxc1.txt', results5)
-            #
-            # results6 = top['fast_component.RootMyc1']
-            # np.savetxt('RootMyc1.txt', results6)
-            #
-            # results6 = top['fast_component.RootMyb1']
-            # np.savetxt('RootMyb1.txt', results6)
+            #deflection = resultsdict['OoPDefl1']
 
             # absolute strength constraints
 
@@ -3147,44 +3162,6 @@ class CreateFASTConstraints(Component):
                 Spn_MLx.append(resultsdict['Spn{0}MLxb1'.format(j)])
                 Spn_MLy.append(resultsdict['Spn{0}MLyb1'.format(j)])
 
-            # Spn1MLxb1 = top['fast_component.Spn1MLxb1']
-            # np.savetxt('Spn1Mlxb1.txt', Spn1MLxb1)
-            # Spn1MLyb1 = top['fast_component.Spn1MLyb1']
-            # np.savetxt('Spn1Mlyb1.txt', Spn1MLyb1)
-            #
-            # Spn2MLxb1 = top['fast_component.Spn2MLxb1']
-            # np.savetxt('Spn2Mlxb1.txt', Spn2MLxb1)
-            # Spn2MLyb1 = top['fast_component.Spn2MLyb1']
-            # np.savetxt('Spn2Mlyb1.txt', Spn2MLyb1)
-            #
-            # Spn3MLxb1 = top['fast_component.Spn3MLxb1']
-            # np.savetxt('Spn3Mlxb1.txt', Spn3MLxb1)
-            # Spn3MLyb1 = top['fast_component.Spn3MLyb1']
-            # np.savetxt('Spn3Mlyb1.txt', Spn3MLyb1)
-            #
-            # Spn4MLxb1 = top['fast_component.Spn4MLxb1']
-            # np.savetxt('Spn4Mlxb1.txt', Spn4MLxb1)
-            # Spn4MLyb1 = top['fast_component.Spn4MLyb1']
-            # np.savetxt('Spn4Mlyb1.txt', Spn4MLyb1)
-            #
-            # Spn5MLxb1 = top['fast_component.Spn4MLxb1']
-            # np.savetxt('Spn5Mlxb1.txt', Spn5MLxb1)
-            # Spn5MLyb1 = top['fast_component.Spn4MLyb1']
-            # np.savetxt('Spn5Mlyb1.txt', Spn5MLyb1)
-            #
-            # Spn6MLxb1 = top['fast_component.Spn6MLxb1']
-            # np.savetxt('Spn6Mlxb1.txt', Spn6MLxb1)
-            # Spn6MLyb1 = top['fast_component.Spn6MLyb1']
-            # np.savetxt('Spn6Mlyb1.txt', Spn6MLyb1)
-            #
-            # Spn7MLxb1 = top['fast_component.Spn7MLxb1']
-            # np.savetxt('Spn7Mlxb1.txt', Spn7MLxb1)
-            # Spn7MLyb1 = top['fast_component.Spn7MLyb1']
-            # np.savetxt('Spn7Mlyb1.txt', Spn7MLyb1)
-            #
-            # Spn_MLx = [Spn1MLxb1, Spn2MLxb1, Spn3MLxb1, Spn4MLxb1, Spn5MLxb1, Spn6MLxb1, Spn7MLxb1]
-            # Spn_MLy = [Spn1MLyb1, Spn2MLyb1, Spn3MLyb1, Spn4MLyb1, Spn5MLyb1, Spn6MLyb1, Spn7MLyb1]
-
             flpstff_spline = Akima(config['BlFract'] * config['TipRad'], config['FlpStff'])
             flpstff_aero = flpstff_spline.interp(config['RNodes'])[0]
 
@@ -3216,172 +3193,6 @@ class CreateFASTConstraints(Component):
             # edgewise
             sigma_x_ELT5500 = eps_x * Ex_ELT5500
             sigma_x_Triax = eps_x * Ex_Triax
-
-            # MLife input file
-            run_MLife_check = 0
-
-            run_MLife_constraints = 0
-
-            if run_MLife_constraints == 1:
-                column0 = top['fast_component.Time']
-                column1 = top['fast_component.WindVxi']
-                column2 = top['fast_component.GenPwr']
-                column3 = top['fast_component.RotSpeed']
-                column4 = top['fast_component.OoPDefl1']
-                column5 = top['fast_component.IPDefl1']
-                column6 = top['fast_component.OoPDefl2']
-                column7 = top['fast_component.IPDefl2']
-                column8 = top['fast_component.OoPDefl3']
-                column9 = top['fast_component.IPDefl3']
-                column10 = top['fast_component.RootFxc1']
-                column11 = top['fast_component.RootFyc1']
-                column12 = top['fast_component.RootFzc1']
-                column13 = top['fast_component.RotTorq']
-
-                column14 = top['fast_component.Spn1MLxb1']
-                column15 = top['fast_component.Spn2MLxb1']
-                column16 = top['fast_component.Spn3MLxb1']
-                column17 = top['fast_component.Spn4MLxb1']
-                column18 = top['fast_component.Spn5MLxb1']
-                column19 = top['fast_component.Spn6MLxb1']
-                column20 = top['fast_component.Spn7MLxb1']
-                column21 = top['fast_component.Spn1MLyb1']
-                column22 = top['fast_component.Spn2MLyb1']
-                column23 = top['fast_component.Spn3MLyb1']
-                column24 = top['fast_component.Spn4MLyb1']
-                column25 = top['fast_component.Spn5MLyb1']
-                column26 = top['fast_component.Spn6MLyb1']
-                column27 = top['fast_component.Spn7MLyb1']
-
-                mlifedata = np.zeros([len(column0), 28])
-
-                mlifedata[:, 0] = column0
-                mlifedata[:, 1] = column1
-                mlifedata[:, 2] = column2
-                mlifedata[:, 3] = column3
-                mlifedata[:, 4] = column4
-                mlifedata[:, 5] = column5
-                mlifedata[:, 6] = column6
-                mlifedata[:, 7] = column7
-                mlifedata[:, 8] = column8
-                mlifedata[:, 9] = column9
-                mlifedata[:, 10] = column10
-                mlifedata[:, 11] = column11
-                mlifedata[:, 12] = column12
-                mlifedata[:, 13] = column13
-                mlifedata[:, 14] = column14
-                mlifedata[:, 15] = column15
-                mlifedata[:, 16] = column16
-                mlifedata[:, 17] = column17
-                mlifedata[:, 18] = column18
-                mlifedata[:, 19] = column19
-                mlifedata[:, 20] = column20
-                mlifedata[:, 21] = column21
-                mlifedata[:, 22] = column22
-                mlifedata[:, 23] = column23
-                mlifedata[:, 24] = column24
-                mlifedata[:, 25] = column25
-                mlifedata[:, 26] = column26
-                mlifedata[:, 27] = column27
-
-                # MLife Analysis
-                header = '\n'.join(
-                    ["", "line2", "line3", "", "NREL 5.0 MW Baseline Wind Turbine for Use in Offshore Analysis.",
-                     "", "    Time WindVxi	GenPwr	RotSpeed	OoPDefl1	IPDefl1	OoPDefl2	IPDefl2	"
-                         "OoPDefl3	IPDefl3	RootFxc1	RootFyc1	RootFzc1	RotTorq	Spn1MLxb1	Spn2MLxb1	Spn3MLxb1	Spn4MLxb1	Spn5MLxb1	Spn6MLxb1	Spn7MLxb1	"
-                         "Spn1MLyb1	Spn2MLyb1	Spn3MLyb1	Spn4MLyb1	Spn5MLyb1	Spn6MLyb1 Spn7MLyb1",
-                     "   (sec)	(m/sec)	(kW)	(rpm)	(m)	(m)	(m)	(m)	(m)	(m)	(kN)	(kN)	(kN)	"
-                     "(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm) (kNm)"])
-
-                np.savetxt(''.join((dp, 'RotorSE_FAST/Mlife/Data/mlifeFAST.out')), mlifedata, header=header, comments='')
-
-                eng = matlab.engine.start_matlab()
-                eng.addpath(''.join((dp, 'RotorSE_FAST/Mlife/Source')), nargout=0)
-                eng.addpath(''.join((dp, 'RotorSE_FAST/Mlife/Source/datatablepackage')), nargout=0)
-                eng.addpath(''.join((dp, 'RotorSE_FAST/Mlife/Source/rainflow')), nargout=0)
-                eng.mlife(''.join((dp, 'RotorSE_FAST/Mlife/CertTest/newFAST.mlif')),
-                          ''.join((dp, 'RotorSE_FAST/Mlife/Data')),
-                          ''.join((dp, 'RotorSE_FAST/Mlife/Results/FAST_5MW/')), nargout=0)
-
-                # quit()
-
-                # Extract MLife outputs
-                fp = open("../../../RotorSE_FAST/Mlife/Results/DLC_1_2/FAST_Constraints_Lifetime_Damage.txt")
-                line = fp.readlines()
-
-                mlife_results = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[22])
-
-                LifeTimeDamage = float(mlife_results[1])
-
-            else:
-                LifeTimeDamage = 0.0
-
-            if run_MLife_check == 1:
-                column0 = top['fast_component.Time']
-                column1 = top['fast_component.WindVxi']
-                column2 = top['fast_component.GenPwr']
-                column3 = top['fast_component.RotSpeed']
-                column4 = top['fast_component.OoPDefl1']
-                column5 = top['fast_component.IPDefl1']
-                column6 = top['fast_component.OoPDefl2']
-                column7 = top['fast_component.IPDefl2']
-                column8 = top['fast_component.OoPDefl3']
-                column9 = top['fast_component.IPDefl3']
-                column10 = top['fast_component.RootFxc1']
-                column11 = top['fast_component.RootFyc1']
-                column12 = top['fast_component.RootFzc1']
-                column13 = top['fast_component.RotTorq']
-                column14 = top['fast_component.Spn4MLxb1']
-
-                mlifedata = np.zeros([len(column0), 15])
-
-                mlifedata[:, 0] = column0
-                mlifedata[:, 1] = column1
-                mlifedata[:, 2] = column2
-                mlifedata[:, 3] = column3
-                mlifedata[:, 4] = column4
-                mlifedata[:, 5] = column5
-                mlifedata[:, 6] = column6
-                mlifedata[:, 7] = column7
-                mlifedata[:, 8] = column8
-                mlifedata[:, 9] = column9
-                mlifedata[:, 10] = column10
-                mlifedata[:, 11] = column11
-                mlifedata[:, 12] = column12
-                mlifedata[:, 13] = column13
-                mlifedata[:, 14] = column14
-
-                # MLife Analysis
-                header = '\n'.join(
-                    ["", "line2", "line3", "", "NREL 5.0 MW Baseline Wind Turbine for Use in Offshore Analysis.",
-                     "",
-                     "    Time	WindVxi	GenPwr	RotSpeed	OoPDefl1	IPDefl1	OoPDefl2	IPDefl2	OoPDefl3	IPDefl3	RootFxc1	RootFyc1	RootFzc1	RotTorq Spn4MLxb1",
-                     "   (sec)	(m/sec)	(kW)	(rpm)	(m)	(m)	(m)	(m)	(m)	(m)	(kN)	(kN)	(kN)	(kNm) (kNm)"])
-
-                np.savetxt(''.join((dp, 'RotorSE_FAST/Mlife/Data/mlifetest.out')), mlifedata, header=header, comments='')
-
-                eng = matlab.engine.start_matlab()
-                eng.addpath(''.join((dp, 'RotorSE_FAST/Mlife/Source')), nargout=0)
-                eng.addpath(''.join((dp, 'RotorSE_FAST/Mlife/Source/datatablepackage')), nargout=0)
-                eng.addpath(''.join((dp, 'RotorSE_FAST/Mlife/Source/rainflow')), nargout=0)
-                eng.mlife(''.join((dp, 'RotorSE_FAST/Mlife/CertTest/Test_FAST.mlif')),
-                          ''.join((dp, 'RotorSE_FAST/Mlife/Data')),
-                          ''.join((dp, 'RotorSE_FAST/Mlife/Results/FAST_5MW/')), nargout=0)
-
-                # Extract MLife outputs
-                fp = open("../../../RotorSE_FAST/Mlife/Results/FAST_5MW/FAST_Constraints_Lifetime_Damage.txt")
-                line = fp.readlines()
-
-                mlife_results = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[22])
-                mlife_results_no_cor = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[38])
-                #
-                # print(mlife_results)
-                # quit()
-
-                LifeTimeDamage = float(mlife_results[4]) / 20.0
-                # LifeTimeDamage_no_cor = float( mlife_results_no_cor[4] )
-
-                # quit()
 
             Check_SS = 'none'
             # Steady-State Check
@@ -3661,7 +3472,10 @@ class CreateFASTConfig(Component):
                 theta_sub = rotorse_opt_chord[0, :]
 
             cfg['NumBl'] = params['nBlades']
-            cfg['Gravity'] = params['g'][0]
+
+            # cfg['Gravity'] = params['g'][0]
+            cfg['Gravity'] = params['g']
+
             cfg['RotSpeed'] = params['control:tsr']
             cfg['TipRad'] = params['FAST_Rtip']
             cfg['HubRad'] = params['FAST_Rhub']
@@ -3669,6 +3483,11 @@ class CreateFASTConfig(Component):
             cfg['PreCone1'] = params['precone']
             cfg['PreCone2'] = params['precone']
             cfg['PreCone3'] = params['precone']
+
+            # print(cfg['TipRad'])
+            # print(cfg['HubRad'])
+            # print(cfg['HubRad']+cfg['TipRad'])
+            # quit()
 
             # exposed parameters (no corresponding RotorSE parameter)
             cfg['TMax'] = self.Tmax
@@ -3684,8 +3503,10 @@ class CreateFASTConfig(Component):
 
             # Add DLC .wnd file name to Aerodyn.ipt input file
             cfg['HH'] = params['hubHt'][0]
-            cfg['AirDens'] = params['rho'][0]
-            cfg['KinVisc'] = params['mu'][0] / params['rho'][0]
+            #cfg['AirDens'] = params['rho'][0]
+            cfg['AirDens'] = params['rho']
+            #cfg['KinVisc'] = params['mu'][0] / params['rho'][0]
+            cfg['KinVisc'] = params['mu'] / params['rho']
             # cfg['FoilNm'] = FoilNm
             cfg['NFoil'] = (params['af_idx'] + np.ones(np.size(params['af_idx']))).astype(int)
             cfg['BldNodes'] = np.size(params['af_idx'])
@@ -3770,8 +3591,8 @@ class CreateFASTConfig(Component):
             # #
 
             # set EI stiffness
-            BladeAerodynamicProperties = np.loadtxt('BladeAerodynamicProperties.txt')
-            BladeStructureProperties = np.loadtxt('BladeStructureProperties.txt')
+            BladeAerodynamicProperties = np.loadtxt('RotorSE_InputFiles/BladeAerodynamicProperties.txt')
+            BladeStructureProperties = np.loadtxt('RotorSE_InputFiles/BladeStructureProperties.txt')
 
             # FlpStff, EdgStff, GJStff, EAStff
             EI_flp_spline = Akima(params['FAST_precurve_Str'], params['FlpStff'])
@@ -4361,7 +4182,7 @@ class RotorSE(Group):
 
             #caseids = ['DLC1']
 
-            from FST7_aeroelasticsolver import FST7Workflow, FST7AeroElasticSolver
+            #from FST7_aeroelasticsolver import FST7Workflow, FST7AeroElasticSolver
 
             self.add('ParallelFASTCases', FST7AeroElasticSolver(caseids))
             self.connect('cfg_master', 'ParallelFASTCases.cfg_master')
@@ -4816,6 +4637,16 @@ if __name__ == '__main__':
     from openmdao.api import Problem
     # from rotorse.rotor import RotorSE  (include this line)
 
+    bl_case = int(sys.argv[1])
+
+    bl_nom = 61.5
+    bl_min = bl_nom * 0.9
+    bl_max = bl_nom * 1.1
+
+    bl_cases = np.linspace(bl_min, bl_max, 21)
+
+    bladelength = bl_cases[bl_case]
+
     # -------------------
     rotor = Problem()
 
@@ -4852,12 +4683,12 @@ if __name__ == '__main__':
     rotor['delta_precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading
     rotor['sparT'] = np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
     rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
-    rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+    rotor['bladeLength'] = bladelength  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
     rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
     rotor['precone'] = 2.5  # (Float, deg): precone angle
     rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
     rotor['yaw'] = 0.0  # (Float, deg): yaw error
-    rotor['nBlades'] = 3  # (Int): number of blades
+    rotor['nBlades'] = 2  # (Int): number of blades
     # ------------------
 
     # === airfoil files ===
@@ -5005,6 +4836,7 @@ if __name__ == '__main__':
 
     # === run and outputs ===
     rotor.run()
+    quit()
     print("================== RotorSE Outputs ==================")
     print('COE =', rotor['COE']*100, 'cents/kWh')
     print('AEP =', rotor['AEP'])

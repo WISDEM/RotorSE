@@ -25,10 +25,10 @@ bladelength = bl_cases[bl_case]
 
 # FAST Top Level Inputs
 FASTinfo = dict()
-FASTinfo['use_FAST'] = 'false'
+FASTinfo['use_FAST'] = 'true'
 
 # FAST Run Time
-FASTinfo['Tmax'] = 5.0
+FASTinfo['Tmax'] = 60.0
 FASTinfo['dT'] = 0.0125
 
 # DLC List
@@ -261,7 +261,7 @@ else:
         [0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
     rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
     rotor[
-        'bladeLength'] = 55.35  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+        'bladeLength'] = bl_cases[bl_case]  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
     rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
     rotor['precone'] = 2.5  # (Float, deg): precone angle
     rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
