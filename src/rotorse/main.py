@@ -23,7 +23,10 @@ initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095
 rotor = Problem()
 naero = len(initial_aero_grid)
 nstr = len(initial_str_grid)
-rotor.root = RotorSE(naero, nstr)
+npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
+npts_spline_power_curve = 200  # (Int): number of points to use in fitting spline to power curve
+
+rotor.root = RotorSE(naero, nstr, npts_coarse_power_curve, npts_spline_power_curve)
 
 ### SETUP OPTIMIZATION
 # rotor.driver = pyOptSparseDriver()
@@ -95,7 +98,7 @@ rotor['airfoil_files'] = af  # (List): names of airfoil file
 rotor['rho'] = 1.225  # (Float, kg/m**3): density of air
 rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
 rotor['shearExp'] = 0.25  # (Float): shear exponent
-rotor['hubHt'] = 90.0  # (Float, m): hub height
+rotor['hubHt'] = np.array([90.0])  # (Float, m): hub height
 rotor['turbine_class'] = 'I'  # (Enum): IEC turbine class
 rotor['turbulence_class'] = 'B'  # (Enum): IEC turbulence class class
 rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
@@ -117,8 +120,8 @@ rotor['VfactorPC'] = 0.7  # (Float): fraction of rated speed at which the deflec
 
 # === aero and structural analysis options ===
 rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
-rotor['npts_coarse_power_curve'] = 20  # (Int): number of points to evaluate aero analysis at
-rotor['npts_spline_power_curve'] = 200  # (Int): number of points to use in fitting spline to power curve
+rotor['npts_coarse_power_curve'] = npts_coarse_power_curve  # (Int): number of points to evaluate aero analysis at
+rotor['npts_spline_power_curve'] = npts_spline_power_curve  # (Int): number of points to use in fitting spline to power curve
 rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
 rotor['drivetrainType'] = 'geared'  # (Enum)
 rotor['nF'] = 5  # (Int): number of natural frequencies to compute
@@ -126,7 +129,7 @@ rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplifi
 # ----------------------
 
 # === materials and composite layup  ===
-basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PrecompFiles')
+basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
 
 materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
 

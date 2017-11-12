@@ -1027,7 +1027,7 @@ if __name__ == '__main__':
 
 
     # -------- materials and composite layup  -----------------
-    basepath = os.path.join('5MW_files', '5MW_PrecompFiles')
+    basepath = os.path.join('5MW_files', '5MW_PreCompFiles')
 
     materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
 

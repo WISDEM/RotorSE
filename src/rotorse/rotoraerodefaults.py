@@ -7,13 +7,15 @@ Created by Andrew Ning on 2013-10-07.
 Copyright (c) NREL. All rights reserved.
 """
 
+from __future__ import print_function
 import numpy as np
 from math import pi, gamma
 from openmdao.api import Component, Group
 
 from ccblade import CCAirfoil, CCBlade as CCBlade_PY
-from utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
-from rotoraero import common_configure
+from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
+from rotoraero import GeometrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase, \
+    VarSpeedMachine, FixedSpeedMachine, RatedConditions, common_configure
 from akima import Akima
 from enum import Enum
 
@@ -31,9 +33,9 @@ class PDFBase(Component):
         self.add_output('f')
 
 class GeometrySpline(Component):
-    def __init__(self):
+    def __init__(self, naero):
         super(GeometrySpline, self).__init__()
-        self.add_param('r_af', shape=17, units='m', desc='locations where airfoils are defined on unit radius')
+        self.add_param('r_af', shape=naero, units='m', desc='locations where airfoils are defined on unit radius')
 
         self.add_param('idx_cylinder', val=0, desc='location where cylinder section ends on unit radius')
         self.add_param('r_max_chord', shape=1, desc='position of max chord on unit radius')
@@ -44,14 +46,12 @@ class GeometrySpline(Component):
         self.add_param('chord_sub', shape=4, units='m', desc='chord at control points')
         self.add_param('theta_sub', shape=4, units='deg', desc='twist at control points')
 
-        self.add_output('r', shape=17, units='m', desc='chord at airfoil locations')
-        self.add_output('chord', shape=17, units='m', desc='chord at airfoil locations')
-        self.add_output('theta', shape=17, units='deg', desc='twist at airfoil locations')
-        self.add_output('precurve', shape=17, units='m', desc='precurve at airfoil locations')
+        self.add_output('r', shape=naero, units='m', desc='chord at airfoil locations')
+        self.add_output('chord', shape=naero, units='m', desc='chord at airfoil locations')
+        self.add_output('theta', shape=naero, units='deg', desc='twist at airfoil locations')
+        self.add_output('precurve', shape=naero, units='m', desc='precurve at airfoil locations')
         # self.add_output('r_af_spacing', shape=16)  # deprecated: not used anymore
 
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
         
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -163,17 +163,13 @@ class GeometrySpline(Component):
 # ---------------------
 # Default Implementations of Base Classes
 # ---------------------
-class CCBladeGeometry(Component):
+class CCBladeGeometry(GeometrySetupBase):
     def __init__(self):
         super(CCBladeGeometry, self).__init__()
         self.add_param('Rtip', shape=1, units='m', desc='tip radius')
         self.add_param('precurveTip', val=0.0, units='m', desc='tip radius')
         self.add_param('precone', val=0.0, desc='precone angle', units='deg')
-        self.add_output('R', shape=1, units='m', desc='rotor radius')
         self.add_output('diameter', shape=1, units='m')
-
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
         
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -210,28 +206,28 @@ class CCBladeGeometry(Component):
 
 
 ## TODO
-class CCBlade(Component):
-    def __init__(self, run_case, n, n2):
-        super(CCBlade, self).__init__()
+class CCBlade(AeroBase):
+    def __init__(self, run_case, naero, npower):
+        super(CCBlade, self).__init__(naero, npower)
         """blade element momentum code"""
 
         # (potential) variables
-        self.add_param('r', shape=n, units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
-        self.add_param('chord', shape=n, units='m', desc='chord length at each section')
-        self.add_param('theta', shape=n,  units='deg', desc='twist angle at each section (positive decreases angle of attack)')
+        self.add_param('r', shape=naero, units='m', desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
+        self.add_param('chord', shape=naero, units='m', desc='chord length at each section')
+        self.add_param('theta', shape=naero,  units='deg', desc='twist angle at each section (positive decreases angle of attack)')
         self.add_param('Rhub', shape=1, units='m', desc='hub radius')
         self.add_param('Rtip', shape=1, units='m', desc='tip radius')
-        self.add_param('hubHt', shape=1, units='m', desc='hub height')
+        self.add_param('hubHt', val=np.zeros(1), units='m', desc='hub height')
         self.add_param('precone', shape=1, desc='precone angle', units='deg')
         self.add_param('tilt', shape=1, desc='shaft tilt', units='deg')
         self.add_param('yaw', shape=1, desc='yaw error', units='deg')
 
         # TODO: I've not hooked up the gradients for these ones yet.
-        self.add_param('precurve', shape=n, units='m', desc='precurve at each section')
+        self.add_param('precurve', shape=naero, units='m', desc='precurve at each section')
         self.add_param('precurveTip', val=0.0, units='m', desc='precurve at tip')
 
         # parameters
-        self.add_param('airfoil_files', shape=n, desc='names of airfoil file', pass_by_obj=True)
+        self.add_param('airfoil_files', shape=naero, desc='names of airfoil file', pass_by_obj=True)
         self.add_param('B', val=3, desc='number of blades', pass_by_obj=True)
         self.add_param('rho', val=1.225, units='kg/m**3', desc='density of air')
         self.add_param('mu', val=1.81206e-5, units='kg/(m*s)', desc='dynamic viscosity of air')
@@ -244,46 +240,8 @@ class CCBlade(Component):
 
         self.add_param('run_case', val=Enum('power', 'loads'), pass_by_obj=True)
 
-
-        # --- use these if (run_case == 'power') ---
-
-        # inputs
-        self.add_param('Uhub', shape=n2, units='m/s', desc='hub height wind speed')
-        self.add_param('Omega', shape=n2, units='rpm', desc='rotor rotation speed')
-        self.add_param('pitch', shape=n2, units='deg', desc='blade pitch setting')
-
-        # outputs
-        self.add_output('T', shape=n2, units='N', desc='rotor aerodynamic thrust')
-        self.add_output('Q', shape=n2, units='N*m', desc='rotor aerodynamic torque')
-        self.add_output('P', shape=n2, units='W', desc='rotor aerodynamic power')
-
-
-        # --- use these if (run_case == 'loads') ---
-        # if you only use rotoraero.py and not rotor.py
-        # (i.e., only care about power curves, and not structural loads)
-        # then these second set of inputs/outputs are not needed
-
-        # inputs
-        self.add_param('V_load', shape=1, units='m/s', desc='hub height wind speed')
-        self.add_param('Omega_load', shape=1, units='rpm', desc='rotor rotation speed')
-        self.add_param('pitch_load', shape=1, units='deg', desc='blade pitch setting')
-        self.add_param('azimuth_load', shape=1, units='deg', desc='blade azimuthal location')
-
-        # outputs
-        self.add_output('loads:r', shape=19, units='m', desc='radial positions along blade going toward tip')
-        self.add_output('loads:Px', shape=19, units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_output('loads:Py', shape=19, units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_output('loads:Pz', shape=19, units='N/m', desc='distributed loads in blade-aligned z-direction')
-
-        # corresponding setting for loads
-        self.add_output('loads:V', shape=1, units='m/s', desc='hub height wind speed')
-        self.add_output('loads:Omega', shape=1, units='rpm', desc='rotor rotation speed')
-        self.add_output('loads:pitch', shape=1, units='deg', desc='pitch angle')
-        self.add_output('loads:azimuth', shape=1, units='deg', desc='azimuthal angle')
-
+	self.naero = naero
         self.run_case = run_case
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
         
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -459,7 +417,7 @@ class CCBlade(Component):
             dazimuth[3*n+9] = 1.0
             
             J = {}
-            zero = np.zeros(17)
+            zero = np.zeros(self.naero)
             J['loads:r', 'r'] = dr_dr
             J['loads:r', 'Rhub'] = dr_dRhub
             J['loads:r', 'Rtip'] = dr_dRtip
@@ -500,22 +458,12 @@ class CCBlade(Component):
 
 
 
-class CSMDrivetrain(Component):
+class CSMDrivetrain(DrivetrainLossesBase):
     def __init__(self, n):
-        super(CSMDrivetrain, self).__init__()
+        super(CSMDrivetrain, self).__init__(n)
         """drivetrain losses from NREL cost and scaling model"""
 
         self.add_param('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True)
-
-
-        self.add_param('aeroPower', shape=n, units='W', desc='aerodynamic power')
-        self.add_param('aeroTorque', shape=n, units='N*m', desc='aerodynamic torque')
-        self.add_param('aeroThrust', shape=n, units='N', desc='aerodynamic thrust')
-        self.add_param('ratedPower', shape=1, units='W', desc='rated power')
-
-        self.add_output('power', shape=n, units='W', desc='total power after drivetrain losses')
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -588,19 +536,13 @@ class CSMDrivetrain(Component):
 
 
 
-class WeibullCDF(Component):
+class WeibullCDF(CDFBase):
     def __init__(self, n):
-        super(WeibullCDF, self).__init__()
+        super(WeibullCDF, self).__init__(n)
         """Weibull cumulative distribution function"""
 
         self.add_param('A', shape=1, desc='scale factor')
         self.add_param('k', shape=1, desc='shape or form factor')
-        self.add_param('x', shape=n)
-
-        self.add_output('F', shape=n)
-
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
         
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -622,18 +564,13 @@ class WeibullCDF(Component):
         return J
 
 
-class WeibullWithMeanCDF(Component):
+class WeibullWithMeanCDF(CDFBase):
     def __init__(self, n):
-        super(WeibullWithMeanCDF, self).__init__()
+        super(WeibullWithMeanCDF, self).__init__(n)
         """Weibull cumulative distribution function"""
 
         self.add_param('xbar', shape=1, desc='mean value of distribution')
         self.add_param('k', shape=1, desc='shape or form factor')
-        self.add_param('x', shape=n)
-
-        self.add_output('F', shape=n)
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
         
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -662,55 +599,12 @@ class WeibullWithMeanCDF(Component):
 
         return J
 
-
-# class RayleighCDF(Component):
-#     def __init(self):
-#         super(RayleighCDF, self).__init__()
-#
-#         """Rayleigh cumulative distribution function"""
-#
-#         self.add_param('xbar', shape=1, desc='mean value of distribution')
-#         self.add_param('x', shape=200)
-#
-#         self.add_output('F', shape=20)
-#         self.fd_options['form'] = 'central'
-#         self.fd_options['step_type'] = 'relative'
-#
-#     def solve_nonlinear(self, params, unknowns, resids):
-#
-#         unknowns['F'] = 1.0 - np.exp(-pi/4.0*(params['x']/params['xbar'])**2)
-#
-#     def list_deriv_vars(self):
-#
-#         inputs = ('x', 'xbar')
-#         outputs = ('F',)
-#
-#         return inputs, outputs
-#
-#     def linearize(self, params, unknowns, resids):
-#
-#         x = params['x']
-#         xbar = params['xbar']
-#         dx = np.diag(np.exp(-pi/4.0*(x/xbar)**2)*pi*x/(2.0*xbar**2))
-#         dxbar = -np.exp(-pi/4.0*(x/xbar)**2)*pi*x**2/(2.0*xbar**3)
-#         J = {}
-#         J['F', 'x'] = dx
-#         J['F', 'xbar'] = dxbar
-#
-#         return J
-
-class RayleighCDF(Component):
-    def __init__(self):
-        super(RayleighCDF,  self).__init__()
+class RayleighCDF(CDFBase):
+    def __init__(self, n):
+        super(RayleighCDF,  self).__init__(n)
 
         # variables
         self.add_param('xbar', shape=1, units='m/s', desc='reference wind speed (usually at hub height)')
-        self.add_param('x', shape=200,  units='m/s', desc='corresponding reference height')
-
-        # out
-        self.add_output('F', shape=200, units='m/s', desc='magnitude of wind speed at each z location')
-        self.fd_options['form'] = 'central'
-        self.fd_options['step_type'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -1081,17 +975,17 @@ if __name__ == '__main__':
     # === run and outputs ===
     rotor.run()
 
-    print 'AEP =', rotor['AEP']
-    print 'diameter =', rotor['diameter']
-    print 'ratedConditions:V =', rotor['ratedConditions:V']
-    print 'ratedConditions:Omega =', rotor['ratedConditions:Omega']
-    print 'ratedConditions:pitch =', rotor['ratedConditions:pitch']
-    print 'ratedConditions:T =', rotor['ratedConditions:T']
-    print 'ratedConditions:Q =', rotor['ratedConditions:Q']
-    print 'mass_one_blade =', rotor['mass_one_blade']
-    print 'mass_all_blades =', rotor['mass_all_blades']
-    print 'I_all_blades =', rotor['I_all_blades']
-    print 'freq =', rotor['freq']
-    print 'tip_deflection =', rotor['tip_deflection']
-    print 'root_bending_moment =', rotor['root_bending_moment']
+    print('AEP =', rotor['AEP'])
+    print('diameter =', rotor['diameter'])
+    print('ratedConditions:V =', rotor['ratedConditions:V'])
+    print('ratedConditions:Omega =', rotor['ratedConditions:Omega'])
+    print('ratedConditions:pitch =', rotor['ratedConditions:pitch'])
+    print('ratedConditions:T =', rotor['ratedConditions:T'])
+    print('ratedConditions:Q =', rotor['ratedConditions:Q'])
+    print('mass_one_blade =', rotor['mass_one_blade'])
+    print('mass_all_blades =', rotor['mass_all_blades'])
+    print('I_all_blades =', rotor['I_all_blades'])
+    print('freq =', rotor['freq'])
+    print('tip_deflection =', rotor['tip_deflection'])
+    print('root_bending_moment =', rotor['root_bending_moment'])
 
