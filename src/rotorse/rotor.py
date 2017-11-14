@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-rotoraero.py
+rotor.py
 
 Created by Andrew Ning on 2012-02-28.
-Copyright (c) NREL. All rights reserved.
+Copyright (c)  NREL. All rights reserved.
 """
 
 # from __future__ import print_function
