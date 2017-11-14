@@ -736,6 +736,9 @@ class RGrid(Component):
 
         # outputs
         self.add_output('r_str', shape=nstr, desc='corresponding structural grid corresponding to new aerodynamic grid')
+	
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -920,6 +923,8 @@ class BladeCurvature(Component):
         self.add_output('y_az', shape=nstr, units='m', desc='location of blade in azimuth y-coordinate system')
         self.add_output('z_az', shape=nstr, units='m', desc='location of blade in azimuth z-coordinate system')
         self.add_output('s', shape=nstr, units='m', desc='cumulative path length along blade')
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -1017,6 +1022,8 @@ class DamageLoads(Component):
 
         self.add_output('Mxa', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil c.s. x-direction')
         self.add_output('Mya', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil c.s. y-direction')
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
         self.rstar = params['rstar']
@@ -1120,6 +1127,9 @@ class TotalLoads(Component):
         self.add_output('Px_af', shape=nstr, desc='total distributed loads in airfoil x-direction')
         self.add_output('Py_af', shape=nstr, desc='total distributed loads in airfoil y-direction')
         self.add_output('Pz_af', shape=nstr, desc='total distributed loads in airfoil z-direction')
+
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1341,6 +1351,9 @@ class TipDeflection(Component):
         # outputs
         self.add_output('tip_deflection', shape=1, units='m', desc='deflection at tip in yaw x-direction')
 
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
+
     def solve_nonlinear(self, params, unknowns, resids):
 
         self.dx = params['dx']
@@ -1438,6 +1451,9 @@ class BladeDeflection(Component):
 
         self.add_output('delta_bladeLength', shape=1, units='m', desc='adjustment to blade length to account for curvature from loading')
         self.add_output('delta_precurve_sub', shape=3,  units='m', desc='adjustment to precurve to account for curvature from loading')
+
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -1611,6 +1627,9 @@ class RootMoment(Component):
         self.add_output('root_bending_moment', shape=1, units='N*m', desc='total magnitude of bending moment at root of blade')
         self.add_output('Mxyz', val=np.array([0.0, 0.0, 0.0]), units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s.')
         self.add_output('Fxyz', val=np.array([0.0, 0.0, 0.0]), units='N', desc='individual forces [x,y,z] at the blade root in blade c.s.')
+
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -1823,6 +1842,9 @@ class MassProperties(Component):
         self.add_output('mass_all_blades', shape=1, units='kg', desc='mass of all blades')
         self.add_output('I_all_blades', shape=6, desc='mass moments of inertia of all blades in yaw c.s. order:Ixx, Iyy, Izz, Ixy, Ixz, Iyz')
 
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
+
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -1966,6 +1988,9 @@ class GustETM(Component):
         # out
         self.add_output('V_gust', shape=1, units='m/s', desc='gust wind speed')
 
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
+
     def solve_nonlinear(self, params, unknowns, resids):
         self.V_mean = params['V_mean']
         self.V_hub = params['V_hub']
@@ -2023,6 +2048,9 @@ class SetupPCModVarSpeed(Component):
         self.add_output('Omega', shape=1, units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', shape=1, units='deg', desc='pitch angles to run')
         self.add_output('azimuth', shape=1, units='deg')
+
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 

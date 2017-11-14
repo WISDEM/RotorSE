@@ -206,6 +206,9 @@ class Coefficients(Component):
         self.add_output('CQ', shape=npts_coarse_power_curve, desc='rotor aerodynamic torque')
         self.add_output('CP', shape=npts_coarse_power_curve, desc='rotor aerodynamic power')
 
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
+
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -323,8 +326,6 @@ class SetupRunVarSpeed(Component):
         self.add_output('Omega', shape=npts_coarse_power_curve, units='rpm', desc='rotation speeds to run')
         self.add_output('pitch', shape=npts_coarse_power_curve, units='deg', desc='pitch angles to run')
 
-        self.deriv_options['type'] = 'fd'
-        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -357,6 +358,12 @@ class SetupRunVarSpeed(Component):
         J['Omega', 'control:tsr'] = dOmega_dOmegad * V/R*RS2RPM
         J['Omega', 'R'] = dOmega_dOmegad * -params['control:tsr']*V/R**2*RS2RPM
         J['Omega', 'control:maxOmega'] = dOmega_dmaxOmega
+	J['Uhub', 'control:tsr'] = np.zeros(len(V))
+	J['Uhub', 'R'] = np.zeros(len(V))
+	J['Uhub', 'control:pitch'] = np.zeros(len(V))
+	J['pitch', 'control:tsr'] = np.zeros(len(V))
+	J['pitch', 'R'] = np.zeros(len(V))
+	J['pitch', 'control:pitch'] = np.zeros(len(V))
 
         self.J = J
 
@@ -464,8 +471,58 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('azimuth', shape=1, units='deg', desc='azimuth load')
 
 
+	self.deriv_options['step_calc'] = 'relative'
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['type'] = 'fd'
+	self.deriv_options['check_step_calc'] = 'relative'
+	self.deriv_options['check_form'] = 'central'
+
     def solve_nonlinear(self, params, unknowns, resids):
-        pass
+        n = params['npts']
+        Vrated = unknowns['Vrated']
+
+        # residual
+        spline = Akima(params['Vcoarse'], params['Pcoarse'])
+        P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
+        # resids['residual'] = P - ctrl.ratedPower
+        #resids['Vrated'] = P - params['control:ratedPower']
+        # functional
+
+        # place half of points in region 2, half in region 3
+        # even though region 3 is constant we still need lots of points there
+        # because we will be integrating against a discretized wind
+        # speed distribution
+
+        # region 2
+        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, n/2)
+        P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
+
+        # region 3
+        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], n/2+1)
+        V3 = V3[1:]  # remove duplicate point
+        dV3_dVrated = dV3_dVrated[1:]
+        P3 = params['control:ratedPower']*np.ones_like(V3)
+
+        # concatenate
+        unknowns['V'] = np.concatenate([V2, V3])
+        unknowns['P'] = np.concatenate([P2, P3])
+
+        R = params['R']
+        # rated speed conditions
+        Omega_d = params['control:tsr']*Vrated/R*RS2RPM
+        OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
+            = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
+
+        splineT = Akima(params['Vcoarse'], params['Tcoarse'])
+        Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
+
+        unknowns['ratedConditions:V'] = Vrated
+        unknowns['ratedConditions:Omega'] = OmegaRated
+        unknowns['ratedConditions:pitch'] = params['control:pitch']
+        unknowns['ratedConditions:T'] = Trated
+        unknowns['ratedConditions:Q'] = params['control:ratedPower'] / (OmegaRated * RPM2RS)
+        unknowns['azimuth'] = 180.0
+
 
     def apply_nonlinear(self, params, unknowns, resids):
 
@@ -529,9 +586,14 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         drQ = -params['control:ratedPower'] / (OmegaRated**2 * RPM2RS) * drOmega
 
         J = {}
+
 	J['Vrated', 'Vcoarse'] = np.reshape(dres_dVcoarse, (1, len(dres_dVcoarse)))
         J['Vrated', 'Pcoarse'] = np.reshape(dres_dPcoarse, (1, len(dres_dPcoarse)))
         J['Vrated', 'Vrated'] = dres_dVrated
+	J['Vrated', 'control:ratedPower'] = -1
+	J['Vrated', 'control:tsr'] = 0
+	
+
 
         J['V', 'Vrated'] = dV_dVrated
         J['P', 'Vrated'] = dP_dVrated
@@ -594,6 +656,8 @@ class AEP(Component):
         self.add_output('AEP', shape=1, units='kW*h', desc='annual energy production')
 
 	self.deriv_options['step_size'] = 1.0
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'	
 
     def solve_nonlinear(self, params, unknowns, resids):
 

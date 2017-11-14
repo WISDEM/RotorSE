@@ -242,6 +242,8 @@ class CCBlade(AeroBase):
 
 	self.naero = naero
         self.run_case = run_case
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
         
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -464,6 +466,8 @@ class CSMDrivetrain(DrivetrainLossesBase):
         """drivetrain losses from NREL cost and scaling model"""
 
         self.add_param('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True)
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -544,6 +548,9 @@ class WeibullCDF(CDFBase):
         self.add_param('A', shape=1, desc='scale factor')
         self.add_param('k', shape=1, desc='shape or form factor')
         
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
+
     def solve_nonlinear(self, params, unknowns, resids):
 
         unknowns['F'] = 1.0 - np.exp(-(params['x']/params['A'])**params['k'])
@@ -571,6 +578,9 @@ class WeibullWithMeanCDF(CDFBase):
 
         self.add_param('xbar', shape=1, desc='mean value of distribution')
         self.add_param('k', shape=1, desc='shape or form factor')
+
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
         
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -605,6 +615,9 @@ class RayleighCDF(CDFBase):
 
         # variables
         self.add_param('xbar', shape=1, units='m/s', desc='reference wind speed (usually at hub height)')
+
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 

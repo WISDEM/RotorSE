@@ -9,8 +9,9 @@ Copyright (c) NREL. All rights reserved.
 
 import unittest
 import numpy as np
-from utilities import check_gradient_unit_test, check_for_missing_unit_tests
-from rotor import RGrid, TotalLoads, TipDeflection, RootMoment, MassProperties, \
+#from commonse.utilities import check_gradient_unit_test, check_for_missing_unit_tests
+from test_rotoraero_gradients import check_gradient_unit_test, check_for_missing_unit_tests
+from rotorse.rotor import RGrid, TotalLoads, TipDeflection, RootMoment, MassProperties, \
     ExtremeLoads, GustETM, BladeCurvature, SetupPCModVarSpeed, BladeDeflection, DamageLoads
 from openmdao.api import IndepVarComp, Problem, Group
 from enum import Enum
@@ -60,13 +61,13 @@ class TestTotalLoads(unittest.TestCase):
         prob = Problem()
         prob.root = Group()
         prob.root.add('comp', TotalLoads(len(r)), promotes=['*'])
-        prob.root.add('aeroLoads:r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
-        prob.root.add('aeroLoads:Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
-        prob.root.add('aeroLoads:Py', IndepVarComp('aeroLoads:Py', np.zeros(len(aeroLoads_Py))), promotes=['*'])
-        prob.root.add('aeroLoads:Pz', IndepVarComp('aeroLoads:Pz', np.zeros(len(aeroLoads_Pz))), promotes=['*'])
-        prob.root.add('aeroLoads:Omega', IndepVarComp('aeroLoads:Omega', aeroLoads_Omega), promotes=['*'])
-        prob.root.add('aeroLoads:pitch', IndepVarComp('aeroLoads:pitch', aeroLoads_pitch), promotes=['*'])
-        prob.root.add('aeroLoads:azimuth', IndepVarComp('aeroLoads:azimuth', aeroLoads_azimuth), promotes=['*'])
+        prob.root.add('aeroLoads_r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
+        prob.root.add('aeroLoads_Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
+        prob.root.add('aeroLoads_Py', IndepVarComp('aeroLoads:Py', np.zeros(len(aeroLoads_Py))), promotes=['*'])
+        prob.root.add('aeroLoads_Pz', IndepVarComp('aeroLoads:Pz', np.zeros(len(aeroLoads_Pz))), promotes=['*'])
+        prob.root.add('aeroLoads_Omega', IndepVarComp('aeroLoads:Omega', aeroLoads_Omega), promotes=['*'])
+        prob.root.add('aeroLoads_pitch', IndepVarComp('aeroLoads:pitch', aeroLoads_pitch), promotes=['*'])
+        prob.root.add('aeroLoads_azimuth', IndepVarComp('aeroLoads:azimuth', aeroLoads_azimuth), promotes=['*'])
         prob.root.add('r', IndepVarComp('r', np.zeros(len(r))), promotes=['*'])
         prob.root.add('theta', IndepVarComp('theta', np.zeros(len(theta))), promotes=['*'])
         prob.root.add('tilt', IndepVarComp('tilt', tilt), promotes=['*'])
@@ -111,13 +112,13 @@ class TestTotalLoads(unittest.TestCase):
         prob = Problem()
         prob.root = Group()
         prob.root.add('comp', TotalLoads(len(r)), promotes=['*'])
-        prob.root.add('aeroLoads:r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
-        prob.root.add('aeroLoads:Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
-        prob.root.add('aeroLoads:Py', IndepVarComp('aeroLoads:Py', np.zeros(len(aeroLoads_Py))), promotes=['*'])
-        prob.root.add('aeroLoads:Pz', IndepVarComp('aeroLoads:Pz', np.zeros(len(aeroLoads_Pz))), promotes=['*'])
-        prob.root.add('aeroLoads:Omega', IndepVarComp('aeroLoads:Omega', aeroLoads_Omega), promotes=['*'])
-        prob.root.add('aeroLoads:pitch', IndepVarComp('aeroLoads:pitch', aeroLoads_pitch), promotes=['*'])
-        prob.root.add('aeroLoads:azimuth', IndepVarComp('aeroLoads:azimuth', aeroLoads_azimuth), promotes=['*'])
+        prob.root.add('aeroLoads_r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
+        prob.root.add('aeroLoads_Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
+        prob.root.add('aeroLoads_Py', IndepVarComp('aeroLoads:Py', np.zeros(len(aeroLoads_Py))), promotes=['*'])
+        prob.root.add('aeroLoads_Pz', IndepVarComp('aeroLoads:Pz', np.zeros(len(aeroLoads_Pz))), promotes=['*'])
+        prob.root.add('aeroLoads_Omega', IndepVarComp('aeroLoads:Omega', aeroLoads_Omega), promotes=['*'])
+        prob.root.add('aeroLoads_pitch', IndepVarComp('aeroLoads:pitch', aeroLoads_pitch), promotes=['*'])
+        prob.root.add('aeroLoads_azimuth', IndepVarComp('aeroLoads:azimuth', aeroLoads_azimuth), promotes=['*'])
         prob.root.add('r', IndepVarComp('r', np.zeros(len(r))), promotes=['*'])
         prob.root.add('theta', IndepVarComp('theta', np.zeros(len(theta))), promotes=['*'])
         prob.root.add('tilt', IndepVarComp('tilt', tilt), promotes=['*'])
@@ -167,10 +168,10 @@ class TestRootMoment(unittest.TestCase):
         prob.root = Group()
         prob.root.add('comp', RootMoment(len(r_str)), promotes=['*'])
         prob.root.add('r_str', IndepVarComp('r_str', np.zeros(len(r_str))), promotes=['*'])
-        prob.root.add('aeroLoads:r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
-        prob.root.add('aeroLoads:Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
-        prob.root.add('aeroLoads:Py', IndepVarComp('aeroLoads:Py', np.zeros(len(aeroLoads_Py))), promotes=['*'])
-        prob.root.add('aeroLoads:Pz', IndepVarComp('aeroLoads:Pz', np.zeros(len(aeroLoads_Pz))), promotes=['*'])
+        prob.root.add('aeroLoads_r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
+        prob.root.add('aeroLoads_Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
+        prob.root.add('aeroLoads_Py', IndepVarComp('aeroLoads:Py', np.zeros(len(aeroLoads_Py))), promotes=['*'])
+        prob.root.add('aeroLoads_Pz', IndepVarComp('aeroLoads:Pz', np.zeros(len(aeroLoads_Pz))), promotes=['*'])
         prob.root.add('totalCone', IndepVarComp('totalCone', np.zeros(len(totalCone))), promotes=['*'])
         prob.root.add('x_az', IndepVarComp('x_az', np.zeros(len(x_az))), promotes=['*'])
         prob.root.add('y_az', IndepVarComp('y_az', np.zeros(len(y_az))), promotes=['*'])
@@ -361,8 +362,8 @@ class TestSetupPCModVarSpeed(unittest.TestCase):
         prob = Problem()
         prob.root = Group()
         prob.root.add('comp', SetupPCModVarSpeed(), promotes=['*'])
-        prob.root.add('control:tsr', IndepVarComp('control:tsr', control_tsr), promotes=['*'])
-        prob.root.add('control:pitch', IndepVarComp('control:pitch', control_pitch), promotes=['*'])
+        prob.root.add('control_tsr', IndepVarComp('control:tsr', control_tsr), promotes=['*'])
+        prob.root.add('control_pitch', IndepVarComp('control:pitch', control_pitch), promotes=['*'])
         prob.root.add('Vrated', IndepVarComp('Vrated', Vrated), promotes=['*'])
         prob.root.add('R', IndepVarComp('R', R), promotes=['*'])
         prob.root.add('Vfactor', IndepVarComp('Vfactor', Vfactor), promotes=['*'])
@@ -439,7 +440,7 @@ class TestDamageLoads(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', DamageLoads(len(r)), promotes=['*'])
+        prob.root.add('comp', DamageLoads(len(r), 17), promotes=['*'])
         prob.root.add('rstar', IndepVarComp('rstar', rstar), promotes=['*'])
         prob.root.add('Mxb', IndepVarComp('Mxb', Mxb), promotes=['*'])
         prob.root.add('Myb', IndepVarComp('Myb', Myb), promotes=['*'])
