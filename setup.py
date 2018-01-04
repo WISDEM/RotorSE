@@ -18,7 +18,9 @@ setup(
     dependency_links=['https://github.com/WISDEM/CCBlade/tarball/master#egg=ccblade',
         'https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam',
         'https://github.com/WISDEM/CommonSE/tarball/master#egg=commonse'],
-    zip_safe=False
+    zip_safe=False,
+    package_data={'':['*.inp']},
+    include_package_data = True
 )
 
 
