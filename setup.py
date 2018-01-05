@@ -7,7 +7,7 @@ import platform
 
 setup(
     name='RotorSE',
-    version='0.1.0',
+    version='0.1.1',
     description='Rotor Systems Engineering Model',
     author='S. Andrew Ning',
     author_email='andrew.ning@nrel.gov',
