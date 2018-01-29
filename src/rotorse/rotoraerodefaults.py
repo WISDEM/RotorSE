@@ -12,12 +12,15 @@ import numpy as np
 from math import pi, gamma
 from openmdao.api import Component, Group
 
-from ccblade import CCAirfoil, CCBlade as CCBlade_PY
+from ccblade.ccblade import CCAirfoil, CCBlade as CCBlade_PY
 from commonse.utilities import sind, cosd, smooth_abs, smooth_min, hstack, vstack, linspace_with_deriv
 from rotoraero import GeometrySetupBase, AeroBase, DrivetrainLossesBase, CDFBase, \
     VarSpeedMachine, FixedSpeedMachine, RatedConditions, common_configure
 from akima import Akima
-from enum import Enum
+from commonse.enum import Enum
+
+DRIVETRAIN_TYPE = Enum('geared single_stage multi_drive pm_direct_drive')
+RUN_CASE = Enum('power loads')
 
 # ---------------------
 # Map Design Variables to Discretization
@@ -238,7 +241,7 @@ class CCBlade(AeroBase):
         self.add_param('wakerotation', val=True, desc='include effect of wake rotation (i.e., tangential induction factor is nonzero)', pass_by_obj=True)
         self.add_param('usecd', val=True, desc='use drag coefficient in computing induction factors', pass_by_obj=True)
 
-        self.add_param('run_case', val=Enum('power', 'loads'), pass_by_obj=True)
+        self.add_param('run_case', val=RUN_CASE['POWER'], pass_by_obj=True)
 
 	self.naero = naero
         self.run_case = run_case
@@ -465,7 +468,7 @@ class CSMDrivetrain(DrivetrainLossesBase):
         super(CSMDrivetrain, self).__init__(n)
         """drivetrain losses from NREL cost and scaling model"""
 
-        self.add_param('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True)
+        self.add_param('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True)
 	self.deriv_options['form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
@@ -476,22 +479,22 @@ class CSMDrivetrain(DrivetrainLossesBase):
         aeroTorque = params['aeroTorque']
         ratedPower = params['ratedPower']
 
-        if drivetrainType == 'geared':
+        if drivetrainType == DRIVETRAIN_TYPE['GEARED']:
             constant = 0.01289
             linear = 0.08510
             quadratic = 0.0
 
-        elif drivetrainType == 'single_stage':
+        elif drivetrainType == DRIVETRAIN_TYPE['SINGLE_STAGE']:
             constant = 0.01331
             linear = 0.03655
             quadratic = 0.06107
 
-        elif drivetrainType == 'multi_drive':
+        elif drivetrainType == DRIVETRAIN_TYPE['MULTI_DRIVE']:
             constant = 0.01547
             linear = 0.04463
             quadratic = 0.05790
 
-        elif drivetrainType == 'pm_direct_drive':
+        elif drivetrainType == DRIVETRAIN_TYPE['PM_DIRECT_DRIVE']:
             constant = 0.01007
             linear = 0.02000
             quadratic = 0.06899
@@ -682,7 +685,7 @@ def common_io_with_ccblade(group, varspeed, varpitch, cdf_type):
         group.add_param('control:pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
         group.add_param('control:npts', val=20, desc='number of points to evalute aero code to generate power curve')
 
-    group.add_param('drivetrainType', val=Enum('geared', ('geared', 'single_stage', 'multi_drive', 'pm_direct_drive')))
+    group.add_param('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'])
     group.add_param('cdf_mean_wind_speed', units='m/s', desc='mean wind speed of site cumulative distribution function')
 
     if cdf_type == 'weibull':

@@ -9,21 +9,24 @@ Copyright (c)  NREL. All rights reserved.
 
 # from __future__ import print_function
 import numpy as np
-import math
-from openmdao.api import IndepVarComp, Component, Group, ExecComp
+import os
+from openmdao.api import IndepVarComp, Component, Group, Problem, ExecComp
 from rotoraero import SetupRunVarSpeed, RegulatedPowerCurve, AEP, \
     RPM2RS, RS2RPM, RegulatedPowerCurveGroup
-from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF
+from rotoraerodefaults import CCBladeGeometry, CCBlade, CSMDrivetrain, RayleighCDF, WeibullWithMeanCDF, DRIVETRAIN_TYPE
 from commonse.csystem import DirectionVector
 from commonse.utilities import hstack, vstack, trapz_deriv, interp_with_deriv
 from commonse.environment import PowerWind
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 from akima import Akima, akima_interp_with_derivs
-from enum import Enum
+from commonse.enum import Enum
 import _pBEAM
 import _curvefem
-import _bem  # TODO: move to rotoraero
+import ccblade._bem as _bem  # TODO: move to rotoraero
 
+
+TURBULENCE_CLASS = Enum('A B C')
+TURBINE_CLASS = Enum('I II III')
 
 # ---------------------
 # Base Components
@@ -310,7 +313,7 @@ class PreCompSections(BeamPropertiesBase):
             D3 = D[0, 1] + 2*D[2, 2]
 
             # use empirical formula
-            Nxx = 2 * (math.pi/sector_length)**2 * (math.sqrt(D1*D2) + D3)
+            Nxx = 2 * (np.pi/sector_length)**2 * (np.sqrt(D1*D2) + D3)
 
             eps_crit[i] = - Nxx / totalHeight / E
 
@@ -539,8 +542,8 @@ class RotorWithpBEAM(StrucBase):
         damageU = N/NfU
         damageL = N/NfL
 
-        damageU = math.log(N) - m*(math.log(emax) - math.log(eta) - np.log(np.abs(strainU)))
-        damageL = math.log(N) - m*(math.log(emax) - math.log(eta) - np.log(np.abs(strainL)))
+        damageU = np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainU)))
+        damageL = np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainL)))
 
         return damageU, damageL
 
@@ -800,8 +803,8 @@ class GeometrySpline(Component):
         self.add_param('teT', shape=5, units='m', desc='thickness values of trailing edge panels')
 
         # parameters
-        self.add_param('idx_cylinder_aero', shape=1, desc='first idx in r_aero_unit of non-cylindrical section')  # constant twist inboard of here
-        self.add_param('idx_cylinder_str', shape=1, desc='first idx in r_str_unit of non-cylindrical section')
+        self.add_param('idx_cylinder_aero', val=0, shape=1, desc='first idx in r_aero_unit of non-cylindrical section', pass_by_obj=True)  # constant twist inboard of here
+        self.add_param('idx_cylinder_str', val=0, shape=1, desc='first idx in r_str_unit of non-cylindrical section', pass_by_obj=True)
         self.add_param('hubFraction', shape=1, desc='hub location as fraction of radius')
 
         # out
@@ -1528,10 +1531,10 @@ class BladeDeflection(Component):
 
 
         for i in range(1, n-1):
-            sm0 = math.sqrt((self.precurve_str0[i] - self.precurve_str0[i-1])**2 + (self.r_str0[i] - self.r_str0[i-1])**2)
-            sm = math.sqrt((precurve_str_out[i] - precurve_str_out[i-1])**2 + (self.r_str0[i] - self.r_str0[i-1])**2)
-            sp0 = math.sqrt((self.precurve_str0[i+1] - self.precurve_str0[i])**2 + (self.r_str0[i+1] - self.r_str0[i])**2)
-            sp = math.sqrt((precurve_str_out[i+1] - precurve_str_out[i])**2 + (self.r_str0[i+1] - self.r_str0[i])**2)
+            sm0 = np.sqrt((self.precurve_str0[i] - self.precurve_str0[i-1])**2 + (self.r_str0[i] - self.r_str0[i-1])**2)
+            sm = np.sqrt((precurve_str_out[i] - precurve_str_out[i-1])**2 + (self.r_str0[i] - self.r_str0[i-1])**2)
+            sp0 = np.sqrt((self.precurve_str0[i+1] - self.precurve_str0[i])**2 + (self.r_str0[i+1] - self.r_str0[i])**2)
+            sp = np.sqrt((precurve_str_out[i+1] - precurve_str_out[i])**2 + (self.r_str0[i+1] - self.r_str0[i])**2)
             dl0_dprecurvestr0[i] = (self.precurve_str0[i] - self.precurve_str0[i-1]) / sm0 \
                 - (self.precurve_str0[i+1] - self.precurve_str0[i]) / sp0
             dl_dprecurvestr0[i] = (precurve_str_out[i] - precurve_str_out[i-1]) / sm \
@@ -1541,10 +1544,10 @@ class BladeDeflection(Component):
             dl_drstr0[i] = (self.r_str0[i] - self.r_str0[i-1]) / sm \
                 - (self.r_str0[i+1] - self.r_str0[i]) / sp
 
-        sfirst0 = math.sqrt((self.precurve_str0[1] - self.precurve_str0[0])**2 + (self.r_str0[1] - self.r_str0[0])**2)
-        sfirst = math.sqrt((precurve_str_out[1] - precurve_str_out[0])**2 + (self.r_str0[1] - self.r_str0[0])**2)
-        slast0 = math.sqrt((self.precurve_str0[n-1] - self.precurve_str0[n-2])**2 + (self.r_str0[n-1] - self.r_str0[n-2])**2)
-        slast = math.sqrt((precurve_str_out[n-1] - precurve_str_out[n-2])**2 + (self.r_str0[n-1] - self.r_str0[n-2])**2)
+        sfirst0 = np.sqrt((self.precurve_str0[1] - self.precurve_str0[0])**2 + (self.r_str0[1] - self.r_str0[0])**2)
+        sfirst = np.sqrt((precurve_str_out[1] - precurve_str_out[0])**2 + (self.r_str0[1] - self.r_str0[0])**2)
+        slast0 = np.sqrt((self.precurve_str0[n-1] - self.precurve_str0[n-2])**2 + (self.r_str0[n-1] - self.r_str0[n-2])**2)
+        slast = np.sqrt((precurve_str_out[n-1] - precurve_str_out[n-2])**2 + (self.r_str0[n-1] - self.r_str0[n-2])**2)
         dl0_dprecurvestr0[0] = -(self.precurve_str0[1] - self.precurve_str0[0]) / sfirst0
         dl0_dprecurvestr0[n-1] = (self.precurve_str0[n-1] - self.precurve_str0[n-2]) / slast0
         dl_dprecurvestr0[0] = -(precurve_str_out[1] - precurve_str_out[0]) / sfirst
@@ -1678,7 +1681,7 @@ class RootMoment(Component):
         Mz = np.trapz(Mp.z, self.s)
 
         # get total magnitude
-        self.root_bending_moment = math.sqrt(Mx**2 + My**2 + Mz**2)
+        self.root_bending_moment = np.sqrt(Mx**2 + My**2 + Mz**2)
 
         self.P = P
         self.az = az
@@ -1708,8 +1711,8 @@ class RootMoment(Component):
         # dx_dr = -sind(self.precone)
         # dz_dr = cosd(self.precone)
 
-        # dx_dprecone = -self.r*cosd(self.precone)*math.pi/180.0
-        # dz_dprecone = -self.r*sind(self.precone)*math.pi/180.0
+        # dx_dprecone = -self.r*cosd(self.precone)*np.pi/180.0
+        # dz_dprecone = -self.r*sind(self.precone)*np.pi/180.0
 
         dPx_dr = (self.P.dx['dx']*self.dPx_dr.T + self.P.dx['dy']*self.dPy_dr.T + self.P.dx['dz']*self.dPz_dr.T).T
         dPy_dr = (self.P.dy['dx']*self.dPx_dr.T + self.P.dy['dy']*self.dPy_dr.T + self.P.dy['dz']*self.dPz_dr.T).T
@@ -1909,7 +1912,7 @@ class TurbineClass(Component):
     def __init__(self):
         super(TurbineClass, self).__init__()
         # parameters
-        self.add_param('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True)
+        self.add_param('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True)
 
         # outputs should be constant
         self.add_output('V_mean', shape=1, units='m/s', desc='IEC mean wind speed for Rayleigh distribution')
@@ -1923,13 +1926,13 @@ class TurbineClass(Component):
 
         self.turbine_class = params['turbine_class']
 
-        if self.turbine_class == 'I':
+        if self.turbine_class == TURBINE_CLASS['I']:
             Vref = 50.0
-        elif self.turbine_class == 'II':
+        elif self.turbine_class == TURBINE_CLASS['II']:
             Vref = 42.5
-        elif self.turbine_class == 'III':
+        elif self.turbine_class == TURBINE_CLASS['III']:
             Vref = 37.5
-        elif self.turbine_class == 'IV':
+        elif self.turbine_class == TURBINE_CLASS['IV']:
             Vref = 30.0
 
         unknowns['V_mean'] = 0.2*Vref
@@ -1989,7 +1992,7 @@ class GustETM(Component):
         self.add_param('V_hub', shape=1, units='m/s', desc='hub height wind speed')
 
         # parameters
-        self.add_param('turbulence_class', val=Enum('A', 'B', 'C'), desc='IEC turbulence class', pass_by_obj=True)
+        self.add_param('turbulence_class', val=TURBULENCE_CLASS['A'], desc='IEC turbulence class', pass_by_obj=True)
         self.add_param('std', val=3, desc='number of standard deviations for strength of gust', pass_by_obj=True)
 
         # out
@@ -2005,11 +2008,11 @@ class GustETM(Component):
         self.std = params['std']
 
 
-        if self.turbulence_class == 'A':
+        if self.turbulence_class == TURBULENCE_CLASS['A']:
             Iref = 0.16
-        elif self.turbulence_class == 'B':
+        elif self.turbulence_class == TURBULENCE_CLASS['B']:
             Iref = 0.14
-        elif self.turbulence_class == 'C':
+        elif self.turbulence_class == TURBULENCE_CLASS['C']:
             Iref = 0.12
 
         c = 2.0
@@ -2322,8 +2325,8 @@ class RotorSE(Group):
 
         self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero)), promotes=['*'])
         self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr)), promotes=['*'])
-        self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 0.0), promotes=['*'])
-        self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 0.0), promotes=['*'])
+        self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 0, pass_by_obj=True), promotes=['*'])
+        self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 0, pass_by_obj=True), promotes=['*'])
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
         self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero)), promotes=['*'])
         self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
@@ -2342,8 +2345,8 @@ class RotorSE(Group):
         self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
         self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
         self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
-        self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
-        self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
+        self.add('turbine_class', IndepVarComp('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
+        self.add('turbulence_class', IndepVarComp('turbulence_class', val=TURBULENCE_CLASS['A'], desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
         self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
         self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
         self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation'), promotes=['*'])
@@ -2383,7 +2386,7 @@ class RotorSE(Group):
         self.add('Omega_load', IndepVarComp('Omega_load', val=0.0, units='rpm', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
 
         # --- drivetrain efficiency ---
-        self.add('drivetrainType', IndepVarComp('drivetrainType', val=Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
+        self.add('drivetrainType', IndepVarComp('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True), promotes=['*'])
 
 
         # --- fatigue ---
@@ -3017,7 +3020,8 @@ if __name__ == '__main__':
 
 	rotor.root = RotorSE(naero, nstr, npts_coarse_power_curve, npts_spline_power_curve)
 
-	rotor.setup(check=False)
+	#rotor.setup(check=False)
+	rotor.setup()
 
 	# === blade grid ===
 	rotor['initial_aero_grid'] = initial_aero_grid  # (Array): initial aerodynamic grid on unit radius
@@ -3075,8 +3079,8 @@ if __name__ == '__main__':
 	rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
 	rotor['shearExp'] = 0.25  # (Float): shear exponent
 	rotor['hubHt'] = np.array([90.0])  # (Float, m): hub height
-	rotor['turbine_class'] = 'I'  # (Enum): IEC turbine class
-	rotor['turbulence_class'] = 'B'  # (Enum): IEC turbulence class class
+	rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
+	rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
 	rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
 	rotor['g'] = 9.81  # (Float, m/s**2): acceleration of gravity
 	# ----------------------
@@ -3099,7 +3103,7 @@ if __name__ == '__main__':
 	rotor['npts_coarse_power_curve'] = npts_coarse_power_curve  # (Int): number of points to evaluate aero analysis at
 	rotor['npts_spline_power_curve'] = npts_spline_power_curve  # (Int): number of points to use in fitting spline to power curve
 	rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
-	rotor['drivetrainType'] = 'geared'  # (Enum)
+	rotor['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']  # (Enum)
 	rotor['nF'] = 5  # (Int): number of natural frequencies to compute
 	rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
 	# ----------------------
@@ -3186,7 +3190,8 @@ if __name__ == '__main__':
 	print 'tip_deflection =', rotor['tip_deflection']
 	print 'root_bending_moment =', rotor['root_bending_moment']
 
-	plt.figure()
+        import matplotlib.pyplot as plt
+        plt.figure()
 	plt.plot(rotor['V'], rotor['P']/1e6)
 	plt.xlabel('wind speed (m/s)')
 	plt.xlabel('power (W)')
