@@ -21,8 +21,24 @@ from commonse.environment import PowerWind
 from akima import Akima
 from rotor_geometry import RotorGeometry
 
-from rotorse import RPM2RS, RS2RPM, TURBINE_CLASS, DRIVETRAIN_TYPE
+from rotorse import RPM2RS, RS2RPM, TURBINE_CLASS, DRIVETRAIN_TYPE, r_aero, r_str
 
+naero = len(r_aero)
+nstr = len(r_str)
+
+class AirfoilProperties():
+    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles')
+    airfoil_types = [0]*8
+    airfoil_types[0] = os.path.join(basepath, 'Cylinder1.dat')
+    airfoil_types[1] = os.path.join(basepath, 'Cylinder2.dat')
+    airfoil_types[2] = os.path.join(basepath, 'DU40_A17.dat')
+    airfoil_types[3] = os.path.join(basepath, 'DU35_A17.dat')
+    airfoil_types[4] = os.path.join(basepath, 'DU30_A17.dat')
+    airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
+    airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
+    airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
+    af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
+    airfoil_files = [airfoil_types[m] for m in af_idx]
 
 class VarSpeedMachine(Component):
     """variable speed machines"""
@@ -196,8 +212,9 @@ class Coefficients(Component):
 
 
 class SetupRunFixedSpeed(Component):
-    def __init__(self):
+    def __init__(self, npts):
         super(SetupRunFixedSpeed, self).__init__()
+        self.npts = npts
         """determines approriate conditions to run AeroBase code across the power curve"""
 
         self.add_param('control:Vin', units='m/s', desc='cut-in wind speed')
@@ -205,7 +222,6 @@ class SetupRunFixedSpeed(Component):
         self.add_param('control:ratedPower', units='W', desc='rated power')
         self.add_param('control:Omega', units='rpm', desc='fixed rotor rotation speed')
         self.add_param('control:pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
-        self.add_param('control:npts', val=20, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
 
         # outputs
         self.add_output('Uhub', units='m/s', desc='freestream velocities to run')
@@ -217,11 +233,8 @@ class SetupRunFixedSpeed(Component):
         self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
-        ctrl = params['control']
-        n = ctrl.n
-
         # velocity sweep
-        V = np.linspace(ctrl.Vin, ctrl.Vout, n)
+        V = np.linspace(ctrl.Vin, ctrl.Vout, self.npts)
 
         # store values
         unknowns['Uhub'] = V
@@ -231,6 +244,7 @@ class SetupRunFixedSpeed(Component):
 class SetupRunVarSpeed(Component):
     def __init__(self, npts_coarse_power_curve):
         super(SetupRunVarSpeed, self).__init__()
+        self.npts = npts_coarse_power_curve
         """determines approriate conditions to run AeroBase code across the power curve"""
 
         self.add_param('control:Vin', shape=1, units='m/s', desc='cut-in wind speed')
@@ -242,7 +256,6 @@ class SetupRunVarSpeed(Component):
         self.add_param('control:pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
         self.add_param('R', shape=1, units='m', desc='rotor radius')
-        self.add_param('npts', shape=1, val=20, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
 
         # outputs
         self.add_output('Uhub', shape=npts_coarse_power_curve, units='m/s', desc='freestream velocities to run')
@@ -252,7 +265,6 @@ class SetupRunVarSpeed(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        n = params['npts']
         R = params['R']
 
         # # attempt to distribute points mostly before rated
@@ -265,7 +277,7 @@ class SetupRunVarSpeed(Component):
         # V = np.concatenate([V1, V2[1:]])
 
         # velocity sweep
-        V = np.linspace(params['control:Vin'], params['control:Vout'], n)
+        V = np.linspace(params['control:Vin'], params['control:Vout'], self.npts)
 
         # corresponding rotation speed
         Omega_d = params['control:tsr']*V/R*RS2RPM
@@ -308,19 +320,18 @@ class SetupRunVarSpeed(Component):
 class UnregulatedPowerCurve(Component):
     def __init__(self, npts_coarse_power_curve, npts_spline_power_curve):
         super(UnregulatedPowerCurve, self).__init__()
-
+        self.npts = npts_spline_power_curve
+        
         # inputs
         self.add_param('control:Vin', units='m/s', desc='cut-in wind speed')
         self.add_param('control:Vout', units='m/s', desc='cut-out wind speed')
         self.add_param('control:ratedPower', units='W', desc='rated power')
         self.add_param('control:Omega', units='rpm', desc='fixed rotor rotation speed')
         self.add_param('control:pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
-        self.add_param('control:npts', val=20, desc='number of points to evalute aero code to generate power curve', pass_by_obj=True)
 
         self.add_param('Vcoarse', shape=npts_coarse_power_curve, units='m/s', desc='wind speeds')
         self.add_param('Pcoarse', shape=npts_coarse_power_curve, units='W', desc='unregulated power curve (but after drivetrain losses)')
         self.add_param('Tcoarse', shape=npts_coarse_power_curve, units='N', desc='unregulated thrust curve')
-        self.add_param('npts', val=npts_spline_power_curve, desc='number of points for splined power curve', pass_by_obj=True)
 
         # outputs
         self.add_output('V', units='m/s', desc='wind speeds')
@@ -330,10 +341,9 @@ class UnregulatedPowerCurve(Component):
     def solve_nonlinear(self, params, unknowns, resids):
 
         ctrl = params['control']
-        n = ctrl.n
 
         # finer power curve
-        V, _, _ = linspace_with_deriv(ctrl.Vin, ctrl.Vout, n)
+        V, _, _ = linspace_with_deriv(ctrl.Vin, ctrl.Vout, self.npts)
         unknowns['V'] = V
         spline = Akima(params['Vcoarse'], params['Pcoarse'])
         P, dP_dV, dP_dVcoarse, dP_dPcoarse = spline.interp(self.V)
@@ -355,6 +365,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
     def __init__(self, npts_coarse_power_curve, npts_spline_power_curve):
         super(RegulatedPowerCurve, self).__init__()
 
+        self.npts = npts_spline_power_curve
         self.eval_only = True  # allows an external solver to converge this, otherwise it will converge itself to mimic an explicit comp
         """Fit a spline to the coarse sampled power curve (and thrust curve),
         find rated speed through a residual convergence strategy,
@@ -373,7 +384,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('Pcoarse', shape=npts_coarse_power_curve, units='W', desc='unregulated power curve (but after drivetrain losses)')
         self.add_param('Tcoarse', shape=npts_coarse_power_curve, units='N', desc='unregulated thrust curve')
         self.add_param('R', shape=1, units='m', desc='rotor radius')
-        self.add_param('npts', val=npts_spline_power_curve, desc='number of points for splined power curve', pass_by_obj=True)
 
         # state
         self.add_state('Vrated', val=11.0, units='m/s', desc='rated wind speed', lower=-1e-15, upper=1e15)
@@ -401,7 +411,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 	self.deriv_options['check_form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
-        n = params['npts']
         Vrated = unknowns['Vrated']
 
         # residual
@@ -417,11 +426,11 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # speed distribution
 
         # region 2
-        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, n/2)
+        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, self.npts/2)
         P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
 
         # region 3
-        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], n/2+1)
+        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], self.npts/2+1)
         V3 = V3[1:]  # remove duplicate point
         dV3_dVrated = dV3_dVrated[1:]
         P3 = params['control:ratedPower']*np.ones_like(V3)
@@ -448,8 +457,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
 
     def apply_nonlinear(self, params, unknowns, resids):
-
-        n = params['npts']
         Vrated = unknowns['Vrated']
 
         # residual
@@ -465,11 +472,11 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # speed distribution
 
         # region 2
-        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, n/2)
+        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, self.npts/2)
         P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
 
         # region 3
-        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], n/2+1)
+        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], self.npts/2+1)
         V3 = V3[1:]  # remove duplicate point
         dV3_dVrated = dV3_dVrated[1:]
         P3 = params['control:ratedPower']*np.ones_like(V3)
@@ -499,9 +506,9 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         dV_dVrated = np.concatenate([dV2_dVrated, dV3_dVrated])
 
-        dP_dVcoarse = vstack([dP2_dVcoarse, np.zeros((n/2, ncoarse))])
-        dP_dPcoarse = vstack([dP2_dPcoarse, np.zeros((n/2, ncoarse))])
-        dP_dVrated = np.concatenate([dP2_dV2*dV2_dVrated, np.zeros(n/2)])
+        dP_dVcoarse = vstack([dP2_dVcoarse, np.zeros((self.npts/2, ncoarse))])
+        dP_dPcoarse = vstack([dP2_dPcoarse, np.zeros((self.npts/2, ncoarse))])
+        dP_dVrated = np.concatenate([dP2_dV2*dV2_dVrated, np.zeros(self.npts/2)])
 
         drOmega = np.concatenate([[dOmegaRated_dOmegad*Vrated/R*RS2RPM], np.zeros(3*ncoarse),
             [dOmegaRated_dOmegad*params['control:tsr']/R*RS2RPM, -dOmegaRated_dOmegad*params['control:tsr']*Vrated/R**2*RS2RPM,
@@ -710,6 +717,7 @@ class OutputsAero(Component):
 
         self.add_param('hub_diameter_in', shape=1, units='m', desc='hub diameter')
         self.add_param('diameter_in', shape=1, units='m', desc='rotor diameter')
+        self.add_param('max_chord_in', shape=1, units='m', desc='max chord length')
         self.add_param('V_extreme_in', shape=1, units='m/s', desc='survival wind speed')
         self.add_param('T_extreme_in', shape=1, units='N', desc='thrust at survival wind condition')
         self.add_param('Q_extreme_in', shape=1, units='N*m', desc='thrust at survival wind condition')
@@ -732,6 +740,7 @@ class OutputsAero(Component):
 
         self.add_output('hub_diameter', shape=1, units='m', desc='hub diameter')
         self.add_output('diameter', shape=1, units='m', desc='rotor diameter')
+        self.add_output('max_chord', shape=1, units='m', desc='max chord length')
         self.add_output('V_extreme', shape=1, units='m/s', desc='survival wind speed')
         self.add_output('T_extreme', shape=1, units='N', desc='thrust at survival wind condition')
         self.add_output('Q_extreme', shape=1, units='N*m', desc='thrust at survival wind condition')
@@ -752,6 +761,7 @@ class OutputsAero(Component):
         unknowns['ratedConditions:Q'] = params['ratedConditions:Q_in']
         unknowns['hub_diameter'] = params['hub_diameter_in']
         unknowns['diameter'] = params['diameter_in']
+        unknowns['max_chord'] = params['max_chord_in']
         unknowns['V_extreme'] = params['V_extreme_in']
         unknowns['T_extreme'] = params['T_extreme_in']
         unknowns['Q_extreme'] = params['Q_extreme_in']
@@ -771,6 +781,7 @@ class OutputsAero(Component):
         J['ratedConditions:Q', 'ratedConditions:Q_in'] = 1
         J['hub_diameter', 'hub_diameter_in'] = 1
         J['diameter', 'diameter_in'] = 1
+        J['max_chord', 'max_chord_in'] = 1
         J['V_extreme', 'V_extreme_in'] = 1
         J['T_extreme', 'T_extreme_in'] = 1
         J['Q_extreme', 'Q_extreme_in'] = 1
@@ -781,7 +792,7 @@ class OutputsAero(Component):
         return J
 
 class RotorAeroPower(Group):
-    def __init__(self, naero=17, nstr=38, npts_coarse_power_curve=20, npts_spline_power_curve=200):
+    def __init__(self, npts_coarse_power_curve=20, npts_spline_power_curve=200):
         super(RotorAeroPower, self).__init__()
 
         self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
@@ -806,15 +817,13 @@ class RotorAeroPower(Group):
 
         # --- options ---
         self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True), promotes=['*'])
-        self.add('npts_coarse_power_curve', IndepVarComp('npts_coarse_power_curve', val=20, desc='number of points to evaluate aero analysis at', pass_by_obj=True), promotes=['*'])
-        self.add('npts_spline_power_curve', IndepVarComp('npts_spline_power_curve', val=200, desc='number of points to use in fitting spline to power curve', pass_by_obj=True), promotes=['*'])
         self.add('AEP_loss_factor', IndepVarComp('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)'), promotes=['*'])
 
-        #self.add('weibull_shape', IndepVarComp('weibull_shape', val=0.0), promotes=['*'])
+        self.add('shape_parameter', IndepVarComp('shape_parameter', val=0.0), promotes=['*'])
 
         
         # --- Rotor Aero & Power ---
-        self.add('rotorGeom', RotorGeometry(naero, nstr), promotes=['*'])
+        self.add('rotorGeom', RotorGeometry(), promotes=['*'])
 
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed(npts_coarse_power_curve))
@@ -843,7 +852,6 @@ class RotorAeroPower(Group):
         self.connect('control:ratedPower', 'setup.control:ratedPower')
         self.connect('control:tsr', 'setup.control:tsr')
         self.connect('geom.R', 'setup.R')
-        self.connect('npts_coarse_power_curve', 'setup.npts')
 
         # connections to analysis
         self.connect('spline.r_aero', 'analysis.r')
@@ -890,7 +898,6 @@ class RotorAeroPower(Group):
         self.connect('dt.power', 'powercurve.Pcoarse')
         self.connect('analysis.T', 'powercurve.Tcoarse')
         self.connect('geom.R', 'powercurve.R')
-        self.connect('npts_spline_power_curve', 'powercurve.npts')
 
         # # setup Brent method to find rated speed
         # self.connect('control:Vin', 'brent.lower_bound')
@@ -911,7 +918,7 @@ class RotorAeroPower(Group):
         # connections to cdf
         self.connect('powercurve.V', 'cdf.x')
         self.connect('wind.U', 'cdf.xbar', src_indices=[0])
-        # self.connect('weibull_shape', 'cdf.k') #TODO
+        self.connect('shape_parameter', 'cdf.k')
 
         # connections to aep
         self.connect('cdf.F', 'aep.CDF_V')
@@ -929,11 +936,10 @@ class RotorAeroPower(Group):
         self.connect('powercurve.ratedConditions:Q', 'ratedConditions:Q_in')
 
 
-        self.connect('spline.diameter', 'hub_diameter_in')
-        self.connect('geom.diameter', 'diameter_in')
-
-
         # connect to outputs
+        self.connect('spline.diameter', 'hub_diameter_in')
+        self.connect('spline.max_chord', 'max_chord_in')
+        self.connect('geom.diameter', 'diameter_in')
         self.connect('turbineclass.V_extreme', 'V_extreme_in')
         self.connect('spline.Rtip', 'Rtip_in')
         self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[nstr-1])
@@ -942,130 +948,86 @@ class RotorAeroPower(Group):
 
 if __name__ == '__main__':
 
-	initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
-	    0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
-	    0.97777724])  # (Array): initial aerodynamic grid on unit radius
-	initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
-	    0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
-	    0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
-	    0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
-	    0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
-	    1.0])  # (Array): initial structural grid on unit radius
+    rotor = Problem()
+    npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
+    npts_spline_power_curve = 200  # (Int): number of points to use in fitting spline to power curve
+    
+    rotor.root = RotorAeroPower(npts_coarse_power_curve, npts_spline_power_curve)
+    
+    #rotor.setup(check=False)
+    rotor.setup()
+    
+    # === blade grid ===
+    rotor['idx_cylinder_aero'] = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
+    rotor['idx_cylinder_str'] = 14  # (Int): first idx in r_str_unit of non-cylindrical section
+    rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
+    # ------------------
+    
+    # === blade geometry ===
+    rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
+    rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317, -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
+    rotor['precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
+    # rotor['delta_precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading
+    rotor['sparT'] = np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
+    rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+    rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+    # rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
+    rotor['precone'] = 2.5  # (Float, deg): precone angle
+    rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
+    rotor['yaw'] = 0.0  # (Float, deg): yaw error
+    rotor['nBlades'] = 3  # (Int): number of blades
+    # ------------------
+    
+    # === atmosphere ===
+    rotor['rho'] = 1.225  # (Float, kg/m**3): density of air
+    rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
+    rotor['wind.z0'] = rotor['wind.betaWind'] = 0.0
+    rotor['shearExp'] = rotor['wind.shearExp'] = 0.25  # (Float): shear exponent
+    rotor['hubHt'] = rotor['wind.z'] = np.array([90.0])  # (Float, m): hub height
+    rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
+    rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
+    # ----------------------
+    
+    # === control ===
+    rotor['control:Vin'] = 3.0  # (Float, m/s): cut-in wind speed
+    rotor['control:Vout'] = 25.0  # (Float, m/s): cut-out wind speed
+    rotor['control:ratedPower'] = 5e6  # (Float, W): rated power
+    rotor['control:minOmega'] = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
+    rotor['control:maxOmega'] = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
+    rotor['control:tsr'] = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    rotor['control:pitch'] = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    # ----------------------
 
+    # === aero and structural analysis options ===
+    rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
+    rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
+    rotor['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']  # (Enum)
+    # ----------------------
 
-	rotor = Problem()
-	naero = len(initial_aero_grid)
-	nstr = len(initial_str_grid)
-	npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
-	npts_spline_power_curve = 200  # (Int): number of points to use in fitting spline to power curve
+    # === materials and composite layup  ===
+    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
 
-	rotor.root = RotorAeroPower(naero, nstr, npts_coarse_power_curve, npts_spline_power_curve)
+    # === run and outputs ===
+    rotor.run()
 
-	#rotor.setup(check=False)
-	rotor.setup()
-
-	# === blade grid ===
-	rotor['initial_aero_grid'] = initial_aero_grid  # (Array): initial aerodynamic grid on unit radius
-	rotor['initial_str_grid'] = initial_str_grid  # (Array): initial structural grid on unit radius
-	rotor['idx_cylinder_aero'] = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
-	rotor['idx_cylinder_str'] = 14  # (Int): first idx in r_str_unit of non-cylindrical section
-	rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
-	# ------------------
-
-	# === blade geometry ===
-	rotor['r_aero'] = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333,
-	    0.5, 0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333,
-	    0.97777724])  # (Array): new aerodynamic grid on unit radius
-	rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
-	rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-	rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317, -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-	rotor['precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-	# rotor['delta_precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading
-	rotor['sparT'] = np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-	rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
-	rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
-	# rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
-	rotor['precone'] = 2.5  # (Float, deg): precone angle
-	rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
-	rotor['yaw'] = 0.0  # (Float, deg): yaw error
-	rotor['nBlades'] = 3  # (Int): number of blades
-	# ------------------
-
-	# === airfoil files ===
-	basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles')
-
-	# load all airfoils
-	airfoil_types = [0]*8
-	airfoil_types[0] = os.path.join(basepath, 'Cylinder1.dat')
-	airfoil_types[1] = os.path.join(basepath, 'Cylinder2.dat')
-	airfoil_types[2] = os.path.join(basepath, 'DU40_A17.dat')
-	airfoil_types[3] = os.path.join(basepath, 'DU35_A17.dat')
-	airfoil_types[4] = os.path.join(basepath, 'DU30_A17.dat')
-	airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
-	airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
-	airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
-
-	# place at appropriate radial stations
-	af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-
-	n = len(af_idx)
-	af = [0]*n
-	for i in range(n):
-	    af[i] = airfoil_types[af_idx[i]]
-	rotor['airfoil_files'] = af  # (List): names of airfoil file
-	# ----------------------
-
-	# === atmosphere ===
-	rotor['rho'] = 1.225  # (Float, kg/m**3): density of air
-	rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
-        rotor['wind.z0'] = rotor['wind.betaWind'] = 0.0
-	rotor['shearExp'] = rotor['wind.shearExp'] = 0.25  # (Float): shear exponent
-	rotor['hubHt'] = rotor['wind.z'] = np.array([90.0])  # (Float, m): hub height
-	rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
-	rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
-	# ----------------------
-
-	# === control ===
-        rotor['control:Vin'] = 3.0  # (Float, m/s): cut-in wind speed
-        rotor['control:Vout'] = 25.0  # (Float, m/s): cut-out wind speed
-	rotor['control:ratedPower'] = 5e6  # (Float, W): rated power
-	rotor['control:minOmega'] = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
-	rotor['control:maxOmega'] = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
-	rotor['control:tsr'] = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-	rotor['control:pitch'] = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
-	# ----------------------
-
-	# === aero and structural analysis options ===
-	rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
-	rotor['npts_coarse_power_curve'] = npts_coarse_power_curve  # (Int): number of points to evaluate aero analysis at
-	rotor['npts_spline_power_curve'] = npts_spline_power_curve  # (Int): number of points to use in fitting spline to power curve
-	rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
-	rotor['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']  # (Enum)
-	# ----------------------
-
-	# === materials and composite layup  ===
-	basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
-
-	# === run and outputs ===
-	rotor.run()
-
-	print 'AEP =', rotor['AEP']
-	print 'diameter =', rotor['diameter']
-	print 'ratedConditions.V =', rotor['ratedConditions:V']
-	print 'ratedConditions.Omega =', rotor['ratedConditions:Omega']
-	print 'ratedConditions.pitch =', rotor['ratedConditions:pitch']
-	print 'ratedConditions.T =', rotor['ratedConditions:T']
-	print 'ratedConditions.Q =', rotor['ratedConditions:Q']
-        #for io in rotor.root.unknowns:
-        #    print(io + ' ' + str(rotor.root.unknowns[io]))
+    print 'AEP =', rotor['AEP']
+    print 'diameter =', rotor['diameter']
+    print 'ratedConditions.V =', rotor['ratedConditions:V']
+    print 'ratedConditions.Omega =', rotor['ratedConditions:Omega']
+    print 'ratedConditions.pitch =', rotor['ratedConditions:pitch']
+    print 'ratedConditions.T =', rotor['ratedConditions:T']
+    print 'ratedConditions.Q =', rotor['ratedConditions:Q']
+    #for io in rotor.root.unknowns:
+    #    print(io + ' ' + str(rotor.root.unknowns[io]))
 
 
 
-        import matplotlib.pyplot as plt
-        plt.figure()
-	plt.plot(rotor['V'], rotor['P']/1e6)
-	plt.xlabel('wind speed (m/s)')
-	plt.xlabel('power (W)')
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.plot(rotor['V'], rotor['P']/1e6)
+    plt.xlabel('wind speed (m/s)')
+    plt.xlabel('power (W)')
 
-	plt.show()
-	# ----------------
+    plt.show()
+    # ----------------

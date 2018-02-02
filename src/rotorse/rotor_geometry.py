@@ -1,10 +1,11 @@
 import numpy as np
 from openmdao.api import Component, Group, IndepVarComp
 from akima import Akima, akima_interp_with_derivs
-from rotorse import TURBINE_CLASS
+from rotorse import TURBINE_CLASS, r_aero, r_str
 from ccblade.ccblade_component import CCBladeGeometry
 
-
+naero = len(r_aero)
+nstr = len(r_str)
 
 class TurbineClass(Component):
     def __init__(self):
@@ -38,109 +39,12 @@ class TurbineClass(Component):
         unknowns['V_extreme_full'][0] = 1.4*Vref # for extreme cases TODO: check if other way to do
         unknowns['V_extreme_full'][1] = 1.4*Vref
 
-        
-class GridSetup(Component):
-    def __init__(self, naero, nstr):
-        super(GridSetup, self).__init__()
-
-        """preprocessing step.  inputs and outputs should not change during optimization"""
-
-        # should be constant
-        self.add_param('initial_aero_grid', shape=naero, desc='initial aerodynamic grid on unit radius')
-        self.add_param('initial_str_grid', shape=nstr, desc='initial structural grid on unit radius')
-
-        # outputs are also constant during optimization
-        self.add_output('fraction', shape=nstr, desc='fractional location of structural grid on aero grid')
-        self.add_output('idxj', val=np.zeros(nstr, dtype=np.int), desc='index of augmented aero grid corresponding to structural index', pass_by_obj=True)
-
-        self.naero = naero
-        self.nstr = nstr
-        self.deriv_options['type'] = 'fd'
-        self.deriv_options['step_calc'] = 'relative'
-
-    def solve_nonlinear(self, params, unknowns, resids):
-
-        r_aero = params['initial_aero_grid']
-        r_str = params['initial_str_grid']
-        r_aug = np.concatenate([[0.0], r_aero, [1.0]])
-
-        nstr = len(r_str)
-        naug = len(r_aug)
-
-        # find idx in augmented aero array that brackets the structural index
-        # then find the fraction the structural value is between the two bounding indices
-        unknowns['fraction'] = np.zeros(nstr)
-        unknowns['idxj'] = np.zeros(nstr, dtype=np.int)
-
-        for i in range(nstr):
-            for j in range(1, naug):
-                if r_aug[j] >= r_str[i]:
-                    j -= 1
-                    break
-            unknowns['idxj'][i] = j
-            unknowns['fraction'][i] = (r_str[i] - r_aug[j]) / (r_aug[j+1] - r_aug[j])
-
-
-class RGrid(Component):
-    def __init__(self, naero, nstr):
-        super(RGrid, self).__init__()
-        # variables
-        self.add_param('r_aero', shape=naero, desc='new aerodynamic grid on unit radius')
-
-        # parameters
-        self.add_param('fraction', shape=nstr, desc='fractional location of structural grid on aero grid')
-        self.add_param('idxj', shape=nstr, dtype=np.int, desc='index of augmented aero grid corresponding to structural index')
-
-        # outputs
-        self.add_output('r_str', shape=nstr, desc='corresponding structural grid corresponding to new aerodynamic grid')
-	
-	self.deriv_options['form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
-
-    def solve_nonlinear(self, params, unknowns, resids):
-
-        r_aug = np.concatenate([[0.0], params['r_aero'], [1.0]])
-
-        nstr = len(params['fraction'])
-        unknowns['r_str'] = np.zeros(nstr)
-        for i in range(nstr):
-            j = params['idxj'][i]
-            unknowns['r_str'][i] = r_aug[j] + params['fraction'][i]*(r_aug[j+1] - r_aug[j])
-
-
-    def list_deriv_vars(self):
-
-        inputs = ('r_aero',)
-        outputs = ('r_str', )
-
-        return inputs, outputs
-
-
-    def linearize(self, params, unknowns, resids):
-
-        J = {}
-        nstr = len(params['fraction'])
-        naero = len(params['r_aero'])
-        J_sub = np.zeros((nstr, naero))
-
-        for i in range(nstr):
-            j = params['idxj'][i]
-            if j > 0 and j < naero+1:
-                J_sub[i, j-1] = 1 - params['fraction'][i]
-            if j > -1 and j < naero:
-                J_sub[i, j] = params['fraction'][i]
-        J['r_str', 'r_aero'] = J_sub
-
-        return J
-
 
 
 class GeometrySpline(Component):
-    def __init__(self, naero, nstr):
+    def __init__(self):
         super(GeometrySpline, self).__init__()
         # variables
-        self.add_param('r_aero_unit', shape=naero, desc='locations where airfoils are defined on unit radius')
-        self.add_param('r_str_unit', shape=nstr, desc='locations where airfoils are defined on unit radius')
         self.add_param('r_max_chord', shape=1, desc='location of max chord on unit radius')
         self.add_param('chord_sub', shape=4, units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
         self.add_param('theta_sub', shape=4, units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
@@ -159,6 +63,7 @@ class GeometrySpline(Component):
         self.add_output('Rtip', shape=1, units='m', desc='dimensional radius of tip')
         self.add_output('r_aero', shape=naero, units='m', desc='dimensional aerodynamic grid')
         self.add_output('r_str', shape=nstr, units='m', desc='dimensional structural grid')
+        self.add_output('max_chord', shape=1, units='m', desc='maximum chord length')
         self.add_output('chord_aero', shape=naero, units='m', desc='chord at airfoil locations')
         self.add_output('chord_str', shape=nstr, units='m', desc='chord at structural locations')
         self.add_output('theta_aero', shape=naero, units='deg', desc='twist at airfoil locations')
@@ -190,7 +95,7 @@ class GeometrySpline(Component):
         nt = len(params['theta_sub'])
         idxc_aero = params['idx_cylinder_aero']
         idxc_str = params['idx_cylinder_str']
-        r_cylinder = Rhub + (Rtip-Rhub)*params['r_aero_unit'][idxc_aero]
+        r_cylinder = Rhub + (Rtip-Rhub)*r_aero[idxc_aero]
         rt = np.linspace(r_cylinder, Rtip, nt)
         theta_spline = Akima(rt, params['theta_sub'])
 
@@ -203,8 +108,9 @@ class GeometrySpline(Component):
         unknowns['Rhub'] = Rhub
         unknowns['Rtip'] = Rtip
         unknowns['diameter'] = 2.0*Rhub
-        unknowns['r_aero'] = Rhub + (Rtip-Rhub)*params['r_aero_unit']
-        unknowns['r_str'] = Rhub + (Rtip-Rhub)*params['r_str_unit']
+        unknowns['r_aero'] = Rhub + (Rtip-Rhub)*r_aero
+        unknowns['r_str'] = Rhub + (Rtip-Rhub)*r_str
+        unknowns['max_chord'], _, _, _ = chord_spline.interp(params['r_max_chord'])
         unknowns['chord_aero'], _, _, _ = chord_spline.interp(unknowns['r_aero'])
         unknowns['chord_str'], _, _, _ = chord_spline.interp(unknowns['r_str'])
         theta_outer_aero, _, _, _ = theta_spline.interp(unknowns['r_aero'][idxc_aero:])
@@ -224,189 +130,15 @@ class GeometrySpline(Component):
         unknowns['sparT_str'], _, _, _ = sparT_spline.interp(unknowns['r_str'])
         unknowns['teT_str'], _, _, _ = teT_spline.interp(unknowns['r_str'])
 
-	# below is not generalized and was for a specific study
-        # nt = len(self.sparT) - 1
-        # rt = np.linspace(r_cylinder, Rtip, nt)
-        # sparT_spline = Akima(rt, self.sparT[1:])
-
-        # self.sparT_cylinder = np.array([0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05457, 0.03859, 0.03812, 0.03906, 0.04799, 0.05363, 0.05833])
-        # self.teT_cylinder = np.array([0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05739, 0.05457, 0.03859, 0.05765, 0.05765, 0.04731, 0.04167])
-
-        # sparT_str_in = self.sparT[0]*self.sparT_cylinder
-        # sparT_str_out, _, _, _ = sparT_spline.interp(self.r_str[idxc_str:])
-        # self.sparT_str = np.concatenate([sparT_str_in, [sparT_str_out[0]], sparT_str_out])
-
-        # # trailing edge thickness
-        # teT_str_in = self.teT[0]*self.teT_cylinder
-        # self.teT_str = np.concatenate((teT_str_in, self.teT[1]*np.ones(9), self.teT[2]*np.ones(7), self.teT[3]*np.ones(8), self.teT[4]*np.ones(2)))
-
-    # def linearize(self, params, unknowns, resids):
-    #     J = {}
-    #     naero = len(self.r_aero_unit)
-    #     nstr = len(self.r_str_unit)
-    #     ncs = len(self.chord_sub)
-    #     nts = len(self.theta_sub)
-    #     nst = len(self.sparT)
-    #     ntt = len(self.teT)
-    #
-    #     n = naero + nstr + ncs + nts + nst + ntt + 2
-    #
-    #     dRtip = np.zeros(n)
-    #     dRhub = np.zeros(n)
-    #     dRtip[naero + nstr + 1 + ncs + nts] = 1.0
-    #     dRhub[naero + nstr + 1 + ncs + nts] = self.hubFraction
-    #
-    #     draero = np.zeros((naero, n))
-    #     draero[:, naero + nstr + 1 + ncs + nts] = (1.0 - self.r_aero_unit)*self.hubFraction + self.r_aero_unit
-    #     draero[:, :naero] = Rtip-Rhub
-    #
-    #     drstr = np.zeros((nstr, n))
-    #     drstr[:, naero + nstr + 1 + ncs + nts] = (1.0 - self.r_str_unit)*self.hubFraction + self.r_str_unit
-    #     drstr[:, naero:nstr] = Rtip-Rhub
-    #     TODO: do with Tapenade
-    #     return J
-'''
-class GeometrySpline(Component):
-    def __init__(self, naero):
-        super(GeometrySpline, self).__init__()
-        self.add_param('r_af', shape=naero, units='m', desc='locations where airfoils are defined on unit radius')
-
-        self.add_param('idx_cylinder', val=0, desc='location where cylinder section ends on unit radius')
-        self.add_param('r_max_chord', shape=1, desc='position of max chord on unit radius')
-
-        self.add_param('Rhub', shape=1, units='m', desc='blade hub radius')
-        self.add_param('Rtip', shape=1, units='m', desc='blade tip radius')
-
-        self.add_param('chord_sub', shape=4, units='m', desc='chord at control points')
-        self.add_param('theta_sub', shape=4, units='deg', desc='twist at control points')
-
-        self.add_output('r', shape=naero, units='m', desc='chord at airfoil locations')
-        self.add_output('chord', shape=naero, units='m', desc='chord at airfoil locations')
-        self.add_output('theta', shape=naero, units='deg', desc='twist at airfoil locations')
-        self.add_output('precurve', shape=naero, units='m', desc='precurve at airfoil locations')
-        # self.add_output('r_af_spacing', shape=16)  # deprecated: not used anymore
-
-        
-    def solve_nonlinear(self, params, unknowns, resids):
-
-        chord_sub = params['chord_sub']
-        theta_sub = params['theta_sub']
-        r_max_chord = params['r_max_chord']
-
-        nc = len(chord_sub)
-        nt = len(theta_sub)
-        Rhub = params['Rhub']
-        Rtip = params['Rtip']
-        idxc = params['idx_cylinder']
-        r_max_chord = Rhub + (Rtip-Rhub)*r_max_chord
-        r_af = params['r_af']
-        r_cylinder = Rhub + (Rtip-Rhub)*r_af[idxc]
-
-        # chord parameterization
-        rc_outer, drc_drcmax, drc_drtip = linspace_with_deriv(r_max_chord, Rtip, nc-1)
-        r_chord = np.concatenate([[Rhub], rc_outer])
-        drc_drcmax = np.concatenate([[0.0], drc_drcmax])
-        drc_drtip = np.concatenate([[0.0], drc_drtip])
-        drc_drhub = np.concatenate([[1.0], np.zeros(nc-1)])
-
-        # theta parameterization
-        r_theta, drt_drcyl, drt_drtip = linspace_with_deriv(r_cylinder, Rtip, nt)
-
-        # spline
-        chord_spline = Akima(r_chord, chord_sub)
-        theta_spline = Akima(r_theta, theta_sub)
-
-        r = Rhub + (Rtip-Rhub)*r_af
-        unknowns['r'] = r
-        chord, dchord_dr, dchord_drchord, dchord_dchordsub = chord_spline.interp(r)
-        theta_outer, dthetaouter_dr, dthetaouter_drtheta, dthetaouter_dthetasub = theta_spline.interp(r[idxc:])
-        unknowns['chord'] = chord
-
-        theta_inner = theta_outer[0] * np.ones(idxc)
-        unknowns['theta'] = np.concatenate([theta_inner, theta_outer])
-
-        # unknowns['r_af_spacing'] = np.diff(r_af)
-
-        unknowns['precurve'] = np.zeros_like(unknowns['chord'])  # TODO: for now I'm forcing this to zero, just for backwards compatibility
-
-        # gradients (TODO: rethink these a bit or use Tapenade.)
-        n = len(r_af)
-        dr_draf = (Rtip-Rhub)*np.ones(n)
-        dr_dRhub = 1.0 - r_af
-        dr_dRtip = r_af
-        # dr = hstack([np.diag(dr_draf), np.zeros((n, 1)), dr_dRhub, dr_dRtip, np.zeros((n, nc+nt))])
-
-        dchord_draf = dchord_dr * dr_draf
-        dchord_drmaxchord0 = np.dot(dchord_drchord, drc_drcmax)
-        dchord_drmaxchord = dchord_drmaxchord0 * (Rtip-Rhub)
-        dchord_drhub = np.dot(dchord_drchord, drc_drhub) + dchord_drmaxchord0*(1.0 - params['r_max_chord']) + dchord_dr*dr_dRhub
-        dchord_drtip = np.dot(dchord_drchord, drc_drtip) + dchord_drmaxchord0*(params['r_max_chord']) + dchord_dr*dr_dRtip
-
-        dthetaouter_dcyl = np.dot(dthetaouter_drtheta, drt_drcyl)
-        dthetaouter_draf = dthetaouter_dr*dr_draf[idxc:]
-        dthetaouter_drhub = dthetaouter_dr*dr_dRhub[idxc:]
-        dthetaouter_drtip = dthetaouter_dr*dr_dRtip[idxc:] + np.dot(dthetaouter_drtheta, drt_drtip)
-
-        dtheta_draf = np.concatenate([np.zeros(idxc), dthetaouter_draf])
-        dtheta_drhub = np.concatenate([dthetaouter_drhub[0]*np.ones(idxc), dthetaouter_drhub])
-        dtheta_drtip = np.concatenate([dthetaouter_drtip[0]*np.ones(idxc), dthetaouter_drtip])
-        sub = dthetaouter_dthetasub[0, :]
-        dtheta_dthetasub = vstack([np.dot(np.ones((idxc, 1)), sub[np.newaxis, :]), dthetaouter_dthetasub])
-
-        dtheta_draf = np.diag(dtheta_draf)
-        dtheta_dcyl = np.concatenate([dthetaouter_dcyl[0]*np.ones(idxc), dthetaouter_dcyl])
-        dtheta_draf[idxc:, idxc] += dthetaouter_dcyl*(Rtip-Rhub)
-        dtheta_drhub += dtheta_dcyl*(1.0 - r_af[idxc])
-        dtheta_drtip += dtheta_dcyl*r_af[idxc]
-
-        drafs_dr = np.zeros((n-1, n))
-        for i in range(n-1):
-            drafs_dr[i, i] = -1.0
-            drafs_dr[i, i+1] = 1.0
-
-        J = {}
-        J['r', 'r_af'] = np.diag(dr_draf)
-        J['r', 'Rhub'] = dr_dRhub
-        J['r', 'Rtip'] = dr_dRtip
-        J['chord', 'r_af'] = np.diag(dchord_draf)
-        J['chord', 'r_max_chord'] = dchord_drmaxchord
-        J['chord', 'Rhub'] = dchord_drhub
-        J['chord', 'Rtip'] = dchord_drtip
-        J['chord', 'chord_sub'] =dchord_dchordsub
-        J['theta', 'r_af'] = dtheta_draf
-        J['theta', 'Rhub'] =dtheta_drhub
-        J['theta', 'Rtip'] =dtheta_drtip
-        J['theta', 'theta_sub'] =dtheta_dthetasub
-        # J['r_af_spacing', 'r_af'] = drafs_dr
-
-        self.J = J
-
-
-    def list_deriv_vars(self):
-
-        inputs = ('r_af', 'r_max_chord', 'Rhub', 'Rtip', 'chord_sub', 'theta_sub')
-        outputs = ('r', 'chord', 'theta', 'precurve')
-
-        return inputs, outputs
-
-
-    def linearize(self, params, unknowns, resids):
-
-        return self.J
-'''
-
 
 class RotorGeometry(Group):
-    def __init__(self, naero=17, nstr=38):
+    def __init__(self):
         super(RotorGeometry, self).__init__()
         """rotor model"""
 
-        self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero)), promotes=['*'])
-        self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr)), promotes=['*'])
         self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 0, pass_by_obj=True), promotes=['*'])
         self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 0, pass_by_obj=True), promotes=['*'])
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
-        self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero)), promotes=['*'])
         self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
         self.add('chord_sub', IndepVarComp('chord_sub', np.zeros(4),units='m'), promotes=['*'])
         self.add('theta_sub', IndepVarComp('theta_sub', np.zeros(4), units='deg'), promotes=['*'])
@@ -417,10 +149,10 @@ class RotorGeometry(Group):
         self.add('yaw', IndepVarComp('yaw', 0.0, units='deg'), promotes=['*'])
         self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
         self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
-        self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
-        self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
-        self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
-        self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
+        #self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
+        #self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
+        #self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
+        #self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         
         # --- composite sections ---
@@ -429,27 +161,14 @@ class RotorGeometry(Group):
         
         # --- Rotor Definition ---
         self.add('turbineclass', TurbineClass())
-        self.add('gridsetup', GridSetup(naero, nstr))
-        self.add('grid', RGrid(naero, nstr))
-        self.add('spline0', GeometrySpline(naero, nstr))
-        self.add('spline', GeometrySpline(naero, nstr))
+        self.add('spline0', GeometrySpline())
+        self.add('spline', GeometrySpline())
         self.add('geom', CCBladeGeometry())
         
         # connections to turbineclass
         self.connect('turbine_class', 'turbineclass.turbine_class')
 
-        # connections to gridsetup
-        self.connect('initial_aero_grid', 'gridsetup.initial_aero_grid')
-        self.connect('initial_str_grid', 'gridsetup.initial_str_grid')
-
-        # connections to grid
-        self.connect('r_aero', 'grid.r_aero')
-        self.connect('gridsetup.fraction', 'grid.fraction')
-        self.connect('gridsetup.idxj', 'grid.idxj')
-
         # connections to spline0
-        self.connect('r_aero', 'spline0.r_aero_unit')
-        self.connect('grid.r_str', 'spline0.r_str_unit')
         self.connect('r_max_chord', 'spline0.r_max_chord')
         self.connect('chord_sub', 'spline0.chord_sub')
         self.connect('theta_sub', 'spline0.theta_sub')
@@ -462,8 +181,6 @@ class RotorGeometry(Group):
         self.connect('teT', 'spline0.teT')
 
         # connections to spline
-        self.connect('r_aero', 'spline.r_aero_unit')
-        self.connect('grid.r_str', 'spline.r_str_unit')
         self.connect('r_max_chord', 'spline.r_max_chord')
         self.connect('chord_sub', 'spline.chord_sub')
         self.connect('theta_sub', 'spline.theta_sub')

@@ -1,5 +1,6 @@
 # from __future__ import print_function
 import numpy as np
+import copy
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem
 from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometry
@@ -13,14 +14,54 @@ import _pBEAM
 import _curvefem
 import ccblade._bem as _bem  # TODO: move to rotoraero
 
-from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, TURBINE_CLASS
+from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, TURBINE_CLASS, r_aero, r_str
+
+naero = len(r_aero)
+nstr = len(r_str)
+
+class CompositeProperties():
+    
+    # === materials and composite layup  ===
+    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
+    materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
+
+    leLoc = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.498, 0.497, 0.465, 0.447, 0.43, 0.411,
+                      0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4,
+                      0.4, 0.4, 0.4, 0.4])    # (Array): array of leading-edge positions from a reference blade axis (usually blade pitch axis). locations are normalized by the local chord length. e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.  positive in -x direction for airfoil-aligned coordinate system
+    sector_idx_strain_spar = [2]*nstr  # (Array): index of sector for spar (PreComp definition of sector)
+    sector_idx_strain_te = [3]*nstr  # (Array): index of sector for trailing-edge (PreComp definition of sector)
+    chord_str_ref = np.array([3.2612, 3.3100915356, 3.32587052924, 3.34159388653, 3.35823798667, 3.37384375335,
+                              3.38939112914, 3.4774055542, 3.49839685, 3.51343645709, 3.87017220335, 4.04645623801, 4.19408216643,
+                              4.47641008477, 4.55844487985, 4.57383098262, 4.57285771934, 4.51914315648, 4.47677655262, 4.40075650022,
+                              4.31069949379, 4.20483735936, 4.08985563932, 3.82931757126, 3.74220276467, 3.54415796922, 3.38732428502,
+                              3.24931446473, 3.23421422609, 3.22701537997, 3.21972125648, 3.08979310611, 2.95152261813, 2.330753331,
+                              2.05553464181, 1.82577817774, 1.5860853279, 1.4621])  # (Array, m): chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)
+
+    upperCS = [0]*nstr
+    lowerCS = [0]*nstr
+    websCS  = [0]*nstr
+    profile = [0]*nstr
+    
+    web1 = np.array([np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, 0.4114, 0.4102, 0.4094, 0.3876, 0.3755, 0.3639, 0.345, 0.3342, 0.3313, 0.3274, 0.323, 0.3206, 0.3172, 0.3138, 0.3104, 0.307, 0.3003, 0.2982, 0.2935, 0.2899, 0.2867, 0.2833, 0.2817, 0.2799, 0.2767, 0.2731, 0.2664, 0.2607, 0.2562, 0.1886, np.nan])
+    web2 = np.array([np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, 0.5886, 0.5868, 0.5854, 0.5508, 0.5315, 0.5131, 0.4831, 0.4658, 0.4687, 0.4726, 0.477, 0.4794, 0.4828, 0.4862, 0.4896, 0.493, 0.4997, 0.5018, 0.5065, 0.5101, 0.5133, 0.5167, 0.5183, 0.5201, 0.5233, 0.5269, 0.5336, 0.5393, 0.5438, 0.6114, np.nan])
+    web3 = np.array([np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan])
+
+    for i in range(nstr):
+        webLoc = []
+        if not np.isnan(web1[i]): webLoc.append(web1[i])
+        if not np.isnan(web2[i]): webLoc.append(web2[i])
+        if not np.isnan(web3[i]): webLoc.append(web3[i])
+
+        upperCS[i], lowerCS[i], websCS[i] = CompositeSection.initFromPreCompLayupFile(os.path.join(basepath, 'layup_' + str(i+1) + '.inp'), webLoc, materials)
+        profile[i] = Profile.initFromPreCompFile(os.path.join(basepath, 'shape_' + str(i+1) + '.inp'))
+
 
 # ---------------------
 # Base Components
 # ---------------------
 
 class BeamPropertiesBase(Component):
-    def __init__(self, nstr):
+    def __init__(self):
         super(BeamPropertiesBase, self).__init__()
         self.add_output('beam:z', shape=nstr, units='m', desc='locations of properties along beam')
         self.add_output('beam:EA', shape=nstr, units='N', desc='axial stiffness')
@@ -34,7 +75,7 @@ class BeamPropertiesBase(Component):
         self.add_output('beam:y_ec_str', shape=nstr, units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
 
 class StrucBase(Component):
-    def __init__(self, nstr):
+    def __init__(self):
         super(StrucBase, self).__init__()
         # all inputs/outputs in airfoil coordinate system
         self.add_param('nF', val=5, desc='number of natural frequencies to return', pass_by_obj=True)
@@ -66,7 +107,7 @@ class StrucBase(Component):
         self.add_param('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels')
         self.add_param('eta_damage', val=1.755, desc='safety factor for fatigue')
         self.add_param('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis')
-        self.add_param('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis')
+        self.add_param('lifetime', val=20.0, units='year', desc='number of years used in fatigue analysis')
 
         self.add_param('beam:z', shape=nstr, units='m', desc='locations of properties along beam')
         self.add_param('beam:EA', shape=nstr, units='N', desc='axial stiffness')
@@ -118,19 +159,9 @@ class AeroLoads(Component):
 # ---------------------
 
 class ResizeCompositeSection(Component):
-    def __init__(self, nstr):
+    def __init__(self):
         super(ResizeCompositeSection, self).__init__()
-
-        self.add_param('upperCSIn', shape=nstr, desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True)
-        self.add_param('lowerCSIn', shape=nstr, desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True)
-        self.add_param('websCSIn', shape=nstr, desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
-
-        # TODO: remove fixed t/c assumption
-        self.add_param('chord_str_ref', shape=nstr, units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)')
-
-        self.add_param('sector_idx_strain_spar', val=np.zeros(nstr, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
-        self.add_param('sector_idx_strain_te', val=np.zeros(nstr, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True)
-
+        
         self.add_param('chord_str', shape=nstr, units='m', desc='structural chord distribution')
         self.add_param('sparT_str', shape=nstr, units='m', desc='structural spar cap thickness distribution')
         self.add_param('teT_str', shape=nstr, units='m', desc='structural trailing-edge panel thickness distribution')
@@ -145,65 +176,37 @@ class ResizeCompositeSection(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        chord_str_ref = params['chord_str_ref']
-        upperCSIn = params['upperCSIn']
-        lowerCSIn = params['lowerCSIn']
-        websCSIn = params['websCSIn']
         chord_str = params['chord_str']
-        sector_idx_strain_spar = params['sector_idx_strain_spar']
-        sector_idx_strain_te = params['sector_idx_strain_te']
         sparT_str = params['sparT_str']
         teT_str = params['teT_str']
 
-        nstr = len(chord_str_ref)
-
         # copy data acrosss
-        upperCSOut = []
-        lowerCSOut = []
-        websCSOut = []
-
-        for i in range(nstr):
-            upperCSOut.append(upperCSIn[i].mycopy())
-            lowerCSOut.append(lowerCSIn[i].mycopy())
-            websCSOut.append(websCSIn[i].mycopy())
+        upperCSOut = copy.deepcopy(CompositeProperties.upperCS)
+        lowerCSOut = copy.deepcopy(CompositeProperties.lowerCS)
+        websCSOut  = copy.deepcopy(CompositeProperties.websCS)
 
         # scale all thicknesses with airfoil thickness
+        # TODO: remove fixed t/c assumption
+        # factor = t_str / tref
+        factor = chord_str / CompositeProperties.chord_str_ref  # same as thickness ratio for constant t/c
         for i in range(nstr):
 
-            upper = upperCSOut[i]
-            lower = lowerCSOut[i]
-            webs = websCSOut[i]
+            upperCSOut[i].t = [m*factor[i] for m in upperCSOut[i].t]
+            lowerCSOut[i].t = [m*factor[i] for m in lowerCSOut[i].t]
+            websCSOut[i].t  = [m*factor[i] for m in websCSOut[i].t]
 
-            # factor = t_str[i]/tref[i]
-            factor = chord_str[i]/chord_str_ref[i]  # same as thickness ratio for constant t/c
-
-            for j in range(len(upper.t)):
-                upper.t[j] *= factor
-
-            for j in range(len(lower.t)):
-                lower.t[j] *= factor
-
-            for j in range(len(webs.t)):
-                webs.t[j] *= factor
-
-
-        # change spar and trailing edge thickness to specified values
-        for i in range(nstr):
-
-            idx_spar = sector_idx_strain_spar[i]
-            idx_te = sector_idx_strain_te[i]
-            upper = upperCSOut[i]
-            lower = lowerCSOut[i]
+            idx_spar = CompositeProperties.sector_idx_strain_spar[i]
+            idx_te = CompositeProperties.sector_idx_strain_te[i]
 
             # upper and lower have same thickness for this design
-            tspar = np.sum(upper.t[idx_spar])
-            tte = np.sum(upper.t[idx_te])
+            tspar = np.sum(upperCSOut[i].t[idx_spar])
+            tte = np.sum(upperCSOut[i].t[idx_te])
 
-            upper.t[idx_spar] *= sparT_str[i]/tspar
-            lower.t[idx_spar] *= sparT_str[i]/tspar
+            upperCSOut[i].t[idx_spar] *= sparT_str[i]/tspar
+            lowerCSOut[i].t[idx_spar] *= sparT_str[i]/tspar
 
-            upper.t[idx_te] *= teT_str[i]/tte
-            lower.t[idx_te] *= teT_str[i]/tte
+            upperCSOut[i].t[idx_te] *= teT_str[i]/tte
+            lowerCSOut[i].t[idx_te] *= teT_str[i]/tte
 
         unknowns['upperCSOut'] = upperCSOut
         unknowns['lowerCSOut'] = lowerCSOut
@@ -212,25 +215,17 @@ class ResizeCompositeSection(Component):
 
 
 class PreCompSections(BeamPropertiesBase):
-    def __init__(self, nstr):
-        super(PreCompSections, self).__init__(nstr)
+    def __init__(self):
+        super(PreCompSections, self).__init__()
         self.add_param('r', shape=nstr, units='m', desc='radial positions. r[0] should be the hub location \
             while r[-1] should be the blade tip. Any number \
             of locations can be specified between these in ascending order.')
         self.add_param('chord', shape=nstr, units='m', desc='array of chord lengths at corresponding radial positions')
         self.add_param('theta', shape=nstr, units='deg', desc='array of twist angles at corresponding radial positions. \
             (positive twist decreases angle of attack)')
-        self.add_param('leLoc', shape=nstr, desc='array of leading-edge positions from a reference blade axis \
-            (usually blade pitch axis). locations are normalized by the local chord length.  \
-            e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
-            positive in -x direction for airfoil-aligned coordinate system')
-        self.add_param('profile', shape=nstr, desc='airfoil shape at each radial position', pass_by_obj=True)
-        self.add_param('materials', desc='list of all Orthotropic2DMaterial objects used in defining the geometry', pass_by_obj=True)
         self.add_param('upperCS', val=np.zeros(nstr), desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True)
         self.add_param('lowerCS', shape=nstr, desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True)
         self.add_param('websCS', shape=nstr, desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
-        self.add_param('sector_idx_strain_spar', val=np.zeros(nstr, dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
-        self.add_param('sector_idx_strain_te', val=np.zeros(nstr, dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True)
 
         self.add_output('eps_crit_spar', shape=nstr, desc='critical strain in spar from panel buckling calculation')
         self.add_output('eps_crit_te', shape=nstr, desc='critical strain in trailing-edge panels from panel buckling calculation')
@@ -243,25 +238,21 @@ class PreCompSections(BeamPropertiesBase):
         self.add_output('yu_strain_te', shape=nstr, desc='y-position of midpoint of trailing-edge panel on upper surface for strain calculation')
         self.add_output('yl_strain_te', shape=nstr, desc='y-position of midpoint of trailing-edge panel on lower surface for strain calculation')
 
-        self.nstr = nstr
-
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
 
     def criticalStrainLocations(self, sector_idx_strain, x_ec_nose, y_ec_nose):
 
-        n = len(sector_idx_strain)
-
         # find corresponding locations on airfoil at midpoint of sector
-        xun = np.zeros(n)
-        xln = np.zeros(n)
-        yun = np.zeros(n)
-        yln = np.zeros(n)
+        xun = np.zeros(nstr)
+        xln = np.zeros(nstr)
+        yun = np.zeros(nstr)
+        yln = np.zeros(nstr)
 
-        for i in range(n):
+        for i in range(nstr):
             csU = self.upperCS[i]
             csL = self.lowerCS[i]
-            pf = self.profile[i]
+            pf = CompositeProperties.profile[i]
             idx = sector_idx_strain[i]
 
             xun[i] = 0.5*(csU.loc[idx] + csU.loc[idx+1])
@@ -325,17 +316,17 @@ class PreCompSections(BeamPropertiesBase):
     def solve_nonlinear(self, params, unknowns, resids):
 
         self.chord = params['chord']
-        self.materials = params['materials']
         self.r = params['r']
-        self.profile = params['profile']
         self.upperCS = params['upperCS']
         self.lowerCS = params['lowerCS']
         self.websCS = params['websCS']
         self.theta = params['theta']
-        self.leLoc = params['leLoc']
-        self.sector_idx_strain_spar = params['sector_idx_strain_spar']
-        self.sector_idx_strain_te = params['sector_idx_strain_te']
 
+        # Load materials
+	basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
+	self.materials = np.array( Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp')) )
+
+        
         # radial discretization
         nsec = len(self.r)
 
@@ -359,7 +350,6 @@ class PreCompSections(BeamPropertiesBase):
         x_ec_nose = np.zeros(nsec)
         y_ec_nose = np.zeros(nsec)
 
-        profile = self.profile
         mat = self.materials
         csU = self.upperCS
         csL = self.lowerCS
@@ -386,7 +376,7 @@ class PreCompSections(BeamPropertiesBase):
 
         for i in range(nsec):
 
-            xnode, ynode = profile[i]._preCompFormat()
+            xnode, ynode = CompositeProperties.profile[i]._preCompFormat()
             locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU = csU[i]._preCompFormat()
             locL, n_laminaL, n_pliesL, tL, thetaL, mat_idxL = csL[i]._preCompFormat()
             locW, n_laminaW, n_pliesW, tW, thetaW, mat_idxW = csW[i]._preCompFormat()
@@ -404,7 +394,7 @@ class PreCompSections(BeamPropertiesBase):
 
 
             results = _precomp.properties(self.chord[i], self.theta[i],
-                th_prime[i], self.leLoc[i],
+                th_prime[i], CompositeProperties.leLoc[i],
                 xnode, ynode, E1, E2, G12, nu12, rho,
                 locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU,
                 locL, n_laminaL, n_pliesL, tL, thetaL, mat_idxL,
@@ -421,7 +411,7 @@ class PreCompSections(BeamPropertiesBase):
             self.beam_rhoA[i] = results[14]
             self.beam_rhoJ[i] = results[15] + results[16]  # perpindicular axis theorem
 
-            x_ec_nose[i] = results[13] + self.leLoc[i]*self.chord[i]
+            x_ec_nose[i] = results[13] + CompositeProperties.leLoc[i]*self.chord[i]
             y_ec_nose[i] = results[12]  # switch b.c of coordinate system used
 
         unknowns['beam:z'] = self.beam_z
@@ -434,13 +424,11 @@ class PreCompSections(BeamPropertiesBase):
         unknowns['beam:y_ec_str'] = self.beam_y_ec_str
         unknowns['beam:rhoA'] = self.beam_rhoA
         unknowns['beam:rhoJ'] = self.beam_rhoJ
-        unknowns['eps_crit_spar'] = self.panelBucklingStrain(self.sector_idx_strain_spar)
-        unknowns['eps_crit_te'] = self.panelBucklingStrain(self.sector_idx_strain_te)
+        unknowns['eps_crit_spar'] = self.panelBucklingStrain(CompositeProperties.sector_idx_strain_spar)
+        unknowns['eps_crit_te'] = self.panelBucklingStrain(CompositeProperties.sector_idx_strain_te)
 
-        xu_strain_spar, xl_strain_spar, yu_strain_spar, \
-            yl_strain_spar = self.criticalStrainLocations(self.sector_idx_strain_spar, x_ec_nose, y_ec_nose)
-        xu_strain_te, xl_strain_te, yu_strain_te, \
-            yl_strain_te = self.criticalStrainLocations(self.sector_idx_strain_te, x_ec_nose, y_ec_nose)
+        xu_strain_spar, xl_strain_spar, yu_strain_spar, yl_strain_spar = self.criticalStrainLocations(CompositeProperties.sector_idx_strain_spar, x_ec_nose, y_ec_nose)
+        xu_strain_te, xl_strain_te, yu_strain_te, yl_strain_te = self.criticalStrainLocations(CompositeProperties.sector_idx_strain_te, x_ec_nose, y_ec_nose)
 
         unknowns['xu_strain_spar'] = xu_strain_spar
         unknowns['xl_strain_spar'] = xl_strain_spar
@@ -453,7 +441,7 @@ class PreCompSections(BeamPropertiesBase):
 
         
 class BladeCurvature(Component):
-    def __init__(self, nstr):
+    def __init__(self):
         super(BladeCurvature, self).__init__()
         self.add_param('r', shape=nstr, units='m', desc='location in blade z-coordinate')
         self.add_param('precurve', shape=nstr, units='m', desc='location in blade x-coordinate')
@@ -553,7 +541,7 @@ class BladeCurvature(Component):
 
 
 class CurveFEM(Component):
-    def __init__(self, nstr):
+    def __init__(self):
         super(CurveFEM, self).__init__()
 
         """natural frequencies for curved blades"""
@@ -597,8 +585,8 @@ class CurveFEM(Component):
 
 class RotorWithpBEAM(StrucBase):
 
-    def __init__(self, nstr):
-        super(RotorWithpBEAM, self).__init__(nstr)
+    def __init__(self):
+        super(RotorWithpBEAM, self).__init__()
 
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
@@ -659,7 +647,7 @@ class RotorWithpBEAM(StrucBase):
 
     def damage(self, Mx, My, xu, yu, xl, yl, EI11, EI22, EA, ca, sa, emax=0.01, eta=1.755, m=10.0, N=365*24*3600*24):
 
-        # use profile c.s. to use Hansen's notation
+        # use profil ec.s. to use Hansen's notation
         Mx, My = My, Mx
         Fz = 0.0
         xu, yu = yu, xu
@@ -726,7 +714,7 @@ class RotorWithpBEAM(StrucBase):
         self.strain_ult_te = params['strain_ult_te']
         self.eta_damage = params['eta_damage']
         self.m_damage = params['m_damage']
-        self.N_damage = params['N_damage']
+        self.N_damage = 365*24*3600*params['lifetime']
 
         # outputs
         nsec = len(params['beam:z'])
@@ -798,7 +786,7 @@ class RotorWithpBEAM(StrucBase):
         
 
 class DamageLoads(Component):
-    def __init__(self, nstr, naero):
+    def __init__(self):
         super(DamageLoads, self).__init__()
         self.add_param('rstar', shape=naero+1, desc='nondimensional radial locations of damage equivalent moments')
         self.add_param('Mxb', shape=naero+1, units='N*m', desc='damage equivalent moments about blade c.s. x-direction')
@@ -888,7 +876,7 @@ class DamageLoads(Component):
 
 
 class TotalLoads(Component):
-    def __init__(self, nstr):
+    def __init__(self):
         super(TotalLoads, self).__init__()
         # variables
         self.add_param('aeroLoads:r', units='m', desc='radial positions along blade going toward tip')
@@ -1217,7 +1205,7 @@ class TipDeflection(Component):
 #         unknowns['tip_deflection'] = params['dynamicFactor'] * self.delta.x
 
 class BladeDeflection(Component):
-    def __init__(self, nstr):
+    def __init__(self):
         super(BladeDeflection, self).__init__()
         self.add_param('dx', shape=nstr, desc='deflections in airfoil x-direction')
         self.add_param('dy', shape=nstr, desc='deflections in airfoil y-direction')
@@ -1393,7 +1381,7 @@ class BladeDeflection(Component):
 
 class RootMoment(Component):
     """blade root bending moment"""
-    def __init__(self, nstr):
+    def __init__(self):
         super(RootMoment, self).__init__()
         self.add_param('aeroLoads:r', units='m', desc='radial positions along blade going toward tip')
         self.add_param('aeroLoads:Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
@@ -1840,7 +1828,7 @@ class SetupPCModVarSpeed(Component):
 
 
 class OutputsStructures(Component):
-    def __init__(self, nstr):
+    def __init__(self):
         super(OutputsStructures, self).__init__()
 
         # structural outputs
@@ -1969,7 +1957,7 @@ class OutputsStructures(Component):
 
 
 class RotorStructure(Group):
-    def __init__(self, naero=17, nstr=38):
+    def __init__(self):
         super(RotorStructure, self).__init__()
         """rotor model"""
 
@@ -1988,31 +1976,11 @@ class RotorStructure(Group):
         self.add('c_tsr', IndepVarComp('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
         self.add('c_pitch', IndepVarComp('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
         self.add('pitch_extreme', IndepVarComp('pitch_extreme', val=0.0, units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
-        self.add('pitch_extreme_full', IndepVarComp('pitch_extreme_full', val=np.array([0.0, 90.0]), units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
         self.add('azimuth_extreme', IndepVarComp('azimuth_extreme', val=0.0, units='deg', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
-        self.add('Omega_load', IndepVarComp('Omega_load', val=0.0, units='rpm', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
         
         # --- composite sections ---
         #self.add('sparT', IndepVarComp('sparT', val=np.zeros(5), units='m', desc='spar cap thickness parameters'), promotes=['*'])
         #self.add('teT', IndepVarComp('teT', val=np.zeros(5), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
-        self.add('chord_str_ref', IndepVarComp('chord_str_ref', val=np.zeros(nstr), units='m', desc='chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)'), promotes=['*'])
-        self.add('leLoc', IndepVarComp('leLoc', val=np.zeros(nstr), desc='array of leading-edge positions from a reference blade axis \
-            (usually blade pitch axis). locations are normalized by the local chord length.  \
-            e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.   \
-            positive in -x direction for airfoil-aligned coordinate system'), promotes=['*'])
-
-        self.add('profile', IndepVarComp('profile', val=np.zeros(nstr), desc='airfoil shape at each radial position', pass_by_obj=True), promotes=['*'])
-        self.add('materials', IndepVarComp('materials', val=np.zeros(6),
-            desc='list of all Orthotropic2DMaterial objects used in defining the geometry', pass_by_obj=True), promotes=['*'])
-        self.add('upperCS', IndepVarComp('upperCS', val=np.zeros(nstr),
-            desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True), promotes=['*'])
-        self.add('lowerCS', IndepVarComp('lowerCS', val=np.zeros(nstr),
-            desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True), promotes=['*'])
-        self.add('websCS', IndepVarComp('websCS', val=np.zeros(nstr),
-            desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True), promotes=['*'])
-        self.add('sector_idx_strain_spar', IndepVarComp('sector_idx_strain_spar', val=np.zeros(38,  dtype=np.int), desc='index of sector for spar (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
-        self.add('sector_idx_strain_te', IndepVarComp('sector_idx_strain_te', val=np.zeros(38,  dtype=np.int), desc='index of sector for trailing-edge (PreComp definition of sector)', pass_by_obj=True), promotes=['*'])
-
 
         # --- fatigue ---
         self.add('rstar_damage', IndepVarComp('rstar_damage', val=np.zeros(naero+1), desc='nondimensional radial locations of damage equivalent moments'), promotes=['*'])
@@ -2022,7 +1990,7 @@ class RotorStructure(Group):
         self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
         self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
         self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
-        self.add('N_damage', IndepVarComp('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis'), promotes=['*'])
+        self.add('lifetime', IndepVarComp('lifetime', val=20.0, units='year', desc='project lifetime for fatigue analysis'), promotes=['*'])
 
 
         # --- options ---
@@ -2031,41 +1999,41 @@ class RotorStructure(Group):
 
 
         # Geometry
-        self.add('rotorGeometry', RotorGeometry(naero, nstr), promotes=['*'])
+        self.add('rotorGeometry', RotorGeometry(), promotes=['*'])
 
         # --- add structures ---
-        self.add('curvature', BladeCurvature(nstr))
-        self.add('resize', ResizeCompositeSection(nstr))
+        self.add('curvature', BladeCurvature())
+        self.add('resize', ResizeCompositeSection())
         self.add('gust', GustETM())
         self.add('setuppc',  SetupPCModVarSpeed())
-        self.add('beam', PreCompSections(nstr))
+        self.add('beam', PreCompSections())
 
         self.add('aero_rated', CCBladeLoads(naero, 1))
         self.add('aero_extrm', CCBladeLoads(naero,  1))
         self.add('aero_extrm_forces', CCBladePower(naero, 2))
         self.add('aero_defl_powercurve', CCBladeLoads(naero,  1))
 
-        self.add('loads_defl', TotalLoads(nstr))
-        self.add('loads_pc_defl', TotalLoads(nstr))
-        self.add('loads_strain', TotalLoads(nstr))
+        self.add('loads_defl', TotalLoads())
+        self.add('loads_pc_defl', TotalLoads())
+        self.add('loads_strain', TotalLoads())
 
-        self.add('damage', DamageLoads(nstr, naero))
-        self.add('struc', RotorWithpBEAM(nstr))
-        self.add('curvefem', CurveFEM(nstr))
+        self.add('damage', DamageLoads())
+        self.add('struc', RotorWithpBEAM())
+        self.add('curvefem', CurveFEM())
         self.add('tip', TipDeflection())
-        self.add('root_moment', RootMoment(nstr))
+        self.add('root_moment', RootMoment())
         self.add('mass', MassProperties())
         self.add('extreme', ExtremeLoads())
-        self.add('blade_defl', BladeDeflection(nstr))
+        self.add('blade_defl', BladeDeflection())
 
         self.add('aero_0', CCBladeLoads(naero,  1))
         self.add('aero_120', CCBladeLoads(naero,  1))
         self.add('aero_240', CCBladeLoads(naero,  1))
-        self.add('root_moment_0', RootMoment(nstr))
-        self.add('root_moment_120', RootMoment(nstr))
-        self.add('root_moment_240', RootMoment(nstr))
+        self.add('root_moment_0', RootMoment())
+        self.add('root_moment_120', RootMoment())
+        self.add('root_moment_240', RootMoment())
 
-        self.add('output_struc', OutputsStructures(nstr), promotes=['*'])
+        self.add('output_struc', OutputsStructures(), promotes=['*'])
         
         # connections to curvature
         self.connect('spline.r_str', 'curvature.r')
@@ -2074,12 +2042,6 @@ class RotorStructure(Group):
         self.connect('precone', 'curvature.precone')
 
         # connections to resize
-        self.connect('upperCS', 'resize.upperCSIn')
-        self.connect('lowerCS', 'resize.lowerCSIn')
-        self.connect('websCS', 'resize.websCSIn')
-        self.connect('chord_str_ref', 'resize.chord_str_ref')
-        self.connect('sector_idx_strain_spar', 'resize.sector_idx_strain_spar')
-        self.connect('sector_idx_strain_te', 'resize.sector_idx_strain_te')
         self.connect('spline.chord_str', 'resize.chord_str')
         self.connect('spline.sparT_str', 'resize.sparT_str')
         self.connect('spline.teT_str', 'resize.teT_str')
@@ -2140,7 +2102,6 @@ class RotorStructure(Group):
         self.connect('turbineclass.V_extreme', 'aero_extrm.V_load')
         self.connect('pitch_extreme', 'aero_extrm.pitch_load')
         self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
-        self.connect('Omega_load', 'aero_extrm.Omega_load')
         self.aero_extrm.Omega_load = 0.0  # parked case
 
         # connections to aero_extrm_forces (for tower thrust)
@@ -2165,8 +2126,7 @@ class RotorStructure(Group):
         self.aero_extrm_forces.Omega = np.zeros(2)  # parked case
         self.aero_extrm_forces.pitch = np.zeros(2)
         self.connect('turbineclass.V_extreme_full', 'aero_extrm_forces.Uhub')
-        self.connect('pitch_extreme_full', 'aero_extrm_forces.pitch')
-        self.aero_extrm_forces.pitch[1] = 90  # feathered
+        self.aero_extrm_forces.pitch = np.array([0.0, 90.0])  # feathered
         self.aero_extrm_forces.T = np.zeros(2)
         self.aero_extrm_forces.Q = np.zeros(2)
 
@@ -2198,14 +2158,9 @@ class RotorStructure(Group):
         self.connect('spline.r_str', 'beam.r')
         self.connect('spline.chord_str', 'beam.chord')
         self.connect('spline.theta_str', 'beam.theta')
-        self.connect('leLoc', 'beam.leLoc')
-        self.connect('profile', 'beam.profile')
-        self.connect('materials', 'beam.materials')
         self.connect('resize.upperCSOut', 'beam.upperCS')
         self.connect('resize.lowerCSOut', 'beam.lowerCS')
         self.connect('resize.websCSOut', 'beam.websCS')
-        self.connect('sector_idx_strain_spar', 'beam.sector_idx_strain_spar')
-        self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
 
         # connections to loads_defl
         self.connect('aero_rated.loads:Omega', 'loads_defl.aeroLoads:Omega')
@@ -2295,7 +2250,7 @@ class RotorStructure(Group):
         self.connect('strain_ult_te', 'struc.strain_ult_te')
         self.connect('eta_damage', 'struc.eta_damage')
         self.connect('m_damage', 'struc.m_damage')
-        self.connect('N_damage', 'struc.N_damage')
+        self.connect('lifetime', 'struc.lifetime')
 
         # connections to curvefem
         self.connect('beam.beam:z', 'curvefem.beam:z')
@@ -2446,38 +2401,20 @@ class RotorStructure(Group):
         #azimuths not passed. assumed 0,120,240 in drivese function
 
 if __name__ == '__main__':
-
-	initial_aero_grid = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
-	    0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333,
-	    0.97777724])  # (Array): initial aerodynamic grid on unit radius
-	initial_str_grid = np.array([0.0, 0.00492790457512, 0.00652942887106, 0.00813095316699, 0.00983257273154,
-	    0.0114340970275, 0.0130356213234, 0.02222276, 0.024446481932, 0.026048006228, 0.06666667, 0.089508406455,
-	    0.11111057, 0.146462614229, 0.16666667, 0.195309105255, 0.23333333, 0.276686558545, 0.3, 0.333640766319,
-	    0.36666667, 0.400404310407, 0.43333333, 0.5, 0.520818918408, 0.56666667, 0.602196371696, 0.63333333,
-	    0.667358391486, 0.683573824984, 0.7, 0.73242031601, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724,
-	    1.0])  # (Array): initial structural grid on unit radius
-
 	rotor = Problem()
-	naero = len(initial_aero_grid)
-	nstr = len(initial_str_grid)
 
-	rotor.root = RotorStructure(naero, nstr)
+	rotor.root = RotorStructure()
 
 	#rotor.setup(check=False)
 	rotor.setup()
 
 	# === blade grid ===
-	rotor['initial_aero_grid'] = initial_aero_grid  # (Array): initial aerodynamic grid on unit radius
-	rotor['initial_str_grid'] = initial_str_grid  # (Array): initial structural grid on unit radius
 	rotor['idx_cylinder_aero'] = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
 	rotor['idx_cylinder_str'] = 14  # (Int): first idx in r_str_unit of non-cylindrical section
 	rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
 	# ------------------
 
 	# === blade geometry ===
-	rotor['r_aero'] = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333,
-	    0.5, 0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333,
-	    0.97777724])  # (Array): new aerodynamic grid on unit radius
 	rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
 	rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
 	rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317, -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
@@ -2509,11 +2446,7 @@ if __name__ == '__main__':
 
 	# place at appropriate radial stations
 	af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-
-	n = len(af_idx)
-	af = [0]*n
-	for i in range(n):
-	    af[i] = airfoil_types[af_idx[i]]
+	af     = [airfoil_types[m] for m in af_idx]
 	rotor['airfoil_files'] = af  # (List): names of airfoil file
 	# ----------------------
 
@@ -2541,52 +2474,6 @@ if __name__ == '__main__':
 	rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
 	# ----------------------
 
-	# === materials and composite layup  ===
-	basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
-
-	materials = Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp'))
-
-	ncomp = len(rotor['initial_str_grid'])
-	upper = [0]*ncomp
-	lower = [0]*ncomp
-	webs = [0]*ncomp
-	profile = [0]*ncomp
-
-	rotor['leLoc'] = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.498, 0.497, 0.465, 0.447, 0.43, 0.411,
-	    0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4,
-	    0.4, 0.4, 0.4, 0.4])    # (Array): array of leading-edge positions from a reference blade axis (usually blade pitch axis). locations are normalized by the local chord length. e.g. leLoc[i] = 0.2 means leading edge is 0.2*chord[i] from reference axis.  positive in -x direction for airfoil-aligned coordinate system
-	rotor['sector_idx_strain_spar'] = [2]*ncomp  # (Array): index of sector for spar (PreComp definition of sector)
-	rotor['sector_idx_strain_te'] = [3]*ncomp  # (Array): index of sector for trailing-edge (PreComp definition of sector)
-	web1 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 0.4114, 0.4102, 0.4094, 0.3876, 0.3755, 0.3639, 0.345, 0.3342, 0.3313, 0.3274, 0.323, 0.3206, 0.3172, 0.3138, 0.3104, 0.307, 0.3003, 0.2982, 0.2935, 0.2899, 0.2867, 0.2833, 0.2817, 0.2799, 0.2767, 0.2731, 0.2664, 0.2607, 0.2562, 0.1886, -1.0])
-	web2 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 0.5886, 0.5868, 0.5854, 0.5508, 0.5315, 0.5131, 0.4831, 0.4658, 0.4687, 0.4726, 0.477, 0.4794, 0.4828, 0.4862, 0.4896, 0.493, 0.4997, 0.5018, 0.5065, 0.5101, 0.5133, 0.5167, 0.5183, 0.5201, 0.5233, 0.5269, 0.5336, 0.5393, 0.5438, 0.6114, -1.0])
-	web3 = np.array([-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0])
-	rotor['chord_str_ref'] = np.array([3.2612, 3.3100915356, 3.32587052924, 3.34159388653, 3.35823798667, 3.37384375335,
-	    3.38939112914, 3.4774055542, 3.49839685, 3.51343645709, 3.87017220335, 4.04645623801, 4.19408216643,
-	     4.47641008477, 4.55844487985, 4.57383098262, 4.57285771934, 4.51914315648, 4.47677655262, 4.40075650022,
-	     4.31069949379, 4.20483735936, 4.08985563932, 3.82931757126, 3.74220276467, 3.54415796922, 3.38732428502,
-	     3.24931446473, 3.23421422609, 3.22701537997, 3.21972125648, 3.08979310611, 2.95152261813, 2.330753331,
-	     2.05553464181, 1.82577817774, 1.5860853279, 1.4621])  # (Array, m): chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c for this case)
-
-	for i in range(ncomp):
-
-	    webLoc = []
-	    if web1[i] != -1:
-		webLoc.append(web1[i])
-	    if web2[i] != -1:
-		webLoc.append(web2[i])
-	    if web3[i] != -1:
-		webLoc.append(web3[i])
-
-	    upper[i], lower[i], webs[i] = CompositeSection.initFromPreCompLayupFile(os.path.join(basepath, 'layup_' + str(i+1) + '.inp'), webLoc, materials)
-	    profile[i] = Profile.initFromPreCompFile(os.path.join(basepath, 'shape_' + str(i+1) + '.inp'))
-
-	rotor['materials'] = np.array(materials)  # (List): list of all Orthotropic2DMaterial objects used in defining the geometry
-	rotor['upperCS'] = np.array(upper)  # (List): list of CompositeSection objections defining the properties for upper surface
-	rotor['lowerCS'] = np.array(lower)  # (List): list of CompositeSection objections defining the properties for lower surface
-	rotor['websCS'] = np.array(webs)  # (List): list of CompositeSection objections defining the properties for shear webs
-	rotor['profile'] = np.array(profile)  # (List): airfoil shape at each radial position
-	# --------------------------------------
-
 
 	# === fatigue ===
 	rotor['rstar_damage'] = np.array([0.000, 0.022, 0.067, 0.111, 0.167, 0.233, 0.300, 0.367, 0.433, 0.500,
@@ -2601,7 +2488,7 @@ if __name__ == '__main__':
 	rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
 	rotor['eta_damage'] = 1.35*1.3*1.0  # (Float): safety factor for fatigue
 	rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
-	rotor['N_damage'] = 365*24*3600*20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
+	rotor['lifetime'] = 20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
 	# ----------------
 
 
