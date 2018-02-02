@@ -1,7 +1,8 @@
 import numpy as np
-from openmdao.api import Component
+from openmdao.api import Component, Group, IndepVarComp
 from akima import Akima, akima_interp_with_derivs
 from rotorse import TURBINE_CLASS
+from ccblade.ccblade_component import CCBladeGeometry
 
 
 
@@ -393,3 +394,89 @@ class GeometrySpline(Component):
 
         return self.J
 '''
+
+
+class RotorGeometry(Group):
+    def __init__(self, naero=17, nstr=38):
+        super(RotorGeometry, self).__init__()
+        """rotor model"""
+
+        self.add('initial_aero_grid', IndepVarComp('initial_aero_grid', np.zeros(naero)), promotes=['*'])
+        self.add('initial_str_grid', IndepVarComp('initial_str_grid', np.zeros(nstr)), promotes=['*'])
+        self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 0, pass_by_obj=True), promotes=['*'])
+        self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 0, pass_by_obj=True), promotes=['*'])
+        self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
+        self.add('r_aero', IndepVarComp('r_aero', np.zeros(naero)), promotes=['*'])
+        self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
+        self.add('chord_sub', IndepVarComp('chord_sub', np.zeros(4),units='m'), promotes=['*'])
+        self.add('theta_sub', IndepVarComp('theta_sub', np.zeros(4), units='deg'), promotes=['*'])
+        self.add('precurve_sub', IndepVarComp('precurve_sub', np.zeros(3), units='m'), promotes=['*'])
+        self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
+        self.add('precone', IndepVarComp('precone', 0.0, units='deg'), promotes=['*'])
+        self.add('tilt', IndepVarComp('tilt', 0.0, units='deg'), promotes=['*'])
+        self.add('yaw', IndepVarComp('yaw', 0.0, units='deg'), promotes=['*'])
+        self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
+        self.add('airfoil_files', IndepVarComp('airfoil_files', val=np.zeros(naero), pass_by_obj=True), promotes=['*'])
+        self.add('rho', IndepVarComp('rho', val=1.225, units='kg/m**3', desc='density of air', pass_by_obj=True), promotes=['*'])
+        self.add('mu', IndepVarComp('mu', val=1.81206e-5, units='kg/m/s', desc='dynamic viscosity of air', pass_by_obj=True), promotes=['*'])
+        self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
+        self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
+        self.add('turbine_class', IndepVarComp('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
+        
+        # --- composite sections ---
+        self.add('sparT', IndepVarComp('sparT', val=np.zeros(5), units='m', desc='spar cap thickness parameters'), promotes=['*'])
+        self.add('teT', IndepVarComp('teT', val=np.zeros(5), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
+        
+        # --- Rotor Definition ---
+        self.add('turbineclass', TurbineClass())
+        self.add('gridsetup', GridSetup(naero, nstr))
+        self.add('grid', RGrid(naero, nstr))
+        self.add('spline0', GeometrySpline(naero, nstr))
+        self.add('spline', GeometrySpline(naero, nstr))
+        self.add('geom', CCBladeGeometry())
+        
+        # connections to turbineclass
+        self.connect('turbine_class', 'turbineclass.turbine_class')
+
+        # connections to gridsetup
+        self.connect('initial_aero_grid', 'gridsetup.initial_aero_grid')
+        self.connect('initial_str_grid', 'gridsetup.initial_str_grid')
+
+        # connections to grid
+        self.connect('r_aero', 'grid.r_aero')
+        self.connect('gridsetup.fraction', 'grid.fraction')
+        self.connect('gridsetup.idxj', 'grid.idxj')
+
+        # connections to spline0
+        self.connect('r_aero', 'spline0.r_aero_unit')
+        self.connect('grid.r_str', 'spline0.r_str_unit')
+        self.connect('r_max_chord', 'spline0.r_max_chord')
+        self.connect('chord_sub', 'spline0.chord_sub')
+        self.connect('theta_sub', 'spline0.theta_sub')
+        self.connect('precurve_sub', 'spline0.precurve_sub')
+        self.connect('bladeLength', 'spline0.bladeLength')
+        self.connect('idx_cylinder_aero', 'spline0.idx_cylinder_aero')
+        self.connect('idx_cylinder_str', 'spline0.idx_cylinder_str')
+        self.connect('hubFraction', 'spline0.hubFraction')
+        self.connect('sparT', 'spline0.sparT')
+        self.connect('teT', 'spline0.teT')
+
+        # connections to spline
+        self.connect('r_aero', 'spline.r_aero_unit')
+        self.connect('grid.r_str', 'spline.r_str_unit')
+        self.connect('r_max_chord', 'spline.r_max_chord')
+        self.connect('chord_sub', 'spline.chord_sub')
+        self.connect('theta_sub', 'spline.theta_sub')
+        self.connect('precurve_sub', 'spline.precurve_sub')
+        self.connect('bladeLength', 'spline.bladeLength')
+        self.connect('idx_cylinder_aero', 'spline.idx_cylinder_aero')
+        self.connect('idx_cylinder_str', 'spline.idx_cylinder_str')
+        self.connect('hubFraction', 'spline.hubFraction')
+        self.connect('sparT', 'spline.sparT')
+        self.connect('teT', 'spline.teT')
+
+        # connections to geom
+        # self.spline['precurve_str'] = np.zeros(1)
+        self.connect('spline.Rtip', 'geom.Rtip')
+        self.connect('precone', 'geom.precone')
+        self.connect('spline.precurve_str', 'geom.precurveTip', src_indices=[naero-1])
