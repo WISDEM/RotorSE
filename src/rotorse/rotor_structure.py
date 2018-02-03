@@ -10,6 +10,7 @@ from commonse.utilities import trapz_deriv, interp_with_deriv
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 from akima import Akima, akima_interp_with_derivs
 from rotor_geometry import RotorGeometry
+from rotor_aeropower import AirfoilProperties
 import _pBEAM
 import _curvefem
 import ccblade._bem as _bem  # TODO: move to rotoraero
@@ -1964,6 +1965,7 @@ class RotorStructure(Group):
         self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation'), promotes=['*'])
         self.add('turbulence_class', IndepVarComp('turbulence_class', val=TURBULENCE_CLASS['A'], desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
         self.add('gust_stddev', IndepVarComp('gust_stddev', val=3, pass_by_obj=True), promotes=['*'])
+        self.add('airfoil_files', IndepVarComp('airfoil_files', AirfoilProperties.airfoil_files, pass_by_obj=True), promotes=['*'])
 
         # --- computation options ---
         self.add('tiploss', IndepVarComp('tiploss', True, pass_by_obj=True), promotes=['*'])
@@ -2429,26 +2431,6 @@ if __name__ == '__main__':
 	rotor['yaw'] = 0.0  # (Float, deg): yaw error
 	rotor['nBlades'] = 3  # (Int): number of blades
 	# ------------------
-
-	# === airfoil files ===
-	basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles')
-
-	# load all airfoils
-	airfoil_types = [0]*8
-	airfoil_types[0] = os.path.join(basepath, 'Cylinder1.dat')
-	airfoil_types[1] = os.path.join(basepath, 'Cylinder2.dat')
-	airfoil_types[2] = os.path.join(basepath, 'DU40_A17.dat')
-	airfoil_types[3] = os.path.join(basepath, 'DU35_A17.dat')
-	airfoil_types[4] = os.path.join(basepath, 'DU30_A17.dat')
-	airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
-	airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
-	airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
-
-	# place at appropriate radial stations
-	af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-	af     = [airfoil_types[m] for m in af_idx]
-	rotor['airfoil_files'] = af  # (List): names of airfoil file
-	# ----------------------
 
 	# === atmosphere ===
 	rotor['rho'] = 1.225  # (Float, kg/m**3): density of air

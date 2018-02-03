@@ -11,6 +11,7 @@ Copyright (c)  NREL. All rights reserved.
 import numpy as np
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem, Brent, ScipyGMRES
+from scipy.optimize import brentq
 
 from ccblade.ccblade_component import CCBladeGeometry, CCBladePower
 
@@ -386,7 +387,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('R', shape=1, units='m', desc='rotor radius')
 
         # state
-        self.add_state('Vrated', val=11.0, units='m/s', desc='rated wind speed', lower=-1e-15, upper=1e15)
+        #self.add_state('Vrated', val=11.0, units='m/s', desc='rated wind speed', lower=-1e-15, upper=1e15)
+        self.add_output('Vrated', val=11.0, units='m/s', desc='rated wind speed')
 
         # residual
         # self.add_state('residual', shape=1)
@@ -411,13 +413,16 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 	self.deriv_options['check_form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
-        Vrated = unknowns['Vrated']
+        #Vrated = unknowns['Vrated']
 
         # residual
         spline = Akima(params['Vcoarse'], params['Pcoarse'])
+        def myfun(myv):
+            P, _, _, _ = spline.interp(myv)
+            return (P - params['control:ratedPower'])
+        Vrated = brentq(lambda x: myfun(x), params['control:Vin'], params['control:Vout'])
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
-        # resids['residual'] = P - ctrl.ratedPower
-        #resids['Vrated'] = P - params['control:ratedPower']
+        unknowns['Vrated'] = Vrated
         # functional
 
         # place half of points in region 2, half in region 3
@@ -455,51 +460,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['ratedConditions:Q'] = params['control:ratedPower'] / (OmegaRated * RPM2RS)
         unknowns['azimuth'] = 180.0
 
-
-    def apply_nonlinear(self, params, unknowns, resids):
-        Vrated = unknowns['Vrated']
-
-        # residual
-        spline = Akima(params['Vcoarse'], params['Pcoarse'])
-        P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
-        # resids['residual'] = P - ctrl.ratedPower
-        resids['Vrated'] = P - params['control:ratedPower']
-        # functional
-
-        # place half of points in region 2, half in region 3
-        # even though region 3 is constant we still need lots of points there
-        # because we will be integrating against a discretized wind
-        # speed distribution
-
-        # region 2
-        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, self.npts/2)
-        P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
-
-        # region 3
-        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], self.npts/2+1)
-        V3 = V3[1:]  # remove duplicate point
-        dV3_dVrated = dV3_dVrated[1:]
-        P3 = params['control:ratedPower']*np.ones_like(V3)
-
-        # concatenate
-        unknowns['V'] = np.concatenate([V2, V3])
-        unknowns['P'] = np.concatenate([P2, P3])
-
-        R = params['R']
-        # rated speed conditions
-        Omega_d = params['control:tsr']*Vrated/R*RS2RPM
-        OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
-            = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
-
-        splineT = Akima(params['Vcoarse'], params['Tcoarse'])
-        Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
-
-        unknowns['ratedConditions:V'] = Vrated
-        unknowns['ratedConditions:Omega'] = OmegaRated
-        unknowns['ratedConditions:pitch'] = params['control:pitch']
-        unknowns['ratedConditions:T'] = Trated
-        unknowns['ratedConditions:Q'] = params['control:ratedPower'] / (OmegaRated * RPM2RS)
-        unknowns['azimuth'] = 180.0
 
         # gradients
         ncoarse = len(params['Vcoarse'])
@@ -548,6 +508,52 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
     def linearize(self, params, unknowns, resids):
 
         return self.J
+    '''
+    def apply_nonlinear(self, params, unknowns, resids):
+        Vrated = unknowns['Vrated']
+
+        # residual
+        spline = Akima(params['Vcoarse'], params['Pcoarse'])
+        P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
+        # resids['residual'] = P - ctrl.ratedPower
+        resids['Vrated'] = P - params['control:ratedPower']
+        # functional
+
+        # place half of points in region 2, half in region 3
+        # even though region 3 is constant we still need lots of points there
+        # because we will be integrating against a discretized wind
+        # speed distribution
+
+        # region 2
+        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, self.npts/2)
+        P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
+
+        # region 3
+        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], self.npts/2+1)
+        V3 = V3[1:]  # remove duplicate point
+        dV3_dVrated = dV3_dVrated[1:]
+        P3 = params['control:ratedPower']*np.ones_like(V3)
+
+        # concatenate
+        unknowns['V'] = np.concatenate([V2, V3])
+        unknowns['P'] = np.concatenate([P2, P3])
+
+        R = params['R']
+        # rated speed conditions
+        Omega_d = params['control:tsr']*Vrated/R*RS2RPM
+        OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
+            = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
+
+        splineT = Akima(params['Vcoarse'], params['Tcoarse'])
+        Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
+
+        unknowns['ratedConditions:V'] = Vrated
+        unknowns['ratedConditions:Omega'] = OmegaRated
+        unknowns['ratedConditions:pitch'] = params['control:pitch']
+        unknowns['ratedConditions:T'] = Trated
+        unknowns['ratedConditions:Q'] = params['control:ratedPower'] / (OmegaRated * RPM2RS)
+        unknowns['azimuth'] = 180.0
+    '''
 
     
 class RegulatedPowerCurveGroup(Group):
@@ -556,8 +562,8 @@ class RegulatedPowerCurveGroup(Group):
         self.add('powercurve_comp', RegulatedPowerCurve(npts_coarse_power_curve, npts_spline_power_curve), promotes=['*'])
         self.nl_solver = Brent()
         self.ln_solver = ScipyGMRES()
-        self.nl_solver.options['var_lower_bound'] = 'powercurve.control:Vin'
-        self.nl_solver.options['var_upper_bound'] = 'powercurve.control:Vout'
+        self.nl_solver.options['var_lower_bound'] = 'powercurve_comp.control:Vin'
+        self.nl_solver.options['var_upper_bound'] = 'powercurve_comp.control:Vout'
         self.nl_solver.options['state_var'] = 'Vrated'
 
         self.deriv_options['form'] = 'central'
@@ -801,7 +807,8 @@ class RotorAeroPower(Group):
         self.add('hubloss', IndepVarComp('hubloss', True, pass_by_obj=True), promotes=['*'])
         self.add('wakerotation', IndepVarComp('wakerotation', True, pass_by_obj=True), promotes=['*'])
         self.add('usecd', IndepVarComp('usecd', True, pass_by_obj=True), promotes=['*'])
-
+        self.add('airfoil_files', IndepVarComp('airfoil_files', AirfoilProperties.airfoil_files, pass_by_obj=True), promotes=['*'])
+        
         # --- control ---
         self.add('c_Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
         self.add('c_Vout', IndepVarComp('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed'), promotes=['*'])
