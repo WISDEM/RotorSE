@@ -76,8 +76,11 @@ class GeometrySpline(Component):
         self.add_output('r_sub_precurve', shape=3, desc='precurve locations (used internally)')
 
         self.add_output('diameter', shape=1, units='m')
+        
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['form'] = 'central'
+        self.deriv_options['step_size'] = 1e-5
 
     def solve_nonlinear(self, params, unknowns, resids):
 

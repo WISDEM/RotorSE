@@ -12,7 +12,7 @@ import numpy as np
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem, ExecComp
 from rotor_aeropower import AirfoilProperties, SetupRunVarSpeed, CSMDrivetrain, RegulatedPowerCurve, RegulatedPowerCurveGroup, AEP, OutputsAero
-from rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, PreCompSections, RotorWithpBEAM
+from rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, PreCompSections, RotorWithpBEAM, ConstraintsStructures
 
 from ccblade.ccblade_component import CCBladeGeometry, CCBladePower, CCBladeLoads
 from commonse.distribution import RayleighCDF, WeibullWithMeanCDF
@@ -59,6 +59,7 @@ class RotorSE(Group):
         #self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
         self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
         #self.add('lifetime', IndepVarComp('lifetime', val=20.0, units='year', desc='project lifetime for fatigue analysis'), promotes=['*'])
+        #self.add('eta_freq', IndepVarComp('eta_freq', val=1.1, desc='ultimate strain in spar cap'), promotes=['*'])
 
 
         # --- options ---
@@ -120,6 +121,7 @@ class RotorSE(Group):
         self.add('root_moment_240', RootMoment())
 
         self.add('output_struc', OutputsStructures(), promotes=['*'])
+        self.add('constraints', ConstraintsStructures(), promotes=['*'])
 
         # # connectiosn to tipspeed
         # self.connect('geom.R', 'tipspeed.R')
@@ -130,9 +132,7 @@ class RotorSE(Group):
         self.connect('control:Vin', 'setup.control:Vin')
         self.connect('control:Vout', 'setup.control:Vout')
         self.connect('control:maxOmega', 'setup.control:maxOmega')
-        self.connect('control:minOmega', 'setup.control:minOmega')
         self.connect('control:pitch', 'setup.control:pitch')
-        self.connect('control:ratedPower', 'setup.control:ratedPower')
         self.connect('control:tsr', 'setup.control:tsr')
         self.connect('geom.R', 'setup.R')
 
@@ -416,7 +416,7 @@ class RotorSE(Group):
         self.connect('damage.Mya', 'struc.My_damage')
         self.connect('strain_ult_spar', 'struc.strain_ult_spar')
         self.connect('strain_ult_te', 'struc.strain_ult_te')
-        #self.connect('eta_damage', 'struc.eta_damage')
+        self.connect('eta_damage', 'struc.eta_damage')
         self.connect('m_damage', 'struc.m_damage')
         #self.connect('lifetime', 'struc.lifetime')
 
@@ -514,6 +514,10 @@ class RotorSE(Group):
         ### adding for the drivetrain root moment calculations:
         # TODO - number and value of azimuth angles should be arbitrary user inputs
         # connections to aero_0 (for rated loads at 0 azimuth angle)
+        self.add('pitch_load89', IndepVarComp('pitch_load89', val=89.0, units='deg'), promotes=['*'])
+        self.add('azimuth_load0', IndepVarComp('azimuth_load0', val=0.0, units='deg'), promotes=['*'])
+        self.add('azimuth_load120', IndepVarComp('azimuth_load120', val=120.0, units='deg'), promotes=['*'])
+        self.add('azimuth_load240', IndepVarComp('azimuth_load240', val=240.0, units='deg'), promotes=['*'])
         self.connect('spline.r_aero', ['aero_0.r','aero_120.r','aero_240.r'])
         self.connect('spline.chord_aero', ['aero_0.chord', 'aero_120.chord', 'aero_240.chord'])
         self.connect('spline.theta_aero', ['aero_0.theta', 'aero_120.theta', 'aero_240.theta'])
@@ -529,13 +533,7 @@ class RotorSE(Group):
         self.connect('nSector', ['aero_0.nSector','aero_120.nSector','aero_240.nSector'])
         self.connect('gust.V_gust', ['aero_0.V_load','aero_120.V_load','aero_240.V_load'])
         self.connect('powercurve.ratedConditions:Omega', ['aero_0.Omega_load','aero_120.Omega_load','aero_240.Omega_load'])
-        self.add('pitch_load89', IndepVarComp('pitch_load89', val=89.0, units='deg'), promotes=['*'])
-        self.add('azimuth_load0', IndepVarComp('azimuth_load0', val=0.0, units='deg'), promotes=['*'])
-        self.add('azimuth_load120', IndepVarComp('azimuth_load120', val=120.0, units='deg'), promotes=['*'])
-        self.add('azimuth_load240', IndepVarComp('azimuth_load240', val=240.0, units='deg'), promotes=['*'])
-        self.connect('pitch_load89', 'aero_0.pitch_load')
-        self.connect('pitch_load89', 'aero_120.pitch_load')
-        self.connect('pitch_load89', 'aero_240.pitch_load')
+        self.connect('pitch_load89', ['aero_0.pitch_load','aero_120.pitch_load','aero_240.pitch_load'])
         self.connect('azimuth_load0', 'aero_0.azimuth_load')
         self.connect('azimuth_load120', 'aero_120.azimuth_load')
         self.connect('azimuth_load240', 'aero_240.azimuth_load')
@@ -558,15 +556,18 @@ class RotorSE(Group):
         self.connect('curvature.s', ['root_moment_0.s','root_moment_120.s','root_moment_240.s'])
 
         # connections to root Mxyz outputs
-        self.connect('root_moment_0.Mxyz','Mxyz_0_in')
-        self.connect('root_moment_120.Mxyz','Mxyz_120_in')
-        self.connect('root_moment_240.Mxyz','Mxyz_240_in')
+        self.connect('root_moment_0.Mxyz','Mxyz_1_in')
+        self.connect('root_moment_120.Mxyz','Mxyz_2_in')
+        self.connect('root_moment_240.Mxyz','Mxyz_3_in')
         self.connect('curvature.totalCone','TotalCone_in', src_indices=[nstr-1])
         self.connect('aero_0.pitch_load','Pitch_in')
-        self.connect('root_moment_0.Fxyz', 'Fxyz_0_in')
-        self.connect('root_moment_120.Fxyz', 'Fxyz_120_in')
-        self.connect('root_moment_240.Fxyz', 'Fxyz_240_in')
+        self.connect('root_moment_0.Fxyz', 'Fxyz_1_in')
+        self.connect('root_moment_120.Fxyz', 'Fxyz_2_in')
+        self.connect('root_moment_240.Fxyz', 'Fxyz_3_in')
         #azimuths not passed. assumed 0,120,240 in drivese function
+
+        # Connections to constraints not accounted for by promotes=*
+        self.connect('aero_rated.Omega_load', 'Omega')
 
         self.add('obj_cmp', ExecComp('obj = -AEP', AEP=1000000.0), promotes=['*'])
 
@@ -609,7 +610,7 @@ if __name__ == '__main__':
 	rotor['analysis.hubHt'] = 90.0  # (Float, m): hub height
 	rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
 	rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
-	#rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
+	rotor['wind.zref'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
         rotor['gust_stddev'] = 3
 	# ----------------------
 
@@ -649,6 +650,7 @@ if __name__ == '__main__':
 	rotor['struc.eta_damage'] = 1.35*1.3*1.0  # (Float): safety factor for fatigue
 	rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
 	rotor['struc.lifetime'] = 20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
+        rotor['eta_freq'] = 1.1
 	# ----------------
 
 	# from myutilities import plt
@@ -671,9 +673,29 @@ if __name__ == '__main__':
 	print 'root_bending_moment =', rotor['root_bending_moment']
         #for io in rotor.root.unknowns:
         #    print(io + ' ' + str(rotor.root.unknowns[io]))
-
-
-
+        '''
+        print 'Pn_margin', rotor[ 'Pn_margin']
+        print 'P1_margin', rotor[ 'P1_margin']
+        print 'Pn_margin_cfem', rotor[ 'Pn_margin_cfem']
+        print 'P1_margin_cfem', rotor[ 'P1_margin_cfem']
+        print 'rotor_strain_sparU', rotor[ 'rotor_strain_sparU']
+        print 'rotor_strain_sparL', rotor[ 'rotor_strain_sparL']
+        print 'rotor_strain_teU', rotor[ 'rotor_strain_teU']
+        print 'rotor_strain_teL', rotor[ 'rotor_strain_teL']
+        print 'eps_crit_spar', rotor['eps_crit_spar']
+        print 'strain_ult_spar', rotor['strain_ult_spar']
+        print 'eps_crit_te', rotor['eps_crit_te']
+        print 'strain_ult_te', rotor['strain_ult_te']
+        print 'rotor_buckling_sparU', rotor[ 'rotor_buckling_sparU']
+        print 'rotor_buckling_sparL', rotor[ 'rotor_buckling_sparL']
+        print 'rotor_buckling_teU', rotor[ 'rotor_buckling_teU']
+        print 'rotor_buckling_teL', rotor[ 'rotor_buckling_teL']
+        print 'rotor_damage_sparU', rotor[ 'rotor_damage_sparU']
+        print 'rotor_damage_sparL', rotor[ 'rotor_damage_sparL']
+        print 'rotor_damage_teU', rotor[ 'rotor_damage_teU']
+        print 'rotor_damage_teL', rotor[ 'rotor_damage_teL']
+        '''
+        
         import matplotlib.pyplot as plt
         plt.figure()
 	plt.plot(rotor['V'], rotor['P']/1e6)
