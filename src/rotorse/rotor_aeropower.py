@@ -1045,5 +1045,10 @@ if __name__ == '__main__':
     plt.show()
     # ----------------
     f = open('deriv_aeropower.dat','w')
-    rotor.check_total_derivatives(f)
+    out = rotor.check_total_derivatives(f)
     f.close()
+    tol = 1e-4
+    for k in out.keys():
+        if ( (out[k]['rel error'][0] > tol) and (out[k]['abs error'][0] > tol) ):
+             print k
+
