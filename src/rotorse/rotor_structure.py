@@ -104,11 +104,11 @@ class StrucBase(Component):
 
         self.add_param('Mx_damage', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil x-direction')
         self.add_param('My_damage', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil y-direction')
-        self.add_param('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap')
-        self.add_param('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels')
-        self.add_param('eta_damage', val=1.755, desc='safety factor for fatigue')
-        self.add_param('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis')
-        self.add_param('lifetime', val=20.0, units='year', desc='number of years used in fatigue analysis')
+        self.add_param('strain_ult_spar', val=0.0, desc='ultimate strain in spar cap')
+        self.add_param('strain_ult_te', val=0.0, desc='uptimate strain in trailing-edge panels')
+        self.add_param('eta_damage', val=0.0, desc='safety factor for fatigue')
+        self.add_param('m_damage', val=0.0, desc='slope of S-N curve for fatigue analysis')
+        self.add_param('lifetime', val=0.0, units='year', desc='number of years used in fatigue analysis')
 
         self.add_param('beam:z', shape=nstr, units='m', desc='locations of properties along beam')
         self.add_param('beam:EA', shape=nstr, units='N', desc='axial stiffness')
@@ -2724,9 +2724,10 @@ if __name__ == '__main__':
     plt.show()
     # ----------------
     f = open('deriv_structure.dat','w')
-    out = rotor.check_total_derivatives(f)
+    out = rotor.check_partial_derivatives(f, compact_print=True)
     f.close()
     tol = 1e-4
-    for k in out.keys():
-        if ( (out[k]['rel error'][0] > tol) and (out[k]['abs error'][0] > tol) ):
-             print k
+    for comp in out.keys():
+        for k in out[comp].keys():
+            if ( (out[comp][k]['rel error'][0] > tol) and (out[comp][k]['abs error'][0] > tol) ):
+                print k

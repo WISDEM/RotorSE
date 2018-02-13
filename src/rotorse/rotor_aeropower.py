@@ -423,7 +423,10 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         def myfun(myv):
             P, _, _, _ = spline.interp(myv)
             return (P - params['control:ratedPower'])
-        Vrated = brentq(lambda x: myfun(x), params['control:Vin'], params['control:Vout'])
+        if (myfun(params['control:Vout']) > params['control:ratedPower']):
+            Vrated = brentq(lambda x: myfun(x), params['control:Vin'], params['control:Vout'])
+        else:
+            Vrated = params['control:Vout']
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
         unknowns['Vrated'] = Vrated
         # functional
@@ -595,7 +598,7 @@ class AEP(Component):
         # outputs
         self.add_output('AEP', shape=1, units='kW*h', desc='annual energy production')
 
-	self.deriv_options['step_size'] = 1.0
+	#self.deriv_options['step_size'] = 1.0
 	self.deriv_options['form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'	
 
@@ -796,7 +799,7 @@ class OutputsAero(Component):
         J['Q_extreme', 'Q_extreme_in'] = 1
         J['Rtip', 'Rtip_in'] = 1
         J['precurveTip', 'precurveTip_in'] = 1
-        J['presweepTip', 'T_presweepTip_in'] = 1
+        J['presweepTip', 'presweepTip_in'] = 1
 
         return J
 
@@ -1045,10 +1048,12 @@ if __name__ == '__main__':
     plt.show()
     # ----------------
     f = open('deriv_aeropower.dat','w')
-    out = rotor.check_total_derivatives(f)
+    #out = rotor.check_total_derivatives(f)
+    out = rotor.check_partial_derivatives(f, compact_print=True)
     f.close()
     tol = 1e-4
-    for k in out.keys():
-        if ( (out[k]['rel error'][0] > tol) and (out[k]['abs error'][0] > tol) ):
-             print k
+    for comp in out.keys():
+        for k in out[comp].keys():
+            if ( (out[comp][k]['rel error'][0] > tol) and (out[comp][k]['abs error'][0] > tol) ):
+                print k
 
