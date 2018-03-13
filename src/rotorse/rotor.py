@@ -38,7 +38,7 @@ class RotorSE(Group):
         # --- control ---
         self.add('c_Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
         self.add('c_Vout', IndepVarComp('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed'), promotes=['*'])
-        self.add('c_ratedPower', IndepVarComp('control:ratedPower', val=0.0,  units='W', desc='rated power'), promotes=['*'])
+        self.add('machine_rating', IndepVarComp('machine_rating', val=0.0,  units='W', desc='rated power'), promotes=['*'])
         self.add('c_minOmega', IndepVarComp('control:minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed'), promotes=['*'])
         self.add('c_maxOmega', IndepVarComp('control:maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed'), promotes=['*'])
         self.add('c_tsr', IndepVarComp('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
@@ -155,7 +155,7 @@ class RotorSE(Group):
         self.connect('setup.pitch', 'analysis.pitch')
 
         # Connections from external modules
-        self.connect('analysis.hubHt', ['aero_0.hubHt','aero_120.hubHt','aero_240.hubHt','aero_defl_powercurve.hubHt','aero_extrm_forces.hubHt','aero_extrm.hubHt','aero_rated.hubHt'])
+        self.connect('hub_height', ['analysis.hubHt','aero_0.hubHt','aero_120.hubHt','aero_240.hubHt','aero_defl_powercurve.hubHt','aero_extrm_forces.hubHt','aero_extrm.hubHt','aero_rated.hubHt'])
         self.connect('analysis.rho', ['aero_0.rho','aero_120.rho','aero_240.rho','aero_defl_powercurve.rho','aero_extrm_forces.rho','aero_extrm.rho','aero_rated.rho'])
         self.connect('analysis.mu', ['aero_0.mu','aero_120.mu','aero_240.mu','aero_defl_powercurve.mu','aero_extrm_forces.mu','aero_extrm.mu','aero_rated.mu'])
         self.connect('wind.shearExp', ['analysis.shearExp', 'aero_0.shearExp','aero_120.shearExp','aero_240.shearExp','aero_defl_powercurve.shearExp','aero_extrm_forces.shearExp','aero_extrm.shearExp','aero_rated.shearExp'])
@@ -165,7 +165,7 @@ class RotorSE(Group):
         self.connect('analysis.P', 'dt.aeroPower')
         self.connect('analysis.Q', 'dt.aeroTorque')
         self.connect('analysis.T', 'dt.aeroThrust')
-        self.connect('control:ratedPower', 'dt.ratedPower')
+        self.connect('machine_rating', 'dt.ratedPower')
         self.connect('drivetrainType', 'dt.drivetrainType')
 
         # connections to powercurve
@@ -174,7 +174,7 @@ class RotorSE(Group):
         self.connect('control:maxOmega', 'powercurve.control:maxOmega')
         self.connect('control:minOmega', 'powercurve.control:minOmega')
         self.connect('control:pitch', 'powercurve.control:pitch')
-        self.connect('control:ratedPower', 'powercurve.control:ratedPower')
+        self.connect('machine_rating', 'powercurve.control:ratedPower')
         self.connect('control:tsr', 'powercurve.control:tsr')
         self.connect('setup.Uhub', 'powercurve.Vcoarse')
         self.connect('dt.power', 'powercurve.Pcoarse')
@@ -184,6 +184,7 @@ class RotorSE(Group):
         # connections to wind
         # self.connect('cdf_reference_mean_wind_speed', 'wind.Uref')
         #self.connect('cdf_reference_height_wind_speed', 'wind.zref')
+        self.connect('wind_zvec', 'wind.z')
         self.connect('turbineclass.V_mean', 'wind.Uref')
 
         # connections to cdf
@@ -606,8 +607,7 @@ if __name__ == '__main__':
 	rotor['analysis.rho'] = 1.225  # (Float, kg/m**3): density of air
 	rotor['analysis.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
 	rotor['wind.shearExp'] = 0.25  # (Float): shear exponent
-	rotor['wind.z'] = np.array([90.0])  # (Float, m): hub height
-	rotor['analysis.hubHt'] = 90.0  # (Float, m): hub height
+	rotor['hub_height'] = 90.0  # (Float, m): hub height
 	rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
 	rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
 	rotor['wind.zref'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
@@ -617,7 +617,7 @@ if __name__ == '__main__':
 	# === control ===
         rotor['control:Vin'] = 3.0  # (Float, m/s): cut-in wind speed
         rotor['control:Vout'] = 25.0  # (Float, m/s): cut-out wind speed
-	rotor['control:ratedPower'] = 5e6  # (Float, W): rated power
+	rotor['machine_rating'] = 5e6  # (Float, W): rated power
 	rotor['control:minOmega'] = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
 	rotor['control:maxOmega'] = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
 	rotor['control:tsr'] = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)

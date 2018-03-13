@@ -7,6 +7,14 @@ from ccblade.ccblade_component import CCBladeGeometry
 naero = len(r_aero)
 nstr = len(r_str)
 
+class Location(Component):
+    def __init__(self):
+        super(Location, self).__init__()
+        self.add_param('hub_height', val=0.0, units='m', desc='Tower top hub height')
+        self.add_output('wind_zvec', val=np.zeros(1), units='m', desc='Tower top hub height as vector')
+    def solve_nonlinear(self, params, unknowns, resids):
+        unknowns['wind_zvec'] = np.array([ params['hub_height'] ])
+        
 class TurbineClass(Component):
     def __init__(self):
         super(TurbineClass, self).__init__()
@@ -158,6 +166,7 @@ class RotorGeometry(Group):
         self.add('teT', IndepVarComp('teT', val=np.zeros(5), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
         
         # --- Rotor Definition ---
+        self.add('loc', Location(), promotes=['*'])
         self.add('turbineclass', TurbineClass())
         self.add('spline0', GeometrySpline())
         self.add('spline', GeometrySpline())

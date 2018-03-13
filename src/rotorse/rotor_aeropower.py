@@ -807,7 +807,6 @@ class RotorAeroPower(Group):
     def __init__(self, npts_coarse_power_curve=20, npts_spline_power_curve=200):
         super(RotorAeroPower, self).__init__()
 
-        self.add('hubHt', IndepVarComp('hubHt', val=90.0), promotes=['*'])
         #self.add('rho', IndepVarComp('rho', val=1.225), promotes=['*'])
         #self.add('mu', IndepVarComp('mu', val=1.81e-5), promotes=['*'])
         #self.add('shearExp', IndepVarComp('shearExp', val=0.2), promotes=['*'])
@@ -877,7 +876,7 @@ class RotorAeroPower(Group):
         self.connect('spline.precurve_str', 'analysis.precurveTip', src_indices=[nstr-1])
         self.connect('spline.Rhub', 'analysis.Rhub')
         self.connect('spline.Rtip', 'analysis.Rtip')
-        self.connect('hubHt', 'analysis.hubHt')
+        self.connect('hub_height', 'analysis.hubHt')
         self.connect('precone', 'analysis.precone')
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
@@ -928,7 +927,7 @@ class RotorAeroPower(Group):
         # self.connect('cdf_reference_mean_wind_speed', 'wind.Uref')
         self.connect('turbineclass.V_mean', 'wind.Uref')
         self.connect('cdf_reference_height_wind_speed', 'wind.zref')
-        #self.connect('hubHt', 'wind.z', src_indices=[0])
+        self.connect('wind_zvec', 'wind.z')
         self.connect('analysis.shearExp', 'wind.shearExp')
 
         # connections to cdf
@@ -998,9 +997,8 @@ if __name__ == '__main__':
     # === atmosphere ===
     rotor['analysis.rho'] = 1.225  # (Float, kg/m**3): density of air
     rotor['analysis.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
-    rotor['wind.z0'] = rotor['wind.betaWind'] = 0.0
+    rotor['hub_height'] = 90.0
     rotor['analysis.shearExp'] = 0.25  # (Float): shear exponent
-    rotor['hubHt'] = rotor['wind.z'] = np.array([90.0])  # (Float, m): hub height
     rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
     rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
     # ----------------------

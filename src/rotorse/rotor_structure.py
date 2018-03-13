@@ -2165,7 +2165,6 @@ class RotorStructure(Group):
         super(RotorStructure, self).__init__()
         """rotor model"""
 
-        self.add('hubHt', IndepVarComp('hubHt', val=90.0), promotes=['*'])
         #self.add('rho', IndepVarComp('rho', val=1.225), promotes=['*'])
         #self.add('mu', IndepVarComp('mu', val=1.81e-5), promotes=['*'])
         #self.add('shearExp', IndepVarComp('shearExp', val=0.2), promotes=['*'])
@@ -2278,7 +2277,7 @@ class RotorStructure(Group):
         self.connect('spline.precurve_str', 'aero_rated.precurveTip', src_indices=[nstr-1])
         self.connect('spline.Rhub', 'aero_rated.Rhub')
         self.connect('spline.Rtip', 'aero_rated.Rtip')
-        self.connect('hubHt', 'aero_rated.hubHt')
+        self.connect('hub_height', 'aero_rated.hubHt')
         self.connect('precone', 'aero_rated.precone')
         self.connect('tilt', 'aero_rated.tilt')
         self.connect('yaw', 'aero_rated.yaw')
@@ -2298,7 +2297,7 @@ class RotorStructure(Group):
         self.connect('spline.precurve_str', 'aero_extrm.precurveTip', src_indices=[nstr-1])
         self.connect('spline.Rhub', 'aero_extrm.Rhub')
         self.connect('spline.Rtip', 'aero_extrm.Rtip')
-        self.connect('hubHt', 'aero_extrm.hubHt')
+        self.connect('hub_height', 'aero_extrm.hubHt')
         self.connect('precone', 'aero_extrm.precone')
         self.connect('tilt', 'aero_extrm.tilt')
         self.connect('yaw', 'aero_extrm.yaw')
@@ -2318,7 +2317,7 @@ class RotorStructure(Group):
         self.connect('spline.precurve_str', 'aero_extrm_forces.precurveTip', src_indices=[nstr-1])
         self.connect('spline.Rhub', 'aero_extrm_forces.Rhub')
         self.connect('spline.Rtip', 'aero_extrm_forces.Rtip')
-        self.connect('hubHt', 'aero_extrm_forces.hubHt')
+        self.connect('hub_height', 'aero_extrm_forces.hubHt')
         self.connect('precone', 'aero_extrm_forces.precone')
         self.connect('tilt', 'aero_extrm_forces.tilt')
         self.connect('yaw', 'aero_extrm_forces.yaw')
@@ -2341,7 +2340,7 @@ class RotorStructure(Group):
         self.connect('spline.precurve_str', 'aero_defl_powercurve.precurveTip', src_indices=[nstr-1])
         self.connect('spline.Rhub', 'aero_defl_powercurve.Rhub')
         self.connect('spline.Rtip', 'aero_defl_powercurve.Rtip')
-        self.connect('hubHt', 'aero_defl_powercurve.hubHt')
+        self.connect('hub_height', 'aero_defl_powercurve.hubHt')
         self.connect('precone', 'aero_defl_powercurve.precone')
         self.connect('tilt', 'aero_defl_powercurve.tilt')
         self.connect('yaw', 'aero_defl_powercurve.yaw')
@@ -2553,7 +2552,7 @@ class RotorStructure(Group):
         self.connect('spline.precurve_str', ['aero_0.precurveTip', 'aero_120.precurveTip', 'aero_240.precurveTip'], src_indices=[naero-1])
         self.connect('spline.Rhub', ['aero_0.Rhub', 'aero_120.Rhub', 'aero_240.Rhub'])
         self.connect('spline.Rtip', ['aero_0.Rtip', 'aero_120.Rtip', 'aero_240.Rtip'])
-        self.connect('hubHt', ['aero_0.hubHt', 'aero_120.hubHt', 'aero_240.hubHt'])
+        self.connect('hub_height', ['aero_0.hubHt', 'aero_120.hubHt', 'aero_240.hubHt'])
         self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
         self.connect('tilt', ['aero_0.tilt', 'aero_120.tilt', 'aero_240.tilt'])
 	self.connect('airfoil_files', ['aero_0.airfoil_files', 'aero_120.airfoil_files', 'aero_240.airfoil_files'])
@@ -2636,7 +2635,7 @@ if __name__ == '__main__':
     rotor['aero_0.rho'] = 1.225  # (Float, kg/m**3): density of air
     rotor['aero_0.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['aero_0.shearExp'] = 0.25  # (Float): shear exponent
-    rotor['hubHt'] = np.array([90.0])  # (Float, m): hub height
+    rotor['hub_height'] = 90.0  # (Float, m): hub height
     rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
     rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
     rotor['gust_stddev'] = 3
