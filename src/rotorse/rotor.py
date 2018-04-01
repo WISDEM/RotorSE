@@ -56,10 +56,8 @@ class RotorSE(Group):
         self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(naero+1), units='N*m', desc='damage equivalent moments about blade c.s. y-direction'), promotes=['*'])
         self.add('strain_ult_spar', IndepVarComp('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap'), promotes=['*'])
         self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
-        #self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
         self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
         #self.add('lifetime', IndepVarComp('lifetime', val=20.0, units='year', desc='project lifetime for fatigue analysis'), promotes=['*'])
-        #self.add('eta_freq', IndepVarComp('eta_freq', val=1.1, desc='ultimate strain in spar cap'), promotes=['*'])
 
 
         # --- options ---
@@ -106,7 +104,7 @@ class RotorSE(Group):
         self.add('loads_pc_defl', TotalLoads())
         self.add('loads_strain', TotalLoads())
         self.add('damage', DamageLoads())
-        self.add('struc', RotorWithpBEAM(), promotes=['nF'])
+        self.add('struc', RotorWithpBEAM(), promotes=['nF','gamma_fatigue'])
         self.add('curvefem', CurveFEM(), promotes=['nF'])
         self.add('tip', TipDeflection())
         self.add('root_moment', RootMoment())
@@ -417,7 +415,6 @@ class RotorSE(Group):
         self.connect('damage.Mya', 'struc.My_damage')
         self.connect('strain_ult_spar', 'struc.strain_ult_spar')
         self.connect('strain_ult_te', 'struc.strain_ult_te')
-        self.connect('eta_damage', 'struc.eta_damage')
         self.connect('m_damage', 'struc.m_damage')
         #self.connect('lifetime', 'struc.lifetime')
 
@@ -647,10 +644,12 @@ if __name__ == '__main__':
 	    3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
 	rotor['strain_ult_spar'] = 1.0e-2  # (Float): ultimate strain in spar cap
 	rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
-	rotor['struc.eta_damage'] = 1.35*1.3*1.0  # (Float): safety factor for fatigue
+        rotor['gamma_fatigue'] = 1.755 # (Float): safety factor for fatigue
+        rotor['gamma_f'] = 1.35 # (Float): safety factor for loads/stresses
+        rotor['gamma_m'] = 1.1 # (Float): safety factor for materials
+        rotor['gamma_freq'] = 1.1 # (Float): safety factor for resonant frequencies
 	rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
 	rotor['struc.lifetime'] = 20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
-        rotor['eta_freq'] = 1.1
 	# ----------------
 
 	# from myutilities import plt

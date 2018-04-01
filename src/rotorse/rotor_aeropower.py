@@ -147,6 +147,7 @@ class Coefficients(Component):
         self.add_output('CP', shape=npts_coarse_power_curve, desc='rotor aerodynamic power')
 
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
 
@@ -573,6 +574,7 @@ class RegulatedPowerCurveGroup(Group):
         self.nl_solver.options['state_var'] = 'Vrated'
 
         self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
 
@@ -600,6 +602,7 @@ class AEP(Component):
 
 	#self.deriv_options['step_size'] = 1.0
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'	
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -641,6 +644,7 @@ class CSMDrivetrain(DrivetrainLossesBase):
 
         self.add_param('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True)
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):

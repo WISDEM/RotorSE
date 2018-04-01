@@ -1,4 +1,4 @@
-# from __future__ import print_function
+#from __future__ import print_function
 import numpy as np
 import copy
 import os
@@ -106,7 +106,7 @@ class StrucBase(Component):
         self.add_param('My_damage', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil y-direction')
         self.add_param('strain_ult_spar', val=0.0, desc='ultimate strain in spar cap')
         self.add_param('strain_ult_te', val=0.0, desc='uptimate strain in trailing-edge panels')
-        self.add_param('eta_damage', val=0.0, desc='safety factor for fatigue')
+        self.add_param('gamma_fatigue', val=0.0, desc='safety factor for fatigue')
         self.add_param('m_damage', val=0.0, desc='slope of S-N curve for fatigue analysis')
         self.add_param('lifetime', val=0.0, units='year', desc='number of years used in fatigue analysis')
 
@@ -175,6 +175,7 @@ class ResizeCompositeSection(Component):
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
         self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
         self.deriv_options['step_size'] = 1e-5
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -244,10 +245,15 @@ class PreCompSections(BeamPropertiesBase):
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
         self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
         self.deriv_options['step_size'] = 1e-5
 
 
-    def criticalStrainLocations(self, sector_idx_strain, x_ec_nose, y_ec_nose):
+    def criticalStrainLocations(self, params, sector_idx_strain, x_ec_nose, y_ec_nose):
+
+        chord = params['chord']
+        upperCS = params['upperCS']
+        lowerCS = params['lowerCS']
 
         # find corresponding locations on airfoil at midpoint of sector
         xun = np.zeros(nstr)
@@ -256,8 +262,8 @@ class PreCompSections(BeamPropertiesBase):
         yln = np.zeros(nstr)
 
         for i in range(nstr):
-            csU = self.upperCS[i]
-            csL = self.lowerCS[i]
+            csU = upperCS[i]
+            csL = lowerCS[i]
             pf = CompositeProperties.profile[i]
             idx = sector_idx_strain[i]
 
@@ -267,10 +273,10 @@ class PreCompSections(BeamPropertiesBase):
             yln[i] = np.interp(xln[i], pf.x, pf.yl)
 
         # make dimensional and define relative to elastic center
-        xu = xun*self.chord - x_ec_nose
-        xl = xln*self.chord - x_ec_nose
-        yu = yun*self.chord - y_ec_nose
-        yl = yln*self.chord - y_ec_nose
+        xu = xun*chord - x_ec_nose
+        xl = xln*chord - x_ec_nose
+        yu = yun*chord - y_ec_nose
+        yl = yln*chord - y_ec_nose
 
 
         # switch to airfoil coordinate system
@@ -280,7 +286,7 @@ class PreCompSections(BeamPropertiesBase):
         return xu, xl, yu, yl
 
 
-    def panelBucklingStrain(self, sector_idx_strain):
+    def panelBucklingStrain(self, params, sector_idx_strain):
         """
         see chapter on Structural Component Design Techniques from Alastair Johnson
         section 6.2: Design of composite panels
@@ -290,8 +296,8 @@ class PreCompSections(BeamPropertiesBase):
         """
 
         # rename
-        chord = self.chord
-        CS_list = self.upperCS  # TODO: assumes the upper surface is the compression one
+        chord = params['chord']
+        CS_list = params['upperCS']
 
         # initialize
         nsec = len(chord)
@@ -321,48 +327,48 @@ class PreCompSections(BeamPropertiesBase):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        self.chord = params['chord']
-        self.r = params['r']
-        self.upperCS = params['upperCS']
-        self.lowerCS = params['lowerCS']
-        self.websCS = params['websCS']
-        self.theta = params['theta']
+        chord = params['chord']
+        r = params['r']
+        upperCS = params['upperCS']
+        lowerCS = params['lowerCS']
+        websCS = params['websCS']
+        theta = params['theta']
 
         # Load materials
 	basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
-	self.materials = np.array( Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp')) )
+	materials = np.array( Orthotropic2DMaterial.listFromPreCompFile(os.path.join(basepath, 'materials.inp')) )
 
         
         # radial discretization
-        nsec = len(self.r)
+        nsec = len(r)
 
         # initialize variables
-        self.beam_z = self.r
-        self.beam_EA = np.zeros(nsec)
-        self.beam_EIxx = np.zeros(nsec)
-        self.beam_EIyy = np.zeros(nsec)
-        self.beam_EIxy = np.zeros(nsec)
-        self.beam_GJ = np.zeros(nsec)
-        self.beam_rhoA = np.zeros(nsec)
-        self.beam_rhoJ = np.zeros(nsec)
+        beam_z = r
+        beam_EA = np.zeros(nsec)
+        beam_EIxx = np.zeros(nsec)
+        beam_EIyy = np.zeros(nsec)
+        beam_EIxy = np.zeros(nsec)
+        beam_GJ = np.zeros(nsec)
+        beam_rhoA = np.zeros(nsec)
+        beam_rhoJ = np.zeros(nsec)
 
         # distance to elastic center from point about which structural properties are computed
         # using airfoil coordinate system
-        self.beam_x_ec_str = np.zeros(nsec)
-        self.beam_y_ec_str = np.zeros(nsec)
+        beam_x_ec_str = np.zeros(nsec)
+        beam_y_ec_str = np.zeros(nsec)
 
         # distance to elastic center from airfoil nose
         # using profile coordinate system
         x_ec_nose = np.zeros(nsec)
         y_ec_nose = np.zeros(nsec)
 
-        mat = self.materials
-        csU = self.upperCS
-        csL = self.lowerCS
-        csW = self.websCS
+        mat = materials
+        csU = upperCS
+        csL = lowerCS
+        csW = websCS
 
         # twist rate
-        th_prime = _precomp.tw_rate(self.r, self.theta)
+        th_prime = _precomp.tw_rate(r, theta)
 
         # arrange materials into list
         n = len(mat)
@@ -399,7 +405,7 @@ class PreCompSections(BeamPropertiesBase):
                 mat_idxW = [0]
 
 
-            results = _precomp.properties(self.chord[i], self.theta[i],
+            results = _precomp.properties(chord[i], theta[i],
                 th_prime[i], CompositeProperties.leLoc[i],
                 xnode, ynode, E1, E2, G12, nu12, rho,
                 locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU,
@@ -407,34 +413,34 @@ class PreCompSections(BeamPropertiesBase):
                 nwebs, locW, n_laminaW, n_pliesW, tW, thetaW, mat_idxW)
 
 
-            self.beam_EIxx[i] = results[1]  # EIedge
-            self.beam_EIyy[i] = results[0]  # EIflat
-            self.beam_GJ[i] = results[2]
-            self.beam_EA[i] = results[3]
-            self.beam_EIxy[i] = results[4]  # EIflapedge
-            self.beam_x_ec_str[i] = results[12] - results[10]
-            self.beam_y_ec_str[i] = results[13] - results[11]
-            self.beam_rhoA[i] = results[14]
-            self.beam_rhoJ[i] = results[15] + results[16]  # perpindicular axis theorem
+            beam_EIxx[i] = results[1]  # EIedge
+            beam_EIyy[i] = results[0]  # EIflat
+            beam_GJ[i] = results[2]
+            beam_EA[i] = results[3]
+            beam_EIxy[i] = results[4]  # EIflapedge
+            beam_x_ec_str[i] = results[12] - results[10]
+            beam_y_ec_str[i] = results[13] - results[11]
+            beam_rhoA[i] = results[14]
+            beam_rhoJ[i] = results[15] + results[16]  # perpindicular axis theorem
 
-            x_ec_nose[i] = results[13] + CompositeProperties.leLoc[i]*self.chord[i]
+            x_ec_nose[i] = results[13] + CompositeProperties.leLoc[i]*chord[i]
             y_ec_nose[i] = results[12]  # switch b.c of coordinate system used
 
-        unknowns['beam:z'] = self.beam_z
-        unknowns['beam:EIxx'] = self.beam_EIxx
-        unknowns['beam:EIyy'] = self.beam_EIyy
-        unknowns['beam:GJ'] = self.beam_GJ
-        unknowns['beam:EA'] = self.beam_EA
-        unknowns['beam:EIxy'] = self.beam_EIxy
-        unknowns['beam:x_ec_str'] = self.beam_x_ec_str
-        unknowns['beam:y_ec_str'] = self.beam_y_ec_str
-        unknowns['beam:rhoA'] = self.beam_rhoA
-        unknowns['beam:rhoJ'] = self.beam_rhoJ
-        unknowns['eps_crit_spar'] = self.panelBucklingStrain(CompositeProperties.sector_idx_strain_spar)
-        unknowns['eps_crit_te'] = self.panelBucklingStrain(CompositeProperties.sector_idx_strain_te)
+        unknowns['beam:z'] = beam_z
+        unknowns['beam:EIxx'] = beam_EIxx
+        unknowns['beam:EIyy'] = beam_EIyy
+        unknowns['beam:GJ'] = beam_GJ
+        unknowns['beam:EA'] = beam_EA
+        unknowns['beam:EIxy'] = beam_EIxy
+        unknowns['beam:x_ec_str'] = beam_x_ec_str
+        unknowns['beam:y_ec_str'] = beam_y_ec_str
+        unknowns['beam:rhoA'] = beam_rhoA
+        unknowns['beam:rhoJ'] = beam_rhoJ
+        unknowns['eps_crit_spar'] = self.panelBucklingStrain(params, CompositeProperties.sector_idx_strain_spar)
+        unknowns['eps_crit_te'] = self.panelBucklingStrain(params, CompositeProperties.sector_idx_strain_te)
 
-        xu_strain_spar, xl_strain_spar, yu_strain_spar, yl_strain_spar = self.criticalStrainLocations(CompositeProperties.sector_idx_strain_spar, x_ec_nose, y_ec_nose)
-        xu_strain_te, xl_strain_te, yu_strain_te, yl_strain_te = self.criticalStrainLocations(CompositeProperties.sector_idx_strain_te, x_ec_nose, y_ec_nose)
+        xu_strain_spar, xl_strain_spar, yu_strain_spar, yl_strain_spar = self.criticalStrainLocations(params, CompositeProperties.sector_idx_strain_spar, x_ec_nose, y_ec_nose)
+        xu_strain_te, xl_strain_te, yu_strain_te, yl_strain_te = self.criticalStrainLocations(params, CompositeProperties.sector_idx_strain_te, x_ec_nose, y_ec_nose)
 
         unknowns['xu_strain_spar'] = xu_strain_spar
         unknowns['xl_strain_spar'] = xl_strain_spar
@@ -461,6 +467,7 @@ class BladeCurvature(Component):
         self.add_output('s', shape=nstr, units='m', desc='cumulative path length along blade')
 
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -574,6 +581,7 @@ class CurveFEM(Component):
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
         self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
         self.deriv_options['step_size'] = 1e-5
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -600,8 +608,15 @@ class RotorWithpBEAM(StrucBase):
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
         self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
         self.deriv_options['step_size'] = 1e-5
 
+        self.EI11 = None
+        self.EI22 = None
+        self.EA   = None
+        self.ca   = None
+        self.sa   = None
+        
     def principalCS(self, EIyy, EIxx, y_ec_str, x_ec_str, EA, EIxy):
 
         # rename (with swap of x, y for profile c.s.)
@@ -609,7 +624,7 @@ class RotorWithpBEAM(StrucBase):
         EIyy = np.copy(EIxx)
         x_ec_str = np.copy(y_ec_str)
         y_ec_str = np.copy(x_ec_str)
-        EA = np.copy(EA)
+        self.EA = np.copy(EA)
         EIxy = np.copy(EIxy)
 
         # translate to elastic center
@@ -620,16 +635,15 @@ class RotorWithpBEAM(StrucBase):
         # get rotation angle
         alpha = 0.5*np.arctan2(2*EIxy, EIyy-EIxx)
 
-        EI11 = EIxx - EIxy*np.tan(alpha)
-        EI22 = EIyy + EIxy*np.tan(alpha)
+        self.EI11 = EIxx - EIxy*np.tan(alpha)
+        self.EI22 = EIyy + EIxy*np.tan(alpha)
 
         # get moments and positions in principal axes
-        ca = np.cos(alpha)
-        sa = np.sin(alpha)
+        self.ca = np.cos(alpha)
+        self.sa = np.sin(alpha)
 
-        return EI11, EI22, EA, ca, sa
 
-    def strain(self, blade, xu, yu, xl, yl, EI11, EI22, EA, ca, sa):
+    def strain(self, blade, xu, yu, xl, yl):
 
         Vx, Vy, Fz, Mx, My, Tz = blade.shearAndBending()
 
@@ -640,23 +654,23 @@ class RotorWithpBEAM(StrucBase):
         xl, yl = yl, xl
 
         # convert to principal xes
-        M1 = Mx*ca + My*sa
-        M2 = -Mx*sa + My*ca
+        M1 = Mx*self.ca + My*self.sa
+        M2 = -Mx*self.sa + My*self.ca
 
-        x = xu*ca + yu*sa
-        y = -xu*sa + yu*ca
+        x = xu*self.ca + yu*self.sa
+        y = -xu*self.sa + yu*self.ca
 
         # compute strain
-        strainU = -(M1/EI11*y - M2/EI22*x + Fz/EA)  # negative sign because 3 is opposite of z
+        strainU = -(M1/self.EI11*y - M2/self.EI22*x + Fz/self.EA)  # negative sign because 3 is opposite of z
 
-        x = xl*ca + yl*sa
-        y = -xl*sa + yl*ca
+        x = xl*self.ca + yl*self.sa
+        y = -xl*self.sa + yl*self.ca
 
-        strainL = -(M1/EI11*y - M2/EI22*x + Fz/EA)
+        strainL = -(M1/self.EI11*y - M2/self.EI22*x + Fz/self.EA)
 
         return strainU, strainL
 
-    def damage(self, Mx, My, xu, yu, xl, yl, EI11, EI22, EA, ca, sa, emax=0.01, eta=1.755, m=10.0, N=365*24*3600*24):
+    def damage(self, Mx, My, xu, yu, xl, yl, emax=0.01, eta=1.755, m=10.0, N=365*24*3600*24):
 
         # use profil ec.s. to use Hansen's notation
         Mx, My = My, Mx
@@ -665,27 +679,27 @@ class RotorWithpBEAM(StrucBase):
         xl, yl = yl, xl
 
         # convert to principal xes
-        M1 = Mx*ca + My*sa
-        M2 = -Mx*sa + My*ca
+        M1 = Mx*self.ca + My*self.sa
+        M2 = -Mx*self.sa + My*self.ca
 
-        x = xu*ca + yu*sa
-        y = -xu*sa + yu*ca
+        x = xu*self.ca + yu*self.sa
+        y = -xu*self.sa + yu*self.ca
 
         # compute strain
-        strainU = -(M1/EI11*y - M2/EI22*x + Fz/EA)  # negative sign because 3 is opposite of z
+        strainU = -(M1/self.EI11*y - M2/self.EI22*x + Fz/self.EA)  # negative sign because 3 is opposite of z
 
-        x = xl*ca + yl*sa
-        y = -xl*sa + yl*ca
+        x = xl*self.ca + yl*self.sa
+        y = -xl*self.sa + yl*self.ca
 
-        strainL = -(M1/EI11*y - M2/EI22*x + Fz/EA)
+        strainL = -(M1/self.EI11*y - M2/self.EI22*x + Fz/self.EA)
 
         # number of cycles to failure
         NfU = (emax/(eta*strainU))**m
         NfL = (emax/(eta*strainL))**m
 
-        # damage
-        damageU = N/NfU
-        damageL = N/NfL
+        # damage- use log-based utilization version
+        #damageU = N/NfU
+        #damageL = N/NfL
 
         damageU = np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainU)))
         damageL = np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainL)))
@@ -698,34 +712,34 @@ class RotorWithpBEAM(StrucBase):
         Py_defl = params['Py_defl']
         Pz_defl = params['Pz_defl']
 
-        self.nF = params['nF']
-        self.Px_defl = params['Px_defl']
-        self.Py_defl = params['Py_defl']
-        self.Pz_defl = params['Pz_defl']
-        self.Px_strain = params['Px_strain']
-        self.Py_strain = params['Py_strain']
-        self.Pz_strain = params['Pz_strain']
-        self.Px_pc_defl = params['Px_pc_defl']
-        self.Py_pc_defl = params['Py_pc_defl']
-        self.Pz_pc_defl = params['Pz_pc_defl']
+        nF = params['nF']
+        Px_defl = params['Px_defl']
+        Py_defl = params['Py_defl']
+        Pz_defl = params['Pz_defl']
+        Px_strain = params['Px_strain']
+        Py_strain = params['Py_strain']
+        Pz_strain = params['Pz_strain']
+        Px_pc_defl = params['Px_pc_defl']
+        Py_pc_defl = params['Py_pc_defl']
+        Pz_pc_defl = params['Pz_pc_defl']
 
-        self.xu_strain_spar = params['xu_strain_spar']
-        self.xl_strain_spar = params['xl_strain_spar']
-        self.yu_strain_spar = params['yu_strain_spar']
-        self.yl_strain_spar = params['yl_strain_spar']
-        self.xu_strain_te = params['xu_strain_te']
-        self.xu_strain_te = params['xu_strain_te']
-        self.xl_strain_te = params['xl_strain_te']
-        self.yu_strain_te = params['yu_strain_te']
-        self.yl_strain_te = params['yl_strain_te']
+        xu_strain_spar = params['xu_strain_spar']
+        xl_strain_spar = params['xl_strain_spar']
+        yu_strain_spar = params['yu_strain_spar']
+        yl_strain_spar = params['yl_strain_spar']
+        xu_strain_te = params['xu_strain_te']
+        xu_strain_te = params['xu_strain_te']
+        xl_strain_te = params['xl_strain_te']
+        yu_strain_te = params['yu_strain_te']
+        yl_strain_te = params['yl_strain_te']
 
-        self.Mx_damage = params['Mx_damage']
-        self.My_damage = params['My_damage']
-        self.strain_ult_spar = params['strain_ult_spar']
-        self.strain_ult_te = params['strain_ult_te']
-        self.eta_damage = params['eta_damage']
-        self.m_damage = params['m_damage']
-        self.N_damage = 365*24*3600*params['lifetime']
+        Mx_damage = params['Mx_damage']
+        My_damage = params['My_damage']
+        strain_ult_spar = params['strain_ult_spar']
+        strain_ult_te = params['strain_ult_te']
+        gamma_fatigue = params['gamma_fatigue']
+        m_damage = params['m_damage']
+        N_damage = 365*24*3600*params['lifetime']
 
         # outputs
         nsec = len(params['beam:z'])
@@ -744,55 +758,56 @@ class RotorWithpBEAM(StrucBase):
         # evaluate displacements
         p_loads = _pBEAM.Loads(nsec, Px_defl, Py_defl, Pz_defl)
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        self.dx_defl, self.dy_defl, self.dz_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
+        dx_defl, dy_defl, dz_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
 
-        p_loads = _pBEAM.Loads(nsec, self.Px_pc_defl, self.Py_pc_defl, self.Pz_pc_defl)
+        p_loads = _pBEAM.Loads(nsec, Px_pc_defl, Py_pc_defl, Pz_pc_defl)
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        self.dx_pc_defl, self.dy_pc_defl, self.dz_pc_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
+        dx_pc_defl, dy_pc_defl, dz_pc_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
 
 
         # --- mass ---
-        self.blade_mass = blade.mass()
+        blade_mass = blade.mass()
 
         # --- moments of inertia
-        self.blade_moment_of_inertia = blade.outOfPlaneMomentOfInertia()
+        blade_moment_of_inertia = blade.outOfPlaneMomentOfInertia()
 
         # ----- natural frequencies ----
-        self.freq = blade.naturalFrequencies(self.nF)
+        freq = blade.naturalFrequencies(nF)
 
         # ----- strain -----
-        EI11, EI22, EA, ca, sa = self.principalCS(params['beam:EIyy'], params['beam:EIxx'], params['beam:y_ec_str'], params['beam:x_ec_str'], params['beam:EA'], params['beam:EIxy'])
+        self.principalCS(params['beam:EIyy'], params['beam:EIxx'], params['beam:y_ec_str'], params['beam:x_ec_str'], params['beam:EA'], params['beam:EIxy'])
 
-        p_loads = _pBEAM.Loads(nsec, self.Px_strain, self.Py_strain, self.Pz_strain)
+        p_loads = _pBEAM.Loads(nsec, Px_strain, Py_strain, Pz_strain)
+
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        self.strainU_spar, self.strainL_spar = self.strain(blade, self.xu_strain_spar, self.yu_strain_spar,
-            self.xl_strain_spar, self.yl_strain_spar, EI11, EI22, EA, ca, sa)
-        self.strainU_te, self.strainL_te = self.strain(blade, self.xu_strain_te, self.yu_strain_te,
-            self.xl_strain_te, self.yl_strain_te, EI11, EI22, EA, ca, sa)
-        self.damageU_spar, self.damageL_spar = self.damage(self.Mx_damage, self.My_damage, self.xu_strain_spar, self.yu_strain_spar,
-            self.xl_strain_spar, self.yl_strain_spar, EI11, EI22, EA, ca, sa,
-            emax=self.strain_ult_spar, eta=self.eta_damage, m=self.m_damage, N=self.N_damage)
-        self.damageU_te, self.damageL_te = self.damage(self.Mx_damage, self.My_damage, self.xu_strain_te, self.yu_strain_te,
-            self.xl_strain_te, self.yl_strain_te, EI11, EI22, EA, ca, sa,
-            emax=self.strain_ult_te, eta=self.eta_damage, m=self.m_damage, N=self.N_damage)
 
-        unknowns['blade_mass'] = self.blade_mass
-        unknowns['blade_moment_of_inertia'] = self.blade_moment_of_inertia
-        unknowns['freq'] = self.freq
-        unknowns['dx_defl'] = self.dx_defl
-        unknowns['dy_defl'] = self.dy_defl
-        unknowns['dz_defl'] = self.dz_defl
-        unknowns['dx_pc_defl'] = self.dx_pc_defl
-        unknowns['dy_pc_defl'] = self.dy_pc_defl
-        unknowns['dz_pc_defl'] = self.dz_pc_defl
-        unknowns['strainU_spar'] = self.strainU_spar
-        unknowns['strainL_spar'] = self.strainL_spar
-        unknowns['strainU_te'] = self.strainU_te
-        unknowns['strainL_te'] = self.strainL_te
-        unknowns['damageU_spar'] = self.damageU_spar
-        unknowns['damageL_spar'] = self.damageL_spar
-        unknowns['damageU_te'] = self.damageU_te
-        unknowns['damageL_te'] = self.damageL_te
+        strainU_spar, strainL_spar = self.strain(blade, xu_strain_spar, yu_strain_spar, xl_strain_spar, yl_strain_spar)
+
+        strainU_te, strainL_te = self.strain(blade, xu_strain_te, yu_strain_te, xl_strain_te, yl_strain_te)
+
+        damageU_spar, damageL_spar = self.damage(Mx_damage, My_damage, xu_strain_spar, yu_strain_spar, xl_strain_spar, yl_strain_spar,
+                                                 emax=strain_ult_spar, eta=gamma_fatigue, m=m_damage, N=N_damage)
+
+        damageU_te, damageL_te = self.damage(Mx_damage, My_damage, xu_strain_te, yu_strain_te, xl_strain_te, yl_strain_te,
+                                             emax=strain_ult_te, eta=gamma_fatigue, m=m_damage, N=N_damage)
+
+        unknowns['blade_mass'] = blade_mass
+        unknowns['blade_moment_of_inertia'] = blade_moment_of_inertia
+        unknowns['freq'] = freq
+        unknowns['dx_defl'] = dx_defl
+        unknowns['dy_defl'] = dy_defl
+        unknowns['dz_defl'] = dz_defl
+        unknowns['dx_pc_defl'] = dx_pc_defl
+        unknowns['dy_pc_defl'] = dy_pc_defl
+        unknowns['dz_pc_defl'] = dz_pc_defl
+        unknowns['strainU_spar'] = strainU_spar
+        unknowns['strainL_spar'] = strainL_spar
+        unknowns['strainU_te'] = strainU_te
+        unknowns['strainL_te'] = strainL_te
+        unknowns['damageU_spar'] = damageU_spar
+        unknowns['damageL_spar'] = damageL_spar
+        unknowns['damageU_te'] = damageU_te
+        unknowns['damageL_te'] = damageL_te
         
 
 class DamageLoads(Component):
@@ -808,6 +823,7 @@ class DamageLoads(Component):
         self.add_output('Mya', shape=nstr, units='N*m', desc='damage equivalent moments about airfoil c.s. y-direction')
 
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -911,6 +927,7 @@ class TotalLoads(Component):
         self.add_output('Pz_af', shape=nstr, desc='total distributed loads in airfoil z-direction')
 
         self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
         self.deriv_options['step_calc'] = 'relative'
 
 
@@ -1133,6 +1150,7 @@ class TipDeflection(Component):
         self.add_output('tip_deflection', shape=1, units='m', desc='deflection at tip in yaw x-direction')
 
 	#self.deriv_options['form'] = 'central'
+        #self.deriv_options['check_form'] = 'central'
 	#self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1232,6 +1250,7 @@ class BladeDeflection(Component):
         self.add_output('delta_precurve_sub', shape=3,  units='m', desc='adjustment to precurve to account for curvature from loading')
 
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1409,6 +1428,7 @@ class RootMoment(Component):
 
         #self.deriv_options['type'] = 'fd'
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
         #self.deriv_options['step_size'] = 1e-5
 
@@ -1624,6 +1644,7 @@ class MassProperties(Component):
         self.add_output('I_all_blades', shape=6, desc='mass moments of inertia of all blades in yaw c.s. order:Ixx, Iyy, Izz, Ixy, Ixz, Iyz')
 
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
 
@@ -1738,6 +1759,7 @@ class GustETM(Component):
         self.add_output('V_gust', shape=1, units='m/s', desc='gust wind speed')
 
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1798,6 +1820,7 @@ class SetupPCModVarSpeed(Component):
         self.add_output('azimuth', shape=1, units='deg')
 
 	self.deriv_options['form'] = 'central'
+        self.deriv_options['check_form'] = 'central'
 	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1861,8 +1884,10 @@ class ConstraintsStructures(Component):
         self.add_param('damageL_spar', shape=nstr, desc='fatigue damage on lower surface in spar cap')
         self.add_param('damageU_te', shape=nstr, desc='fatigue damage on upper surface in trailing-edge panels')
         self.add_param('damageL_te', shape=nstr, desc='fatigue damage on lower surface in trailing-edge panels')
-        self.add_param('eta_damage', val=0.0, desc='strain safety factor')
-        self.add_param('eta_freq', val=0.0, desc='resonance frequency safety factor')
+        self.add_param('gamma_f', 0.0, desc='safety factor on loads')
+        self.add_param('gamma_m', 0.0, desc='safety factor on materials')
+        self.add_param('gamma_freq', 0.0, desc='partial safety factor for fatigue')
+        
 
         self.add_output('Pn_margin', shape=5, desc='Blade natural frequency (pBeam) relative to blade passing frequency')
         self.add_output('P1_margin', shape=5, desc='Blade natural frequency (pBeam) relative to rotor passing frequency')
@@ -1884,30 +1909,30 @@ class ConstraintsStructures(Component):
         
     def solve_nonlinear(self, params, unknowns, resids):
         # Unpack variables
-        omega = params['Omega'] / 60.0 #Hz
-        eta_f = params['eta_freq']
-        eta_s = params['eta_damage']
+        omega           = params['Omega'] / 60.0 #Hz
+        gamma_freq      = params['gamma_freq']
+        gamma_f         = params['gamma_f']
+        gamma_strain    = gamma_f * params['gamma_m']
         strain_ult_spar = params['strain_ult_spar']
         strain_ult_te   = params['strain_ult_te']
         eps_crit_spar   = params['eps_crit_spar']
         eps_crit_te     = params['eps_crit_te']
         
-        unknowns['Pn_margin'] = (params['nBlades']*omega*eta_f) / params['freq']
-        unknowns['P1_margin'] = (                  omega*eta_f) / params['freq']
+        unknowns['Pn_margin'] = (params['nBlades']*omega*gamma_freq) / params['freq']
+        unknowns['P1_margin'] = (                  omega*gamma_freq) / params['freq']
         
-        unknowns['Pn_margin_cfem'] = (params['nBlades']*omega*eta_f) / params['freq_curvefem']
-        unknowns['P1_margin_cfem'] = (                  omega*eta_f) / params['freq_curvefem']
+        unknowns['Pn_margin_cfem'] = (params['nBlades']*omega*gamma_freq) / params['freq_curvefem']
+        unknowns['P1_margin_cfem'] = (                  omega*gamma_freq) / params['freq_curvefem']
 
-        unknowns['rotor_strain_sparU'] = params['strainU_spar'] * eta_s / strain_ult_spar
-        unknowns['rotor_strain_sparL'] = params['strainL_spar'] * eta_s / strain_ult_spar
-        unknowns['rotor_strain_teU']   = params['strainU_te'] * eta_s / strain_ult_te
-        unknowns['rotor_strain_teL']   = params['strainL_te'] * eta_s / strain_ult_te
+        unknowns['rotor_strain_sparU'] = params['strainU_spar'] * gamma_strain / strain_ult_spar
+        unknowns['rotor_strain_sparL'] = params['strainL_spar'] * gamma_strain / strain_ult_spar
+        unknowns['rotor_strain_teU']   = params['strainU_te'] * gamma_strain / strain_ult_te
+        unknowns['rotor_strain_teL']   = params['strainL_te'] * gamma_strain / strain_ult_te
 
-        # TODO: Don't understand these!
-        unknowns['rotor_buckling_sparU'] = (eps_crit_spar - params['strainU_spar']) / strain_ult_spar
-        unknowns['rotor_buckling_sparL'] = (eps_crit_spar - params['strainL_spar']) / strain_ult_spar
-        unknowns['rotor_buckling_teU']   = (eps_crit_te   - params['strainU_te']  ) / strain_ult_te
-        unknowns['rotor_buckling_teL']   = (eps_crit_te   - params['strainL_te']  ) / strain_ult_te
+        unknowns['rotor_buckling_sparU'] = params['strainU_spar'] * gamma_f / eps_crit_spar
+        unknowns['rotor_buckling_sparL'] = params['strainL_spar'] * gamma_f / eps_crit_spar
+        unknowns['rotor_buckling_teU']   = params['strainU_te'] * gamma_f / eps_crit_te
+        unknowns['rotor_buckling_teL']   = params['strainL_te'] * gamma_f / eps_crit_te
 
         unknowns['rotor_damage_sparU'] = params['damageU_spar']
         unknowns['rotor_damage_sparL'] = params['damageL_spar']
@@ -1916,9 +1941,11 @@ class ConstraintsStructures(Component):
 
 
     def linearize(self, params, unknowns, resids):
-        omega = params['Omega'] / 60.0 #Hz
-        eta_f = params['eta_freq']
-        eta_s = params['eta_damage']
+        omega           = params['Omega'] / 60.0 #Hz
+        gamma_freq      = params['gamma_freq']
+        gamma_f         = params['gamma_f']
+        gamma_m         = params['gamma_m']
+        gamma_strain    = gamma_f * gamma_m
         strain_ult_spar = params['strain_ult_spar']
         strain_ult_te   = params['strain_ult_te']
         eps_crit_spar   = params['eps_crit_spar']
@@ -1928,47 +1955,54 @@ class ConstraintsStructures(Component):
 
         myones = np.ones((nstr,))
 
-        J['Pn_margin','Omega']    = (params['nBlades']*eta_f) / params['freq']
-        J['Pn_margin','eta_freq'] = (params['nBlades']*omega) / params['freq']
-        J['Pn_margin','freq']     = -np.diag(unknowns['Pn_margin'])  / params['freq']
-        J['P1_margin','Omega']    = eta_f / params['freq']
-        J['P1_margin','eta_freq'] = omega / params['freq']
-        J['P1_margin','freq']     = -np.diag(unknowns['P1_margin'])  / params['freq']
+        J['Pn_margin','Omega']      = (params['nBlades']*gamma_freq) / params['freq']
+        J['Pn_margin','gamma_freq'] = (params['nBlades']*omega) / params['freq']
+        J['Pn_margin','freq']       = -np.diag(unknowns['Pn_margin'])  / params['freq']
+        J['P1_margin','Omega']      = gamma_freq / params['freq']
+        J['P1_margin','gamma_freq'] = omega / params['freq']
+        J['P1_margin','freq']       = -np.diag(unknowns['P1_margin'])  / params['freq']
         
-        J['Pn_margin_cfem','Omega']     = (params['nBlades']*eta_f) / params['freq_curvefem']
-        J['Pn_margin_cfem','eta_freq']  = (params['nBlades']*omega) / params['freq_curvefem']
-        J['Pn_margin_cfem','freq_cfem'] = -np.diag(unknowns['Pn_margin_cfem'])  / params['freq_curvefem']
-        J['P1_margin_cfem','Omega']     = eta_f / params['freq_curvefem']
-        J['P1_margin_cfem','eta_freq']  = omega / params['freq_curvefem']
-        J['P1_margin_cfem','freq_cfem'] = -np.diag(unknowns['P1_margin_cfem'])  / params['freq_curvefem']
+        J['Pn_margin_cfem','Omega']      = (params['nBlades']*gamma_freq) / params['freq_curvefem']
+        J['Pn_margin_cfem','gamma_freq'] = (params['nBlades']*omega) / params['freq_curvefem']
+        J['Pn_margin_cfem','freq_cfem']  = -np.diag(unknowns['Pn_margin_cfem'])  / params['freq_curvefem']
+        J['P1_margin_cfem','Omega']      = gamma_freq / params['freq_curvefem']
+        J['P1_margin_cfem','gamma_freq'] = omega / params['freq_curvefem']
+        J['P1_margin_cfem','freq_cfem']  = -np.diag(unknowns['P1_margin_cfem'])  / params['freq_curvefem']
         
-        J['rotor_strain_sparU', 'eta_damage'] = params['strainU_spar'] / strain_ult_spar
-        J['rotor_strain_sparL', 'eta_damage'] = params['strainL_spar'] / strain_ult_spar
-        J['rotor_strain_teU'  , 'eta_damage'] = params['strainU_te']   / strain_ult_te
-        J['rotor_strain_teL'  , 'eta_damage'] = params['strainL_te']   / strain_ult_te
+        J['rotor_strain_sparU', 'gamma_f'] = params['strainU_spar'] * gamma_m / strain_ult_spar
+        J['rotor_strain_sparL', 'gamma_f'] = params['strainL_spar'] * gamma_m / strain_ult_spar
+        J['rotor_strain_teU'  , 'gamma_f'] = params['strainU_te']   * gamma_m / strain_ult_te
+        J['rotor_strain_teL'  , 'gamma_f'] = params['strainL_te']   * gamma_m / strain_ult_te
 
-        J['rotor_strain_sparU', 'strainU_spar'] = eta_s * np.diag(myones) / strain_ult_spar
-        J['rotor_strain_sparL', 'strainL_spar'] = eta_s * np.diag(myones) / strain_ult_spar
-        J['rotor_strain_teU'  , 'strainU_te']   = eta_s * np.diag(myones) / strain_ult_te
-        J['rotor_strain_teL'  , 'strainL_te']   = eta_s * np.diag(myones) / strain_ult_te
+        J['rotor_strain_sparU', 'gamma_m'] = params['strainU_spar'] * gamma_f / strain_ult_spar
+        J['rotor_strain_sparL', 'gamma_m'] = params['strainL_spar'] * gamma_f / strain_ult_spar
+        J['rotor_strain_teU'  , 'gamma_m'] = params['strainU_te']   * gamma_f / strain_ult_te
+        J['rotor_strain_teL'  , 'gamma_m'] = params['strainL_te']   * gamma_f / strain_ult_te
+
+        J['rotor_strain_sparU', 'strainU_spar'] = gamma_strain * np.diag(myones) / strain_ult_spar
+        J['rotor_strain_sparL', 'strainL_spar'] = gamma_strain * np.diag(myones) / strain_ult_spar
+        J['rotor_strain_teU'  , 'strainU_te']   = gamma_strain * np.diag(myones) / strain_ult_te
+        J['rotor_strain_teL'  , 'strainL_te']   = gamma_strain * np.diag(myones) / strain_ult_te
 
         J['rotor_strain_sparU', 'strain_ult_spar'] = -unknowns['rotor_strain_sparU'] / strain_ult_spar
         J['rotor_strain_sparL', 'strain_ult_spar'] = -unknowns['rotor_strain_sparL'] / strain_ult_spar
         J['rotor_strain_teU'  , 'strain_ult_te']   = -unknowns['rotor_strain_teU']   / strain_ult_te
         J['rotor_strain_teL'  , 'strain_ult_te']   = -unknowns['rotor_strain_teL']   / strain_ult_te
+        
+        J['rotor_buckling_sparU', 'gamma_f'] = params['strainU_spar'] / eps_crit_spar
+        J['rotor_buckling_sparL', 'gamma_f'] = params['strainL_spar'] / eps_crit_spar
+        J['rotor_buckling_teU'  , 'gamma_f'] = params['strainU_te']   / eps_crit_te
+        J['rotor_buckling_teL'  , 'gamma_f'] = params['strainL_te']   / eps_crit_te
 
-        J['rotor_buckling_sparU', 'eps_crit_spar'] = J['rotor_buckling_sparL', 'eps_crit_spar'] = np.diag(np.ones(len(params['eps_crit_spar']))) / strain_ult_spar
-        J['rotor_buckling_teU'  , 'eps_crit_te']   = J['rotor_buckling_teL'  , 'eps_crit_te']   = np.diag(np.ones(len(params['eps_crit_te'])))   / strain_ult_te
+        J['rotor_buckling_sparU', 'strainU_spar'] = gamma_f * np.diag(myones) / eps_crit_spar
+        J['rotor_buckling_sparL', 'strainL_spar'] = gamma_f * np.diag(myones) / eps_crit_spar
+        J['rotor_buckling_teU'  , 'strainU_te']   = gamma_f * np.diag(myones) / eps_crit_te
+        J['rotor_buckling_teL'  , 'strainL_te']   = gamma_f * np.diag(myones) / eps_crit_te
 
-        J['rotor_buckling_sparU', 'strainU_spar'] = -np.diag(myones) / strain_ult_spar
-        J['rotor_buckling_sparL', 'strainL_spar'] = -np.diag(myones) / strain_ult_spar
-        J['rotor_buckling_teU'  , 'strainU_te']   = -np.diag(myones) / strain_ult_te
-        J['rotor_buckling_teL'  , 'strainL_te']   = -np.diag(myones) / strain_ult_te
-
-        J['rotor_buckling_sparU', 'strain_ult_spar'] = -unknowns['rotor_buckling_sparU'] / strain_ult_spar
-        J['rotor_buckling_sparL', 'strain_ult_spar'] = -unknowns['rotor_buckling_sparL'] / strain_ult_spar
-        J['rotor_buckling_teU'  , 'strain_ult_te']   = -unknowns['rotor_buckling_teU']   / strain_ult_te
-        J['rotor_buckling_teL'  , 'strain_ult_te']   = -unknowns['rotor_buckling_teL']   / strain_ult_te
+        J['rotor_buckling_sparU', 'eps_crit_spar'] = -np.diag(unknowns['rotor_buckling_sparU'] / eps_crit_spar)
+        J['rotor_buckling_sparL', 'eps_crit_spar'] = -np.diag(unknowns['rotor_buckling_sparL'] / eps_crit_spar)
+        J['rotor_buckling_teU'  , 'eps_crit_te']   = -np.diag(unknowns['rotor_buckling_teU']   / eps_crit_te)
+        J['rotor_buckling_teL'  , 'eps_crit_te']   = -np.diag(unknowns['rotor_buckling_teL']   / eps_crit_te)
         
         J['rotor_damage_sparU', 'damageU_spar'] = np.diag(myones)
         J['rotor_damage_sparL', 'damageL_spar'] = np.diag(myones)
@@ -2082,14 +2116,14 @@ class OutputsStructures(Component):
 
         for k in range(1,7):
             kstr = '_'+str(k)
-            unknowns['Fxyz'+kstr] = params['Fxyz'+kstr+'_in']
-            unknowns['Mxyz'+kstr] = params['Mxyz'+kstr+'_in']
+            unknowns['Fxyz'+kstr] = np.copy( params['Fxyz'+kstr+'_in'] )
+            unknowns['Mxyz'+kstr] = np.copy( params['Mxyz'+kstr+'_in'] )
 
         # TODO: This is meant to sum up forces and torques across all blades while taking into account coordinate systems
         # This may not be necessary as CCBlade returns total thrust (T) and torque (Q), which are the only non-zero F & M entries anyway
         # The difficulty is that the answers don't match exactly.
-        F_hub   = np.array([params['Fxyz_1_in'], params['Fxyz_2_in'], params['Fxyz_3_in'], params['Fxyz_4_in'], params['Fxyz_5_in'], params['Fxyz_6_in']])
-        M_hub   = np.array([params['Mxyz_1_in'], params['Mxyz_2_in'], params['Mxyz_3_in'], params['Mxyz_4_in'], params['Mxyz_5_in'], params['Mxyz_6_in']])
+        F_hub   = np.copy( np.array([params['Fxyz_1_in'], params['Fxyz_2_in'], params['Fxyz_3_in'], params['Fxyz_4_in'], params['Fxyz_5_in'], params['Fxyz_6_in']]) )
+        M_hub   = np.copy( np.array([params['Mxyz_1_in'], params['Mxyz_2_in'], params['Mxyz_3_in'], params['Mxyz_4_in'], params['Mxyz_5_in'], params['Mxyz_6_in']]) )
 
         nBlades = params['nBlades']
         angles  = np.linspace(0, 360, nBlades+1)
@@ -2197,10 +2231,12 @@ class RotorStructure(Group):
         self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(naero+1), units='N*m', desc='damage equivalent moments about blade c.s. y-direction'), promotes=['*'])
         self.add('strain_ult_spar', IndepVarComp('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap'), promotes=['*'])
         self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
-        self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
         self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
         self.add('lifetime', IndepVarComp('lifetime', val=20.0, units='year', desc='project lifetime for fatigue analysis'), promotes=['*'])
-        self.add('eta_freq', IndepVarComp('eta_freq', val=1.1, desc='ultimate strain in spar cap'), promotes=['*'])
+        self.add('gamma_fatigue', IndepVarComp('gamma_fatigue', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
+        self.add('gamma_freq', IndepVarComp('gamma_freq', val=1.1, desc='safety factor for resonant frequencies'), promotes=['*'])
+        self.add('gamma_f', IndepVarComp('gamma_f', val=1.35, desc='safety factor for loads/stresses'), promotes=['*'])
+        self.add('gamma_m', IndepVarComp('gamma_m', val=1.1, desc='safety factor for materials'), promotes=['*'])
 
 
         # --- options ---
@@ -2228,7 +2264,7 @@ class RotorStructure(Group):
         self.add('loads_strain', TotalLoads())
 
         self.add('damage', DamageLoads())
-        self.add('struc', RotorWithpBEAM())
+        self.add('struc', RotorWithpBEAM(), promotes=['gamma_fatigue'])
         self.add('curvefem', CurveFEM())
         self.add('tip', TipDeflection())
         self.add('root_moment', RootMoment())
@@ -2451,7 +2487,6 @@ class RotorStructure(Group):
         self.connect('damage.Mya', 'struc.My_damage')
         self.connect('strain_ult_spar', 'struc.strain_ult_spar')
         self.connect('strain_ult_te', 'struc.strain_ult_te')
-        self.connect('eta_damage', 'struc.eta_damage')
         self.connect('m_damage', 'struc.m_damage')
         self.connect('lifetime', 'struc.lifetime')
 
@@ -2667,10 +2702,12 @@ if __name__ == '__main__':
         3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
     rotor['strain_ult_spar'] = 1.0e-2  # (Float): ultimate strain in spar cap
     rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
-    rotor['eta_damage'] = 1.35*1.3*1.0  # (Float): safety factor for fatigue
+    rotor['gamma_fatigue'] = 1.755 # (Float): safety factor for fatigue
+    rotor['gamma_f'] = 1.35 # (Float): safety factor for loads/stresses
+    rotor['gamma_m'] = 1.1 # (Float): safety factor for materials
+    rotor['gamma_freq'] = 1.1 # (Float): safety factor for resonant frequencies
     rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
     rotor['lifetime'] = 20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
-    rotor['eta_freq'] = 1.1
     # ----------------
 
 
@@ -2684,6 +2721,7 @@ if __name__ == '__main__':
 
     # === run and outputs ===
     rotor.run()
+    
 
     print 'mass_one_blade =', rotor['mass_one_blade']
     print 'mass_all_blades =', rotor['mass_all_blades']
@@ -2729,4 +2767,5 @@ if __name__ == '__main__':
     for comp in out.keys():
         for k in out[comp].keys():
             if ( (out[comp][k]['rel error'][0] > tol) and (out[comp][k]['abs error'][0] > tol) ):
-                print k
+                print k, out[comp][k]['rel error'][0], out[comp][k]['abs error'][0]
+
