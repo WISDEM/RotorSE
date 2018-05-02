@@ -43,6 +43,9 @@ sys.path.insert(0, '../../../AeroelasticSE/src/AeroelasticSE/FAST_mdao')
 # rainflow
 sys.path.insert(0, '../../../AeroelasticSE/src/AeroelasticSE/rainflow')
 
+# for creating FAST run directories
+from distutils.dir_util import copy_tree
+
 # ---------------------
 # Base Components
 # ---------------------
@@ -95,6 +98,11 @@ class StrucBase(Component):
         self.add_param('eta_damage', val=1.755, desc='safety factor for fatigue')
         self.add_param('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis')
         self.add_param('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis')
+
+        self.add_param('Edg_max', shape=nstr, desc='FAST Edg_max')
+        self.add_param('Flp_max', shape=nstr, desc='FAST Flp_max')
+
+
 
         self.add_param('beam:z', shape=nstr, units='m', desc='locations of properties along beam')
         self.add_param('beam:EA', shape=nstr, units='N', desc='axial stiffness')
@@ -571,12 +579,18 @@ class PreCompSections(BeamPropertiesBase):
 
 class RotorWithpBEAM(StrucBase):
 
-    def __init__(self, nstr):
+    def __init__(self, nstr, FASTinfo):
         super(RotorWithpBEAM, self).__init__(nstr)
 
 
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
+
+        self.use_FAST = FASTinfo['use_FAST']
+        self.check_damage = FASTinfo['check_damage']
+        if self.use_FAST == 'true':
+            self.use_FAST_struc = FASTinfo['use_struc_cons']
+
 
     def principalCS(self, EIyy, EIxx, y_ec_str, x_ec_str, EA, EIxy):
 
@@ -605,9 +619,22 @@ class RotorWithpBEAM(StrucBase):
 
         return EI11, EI22, EA, ca, sa
 
-    def strain(self, blade, xu, yu, xl, yl, EI11, EI22, EA, ca, sa):
+    def strain(self, blade, xu, yu, xl, yl, EI11, EI22, EA, ca, sa, Edg_max=0.0, Flp_max=0.0):
 
         Vx, Vy, Fz, Mx, My, Tz = blade.shearAndBending()
+
+        # print(Mx)
+        # print(My)
+        # print(Fz)
+
+        if self.use_FAST == 'true':
+            if self.use_FAST_struc == 'true':
+                Mx = Edg_max
+                My = Flp_max
+
+                # print(Mx)
+                # print(My)
+                # quit()
 
         # use profile c.s. to use Hansen's notation
         Vx, Vy = Vy, Vx
@@ -632,9 +659,11 @@ class RotorWithpBEAM(StrucBase):
 
         return strainU, strainL
 
-    def damage(self, Mx, My, xu, yu, xl, yl, EI11, EI22, EA, ca, sa, emax=0.01, eta=1.755, m=10.0, N=365*24*3600*24):
+    def damage(self, Mx, My, xu, yu, xl, yl, EI11, EI22, EA, ca, sa, emax=0.01, eta=1.755, m=10.0, N=365*24*3600*20):
+
 
         # use profile c.s. to use Hansen's notation
+
         Mx, My = My, Mx
         Fz = 0.0
         xu, yu = yu, xu
@@ -663,8 +692,11 @@ class RotorWithpBEAM(StrucBase):
         damageU = N/NfU
         damageL = N/NfL
 
-        damageU = math.log(N) - m*(math.log(emax) - math.log(eta) - np.log(np.abs(strainU)))
-        damageL = math.log(N) - m*(math.log(emax) - math.log(eta) - np.log(np.abs(strainL)))
+        # damageU = math.log(N) - m*(math.log(emax) - math.log(eta) - np.log(np.abs(strainU)))
+        # damageL = math.log(N) - m*(math.log(emax) - math.log(eta) - np.log(np.abs(strainL)))
+
+        # print(damageU[0])
+        # quit()
 
         return damageU, damageL
 
@@ -712,16 +744,45 @@ class RotorWithpBEAM(StrucBase):
 
         p_loads = _pBEAM.Loads(nsec, params['Px_strain'], params['Py_strain'], params['Pz_strain'])
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
-        self.strainU_spar, self.strainL_spar = self.strain(blade, params['xu_strain_spar'], params['yu_strain_spar'],
-            params['xl_strain_spar'], params['yl_strain_spar'], EI11, EI22, EA, ca, sa)
-        self.strainU_te, self.strainL_te = self.strain(blade, params['xu_strain_te'], params['yu_strain_te'],
-            params['xl_strain_te'], params['yl_strain_te'], EI11, EI22, EA, ca, sa)
+
+        # TODO: document this better
+        if self.use_FAST == 'true':
+            if self.use_FAST_struc == 'true':
+                self.strainU_spar, self.strainL_spar = self.strain(blade, params['xu_strain_spar'],
+                    params['yu_strain_spar'], params['xl_strain_spar'], params['yl_strain_spar'], EI11, EI22, EA, ca, sa, params['Edg_max'], params['Flp_max'])
+
+                self.strainU_te, self.strainL_te = self.strain(blade, params['xu_strain_te'], params['yu_strain_te'],
+                    params['xl_strain_te'], params['yl_strain_te'], EI11, EI22, EA, ca, sa, params['Edg_max'], params['Flp_max'])
+
+            else:
+                self.strainU_spar, self.strainL_spar = self.strain(blade, params['xu_strain_spar'],
+                    params['yu_strain_spar'], params['xl_strain_spar'], params['yl_strain_spar'], EI11, EI22, EA, ca, sa)
+                self.strainU_te, self.strainL_te = self.strain(blade, params['xu_strain_te'], params['yu_strain_te'],
+                      params['xl_strain_te'], params['yl_strain_te'], EI11, EI22, EA, ca, sa)
+        else:
+            self.strainU_spar, self.strainL_spar = self.strain(blade, params['xu_strain_spar'], params['yu_strain_spar'],
+                params['xl_strain_spar'], params['yl_strain_spar'], EI11, EI22, EA, ca, sa)
+            self.strainU_te, self.strainL_te = self.strain(blade, params['xu_strain_te'], params['yu_strain_te'],
+                params['xl_strain_te'], params['yl_strain_te'], EI11, EI22, EA, ca, sa)
+
+        # ------ damage ------
+
+        # print(EI11)
+        # print(EI22)
+        # quit()
+
+        # print('damage calc')
+        # print(params['Mx_damage'])
+        # print(params['My_damage'])
+        # quit()
+
         self.damageU_spar, self.damageL_spar = self.damage(params['Mx_damage'], params['My_damage'], params['xu_strain_spar'], params['yu_strain_spar'],
             params['xl_strain_spar'], params['yl_strain_spar'], EI11, EI22, EA, ca, sa,
             emax=params['strain_ult_spar'], eta=params['eta_damage'], m=params['m_damage'], N=params['N_damage'])
         self.damageU_te, self.damageL_te = self.damage(params['Mx_damage'], params['My_damage'], params['xu_strain_te'], params['yu_strain_te'],
             params['xl_strain_te'], params['yl_strain_te'], EI11, EI22, EA, ca, sa,
             emax=params['strain_ult_te'], eta=params['eta_damage'], m=params['m_damage'], N=params['N_damage'])
+
 
         unknowns['blade_mass'] = self.blade_mass
         unknowns['blade_moment_of_inertia'] = self.blade_moment_of_inertia
@@ -732,14 +793,32 @@ class RotorWithpBEAM(StrucBase):
         unknowns['dx_pc_defl'] = self.dx_pc_defl
         unknowns['dy_pc_defl'] = self.dy_pc_defl
         unknowns['dz_pc_defl'] = self.dz_pc_defl
+
         unknowns['strainU_spar'] = self.strainU_spar
         unknowns['strainL_spar'] = self.strainL_spar
         unknowns['strainU_te'] = self.strainU_te
         unknowns['strainL_te'] = self.strainL_te
+
         unknowns['damageU_spar'] = self.damageU_spar
         unknowns['damageL_spar'] = self.damageL_spar
         unknowns['damageU_te'] = self.damageU_te
         unknowns['damageL_te'] = self.damageL_te
+
+
+        if self.check_damage == 'true':
+            print('damageU_spar is:')
+            print(unknowns['damageU_spar'])
+
+            print('damageL_spar is:')
+            print(unknowns['damageL_spar'])
+
+            print('damageU_te is:')
+            print(unknowns['damageU_te'])
+
+            print('damageL_te is:')
+            print(unknowns['damageL_te'])
+
+            quit()
 
 class CurveFEM(Component):
     def __init__(self, nstr):
@@ -1130,6 +1209,11 @@ class DamageLoads(Component):
             akima_interp_with_derivs(params['rstar'], params['Myb'], rstar_str)
 
         self.Ma = DirectionVector(Mxb_str, Myb_str, 0.0).bladeToAirfoil(params['theta'])
+
+        # print(self.Ma.y)
+        # print(self.Ma.x)
+        # quit()
+
         unknowns['Mxa'] = self.Ma.x
         unknowns['Mya'] = self.Ma.y
 
@@ -2229,1104 +2313,1315 @@ class OutputsStructures(Component):
 
         return J
 
-def Call_FAST(air_dens, gravity, dyn_visc, hubHt, nBlades, precone, tilt, FlpStff, EdgStff, GJStff, EAStff, BMassDen,
-              hubFraction, tsr, AeroCent, FAST_Chord_Aero, FAST_Theta_Aero, FAST_Chord_Str, FAST_Theta_Str, FAST_r_Aero,
-              FAST_precurve_Aero, FAST_precurve_Str, FAST_Rhub, FAST_Rtip, WindSpeed, Nfoil, FoilNm, BldFlDmp1,
-              BldFlDmp2, BldEdDmp1, FlStTunr1, FlStTunr2, AdjBlMs, AdjFlSt, AdjEdSt, SysUnits, StallMod, UseCm, InfModel,
-              AToler, TwrShad, ShadHWid, T_Shad_Refpt, IndModel, TLModel, HLModel, Input, Check_SS, Tmax, DT, r_max_chord,
-              chord_sub, theta_sub, idx_cylinder_aero, initial_aero_grid, DLC_list, dp):
-
-    # Hacky way of doing relative imports
-    import os, sys
-    sys.path.insert(0, os.path.abspath(".."))
-    import numpy as np
-
-    from openmdao.api import Group, Problem, Component, IndepVarComp
-    from openmdao.api import ParallelGroup, ParallelFDGroup
-    from openmdao.core.mpi_wrap import MPI
-    if MPI:
-        from openmdao.core.petsc_impl import PetscImpl as impl
-    else:
-        from openmdao.core.basic_impl import BasicImpl as impl
-    from FST7_aeroelasticsolver import FST7Workflow, FST7AeroElasticSolver
-
-    # Initial OpenMDAO problem setup for parallel group
-    top = Problem(impl=impl, root=ParallelFDGroup(1))
-    root = top.root
-
-    # Setup input config dictionary of dictionaries.
-    # TODO: Make 18 long
-    #caseids = ['DLC1', 'DLC2', 'DLC3', 'DLC4', 'DLC5', 'DLC6', 'DLC7', 'DLC8', 'DLC9',
-    #   'DLC10', 'DLC11', 'DLC12', 'DLC13', 'DLC14', 'DLC15', 'DLC16', 'DLC17', 'DLC18']  # Caseids
-    caseids = ['DLC1']#, 'DLC2', 'DLC3']
-    cfg_master = {}  # master config dictionary (dictionary of dictionaries)
-
-    DLC_list = DLC_list[0]
-
-    for DLC in range(0, 1):#len(DLC_list)):
-
-        # Create dictionary for this particular index
-        cfg = {}
-
-        # print(caseids[DLC])
-        # print('{0}.fst'.format(caseids[DLC]))
-        # quit()
-        cfg['fst_runfile'] = '{0}.fst'.format(caseids[DLC])
-        cfg['fst_rundir'] = os.path.join(''.join((dp,'RotorSE_FAST/' \
-                                'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/')), caseids[DLC])
-
-
-        # print(DLC_list[DLC])
-        # print(DLC)
-        # print(DLC_list)
-        # quit()
-        # if Input is '5MW_Check':
-        #     config['fst_masterfile'] = 'NRELOffshrBsline5MW_Onshore.fst'
-        #     config[
-        #         'fst_masterdir'] = ''.join((dp,'RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/'))
-        #     config['fst_runfile'] = caseid
-        #
-        #     config[
-        #         'fst_rundir'] = ''.join((dp,'RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/'))
-        #
-        #     config['fst_exe'] = ''.join((dp,'RotorSE_FAST/FAST_glin64'))
-        #     config['fst_file_type'] = 0
-        #     config['ad_file_type'] = 1
-        #
-        #     # print(WindSpeed)
-        #     # quit()
-        #
-        #     wind_file = np.array([[0.00000, WindSpeed, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000],
-        #                           [0.10000, WindSpeed, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000],
-        #                           [999.90000, WindSpeed, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000]])
-        #
-        #     # np.savetxt('/Users/bryceingersoll/Dropbox/GradPrograms/RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/FST7inputfiles/test.wnd', wind_file)
-        #     np.savetxt(
-        #         ''.join((dp,'RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7/test_wnd')), wind_file)
-        #
-        #     config['WindFile'] = 'test.wnd'
-        #
-        #     # Main AeroDyn File
-        #     test_rotorse = 1.0
-        #
-        #     config['TMax'] = Tmax  # Needs to be greater than 10 ?
-        #     # config['TMax'] = 1.0  # Needs to be greater than 10 ?
-        #     config['DT'] = DT  # Needs to be less than 0.005
-
-        if Input is 'RotorSE':
-
-            # Platform
-            run_sc = 0
-            if run_sc == 1:
-                dp = '/fslhome/ingerbry/programs/'
-            else:
-                dp = '/Users/bingersoll/Dropbox/GradPrograms/'
-
-            cfg['fst_masterfile'] = 'NRELOffshrBsline5MW_Onshore' + caseids[DLC] + '.fst'
-
-            cfg[
-                'fst_masterdir'] = ''.join((dp,'RotorSE_FAST/' \
-                                   'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/'))
-            cfg['fst_exe'] = ''.join((dp,'FAST_glin64'))
-            cfg['fst_file_type'] = 0
-            cfg['ad_file_type'] = 1
-
-            def replace_line(file_name, line_num, text):
-                lines = open(file_name, 'r').readlines()
-                lines[line_num] = text
-                out = open(file_name, 'w')
-                out.writelines(lines)
-                out.close()
-
-
-            # AerodynFile = ''.join((dp,'RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/',
-            #                caseids[DLC],'/NRELOffshrBsline5MW_AeroDyn.ipt'))
-            #
-            # FstFile = ''.join((cfg['fst_masterdir'],cfg['fst_masterfile']))
-            # f = open(FstFile)
-            # print(AerodynFile)
-            # print(FstFile)
-            # print(f.readline(160))
-            # quit()
-            #
-            # replace_line(FstFile,160,AerodynFile)
-
-            # Put dictionary into master dictionary, keyed by caseid
-            cfg_master[caseids[DLC]] = cfg
-
-            # cfg['ad_file'] = os.path.join(''.join((dp, 'RotorSE_FAST/' \
-            #                           'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/')),
-            #              caseids[DLC], 'NRELOffshrBsline5MW_AeroDyn.ipt')
-
-            # replace_line(''.join((dp, 'RotorSE_FAST/' \
-            #                           'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/NRELOffshrBsline5MW_Onshore.fst')),
-            #              160, '"' + os.path.join(''.join((dp, 'RotorSE_FAST/' \
-            #                           'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/')),
-            #              caseids[DLC], 'NRELOffshrBsline5MW_AeroDyn.ipt') + '"' + '\n')
-            #
-            # replace_line(os.path.join(''.join((dp, 'RotorSE_FAST/' \
-            #                           'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/')),
-            #              caseids[DLC], 'NRELOffshrBsline5MW_AeroDyn.ipt'),
-            #              9, '"' + DLC_list[DLC] + '"' + '\n')
-
-            check_optimized_values = 0
-
-            if check_optimized_values == 1:
-                # optimized chord distribution
-
-                rotorse_opt_chord = np.loadtxt('chord_opt.txt')
-                chord_sub = rotorse_opt_chord[1,:]
-                r_max_chord = rotorse_opt_chord[0,0]
-                r_max_chord = 0.1
-
-                # optimized twist distribution
-                theta_sub = rotorse_opt_chord[0,:]
-
-            #get corresponding r values for chord_sub
-            # r_val_chord_sub = np.zeros(4)
-            # r_val_chord_sub[0] = FAST_Rhub
-            # r_val_chord_sub[1] = FAST_Rtip*r_max_chord
-            # r_val_chord_sub[3] = FAST_Rtip
-            # r_val_chord_sub[2] = (r_val_chord_sub[3] + r_val_chord_sub[1])/2.0
-            #
-            # # make akima spline
-            # chord_sub_spline = Akima(r_val_chord_sub,chord_sub)
-            # BladeAerodynamicProperties = np.loadtxt('BladeAerodynamicProperties.txt')
-            # FAST_Chord = chord_sub_spline.interp(BladeAerodynamicProperties[:,0])[0]
-            #
-            # # set values to aerodyn inputs
-            # config['Chord'] = FAST_Chord
-            #
-            # # same for twist
-            # r_val_twist_sub = np.linspace(initial_aero_grid[idx_cylinder_aero]*FAST_Rtip,FAST_Rtip,len(theta_sub))
-            #
-            # theta_sub_spline = Akima(r_val_twist_sub,theta_sub)
-            # BladeAerodynamicProperties = np.loadtxt('BladeAerodynamicProperties.txt')
-            # FAST_Theta = theta_sub_spline.interp(BladeAerodynamicProperties[3:len(BladeAerodynamicProperties),0])[0]
-            # FAST_Theta = np.append([FAST_Theta[0], FAST_Theta[0], FAST_Theta[0]], FAST_Theta)
-            # # print (FAST_Theta)
-            # # quit()
-            #
-            # # set values to aerodyn inputs
-            # config['AeroTwst'] = FAST_Theta
-
-            # # FAST Input File
-
-            cfg['NumBl'] = nBlades
-            cfg['Gravity'] = gravity[0]
-            cfg['RotSpeed'] = tsr
-            cfg['TipRad'] = FAST_Rtip
-            cfg['HubRad'] = FAST_Rhub
-            cfg['ShftTilt'] = tilt
-            cfg['PreCone1'] = precone
-            cfg['PreCone2'] = precone
-            cfg['PreCone3'] = precone
-
-            # exposed parameters (no corresponding RotorSE parameter)
-            cfg['TMax'] = Tmax
-            cfg['TMax'] = 5.0
-            cfg['DT'] = DT
-
-            # Check fast-connect.txt for parameters we'll eventually want to connect
-
-            # #
-
-            # # Aerodyn File
-
-            # Add DLC .wnd file name to Aerodyn.ipt input file
-            cfg['HH'] = hubHt[0]
-            cfg['AirDens'] = air_dens[0]
-            cfg['KinVisc'] = dyn_visc[0]/air_dens[0]
-            # cfg['FoilNm'] = FoilNm
-            cfg['NFoil'] = (Nfoil + np.ones(np.size(Nfoil))).astype(int)
-            cfg['BldNodes'] = np.size(Nfoil)
-
-            # Make akima splines of RNodes/AeroTwst and RNodes/Chord
-            theta_sub_spline = Akima(FAST_r_Aero, FAST_Theta_Aero)
-            chord_sub_spline = Akima(FAST_r_Aero, FAST_Chord_Aero)
-
-            # Redefine RNodes so that DRNodes can be calculated using AeroSubs
-            RNodes = FAST_r_Aero
-            RNodes = np.linspace(RNodes[0], RNodes[-1], len(RNodes))
-
-            cfg['RNodes'] = RNodes
-            # Find new values of AeroTwst and Chord using redefined RNodes
-
-            FAST_Theta = theta_sub_spline.interp(RNodes)[0]
-            FAST_Chord = chord_sub_spline.interp(RNodes)[0]
-
-            cfg['Chord'] = FAST_Chord
-            cfg['AeroTwst'] = FAST_Theta
-
-            DRNodes = np.zeros(np.size(Nfoil))
-            for i in range(0,np.size(Nfoil)):
-                if i == 0:
-                    DRNodes[i] = 2.0*(RNodes[0] - FAST_Rhub)
-                else:
-                    DRNodes[i] = 2.0*(RNodes[i]-RNodes[i-1])-DRNodes[i-1]
-
-            cfg['DRNodes'] = DRNodes
-
-            # # exposed parameters (no corresponding RotorSE parameter)
-            cfg['SysUnits'] = 'SI'
-            cfg['StallMod'] = 'BEDDOES'
-            cfg['UseCm'] = 'NO_CM'
-            cfg['InfModel'] = 'DYNIN'
-            cfg['AToler'] = 0.005
-            cfg['TLModel'] = 'PRANDtl'
-            cfg['HLModel'] = 'NONE'
-            cfg['TwrShad'] = 0.0
-            cfg['ShadHWid'] = 9999.9
-            cfg['T_Shad_Refpt'] = 9999.9
-            cfg['DTAero'] = 0.02479
-
-            # #
-
-            # # Blade File
-
-            cfg['NBlInpSt'] = len(FlpStff)
-            cfg['BlFract'] = np.linspace(0, 1, len(FlpStff))
-            cfg['AeroCent'] = AeroCent
-            cfg['StrcTwst'] = FAST_Theta_Str
-            cfg['BMassDen']  = BMassDen
-            cfg['FlpStff'] = FlpStff
-            cfg['EdgStff'] = EdgStff
-            cfg['GJStff'] = GJStff
-            cfg['EAStff'] = EAStff
-
-            # exposed parameters (no corresponding RotorSE parameter)
-            cfg['CalcBMode'] = 'False'
-            cfg['BldFlDmp1'] = 2.477465
-            cfg['BldFlDmp2'] = 2.477465
-            cfg['BldEdDmp1'] = 2.477465
-            cfg['FlStTunr1'] = 1.0
-            cfg['FlStTunr2'] = 1.0
-            cfg['AdjBlMs'] = 1.04536
-            cfg['AdjFlSt'] = 1.0
-            cfg['AdjEdSt'] = 1.0
-
-            # unused parameters (not used by FAST)
-            alpha = 0.5 * np.arctan2(2 * EdgStff, FlpStff - EdgStff)
-            for i in range(0,len(alpha)):
-                alpha[i] = min(0.99999,alpha[i])
-            cfg['Alpha'] = alpha
-
-            cfg['PrecrvRef'] = np.zeros(len(FlpStff))
-            cfg['PreswpRef'] = np.zeros(len(FlpStff))
-            cfg['FlpcgOf'] = np.zeros(len(FlpStff))
-            cfg['Edgcgof'] = np.zeros(len(FlpStff))
-            cfg['FlpEAOf'] = np.zeros(len(FlpStff))
-            cfg['EdgEAOf'] = np.zeros(len(FlpStff))
-
-            # #
-
-            # set EI stiffness
-            BladeAerodynamicProperties = np.loadtxt('BladeAerodynamicProperties.txt')
-            BladeStructureProperties = np.loadtxt('BladeStructureProperties.txt')
-
-            # FlpStff, EdgStff, GJStff, EAStff
-            EI_flp_spline = Akima(FAST_precurve_Str,FlpStff)
-            EI_flp = EI_flp_spline.interp(BladeStructureProperties[:,0])[0]
-
-            EI_edge_spline = Akima(FAST_precurve_Str,EdgStff)
-            EI_edge = EI_edge_spline.interp(BladeStructureProperties[:,0])[0]
-
-            EI_gj_spline = Akima(FAST_precurve_Str,GJStff)
-            EI_gj = EI_gj_spline.interp(BladeStructureProperties[:,0])[0]
-
-            EI_ea_spline = Akima(FAST_precurve_Str,EAStff)
-            EI_ea = EI_ea_spline.interp(BladeStructureProperties[:,0])[0]
-
-            match_EI = 0
-
-            if match_EI == 1:
-                cfg['FlpStff'] = EI_flp
-                cfg['EdgStff'] = EI_edge
-                cfg['GJStff'] = EI_gj
-                cfg['EAStff'] = EI_ea
-
-            # calculate c flapwise and c edgewise
-
-            airfoilpath = ''.join((dp,'RotorSE_FAST/' \
-                          'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/' \
-                          'NRELOffshrBsline5MW_Onshore_v7_RotorSE/5MW_AFFiles_FAST/'))
-
-
-            airfoil1 = np.loadtxt(''.join((airfoilpath,'Cylinder.pfl')),skiprows=2)
-            airfoil2 = np.loadtxt(''.join((airfoilpath,'Cylinder.pfl')),skiprows=2)
-            airfoil3 = np.loadtxt(''.join((airfoilpath,'DU40_A17.pfl')),skiprows=2)
-            airfoil4 = np.loadtxt(''.join((airfoilpath,'DU35_A17.pfl')),skiprows=2)
-            airfoil5 = np.loadtxt(''.join((airfoilpath,'DU30_A17.pfl')),skiprows=2)
-            airfoil6 = np.loadtxt(''.join((airfoilpath,'DU25_A17.pfl')),skiprows=2)
-            airfoil7 = np.loadtxt(''.join((airfoilpath,'DU21_A17.pfl')),skiprows=2)
-            airfoil8 = np.loadtxt(''.join((airfoilpath,'NACA64_A17.pfl')),skiprows=2)
-
-            airfoil_h = np.zeros([8,1])
-
-            airfoil_h[0] = max(airfoil1[:,1]) - min(airfoil1[:,1])
-            airfoil_h[1] = max(airfoil2[:,1]) - min(airfoil2[:,1])
-            airfoil_h[2] = max(airfoil3[:,1]) - min(airfoil3[:,1])
-            airfoil_h[3] = max(airfoil4[:,1]) - min(airfoil4[:,1])
-            airfoil_h[4] = max(airfoil5[:,1]) - min(airfoil5[:,1])
-            airfoil_h[5] = max(airfoil6[:,1]) - min(airfoil6[:,1])
-            airfoil_h[6] = max(airfoil7[:,1]) - min(airfoil7[:,1])
-            airfoil_h[7] = max(airfoil8[:,1]) - min(airfoil8[:,1])
-
-            # calc height
-            h = np.zeros([17,1])
-            for i in range(0,17):
-                h[i] = airfoil_h[int(BladeAerodynamicProperties[i,4]-1)]*FAST_Chord[i]
-
-            # plt.figure()
-            # plt.plot(BladeAerodynamicProperties[:,0], h)
-            # plt.show()
-            # quit()
-
-            c_flapwise = h/2.0
-
-            # calculate c_edgewise
-            aerocent_spline = Akima(BladeStructureProperties[:,0]*FAST_Rtip,BladeStructureProperties[:,1])
-            aerocent_c = aerocent_spline.interp(BladeAerodynamicProperties[:,0])[0]
-
-
-            c_edgewise = (1-aerocent_c)*FAST_Chord
-
-
-
-    # Add case to OpenMDAO problem
-
-    root.add('ParallelFASTCases', FST7AeroElasticSolver(cfg_master, caseids))
-
-    # Set up recorder
-    # recorder = SqliteRecorder('omdaoCase1.sqlite')
-    # top.driver.add_recorder(recorder)
-
-    # Perform setup and run OpenMDAO problem
-
-    # import time
-    # time.sleep(2)
-    # quit()
-
-    top.setup()
-    top.run()
-
-    top.cleanup()  # Good practice, especially when using recorder
-
-    # TODO: Test to see how outputs change with different inputs
-    # Test result: tip deflection
-    results = max(top['ParallelFASTCases.pg.DLC1.OoPDefl1'])
-    results2 = max(top['ParallelFASTCases.pg.DLC2.OoPDefl1'])
-    results3 = max(top['ParallelFASTCases.pg.DLC3.OoPDefl1'])
-    results4 = max(top['ParallelFASTCases.pg.DLC4.OoPDefl1'])
-    results5 = max(top['ParallelFASTCases.pg.DLC5.OoPDefl1'])
-    results6 = max(top['ParallelFASTCases.pg.DLC6.OoPDefl1'])
-    results7 = max(top['ParallelFASTCases.pg.DLC7.OoPDefl1'])
-    results8 = max(top['ParallelFASTCases.pg.DLC8.OoPDefl1'])
-    results9 = max(top['ParallelFASTCases.pg.DLC9.OoPDefl1'])
-    results10 = max(top['ParallelFASTCases.pg.DLC10.OoPDefl1'])
-    results11 = max(top['ParallelFASTCases.pg.DLC11.OoPDefl1'])
-    results12 = max(top['ParallelFASTCases.pg.DLC12.OoPDefl1'])
-    results13 = max(top['ParallelFASTCases.pg.DLC13.OoPDefl1'])
-    results14 = max(top['ParallelFASTCases.pg.DLC14.OoPDefl1'])
-    results15 = max(top['ParallelFASTCases.pg.DLC15.OoPDefl1'])
-    results16 = max(top['ParallelFASTCases.pg.DLC16.OoPDefl1'])
-    results17 = max(top['ParallelFASTCases.pg.DLC17.OoPDefl1'])
-    results18 = max(top['ParallelFASTCases.pg.DLC18.OoPDefl1'])
-
-
-    print(results)
-    print(results2)
-    print(results3)
-    print(results4)
-    print(results5)
-    print(results6)
-    print(results7)
-    print(results8)
-    print(results9)
-    print(results10)
-    print(results11)
-    print(results12)
-    print(results13)
-    print(results14)
-    print(results15)
-    print(results16)
-    print(results17)
-    print(results18)
-    quit()
-
-    np.savetxt('OoPDefl1.txt', results)
-
-    results2 = top['fast_component.GenTq']
-    np.savetxt('GenTq.txt', results2)
-
-    results3 = top['fast_component.GenPwr']
-    np.savetxt('GenPwr.txt', results3)
-
-    results4 = top['fast_component.WindVxi']
-    np.savetxt('WindVxi.txt', results4)
-
-    results5 = top['fast_component.RootMxc1']
-    np.savetxt('RootMxc1.txt', results5)
-
-    results6 = top['fast_component.RootMyc1']
-    np.savetxt('RootMyc1.txt', results6)
-
-    results6 = top['fast_component.RootMyb1']
-    np.savetxt('RootMyb1.txt', results6)
-
-
-    # absolute strength constraints
-    Spn1MLxb1 = top['fast_component.Spn1MLxb1']
-    np.savetxt('Spn1Mlxb1.txt', Spn1MLxb1)
-    Spn1MLyb1 = top['fast_component.Spn1MLyb1']
-    np.savetxt('Spn1Mlyb1.txt', Spn1MLyb1)
-
-    Spn2MLxb1 = top['fast_component.Spn2MLxb1']
-    np.savetxt('Spn2Mlxb1.txt', Spn2MLxb1)
-    Spn2MLyb1 = top['fast_component.Spn2MLyb1']
-    np.savetxt('Spn2Mlyb1.txt', Spn2MLyb1)
-
-    Spn3MLxb1 = top['fast_component.Spn3MLxb1']
-    np.savetxt('Spn3Mlxb1.txt', Spn3MLxb1)
-    Spn3MLyb1 = top['fast_component.Spn3MLyb1']
-    np.savetxt('Spn3Mlyb1.txt', Spn3MLyb1)
-
-    Spn4MLxb1 = top['fast_component.Spn4MLxb1']
-    np.savetxt('Spn4Mlxb1.txt', Spn4MLxb1)
-    Spn4MLyb1 = top['fast_component.Spn4MLyb1']
-    np.savetxt('Spn4Mlyb1.txt', Spn4MLyb1)
-
-    Spn5MLxb1 = top['fast_component.Spn4MLxb1']
-    np.savetxt('Spn5Mlxb1.txt', Spn5MLxb1)
-    Spn5MLyb1 = top['fast_component.Spn4MLyb1']
-    np.savetxt('Spn5Mlyb1.txt', Spn5MLyb1)
-
-    Spn6MLxb1 = top['fast_component.Spn6MLxb1']
-    np.savetxt('Spn6Mlxb1.txt', Spn6MLxb1)
-    Spn6MLyb1 = top['fast_component.Spn6MLyb1']
-    np.savetxt('Spn6Mlyb1.txt', Spn6MLyb1)
-
-    Spn7MLxb1 = top['fast_component.Spn7MLxb1']
-    np.savetxt('Spn7Mlxb1.txt', Spn7MLxb1)
-    Spn7MLyb1 = top['fast_component.Spn7MLyb1']
-    np.savetxt('Spn7Mlyb1.txt', Spn7MLyb1)
-
-    Spn_MLx = [Spn1MLxb1, Spn2MLxb1, Spn3MLxb1, Spn4MLxb1, Spn5MLxb1, Spn6MLxb1, Spn7MLxb1]
-    Spn_MLy = [Spn1MLyb1, Spn2MLyb1, Spn3MLyb1, Spn4MLyb1, Spn5MLyb1, Spn6MLyb1, Spn7MLyb1]
-
-    flpstff_spline = Akima(BladeStructureProperties[:, 0] * FAST_Rtip, BladeStructureProperties[:, 4])
-    flpstff_aero = flpstff_spline.interp(BladeAerodynamicProperties[:, 0])[0]
-
-    edgstff_spline = Akima(BladeStructureProperties[:, 0] * FAST_Rtip, BladeStructureProperties[:, 5])
-    edgstff_aero = flpstff_spline.interp(BladeAerodynamicProperties[:, 0])[0]
-
-    eps_x = np.zeros(len(Spn_MLx))
-    eps_y = np.zeros(len(Spn_MLy))
-
-    for i in range(0, len(Spn_MLx)):
-        eps_x[i] = max(Spn_MLx[i])*c_flapwise[i]/flpstff_aero[i]*1000.0 # flapwise strain
-        eps_y[i] = max(Spn_MLy[i])*c_edgewise[i]/edgstff_aero[i]*1000.0 # edgewise strain
-
-
-    # total safety factor
-    tsf = 1.35*1.30
-
-    #Elastic Moduli of Materials
-    Ex_Triax = 27700*10**6.0 # Pa
-    Ey_Triax = 13650*10**6.0 # Pa
-    Ex_ELT5500 = 41800*10**6.0 # Pa
-    Ey_ELT5500 = 13650*10**6.0 # Pa
-    Ex_Carbon = 8390*10**6.0 # Pa
-    Ey_Carbon = 5990*10**6.0 # Pa
-
-    # flapwise
-    sigma_y_ELT5500 = eps_y*Ey_ELT5500
-    sigma_y_Carbon = eps_y*Ey_Carbon
-
-    # edgewise
-    sigma_x_ELT5500 = eps_x*Ex_ELT5500
-    sigma_x_Triax = eps_x*Ex_Triax
-
-    # MLife input file
-    run_MLife_check = 0
-
-    run_MLife_constraints = 0
-
-    if run_MLife_constraints == 1:
-        column0 = top['fast_component.Time']
-        column1 = top['fast_component.WindVxi']
-        column2 = top['fast_component.GenPwr']
-        column3 = top['fast_component.RotSpeed']
-        column4 = top['fast_component.OoPDefl1']
-        column5 = top['fast_component.IPDefl1']
-        column6 = top['fast_component.OoPDefl2']
-        column7 = top['fast_component.IPDefl2']
-        column8 = top['fast_component.OoPDefl3']
-        column9 = top['fast_component.IPDefl3']
-        column10 = top['fast_component.RootFxc1']
-        column11 = top['fast_component.RootFyc1']
-        column12 = top['fast_component.RootFzc1']
-        column13 = top['fast_component.RotTorq']
-
-        column14 = top['fast_component.Spn1MLxb1']
-        column15 = top['fast_component.Spn2MLxb1']
-        column16 = top['fast_component.Spn3MLxb1']
-        column17 = top['fast_component.Spn4MLxb1']
-        column18 = top['fast_component.Spn5MLxb1']
-        column19 = top['fast_component.Spn6MLxb1']
-        column20 = top['fast_component.Spn7MLxb1']
-        column21 = top['fast_component.Spn1MLyb1']
-        column22 = top['fast_component.Spn2MLyb1']
-        column23 = top['fast_component.Spn3MLyb1']
-        column24 = top['fast_component.Spn4MLyb1']
-        column25 = top['fast_component.Spn5MLyb1']
-        column26 = top['fast_component.Spn6MLyb1']
-        column27 = top['fast_component.Spn7MLyb1']
-
-
-        mlifedata = np.zeros([len(column0),28])
-
-        mlifedata[:,0] = column0
-        mlifedata[:,1] = column1
-        mlifedata[:,2] = column2
-        mlifedata[:,3] = column3
-        mlifedata[:,4] = column4
-        mlifedata[:,5] = column5
-        mlifedata[:,6] = column6
-        mlifedata[:,7] = column7
-        mlifedata[:,8] = column8
-        mlifedata[:,9] = column9
-        mlifedata[:,10] = column10
-        mlifedata[:,11] = column11
-        mlifedata[:,12] = column12
-        mlifedata[:,13] = column13
-        mlifedata[:,14] = column14
-        mlifedata[:,15] = column15
-        mlifedata[:,16] = column16
-        mlifedata[:,17] = column17
-        mlifedata[:,18] = column18
-        mlifedata[:,19] = column19
-        mlifedata[:,20] = column20
-        mlifedata[:,21] = column21
-        mlifedata[:,22] = column22
-        mlifedata[:,23] = column23
-        mlifedata[:,24] = column24
-        mlifedata[:,25] = column25
-        mlifedata[:,26] = column26
-        mlifedata[:,27] = column27
-
-        # MLife Analysis
-        header = '\n'.join(["", "line2", "line3", "", "NREL 5.0 MW Baseline Wind Turbine for Use in Offshore Analysis.",
-                            "", "    Time WindVxi	GenPwr	RotSpeed	OoPDefl1	IPDefl1	OoPDefl2	IPDefl2	"
-                                "OoPDefl3	IPDefl3	RootFxc1	RootFyc1	RootFzc1	RotTorq	Spn1MLxb1	Spn2MLxb1	Spn3MLxb1	Spn4MLxb1	Spn5MLxb1	Spn6MLxb1	Spn7MLxb1	"
-                                "Spn1MLyb1	Spn2MLyb1	Spn3MLyb1	Spn4MLyb1	Spn5MLyb1	Spn6MLyb1 Spn7MLyb1",
-                            "   (sec)	(m/sec)	(kW)	(rpm)	(m)	(m)	(m)	(m)	(m)	(m)	(kN)	(kN)	(kN)	"
-                            "(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm)	(kNm) (kNm)"])
-
-        np.savetxt(''.join((dp,'RotorSE_FAST/Mlife/Data/mlifeFAST.out')), mlifedata, header=header, comments ='')
-
-        eng = matlab.engine.start_matlab()
-        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source')), nargout=0)
-        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source/datatablepackage')), nargout=0)
-        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source/rainflow')), nargout=0)
-        eng.mlife(''.join((dp,'RotorSE_FAST/Mlife/CertTest/newFAST.mlif')),
-                ''.join((dp,'RotorSE_FAST/Mlife/Data')),
-                  ''.join((dp,'RotorSE_FAST/Mlife/Results/FAST_5MW/')), nargout=0)
-
-
-        #quit()
-
-        # Extract MLife outputs
-        fp = open("../../../RotorSE_FAST/Mlife/Results/DLC_1_2/FAST_Constraints_Lifetime_Damage.txt")
-        line = fp.readlines()
-
-        mlife_results  = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[22])
-
-        LifeTimeDamage = float( mlife_results[1] )
-
-    else:
-        LifeTimeDamage = 0.0
-
-
-    if run_MLife_check == 1:
-        column0 = top['fast_component.Time']
-        column1 = top['fast_component.WindVxi']
-        column2 = top['fast_component.GenPwr']
-        column3 = top['fast_component.RotSpeed']
-        column4 = top['fast_component.OoPDefl1']
-        column5 = top['fast_component.IPDefl1']
-        column6 = top['fast_component.OoPDefl2']
-        column7 = top['fast_component.IPDefl2']
-        column8 = top['fast_component.OoPDefl3']
-        column9 = top['fast_component.IPDefl3']
-        column10 = top['fast_component.RootFxc1']
-        column11 = top['fast_component.RootFyc1']
-        column12 = top['fast_component.RootFzc1']
-        column13 = top['fast_component.RotTorq']
-        column14 = top['fast_component.Spn4MLxb1']
-
-        mlifedata = np.zeros([len(column0),15])
-
-        mlifedata[:,0] = column0
-        mlifedata[:,1] = column1
-        mlifedata[:,2] = column2
-        mlifedata[:,3] = column3
-        mlifedata[:,4] = column4
-        mlifedata[:,5] = column5
-        mlifedata[:,6] = column6
-        mlifedata[:,7] = column7
-        mlifedata[:,8] = column8
-        mlifedata[:,9] = column9
-        mlifedata[:,10] = column10
-        mlifedata[:,11] = column11
-        mlifedata[:,12] = column12
-        mlifedata[:,13] = column13
-        mlifedata[:,14] = column14
-
-        # MLife Analysis
-        header = '\n'.join(["", "line2", "line3", "", "NREL 5.0 MW Baseline Wind Turbine for Use in Offshore Analysis.",
-                            "", "    Time	WindVxi	GenPwr	RotSpeed	OoPDefl1	IPDefl1	OoPDefl2	IPDefl2	OoPDefl3	IPDefl3	RootFxc1	RootFyc1	RootFzc1	RotTorq Spn4MLxb1",
-                            "   (sec)	(m/sec)	(kW)	(rpm)	(m)	(m)	(m)	(m)	(m)	(m)	(kN)	(kN)	(kN)	(kNm) (kNm)"])
-
-        np.savetxt(''.join((dp,'RotorSE_FAST/Mlife/Data/mlifetest.out')), mlifedata, header=header, comments ='')
-
-        eng = matlab.engine.start_matlab()
-        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source')), nargout=0)
-        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source/datatablepackage')), nargout=0)
-        eng.addpath(''.join((dp,'RotorSE_FAST/Mlife/Source/rainflow')), nargout=0)
-        eng.mlife(''.join((dp,'RotorSE_FAST/Mlife/CertTest/Test_FAST.mlif')),
-                ''.join((dp,'RotorSE_FAST/Mlife/Data')),
-                  ''.join((dp,'RotorSE_FAST/Mlife/Results/FAST_5MW/')), nargout=0)
-
-
-        # Extract MLife outputs
-        fp = open("../../../RotorSE_FAST/Mlife/Results/FAST_5MW/FAST_Constraints_Lifetime_Damage.txt")
-        line = fp.readlines()
-
-        mlife_results  = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[22])
-        mlife_results_no_cor  = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[38])
-        #
-        #print(mlife_results)
-        # quit()
-
-        LifeTimeDamage = float( mlife_results[4] )/20.0
-        #LifeTimeDamage_no_cor = float( mlife_results_no_cor[4] )
-
-        #quit()
-
-    # Steady-State Check
-    if Check_SS is not 'none':
-
-        results_check = results3
-
-        points = 80
-        numVal = len(results_check) / points
-        slope = np.zeros([points, 1])
-        avg_y = np.zeros([points, 1])
-
-        time = np.linspace(0, Tmax, Tmax / DT + 1)
-
-        for i in range(0, points):
-            y = results[1 + i * numVal:1 + (i + 1) * numVal]
-        x = time[1 + i * numVal:1 + (i + 1) * numVal]
-
-        # linear regression
-        slope[i], intercept, r_value, p_value, std_err = stats.linregress(x, y)
-
-        # batch mean
-        avg_y[i] = np.sum(y) / len(y)
-
-        if Check_SS is 'LinReg':
-            print('The avg. lin. reg. slope at the end is', slope[-1])
-        if Check_SS is 'BatchMean':
-            print ('The batch mean at the end is', avg_y[i])
-
-    #return [sum(results[-500:-1])/500.0, sum(results5[-500:-1])/500.0, sum(results6[-500:-1])/500.0]
-
-    #return [sum(results2[-500:-1])/500.0, sum(results3[-500:-1])/500.0, WindSpeed]
-
-    #return max(top['fast_component.OoPDefl1'])
-
-    return sigma_y_ELT5500, sigma_y_Carbon, sigma_x_ELT5500, sigma_x_Triax, LifeTimeDamage/20.0, sum(results[-500:-1])/500.0, #LifeTimeDamage_no_cor
-
-    # return [sum(results[-500:-1])/500.0, sum(results6[-500:-1])/500.0,
-    #         sum(Spn1MLxb1[-500:-1])/500.0, sum(Spn1MLyb1[-500:-1])/500.0,
-    #         # sum(Spn2MLxb1[-500:-1]) / 500.0, sum(Spn2MLyb1[-500:-1]) / 500.0,
-    #         # sum(Spn3MLxb1[-500:-1]) / 500.0, sum(Spn3MLyb1[-500:-1]) / 500.0,
-    #         # sum(Spn4MLxb1[-500:-1]) / 500.0, sum(Spn4MLyb1[-500:-1]) / 500.0,
-    #         # sum(Spn5MLxb1[-500:-1]) / 500.0, sum(Spn5MLyb1[-500:-1]) / 500.0,
-    #         # sum(Spn6MLxb1[-500:-1]) / 500.0, sum(Spn6MLyb1[-500:-1]) / 500.0,
-    #         LifeTimeDamage]
-    # Critical Deflection Analysis, # Buckling Analysis, Edgewise strain, Flapwise Strain
-
-    #return r_max_chord
-
-# class FAST_Cons(ParallelFDGroup): # or Group, not sure
-#     def __init__(self):
-#         super(ParallelFDGroup, self).__init__()
-
-
-# FST7Workflow is the component that executes fast. A config file is passed in, which FST7Workflow uses to execute FAST
-
-# FST7AeroElasticSolver is a group, and an additional parallel group is added to it to run several components of
-# FST7Workflow at the same time
-
-# game plan :
-# create configs for each case
-# add FST7AeroElasticSolver
-# look at results
-
-# create component for config file
-# # Setup input config dictionary of dictionaries.
-# caseids = ['case1', 'case2', 'case3', 'case4']  # Caseids
-# TMax = [10, 15, 20, 30]  # Different TMaxes for different cases
-# cfg_master = {}  # master config dictionary (dictionary of dictionaries)
-#
-# for i in range(4):
-#     # Create dictionary for this particular index
-#     cfg = {}
-#     cfg['fst_runfile'] = '{0}.fst'.format(caseids[i])
-#     cfg['fst_rundir'] = os.path.join('./rundir/', caseids[i])
-#     cfg['TMax'] = TMax[i]
-#
-#     # These parameters the same for all cases
-#     cfg['fst_masterfile'] = 'Test01.fst'
-#     cfg['fst_masterdir'] = './FST7inputfiles/'
-#     cfg['fst_exe'] = '../../../../../FAST_v7/bin/FAST_glin32'
-#     cfg['fst_file_type'] = 0
-#     cfg['ad_file_type'] = 1
-
-# class RunFASTinParallel(Group):
-#     def __init__(self, FASTcfg):
-#         super(RunFASTinParallel, self).__init__()
-#
-#         caseid = ['Case1']
-#
-#
-#
-#         from FST7_aeroelasticsolver import FST7Workflow, FST7AeroElasticSolver
-#
-#         self.add('FASTcases', FST7AeroElasticSolver(FASTcfg, caseid))
-#
-#         print(1)
-
-        # self.add_param('FASTcfg', val=dict)
-        #
-        # self.add_output('testFASToutput', val = 0.0)
-
-    # def solve_nonlinear(self, params, unknowns, resids):
-    #
-    #     caseid = ['Case1']
-    #
-    #     from FST7_aeroelasticsolver import FST7Workflow, FST7AeroElasticSolver
-    #
-    #     self.add('FASTcases', FST7AeroElasticSolver(params['FASTcfg', caseid]) )
-    #
-    #     print(RunFASTinParallel)
-    #     quit()
-
-        #unknowns['testFASToutput'] = 1.0
-
 class CreateFASTConstraints(Component):
-    def __init__(self, caseids):
+    def __init__(self, naero, nstr, FASTinfo, WNDfile_List, caseids):
         super(CreateFASTConstraints, self).__init__()
 
         self.caseids = caseids
+        self.WNDfile_List = WNDfile_List
+        self.dT = FASTinfo['dT']
+        self.description = FASTinfo['description']
+        self.path = FASTinfo['path']
+        self.opt_dir = FASTinfo['opt_dir']
+        self.NBlGages = FASTinfo['NBlGages']
+        self.BldGagNd = FASTinfo['BldGagNd']
+        self.Run_Once = FASTinfo['Run_Once']
 
-        self.add_param('FAST_Rtip', val=0.0)
+        self.check_results = FASTinfo['check_results']
+        self.check_sgp_spline = FASTinfo['check_sgp_spline']
+        self.check_peaks = FASTinfo['check_peaks']
+        self.check_rainflow = FASTinfo['check_rainflow']
+        self.check_rm_time = FASTinfo['check_rm_time']
+
+        # only works if check_damage is also set as 'true
+        self.check_nom_DEM_damage = FASTinfo['check_nom_DEM_damage']
+
+        self.sgp = FASTinfo['sgp']
+
+        self.wndfiletype = FASTinfo['wnd_type_list']
+        self.Tmax_turb = FASTinfo['Tmax_turb']
+        self.Tmax_nonturb = FASTinfo['Tmax_nonturb']
+        self.turb_sf = FASTinfo['turb_sf']
+        self.rm_time = FASTinfo['rm_time']
+
+        self.m_value = FASTinfo['m_value']
 
         self.add_param('cfg_master', val=dict(), pass_by_obj=False)
+
+        self.add_param('rstar_damage', shape=naero + 1, desc='nondimensional radial locations of damage equivalent moments')
+
+        self.add_param('initial_str_grid', shape=nstr, desc='initial structural grid on unit radius')
+        self.add_param('initial_aero_grid', shape=naero, desc='initial structural grid on unit radius')
 
         for i in range(0, len(caseids)):
             self.add_param(caseids[i], dict())
 
-        self.add_output('ELT5500_sigma_x', val=np.zeros(len(caseids)*7))
-        self.add_output('ELT5500_sigma_y', val=np.zeros(len(caseids)*7))
-        self.add_output('Carbon_sigma_y', val=np.zeros(len(caseids)*7))
-        self.add_output('Triax_sigma_x', val=np.zeros(len(caseids)*7))
+        # DEMs
+        self.add_output('DEMx', val=np.zeros(naero+1))
+        self.add_output('DEMy', val=np.zeros(naero+1))
 
-        self.add_output('crit_def', np.zeros(len(caseids)))
+        # Tip Deflection
+        self.add_output('max_tip_def', val=0.0)
 
-        self.add_output('fatigue', np.zeros(len(caseids)))
+        # Structure
+        self.add_output('Edg_max',val=np.zeros(nstr))
+        self.add_output('Flp_max',val=np.zeros(nstr))
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        # print('Within CreateFASTConstraints, DLC1')
-        # print(params['DLC1'])
-        # print('Within CreateFASTConstraints, DLC2')
-        # print(params['DLC2'])
-        # quit()
+        # print('in start of create fast constraints')
+        # print(self.BldGagNd)
+        # print(self.test_BldGagNd)
+        # print('-----------------------------------')
 
-        # code within Call_FAST after problem is executed
+        # === Check Results === #
+        resultsdict = params["WNDfile{0}".format(1) + '_sgp' + str(self.sgp[0])]
+        if self.check_results == 'true':
+            # bm_param = 'Spn4MLxb1'
+            # bm_param = 'RootMxb1'
+            bm_param = 'RootMyb1'
+            plt.figure()
+            plt.plot(resultsdict[bm_param])
+            plt.xlabel('Simulation Step')
+            plt.ylabel(bm_param + '(kN*m)')
+            plt.title(bm_param)  #: Bending Moment at Spanwise Station #4, Blade #1')
+            plt.savefig('/Users/bingersoll/Desktop/plots/param_plots/' + bm_param + '.png')
 
-        #initialize lists of constraints
-        critical_deflection = []
-        ELTx = []
-        ELTy = []
-        Carbony = []
-        Triaxx = []
-        life_time_damage = []
+            plt.show()
 
-        for i in range(1, len(self.caseids)+1):
-            resultsdict = params['DLC{0}'.format(i)]
+            bm_param = 'OoPDefl1'
+            plt.figure()
+            plt.plot(resultsdict[bm_param])
+            plt.xlabel('Simulation Step')
+            plt.ylabel(bm_param + '(m)')
+            plt.title(bm_param)  #: Bending Moment at Spanwise Station #4, Blade #1')
+            plt.savefig('/Users/bingersoll/Desktop/plots/param_plots/' + bm_param + '.png')
 
-            config = params['cfg_master']['DLC{0}'.format(i)]
-
-            # fatigue constraints
-
-            files = ['/Users/bingersoll/Dropbox/GradPrograms/RotorSE_FAST/AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/' + 'DLC{0}'.format(i) + '.outb']
-            files = ['../../../AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/' + 'DLC{0}'.format(i) + '.outb']
-
-            ##get DELs for Blade edge:53 and flap:54 bending moment, tower SS:92 and FA:93, and
-            ##anchor tension:100. Note: these might be different for different FAST
-            ##output files
-            ## these are literally the indices in the FAST output table of the fields of interest
-            ## (in python they are 0-based)
-            output_array = [20,21,22,23,24,25]
-            ## these are the powers that the cycles are raised to in order to get the final fatigue.
-            ## they are properties of the materials of the corresponding fields (so they are tied
-            ## to the indices in "output_array"
-            SNslope = np.array([[1,1,1,1,1,1], [8,8,8,8,8,8],
-                                [10,10,10,10,10,10],
-                                [12,12,12,12,12,12]], dtype="double")
-
-            # SNslope = np.array([[1], [8], [10], [12]], dtype="double")
-
-            from rainflow import do_rainflow
-
-            allres = do_rainflow(files, output_array, SNslope)
-
-            print(allres)
+            plt.show()
 
             quit()
 
-            # Deflection Constraint
-            #results = max(top['ParallelFASTCases.pg.DLC1.OoPDefl1'])
 
-            deflection = max(resultsdict['OoPDefl1'])
-            deflection = min(resultsdict['OoPDefl1'])
+        tot_BldGagNd = []
+        for i in range(0, len(self.BldGagNd)):
+            for j in range(0, self.NBlGages[i]):
+                tot_BldGagNd.append(self.BldGagNd[i][j])
 
-            #deflection = resultsdict['OoPDefl1']
+        total_num_bl_gages = 0
+        max_gage = 0
+        for i in range(0, len(self.NBlGages)):
+            total_num_bl_gages += self.NBlGages[i]
+            max_gage = max(max_gage, max(self.BldGagNd[i]))
 
-            # absolute strength constraints
+        # === DEM / structural calculations === #
 
-            # calculate c flapwise and c edgewise
-            dp = '/Users/bingersoll/Dropbox/GradPrograms/'
+        # print('--- DEM ---')
+        # print(self.BldGagNd)
+        #
+        # print(self.WNDfile_List)
+        # print(type(self.WNDfile_List))
+        # print(max_gage)
+        # print(type(max_gage))
+        # print('--- ---')
 
-            airfoilpath = ''.join((dp, 'RotorSE_FAST/' \
-                                       'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/' \
-                                       'NRELOffshrBsline5MW_Onshore_v7_RotorSE/5MW_AFFiles_FAST/'))
+        DEMx_master_array = np.zeros([len(self.WNDfile_List), 1 + max_gage])
+        DEMy_master_array = np.zeros([len(self.WNDfile_List), 1 + max_gage])
 
-            airfoil1 = np.loadtxt(''.join((airfoilpath, 'Cylinder.pfl')), skiprows=2)
-            airfoil2 = np.loadtxt(''.join((airfoilpath, 'Cylinder.pfl')), skiprows=2)
-            airfoil3 = np.loadtxt(''.join((airfoilpath, 'DU40_A17.pfl')), skiprows=2)
-            airfoil4 = np.loadtxt(''.join((airfoilpath, 'DU35_A17.pfl')), skiprows=2)
-            airfoil5 = np.loadtxt(''.join((airfoilpath, 'DU30_A17.pfl')), skiprows=2)
-            airfoil6 = np.loadtxt(''.join((airfoilpath, 'DU25_A17.pfl')), skiprows=2)
-            airfoil7 = np.loadtxt(''.join((airfoilpath, 'DU21_A17.pfl')), skiprows=2)
-            airfoil8 = np.loadtxt(''.join((airfoilpath, 'NACA64_A17.pfl')), skiprows=2)
+        # maxes of DEMx, DEMy, (will be promoted)
+        DEMx_max = np.zeros([1 + total_num_bl_gages, 1])
+        DEMy_max = np.zeros([1 + total_num_bl_gages, 1])
 
-            airfoil_h = np.zeros([8, 1])
+        Edg_max_array = np.zeros([len(self.WNDfile_List), 1 + max_gage])
+        Flp_max_array = np.zeros([len(self.WNDfile_List), 1 + max_gage])
 
-            airfoil_h[0] = max(airfoil1[:, 1]) - min(airfoil1[:, 1])
-            airfoil_h[1] = max(airfoil2[:, 1]) - min(airfoil2[:, 1])
-            airfoil_h[2] = max(airfoil3[:, 1]) - min(airfoil3[:, 1])
-            airfoil_h[3] = max(airfoil4[:, 1]) - min(airfoil4[:, 1])
-            airfoil_h[4] = max(airfoil5[:, 1]) - min(airfoil5[:, 1])
-            airfoil_h[5] = max(airfoil6[:, 1]) - min(airfoil6[:, 1])
-            airfoil_h[6] = max(airfoil7[:, 1]) - min(airfoil7[:, 1])
-            airfoil_h[7] = max(airfoil8[:, 1]) - min(airfoil8[:, 1])
+        # maxes of Edg, Flp, (will be promoted)
+        Edg_max = np.zeros([1 + total_num_bl_gages, 1])
+        Flp_max = np.zeros([1 + total_num_bl_gages, 1])
 
-            # calc height
+        # peaks master
+        peaks_master_x = dict()
+        peaks_master_x['root'] = []
+        for i in range(0, total_num_bl_gages):
+            peaks_master_x['bld_gage_' + str(tot_BldGagNd[i])] = []
 
-            h = np.zeros([17, 1])
-            for i in range(0, 17):
-                h[i] = airfoil_h[int(config['NFoil'][i] - 1)] * config['Chord'][i]
+        peaks_master_y = dict()
+        peaks_master_y['root'] = []
+        for i in range(0, total_num_bl_gages):
+            peaks_master_y['bld_gage_' + str(tot_BldGagNd[i])] = []
 
-            # plt.figure()
-            # plt.plot(BladeAerodynamicProperties[:,0], h)
-            # plt.show()
-            # quit()
+        # peaks max (will be promoted)
+        peaks_max_x = dict()
+        peaks_max_x['root'] = []
+        for i in range(0, total_num_bl_gages):
+            peaks_max_x['bld_gage_' + str(tot_BldGagNd[i])] = []
 
-            c_flapwise = h / 2.0
+        peaks_max_y = dict()
+        peaks_max_y['root'] = []
+        for i in range(0, total_num_bl_gages):
+            peaks_max_y['bld_gage_' + str(tot_BldGagNd[i])] = []
 
-            aerocent_spline = Akima(config['BlFract'] * config['TipRad'],
-                                    config['AeroCent'])
-            aerocent_c = aerocent_spline.interp(config['RNodes'])[0]
+        for k in range(0, len(self.NBlGages)):
 
-            c_edgewise = (1 - aerocent_c) * config['Chord']
+            for i in range(0 + 1, len(self.WNDfile_List) + 1):
 
-            Spn_MLx = []
-            Spn_MLy = []
-            for j in range(1,8):
-                Spn_MLx.append(resultsdict['Spn{0}MLxb1'.format(j)])
-                Spn_MLy.append(resultsdict['Spn{0}MLyb1'.format(j)])
+                spec_caseid = k*len(self.WNDfile_List)+(i-1)
+                resultsdict = params[self.caseids[spec_caseid]]
 
-            flpstff_spline = Akima(config['BlFract'] * config['TipRad'], config['FlpStff'])
-            flpstff_aero = flpstff_spline.interp(config['RNodes'])[0]
+                spec_wnd_dir = self.description + '/' + 'sgp' + str(self.sgp[k]) + '/' + self.caseids[spec_caseid]
 
-            edgstff_spline = Akima(config['BlFract'] * config['TipRad'], config['EdgStff'])
-            edgstff_aero = edgstff_spline.interp(config['RNodes'])[0]
+                FAST_wnd_directory = self.opt_dir + '/' + 'sgp' + str(self.sgp[k]) + '/' + self.caseids[spec_caseid]
 
-            eps_x = np.zeros(len(Spn_MLx))
-            eps_y = np.zeros(len(Spn_MLy))
+                # === rainflow calculation files === #
 
-            for i in range(0, len(Spn_MLx)):
-                eps_x[i] = max(Spn_MLx[i]) * c_flapwise[i] / flpstff_aero[i] * 1000.0  # flapwise strain
-                eps_y[i] = max(Spn_MLy[i]) * c_edgewise[i] / edgstff_aero[i] * 1000.0  # edgewise strain
+                # files = [FAST_wnd_directory + '/fst_runfile.outb']
+                files = [FAST_wnd_directory + '/fst_runfile.out']
 
-            # total safety factor
-            tsf = 1.35 * 1.30
+                # read titles of file, since they don't seem to be in order
+                file_rainflow = open(files[0])
+                line_rainflow = file_rainflow.readlines()
 
-            # Elastic Moduli of Materials
-            Ex_Triax = 27700 * 10 ** 6.0  # Pa
-            Ey_Triax = 13650 * 10 ** 6.0  # Pa
-            Ex_ELT5500 = 41800 * 10 ** 6.0  # Pa
-            Ey_ELT5500 = 13650 * 10 ** 6.0  # Pa
-            Ex_Carbon = 8390 * 10 ** 6.0  # Pa
-            Ey_Carbon = 5990 * 10 ** 6.0  # Pa
+                # extract names fron non-binary FAST output file
+                name_line = 6
+                str_val = re.findall("\w+", line_rainflow[name_line])
 
-            # flapwise
-            sigma_y_ELT5500 = eps_y * Ey_ELT5500
-            sigma_y_Carbon = eps_y * Ey_Carbon
+                # create output_array (needed for rainflow calculation)
+                output_array = []
 
-            # edgewise
-            sigma_x_ELT5500 = eps_x * Ex_ELT5500
-            sigma_x_Triax = eps_x * Ex_Triax
+                # make RootMxb1 first in output_array
+                for j in range (0,len(str_val)):
+                    if str_val[j] == 'RootMxb1':
+                        output_array.append(j)
 
-            Check_SS = 'none'
-            # Steady-State Check
-            if Check_SS is not 'none':
+                # make Spn1MLxb1 next in output array
+                for l in range(0,self.NBlGages[k]):
+                    for j in range(0,len(str_val)):
+                        if str_val[j] == 'Spn{0}MLxb1'.format(str(l+1)):
+                            output_array.append(j)
 
-                results_check = results3
+                # make RootMyb1 next in output_array
+                for j in range(0, len(str_val)):
+                    if str_val[j] == 'RootMyb1':
+                        output_array.append(j)
 
-                points = 80
-                numVal = len(results_check) / points
-                slope = np.zeros([points, 1])
-                avg_y = np.zeros([points, 1])
+                # make Spn1MLyb1 next in output array
+                for l in range(0, self.NBlGages[k]):
+                    for j in range(0, len(str_val)):
+                        if str_val[j] == 'Spn{0}MLyb1'.format(str(l+1)):
+                            output_array.append(j)
 
-                time = np.linspace(0, Tmax, Tmax / DT + 1)
+                ## these are the powers that the cycles are raised to in order to get the final fatigue.
+                ## they are properties of the materials of the corresponding fields (so they are tied
+                ## to the indices in "output_array"
 
-                for i in range(0, points):
-                    y = results[1 + i * numVal:1 + (i + 1) * numVal]
-                x = time[1 + i * numVal:1 + (i + 1) * numVal]
+                SNslope = np.zeros([1,len(output_array)])
+                for index in range(0,len(output_array)):
+                    for j in range(0,1):
+                        SNslope[j,index] = self.m_value
 
-                # linear regression
-                slope[i], intercept, r_value, p_value, std_err = stats.linregress(x, y)
+                if self.wndfiletype[i-1] == 'turb':
+                    Tmax = self.Tmax_turb
+                else:
+                    Tmax = self.Tmax_nonturb
 
-                # batch mean
-                avg_y[i] = np.sum(y) / len(y)
+                # === perform rainflow calculations === #
+                from rainflow import do_rainflow
+                allres, peaks_list, orig_data, rm_data, data_name = \
+                    do_rainflow(files, output_array, SNslope, Tmax, self.dT, self.rm_time, self.check_rm_time)
 
-                if Check_SS is 'LinReg':
-                    print('The avg. lin. reg. slope at the end is', slope[-1])
-                if Check_SS is 'BatchMean':
-                    print('The batch mean at the end is', avg_y[i])
+                allres = allres[0]
+                a = allres
 
-            # return [sum(results[-500:-1])/500.0, sum(results5[-500:-1])/500.0, sum(results6[-500:-1])/500.0]
+                # print(a)
+                # quit()
 
-            # return [sum(results2[-500:-1])/500.0, sum(results3[-500:-1])/500.0, WindSpeed]
+                # === rainflow sanity check === #
+                # TODO: make an option to choose which .wnd file to check
+                if self.check_rainflow == 'true':
+                    
+                    n = 0;
+                    for m in output_array:
 
-            # return max(top['fast_component.OoPDefl1'])
+                        FAST_b = orig_data[:,m]
+                        FAST_b_time = orig_data[:,0]
+                        FAST_rm = rm_data[:,m]
+                        FAST_rm_time = rm_data[:,0]
 
-            # return sigma_y_ELT5500, sigma_y_Carbon, sigma_x_ELT5500, sigma_x_Triax, LifeTimeDamage / 20.0, sum(
-            #     deflection[-500:-1]) / 500.0,  # LifeTimeDamage_no_cor
-            crit_def = sum(deflection[-200:-1]) / 200.0
+                        plt.figure()
+                        plt.plot(FAST_b_time,FAST_b,'--',label='all data output')
+                        plt.plot(FAST_rm_time,FAST_rm,label='used data output')
 
-            # results from Call_FAST function
-            # [sigma_y_ELT5500, sigma_y_Carbon, sigma_x_ELT5500, sigma_x_Triax, LifeTimeDamage, crit_def]
+                        plt.xlabel('Time Step (s)')
+                        plt.ylabel('Data')
+                        # plt.title(data_name[m] + '; DEM = ' + str(a[n][0]) + ' kN*m')
+                        plt.title(data_name[m] + '; DEM = ' + str(a[n][0]) + ' kN*m')
 
-            # code after CAll_FAST function is called
-            #critical_deflection = crit_def
-            # print(critical_deflection)
-            # quit()
+                        plt.legend()
+                        # plt.savefig('/Users/bingersoll/Desktop/rainflow_check/' + data_name[m] + '.eps')
+                        plt.savefig('/Users/bingersoll/Desktop/plots/rainflow_check/' + data_name[m] + '.png')
+                        # plt.show()
+                        plt.close()
 
-            # append lists of constraints
-            critical_deflection.append(crit_def)
-            ELTx.append(sigma_x_ELT5500)
-            ELTy.append(sigma_y_ELT5500)
-            Carbony.append(sigma_y_Carbon)
-            Triaxx.append(sigma_x_Triax)
-            life_time_damage.append(LifeTimeDamage)
-            # life_time_damage_no_cor.append(LifeTimeDamage_no_cor)
+                        n = n+1
+                    quit()
 
-        np.savetxt('FAST_Outputs/critical_deflection.txt', critical_deflection)
-        np.savetxt('FAST_Outputs/ELTx.txt', ELTx)
-        np.savetxt('FAST_Outputs/ELTy.txt', ELTy)
-        np.savetxt('FAST_Outputs/Carbony.txt', Carbony)
-        np.savetxt('FAST_Outputs/Triaxx.txt', Triaxx)
-        np.savetxt('FAST_Outputs/life_time_damage.txt', life_time_damage)
-        # np.savetxt('life_time_damage_no_cor.txt', life_time_damage_no_cor)
+                # peaks info
+                peaks_array = dict()
+                # for i in range(0,2*(1+total_num_bl_gages)):
+                # for m in range(0, 16 * len(self.BldGagNd)):
+                #     peaks_array['value' + str(m)] = []
+
+                # create peaks master file
+                for j in range(0,len(output_array)):
+                    l = output_array[j]
+                    peaks_array[str_val[l]] = []
+                    peaks_array[str_val[l]].append(peaks_list[j].tolist())
+
+                for j in range(0, len(peaks_array['RootMxb1'])):
+                    peaks_master_x['root'].append(peaks_array['RootMxb1'][j])
+                for j in range(0, len(peaks_array['RootMyb1'])):
+                    peaks_master_y['root'].append(peaks_array['RootMyb1'][j])
+                for j in range(0,len(peaks_array)):
+                    for l in range(0, self.NBlGages[k]):
+                        for m in range(0, len(peaks_array['Spn{0}MLxb1'.format(str(l+1))])):
+                            peaks_master_x['bld_gage_' + str(self.BldGagNd[k][l])].append(peaks_array['Spn{0}MLxb1'.format(str(l+1))][m])
+                        for m in range(0, len(peaks_array['Spn{0}MLyb1'.format(str(l + 1))])):
+                            peaks_master_y['bld_gage_' + str(self.BldGagNd[k][l])].append(peaks_array['Spn{0}MLyb1'.format(str(l+1))][m])
+
+                # addition of turbulent safety factor
+                if self.wndfiletype[i - 1] == 'turb':
+                    a = a*self.turb_sf
+
+                # create xRoot, xDEM, yRoot, and yDEM
+                xRoot = a[0][0]
+
+                xDEM = []
+                for l in range(0,self.NBlGages[k]):
+                    xDEM.append(a[l+1][0])
+
+                yRoot = a[1+self.NBlGages[k]][0]
+                yDEM = []
+                for l in range(0,self.NBlGages[k]):
+                    yDEM.append(a[l+2+self.NBlGages[k]][0])
+
+                for j in range(0,self.NBlGages[k]):
+                    if j == 0:
+                        Edg_param = 'RootMxb1'
+                        Flp_param = 'RootMyb1'
+                    else:
+                        Edg_param = 'Spn{0}MLxb1'.format(j)
+                        Flp_param = 'Spn{0}MLyb1'.format(j)
+
+                    Edg_max_val = abs(max(resultsdict[Edg_param]))
+                    Edg_min_val = abs(min(resultsdict[Edg_param]))
+
+                    Flp_max_val = abs(max(resultsdict[Flp_param]))
+                    Flp_min_val = abs(min(resultsdict[Flp_param]))
+
+                    if j == 0:
+                        Edg_max_array[i-1][0] = max(Edg_max_val, Edg_min_val)
+                        Flp_max_array[i-1][0] = max(Flp_max_val, Flp_min_val)
+                    else:
+                        Edg_max_array[i-1][self.BldGagNd[k][j]] = max(Edg_max_val, Edg_min_val)
+                        Flp_max_array[i-1][self.BldGagNd[k][j]] = max(Flp_max_val, Flp_min_val)
+
+                # take max at each position
+                Edg_max[0] = max(Edg_max[0], Edg_max_array[i - 1][0])
+                Flp_max[0] = max(Flp_max[0], Flp_max_array[i - 1][0])
+                for j in range(1, len(self.BldGagNd[k])+1):
+
+                    for l in range(0,len(tot_BldGagNd)):
+                        if tot_BldGagNd[l] == self.BldGagNd[k][j - 1]:
+                            max_it = l
+
+                    Edg_max[max_it] = max(Edg_max[max_it], Edg_max_array[i - 1][self.BldGagNd[k][j - 1]])
+                    Flp_max[max_it] = max(Flp_max[max_it], Flp_max_array[i - 1][self.BldGagNd[k][j - 1]])
+
+                # Add DEMs to master arrays
+                DEMx_master_array[i-1][0] = xRoot
+                DEMy_master_array[i-1][0] = yRoot
+
+                DEMx_master_array[i-1][self.BldGagNd[k]] = xDEM
+                DEMy_master_array[i-1][self.BldGagNd[k]] = yDEM
+
+                # take max at each position
+                DEMx_max[0] = max(DEMx_max[0], DEMx_master_array[i - 1][0])
+                DEMy_max[0] = max(DEMy_max[0], DEMy_master_array[i - 1][0])
+
+                for j in range(1, len(self.BldGagNd[k]) + 1):
+
+                    for l in range(0,len(tot_BldGagNd)):
+                        if tot_BldGagNd[l] == self.BldGagNd[k][j - 1]:
+                            max_it = l+1
+
+                    DEMx_max[max_it] = max(DEMx_max[max_it], DEMx_master_array[i-1][self.BldGagNd[k][j-1]])
+                    DEMy_max[max_it] = max(DEMy_max[max_it], DEMy_master_array[i-1][self.BldGagNd[k][j-1]])
+
+                if self.Run_Once == 'true':
+
+                    # save root values
+
+                    # xRoot file
+                    xRoot_file = FAST_wnd_directory + '/' + 'xRoot.txt'
+                    file_xroot = open(xRoot_file, "w")
+
+                    # yRoot file
+                    yRoot_file = FAST_wnd_directory + '/' + 'yRoot.txt'
+                    file_yroot = open(yRoot_file, "w")
+
+                    # write to xDEM file
+                    file_xroot.write(str(xRoot) + '\n')
+                    file_xroot.close()
+
+                    # write to yDEM file
+                    file_yroot.write(str(yRoot) + '\n')
+                    file_yroot.close()
+
+                    # save xDEM, yDEM
+
+                    # xDEM file
+                    xDEM_file = FAST_wnd_directory + '/' + 'xDEM_' + str(self.BldGagNd[k][0]) + '.txt'
+                    file_x = open(xDEM_file, "w")
+
+                    # yDEM file
+                    yDEM_file = FAST_wnd_directory + '/' + 'yDEM_' + str(self.BldGagNd[k][0]) + '.txt'
+                    file_y = open(yDEM_file, "w")
+
+                    for j in range(0,len(xDEM)):
+
+                        # write to xDEM file
+                        file_x.write(str(xDEM[j]) + '\n')
+
+                        # write to yDEM file
+                        file_y.write(str(yDEM[j]) + '\n')
+
+                    file_x.close()
+                    file_y.close()
+
+        # === turbulent extreme moment extrapolation === #
+        from scipy.stats import norm
+
+        for j in range(0, 2):  # for both x,y bending moments
+            if j == 1:
+                peaks_master = peaks_master_x
+                data_type = 'x'
+            else:
+                peaks_master = peaks_master_y
+                data_type = 'y'
+
+            for i in range(0, total_num_bl_gages+1): # +1 for root bending moment
+
+                if i == 0:
+                    data_name = 'root'
+                else:
+                    data_name = 'bld_gage_' + str(tot_BldGagNd[i-1])
+                root_peaks = peaks_master[data_name]
+
+                # get data
+                rp_list = []
+                for i in range(0, len(root_peaks)):
+                    for j in range(0, len(root_peaks[i])):
+                        rp_list.append(root_peaks[i][j])
+
+                # normal distribution
+                norm_dist = 'true'
+                if norm_dist == 'true':
+                    # get fit
+                    data = rp_list
+
+                    plt.figure()
+                    # Fit a normal distribution to the data:
+                    mu, std = norm.fit(data)
+
+                    # Plot the histogram.
+                    plt.hist(data, bins=25, normed=True, alpha=0.6, color='g')
+
+                    # Plot the PDF.
+                    xmin, xmax = plt.xlim()
+                    x = np.linspace(xmin, xmax, 100)
+                    p = norm.pdf(x, mu, std)
+                    plt.plot(x, p, 'k', linewidth=2)
+                    plt.title(data_name + data_type + ' Turbulent Peaks, Normal Dist. Fit')
+                    plt.ylabel('Normalized Frequency')
+                    plt.xlabel('Load Bins (kN*m)')
+
+                    # add extrapolated, extreme moment
+                    spec_sd = 3.7*10.0**(-8.0)
+
+                    extreme_mom = max(abs(mu + std*norm.ppf(spec_sd)), abs(mu + std*norm.ppf(1.0-spec_sd)))
+
+                    if data_type == 'x':
+                        peaks_max_x[data_name] = extreme_mom
+                    else:
+                        peaks_max_y[data_name] = extreme_mom
+                    # print(peaks_max[data_name])
+
+                    # show plot, quit routine
+                    if self.check_peaks == 'true':
+                        plt.savefig('/Users/bingersoll/Desktop/plots/hist_' + str(data_name) + str(data_type) + '.png')
+                        # plt.show()
+                        # quit()
+                    plt.close()
+
+        if self.check_peaks == 'true':
+            quit()
+
+        # compare peaks_max_x, peaks_max_y with Edg_max, Flp_max
+        # not super necessary, since peaks should always be greater
+        for i in range(0, len(Edg_max)):
+            if i == 0:
+                Edg_max[i] = max(Edg_max[i],peaks_max_x['root'])
+                Flp_max[i] = max(Flp_max[i],peaks_max_y['root'])
+            else:
+                Edg_max[i] = max(Edg_max[i], peaks_max_x['bld_gage_' + str(tot_BldGagNd[i-1])])
+                Flp_max[i] = max(Flp_max[i], peaks_max_y['bld_gage_' + str(tot_BldGagNd[i-1])])
+
+
+        # === structural akima spline === #
+
+        spline_extr = params['initial_str_grid']
+        spline_pos = params['rstar_damage'][np.insert(tot_BldGagNd, 0, 0.0)]
+
+        Edg_max_spline = Akima(spline_pos, Edg_max)
+
+        unknowns['Edg_max'] = Edg_max_spline.interp(spline_extr)[0]*10.0**3.0 # kN*m to N*m
+
+        Flp_max_spline = Akima(spline_pos, Flp_max)
+        unknowns['Flp_max'] = Flp_max_spline.interp(spline_extr)[0]*10.0**3.0 # kN*m to N*m
+
+        # === DEM akima spline === #
+
+        spline_extr = params['rstar_damage']
+        spline_pos = params['rstar_damage'][np.insert(tot_BldGagNd,0,0.0)]
+
+        # print(spline_extr)
+        # print([np.insert(tot_BldGagNd,0,0.0)])
+        # print(spline_pos)
+        # print(DEMy_max)
+        # quit()
+
+        DEMx_spline = Akima(spline_pos,DEMx_max)
+        unknowns['DEMx'] = DEMx_spline.interp(spline_extr)[0]
+
+        DEMy_spline = Akima(spline_pos,DEMy_max)
+        unknowns['DEMy'] = DEMy_spline.interp(spline_extr)[0]
+
+
+        if self.check_nom_DEM_damage == 'true':
+            unknowns['DEMx'] = 1e3 * np.array([2.3743E+003, 2.0834E+003, 1.8108E+003, 1.5705E+003, 1.3104E+003,
+                                                  1.0488E+003, 8.2367E+002, 6.3407E+002, 4.7727E+002, 3.4804E+002,
+                                                  2.4458E+002, 1.6339E+002,
+                                                  1.0252E+002, 5.7842E+001, 2.7349E+001, 1.1262E+001, 3.8549E+000,
+                                                  4.4738E-001])  # (Array, N*m): damage equivalent moments about blade c.s. x-direction
+            unknowns['DEMy'] = 1e3 * np.array([2.7732E+003, 2.8155E+003, 2.6004E+003, 2.3933E+003, 2.1371E+003,
+                                                  1.8459E+003, 1.5582E+003, 1.2896E+003, 1.0427E+003, 8.2015E+002,
+                                                  6.2449E+002, 4.5229E+002,
+                                                  3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001,
+                                                  1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
+
+        # TODO: create plot check to see if akima spline can't be fitted better with other strain gage positions
+        if self.check_sgp_spline == 'true':
+
+            # plot splines
+            spline_plot = np.linspace(0,1,200)
+            DEMx_spline_plot = Akima(spline_pos, DEMx_max)
+            DEMx_plot = DEMx_spline_plot.interp(spline_plot)[0]
+
+            DEMy_spline = Akima(spline_pos, DEMy_max)
+            DEMy_plot = DEMy_spline.interp(spline_plot)[0]
+
+            # DEMx
+            plt.figure()
+            plt.plot(spline_pos, DEMx_max, '*', label='points')
+            # plt.plot(spline_extr, unknowns['DEMx'], label='spline')
+            plt.plot(spline_plot, DEMx_plot, label='spline')
+
+            plt.xlabel('Unit Radius of Blade')
+            plt.ylabel('DEMx (kN*m)')
+            plt.title('DEMx spline - ' + str(total_num_bl_gages) + ' strain gages')
+            plt.legend()
+
+            plt.savefig("/Users/bingersoll/Desktop/plots/DEM_plots/DEMx_nsg" + str(total_num_bl_gages) + ".png")
+            print('saved at ')
+            print("/Users/bingersoll/Desktop/plots/DEM_plots/DEMx_nsg" + str(total_num_bl_gages) + ".png")
+            print(unknowns['DEMx'])
+            print(spline_pos)
+
+            # DEMy
+            plt.figure()
+            plt.plot(spline_pos, DEMy_max, '*', label='points')
+            # plt.plot(spline_extr, unknowns['DEMy'], label='spline')
+            plt.plot(spline_plot, DEMy_plot, label='spline')
+
+            plt.xlabel('Unit Radius of Blade')
+            plt.ylabel('DEMy (N*m)')
+            plt.title('DEMy spline - ' + str(total_num_bl_gages) + ' strain gages')
+            plt.legend()
+
+            plt.savefig("/Users/bingersoll/Desktop/plots/DEM_plots/DEMy_nsg" + str(total_num_bl_gages) + ".png")
+            print('saved at ')
+            print("/Users/bingersoll/Desktop/plots/DEM_plots/DEMy_nsg" + str(total_num_bl_gages) + ".png")
+            print(unknowns['DEMy'])
+            print(spline_pos)
+
+            plt.show()
+
+            quit()
+
+        # === Tip Deflection extraction === #
+
+        max_tip_def_array = np.zeros([len(self.caseids), 1])
+
+        # for i in range(0+1, len(self.caseids)+1):
+        for i in range(0, len(self.caseids)):
+            # resultsdict = params['WNDfile{0}'.format(i)]
+            resultsdict = params[self.caseids[i]]
+
+            maxdeflection = abs(max(resultsdict['OoPDefl1']))
+            mindeflection = abs(min(resultsdict['OoPDefl1']))
+
+            max_tip_def_array[i - 1] = max(maxdeflection, mindeflection)
+
+        # for now, just create single constraint
+        # TODO: see if it'd be better to create vector of constraints
+        unknowns['max_tip_def'] = max(max_tip_def_array)
+        #
+        # print('in end of create fast constraints')
+        # print(self.BldGagNd)
+        # print(self.test_BldGagNd)
+        # print('-----------------------------------')
+
+class CreateFAST_surr_model(Component):
+    def __init__(self, FASTinfo, naero, nstr):
+        super(CreateFAST_surr_model, self).__init__()
+
+        # design variables
+        self.add_param('r_max_chord', val=0.0)
+        self.add_param('chord_sub',  val=np.zeros(4))
+        self.add_param('theta_sub', val=np.zeros(4))
+        self.add_param('sparT', val=np.zeros(5))
+        self.add_param('teT', val=np.zeros(5))
+
+        self.FASTinfo = FASTinfo
+
+        self.training_point_dist = FASTinfo['training_point_dist'] # 'lhs', 'linear'
+
+        self.sm_var_spec = FASTinfo['sm_var_spec']
+        self.sm_var_index = FASTinfo['sm_var_index']
+        self.sm_var_names = FASTinfo['sm_var_names']
+
+        if self.training_point_dist == 'lhs':
+            self.num_pts = FASTinfo['num_pts']
+        else:
+            self.sm_var_max = FASTinfo['sm_var_max']
+
+
+        self.sm_var_file = FASTinfo['sm_var_file']
+        self.sm_out_file = FASTinfo['sm_out_file']
+        # self.sm_param_file = FASTinfo['sm_param_file']
+
+        self.opt_dir = FASTinfo['opt_dir']
+
+        self.var_filename = self.opt_dir + '/' + self.sm_var_file
+        self.out_filename = self.opt_dir + '/' + self.sm_out_file
+        # self.param_filename = self.opt_dir + '/' + self.sm_param_file
+
+        self.NBlGages = FASTinfo['NBlGages']
+        self.BldGagNd = FASTinfo['BldGagNd']
+
+        total_num_bl_gages = 0
+        for i in range(0, len(self.NBlGages)):
+            total_num_bl_gages += self.NBlGages[i]
+
+
+        # self.add_param('DEMx', shape=total_num_bl_gages+1, desc='DEMx')
+        # self.add_param('DEMy', shape=total_num_bl_gages+1, desc='DEMy')
+        self.add_param('DEMx', shape=18, desc='DEMx')
+        self.add_param('DEMy', shape=18, desc='DEMy')
+
+        self.add_param('Edg_max', shape=nstr, desc='FAST Edg_max')
+        self.add_param('Flp_max', shape=nstr, desc='FAST Flp_max')
+
+    def solve_nonlinear(self, params, unknowns, resids):
+        #
+        # print(params['r_max_chord'])
+        # quit()
+
+        def replace_line(file_name, line_num, text):
+            lines = open(file_name, 'r').readlines()
+            lines[line_num] = text
+            out = open(file_name, 'w')
+            out.writelines(lines)
+            out.close()
+
+        # === parameter file === #
+
+        # # check if output file exists (if it doesn't, create it)
+        # if not (os.path.isfile(self.param_filename)):
+        #
+        #     # header line
+        #     f = open(self.param_filename, "w+")
+        #
+        #     # write a header
+        #     header0 = 'surrogate model parameter file'
+        #     f.write(header0 + '\n')
+        #
+        #     # write param info
+        #     f.write(self.training_point_dist + '\n')
+        #
+        #     if self.training_point_dist == 'linear':
+        #         f.write(str(self.sm_var_max) + '\n')
+        #     elif self.training_point_dist == 'lhs':
+        #         f.write(str(self.num_pts) + '\n')
+        #
+        #     f.write(str(self.sm_var_index) + '\n')
+        #
+        #     for i in range(0, len(self.sm_var_names)):
+        #         f.write(str(self.sm_var_names[i]) + '\n')
+        #
+        #     f.close()
         #
         # quit()
 
-        ELTx_1 = np.loadtxt('FAST_Outputs/ELTx.txt')
-        ELTx_2 = np.zeros(len(self.caseids) * 7)
-        ELTy_1 = np.loadtxt('FAST_Outputs/ELTy.txt')
-        ELTy_2 = np.zeros(len(self.caseids) * 7)
-        Carbony_1 = np.loadtxt('FAST_Outputs/Carbony.txt')
-        Carbony_2 = np.zeros(len(self.caseids) * 7)
-        Triaxx_1 = np.loadtxt('FAST_Outputs/Triaxx.txt')
-        Triaxx_2 = np.zeros(len(self.caseids) * 7)
-        # life_time_damage_1 = np.loadtxt('life_time_damage.txt')
-        # life_time_damage_2 = np.zeros(len(DLC_List) * 7)
-        # critical_deflection_1 = np.loadtxt('critical_deflection.txt')
-        # critical_deflection_2 = np.zeros(len(DLC_List) * 7)
-        for i in range(0, len(self.caseids)):
-            for j in range(0, 7):
-                ELTx_2[i * 7 + j] = ELTx_1[i, j]
-                ELTy_2[i * 7 + j] = ELTy_1[i, j]
-                Carbony_2[i * 7 + j] = Carbony_1[i, j]
-                Triaxx_2[i * 7 + j] = Triaxx_1[i, j]
-                # life_time_damage_2[i * 7 + j] = life_time_damage_1[i, j]
-                # critical_deflection_2[i * 7 + j] = critical_deflection_1[i, j]
+        # === variable and output files === #
 
-        np.savetxt('FAST_Outputs/ELTx_new.txt', ELTx_2)
-        np.savetxt('FAST_Outputs/ELTy_new.txt', ELTy_2)
-        np.savetxt('FAST_Outputs/Carbony_new.txt', Carbony_2)
-        np.savetxt('FAST_Outputs/Triaxx_new.txt', Triaxx_2)
-        # np.savetxt('life_time_damage_new.txt', life_time_damage)
-        # np.savetxt('critical_deflection_new.txt', critical_deflection)
+        # if training points are laid out linearly
+        if self.training_point_dist == 'linear':
 
-        critical_deflection = np.asarray(critical_deflection)
-        life_time_damage = np.asarray(life_time_damage)
+            # total variations
+            tv = []
+            for i in range(0, len(self.sm_var_max)):
+                for j in range(0, len(self.sm_var_max[i])):
+                    tv.append(self.sm_var_max[i][j])
 
-        unknowns['ELT5500_sigma_x'] = ELTx_2
-        unknowns['ELT5500_sigma_y'] = ELTy_2
-        unknowns['Carbon_sigma_y'] = Carbony_2
-        unknowns['Triax_sigma_x'] = Triaxx_2
-        unknowns['crit_def'] = critical_deflection
-        unknowns['fatigue'] = life_time_damage
+            # specific variation
+            sv = []
+            for i in range(0, len(self.sm_var_spec)):
+                for j in range(0, len(self.sm_var_spec[i])):
+                    sv.append(self.sm_var_spec[i][j])
 
-        print(unknowns['ELT5500_sigma_x'])
-        print(unknowns['ELT5500_sigma_y'])
-        print(unknowns['Carbon_sigma_y'])
-        print(unknowns['Triax_sigma_x'])
-        print(unknowns['crit_def'])
-        print(unknowns['fatigue'])
-        quit()
+            # check if output file exists (if it doesn't, create it)
+            if not (os.path.isfile(self.out_filename)):
+                # create file
+                f = open(self.out_filename,"w+")
 
+                # write a header
+                header0 = 'variable points: '
+                for i in range(0, len(self.sm_var_names)):
+
+                    header0 += self.sm_var_names[i]
+                    for j in range(0, len(self.sm_var_index[i])):
+                        header0 += '_' + str(self.sm_var_index[i][j])
+
+                    header0 += ' '
+
+                    for j in range(0, len(self.sm_var_spec[i])):
+                        header0 += str(self.sm_var_max[i][j]) + ' '
+
+                f.write(header0+'\n')
+
+                # total variation product
+                n_tv = np.prod(tv)
+
+                for i in range(0,n_tv):
+                    f.write('-- place holder --'+'\n')
+
+                f.close()
+
+            # variable file
+            if not (os.path.isfile(self.var_filename)):
+                # create file
+                f = open(self.var_filename, "w+")
+
+                # write a header
+                header0 = 'variable points: '
+                for i in range(0, len(self.sm_var_names)):
+
+                    header0 += self.sm_var_names[i]
+                    for j in range(0, len(self.sm_var_index[i])):
+                        header0 += '_' + str(self.sm_var_index[i][j])
+
+                    header0 += ' '
+
+                    for j in range(0, len(self.sm_var_spec[i])):
+                        header0 += str(self.sm_var_max[i][j]) + ' '
+
+                f.write(header0 + '\n')
+
+                # total variation product
+                n_tv = np.prod(tv)
+
+                for i in range(0, n_tv):
+                    f.write('-- place holder --' + '\n')
+
+                f.close()
+
+            # determine which line we should write to
+
+            # get position
+            def surr_model_pos(spec_var, max_var):
+                pos = 0
+                for i in range(0, len(max_var) - 1):
+                    pos += (spec_var[i] - 1) * np.prod(max_var[i + 1:len(max_var)])
+                pos += spec_var[len(spec_var) - 1] - 1
+
+                return pos
+
+            spec_pos = surr_model_pos(sv, tv)
+
+            header_len = 1
+
+            # write first entry to line as naming convention (ex. 1_2_2_0_1 if 5 variables are being used)
+            out_text = 'var_'
+            for i in range(0, len(sv)):
+                out_text += str(sv[i])+'_'
+
+            # put DEMx and DEMy as values on line
+            for i in range(0, len(params['DEMx'])):
+                out_text += ' ' + str(params['DEMx'][i])
+
+            for i in range(0, len(params['DEMy'])):
+                out_text += ' ' + str(params['DEMy'][i])
+
+            replace_line(self.out_filename, spec_pos+header_len, out_text+'\n')
+
+            # add for var_file
+            var_text = 'var_'
+            for i in range(0, len(sv)):
+                var_text += str(sv[i])+'_'
+
+            for i in range(0, len(self.sm_var_names)):
+
+                if hasattr(params[self.sm_var_names[i]],'__len__'):
+
+                    for j in range(0, len(params[self.sm_var_names[i]])):
+                        if j in self.sm_var_index[i]:
+                            var_text += ' ' + str(params[self.sm_var_names[i]][j])
+
+                else:
+                    var_text += ' ' + str(params[self.sm_var_names[i]])
+
+            replace_line(self.var_filename, spec_pos + header_len, var_text + '\n')
+
+        # if training points are determined with latin hypercube sampling
+        elif self.training_point_dist == 'lhs':
+
+            header_len = 1
+
+            # variable file
+            if not (os.path.isfile(self.var_filename)):
+                # create file
+
+                f = open(self.var_filename, "w+")
+
+                # header line
+                header0 = 'variable points: '
+                for i in range(0, len(self.sm_var_names)):
+
+                    header0 += self.sm_var_names[i]
+                    for j in range(0, len(self.sm_var_index[i])):
+                        header0 += '_' + str(self.sm_var_index[i][j])
+
+                    header0 += ' '
+
+                f.write(header0 + '\n')
+
+                for i in range(0, self.num_pts):
+                    f.write('-- place holder --' + '\n')
+
+                f.close
+
+            # add for var_file
+            var_text = 'num_pt_' + str(self.sm_var_spec)
+
+            for i in range(0, len(self.sm_var_names)):
+
+                if hasattr(params[self.sm_var_names[i]],'__len__'):
+                    for j in range(0, len(params[self.sm_var_names[i]])):
+                        if j in self.sm_var_index[i]:
+                            var_text += ' ' + str(params[self.sm_var_names[i]][j])
+                else:
+                    var_text += ' ' + str(params[self.sm_var_names[i]])
+
+            # output file
+            # check if output file exists (if it doesn't, create it)
+            if not (os.path.isfile(self.out_filename)):
+                # create file
+                f = open(self.out_filename, "w+")
+
+                # write a header
+                header0 = 'variable points: '
+                for i in range(0, len(self.sm_var_names)):
+
+                    header0 += self.sm_var_names[i]
+                    for j in range(0, len(self.sm_var_index[i])):
+                        header0 += '_' + str(self.sm_var_index[i][j])
+
+                    header0 += ' '
+
+                f.write(header0 + '\n')
+
+                for i in range(0, self.num_pts):
+                    f.write('-- place holder --' + '\n')
+
+                f.close()
+
+            # write first entry to line as naming convention (ex. 1_2_2_0_1 if 5 variables are being used)
+            out_text = 'pt_' + str(self.sm_var_spec)
+
+            # put DEMx and DEMy as values on line
+            for i in range(0, len(params['DEMx'])):
+                out_text += ' ' + str(params['DEMx'][i])
+
+            for i in range(0, len(params['DEMy'])):
+                out_text += ' ' + str(params['DEMy'][i])
+
+            # replace lines
+            replace_line(self.var_filename, self.sm_var_spec + header_len, var_text + '\n')
+
+            replace_line(self.out_filename, self.sm_var_spec + header_len, out_text + '\n')
+
+        else:
+            raise Exception('Need to specify training point distribution.')
+
+        return
+
+class Use_FAST_surr_model(Component):
+
+    def __init__(self, FASTinfo, naero, nstr):
+        super(Use_FAST_surr_model, self).__init__()
+
+        self.FASTinfo = FASTinfo
+
+        self.add_param('r_max_chord', val=0.0)
+        self.add_param('chord_sub',  val=np.zeros(4))
+        self.add_param('theta_sub', val=np.zeros(4))
+        self.add_param('sparT', val=np.zeros(5))
+        self.add_param('teT', val=np.zeros(5))
+
+        self.sm_var_file = FASTinfo['sm_var_file']
+        self.sm_out_file = FASTinfo['sm_out_file']
+        # self.sm_param_file = FASTinfo['sm_param_file']
+
+        self.opt_dir = FASTinfo['opt_dir']
+
+        self.var_filename = self.opt_dir + '/' + self.sm_var_file
+        self.out_filename = self.opt_dir + '/' + self.sm_out_file
+        # self.param_filename = self.opt_dir + '/' + self.sm_param_file
+
+        self.training_point_dist = FASTinfo['training_point_dist'] # 'linear', 'lhs'
+
+        if self.training_point_dist == 'lhs':
+            self.num_pts = FASTinfo['num_pts']
+        else:
+            self.sm_var_max = FASTinfo['sm_var_max']
+
+        self.sm_var_index = FASTinfo['sm_var_index']
+        self.sm_var_names = FASTinfo['sm_var_names']
+
+        self.NBlGages = FASTinfo['NBlGages']
+        self.BldGagNd = FASTinfo['BldGagNd']
+
+        self.add_param('DEMx', shape=18, desc='DEMx')
+        self.add_param('DEMy', shape=18, desc='DEMy')
+
+        self.check_fit = FASTinfo['check_fit']
+        self.do_cv = FASTinfo['do_cv']
+
+        if self.do_cv == 'true':
+            self.cv_dir = FASTinfo['cv_dir']
+
+            self.cv_var_filename = self.cv_dir + '/' + self.sm_var_file
+            self.cv_out_filename = self.cv_dir + '/' + self.sm_out_file
+
+        self.add_output('DEMx_sm', val=np.zeros(8), pass_by_obj=False)
+        self.add_output('DEMy_sm', val=np.zeros(8), pass_by_obj=False)
+
+    def solve_nonlinear(self, params, unknowns, resids):
+
+        # === extract surrogate model parameters === #
+        # f = open(self.param_filename, "r")
+        #
+        # sm_param = list(f)
+        #
+        # self.training_point_dist = sm_param[1].strip()
+        #
+        # if self.training_point_dist == 'linear':
+        #
+        #     self.sm_var_max = sm_param[3].split(',')
+        #     for i in range(0, len(self.sm_var_max)):
+        #         self.sm_var_max[i] = float(self.sm_var_max[i])
+        #
+        # elif self.training_point_dist == 'lhs':
+        #     self.num_pts = float(sm_param[2])
+        #
+        # self.sm_var_index = sm_param[3].split(',')
+        # for i in range(0, len(self.sm_var_index)):
+        #     self.sm_var_index[i] = float(self.sm_var_index[i])
+        #
+        # self.sm_var_names = []
+        # for i in range(4, len(sm_param)):
+        #     self.sm_var_names.append(sm_param[i])
+        #
+        # print(self.sm_var_index)
+        # print(self.sm_var_max)
+        # print(self.sm_var_names)
+        #
+        # quit()
+
+        # === extract variables === #
+        header_len = 1
+
+        if self.training_point_dist == 'linear':
+            # determine total number of combinations
+            tot_var = 1
+            for i in range(0, len(self.sm_var_max)):
+                for j in range(0, len(self.sm_var_max[i])):
+                    tot_var *= self.sm_var_max[i][j]
+
+        elif self.training_point_dist == 'lhs':
+
+            tot_var = self.num_pts
+
+        else:
+            raise Exception('Need to specify training point distribution.')
+
+        # === determine total number of design variables === #
+        num_var = 0
+        for i in range(0, len(self.sm_var_index)):
+            for j in range(0, len(self.sm_var_index[i])):
+                num_var += 1
+
+        # === placeholder for var_names === #
+        var_names = []
+
+        for i in range(0, num_var):
+            var_names.append('var_' + str(i))
+
+        # read in variables
+        var_dict = dict()
+        for i in range(0, len(var_names)):
+            var_dict[var_names[i]] = []
+
+        # open variable .txt file
+        f = open(self.var_filename, "r")
+
+        # lines = f.readlines(1)
+        lines = list(f)
+
+        for i in range(header_len, tot_var+header_len):
+
+            cur_line = lines[i].split()
+
+            # for the case where only varied variables are recorded in sm_var.txt
+            if len(cur_line) == num_var+1:
+                for j in range(1, len(cur_line)):
+                    var_dict[var_names[j-1]].append(float(cur_line[j]))
+
+        f.close()
+
+        # === extract outputs === #
+        # open output .txt file
+        f = open(self.out_filename, "r")
+
+        # print(list(f))
+        lines = list(f)
+
+        # first out line
+        first_line = lines[1].split()
+
+        if len(first_line) == 37:
+            sgp_range = 17+1
+        elif len(first_line) == 17:
+            sgp_range = 7+1
+
+        out_dict = dict()
+        out_names = []
+
+        out_dict['Rootx'] = []
+        out_names.append('Rootx')
+        for i in range(1, sgp_range):
+            out_dict['DEMx_' + str(i)] = []
+            out_names.append('DEMx_' + str(i))
+
+        out_dict['Rooty'] = []
+        out_names.append('Rooty')
+        for i in range(1, sgp_range):
+            out_dict['DEMy_' + str(i)] = []
+            out_names.append('DEMy_' + str(i))
+
+        for i in range(header_len, tot_var + header_len):
+
+            cur_line = lines[i].split()
+            for j in range(1, len(cur_line)):
+                out_dict[out_names[j - 1]].append(float(cur_line[j]))
+
+        f.close()
+
+        # === estimate DEMs === #
+
+        # current design variable values
+        sv = []
+        for i in range(0, len(self.sm_var_names)):
+
+            if hasattr(params[self.sm_var_names[i]], '__len__'):
+                for j in range(0, len(self.sm_var_names[i])):
+
+                    if j in self.sm_var_index[i]:
+                        sv.append(params[self.sm_var_names[i]][j])
+            else:
+                sv.append(params[self.sm_var_names[i]])
+
+        # second-order polynomial approximation
+        from smt.surrogate_models import QP
+
+        DEMx_sm = np.zeros([18, 1])
+        DEMy_sm = np.zeros([18, 1])
+
+        num_pts = len(out_dict['Rootx'])
+        num_vars = len(var_names)
+
+        # === DEMx_sm, DEMy_sm calculations === #
+
+        # need to get training values: xt - design variable values; yt - outputs
+        xt = np.zeros([num_vars, num_pts])
+
+        yt_x = np.zeros([len(DEMx_sm), num_pts])
+        yt_y = np.zeros([len(DEMy_sm), num_pts])
+
+        for i in range(0,len(DEMx_sm)):
+
+            for j in range(0, num_pts):
+
+                # design variable values
+                for k in range(0,len(var_names)):
+                    xt[k, j] = var_dict[var_names[k]][j]
+
+                # output values
+                yt_x[i,j] = out_dict[out_names[i]][j]
+                yt_y[i, j] = out_dict[out_names[i + 18]][j]
+
+        # using current design variable values, predict output
+        sm_x = QP()
+        sm_x.set_training_values(np.transpose(xt),np.transpose(yt_x))
+        sm_x.train()
+
+        sm_y = QP()
+        sm_y.set_training_values(np.transpose(xt),np.transpose(yt_y))
+        sm_y.train()
+
+        # predicted values
+        int_sv = np.zeros([len(sv),1])
+        for i in range(0, len(int_sv)):
+            int_sv[i] = sv[i]
+
+        DEMx_sm = np.transpose(sm_x.predict_values(np.transpose(int_sv)))
+        DEMy_sm = np.transpose(sm_y.predict_values(np.transpose(int_sv)))
+
+        if self.check_fit  == 'true':
+            sm = QP()
+
+            # sm.set_training_values(np.array(var_dict['r_max_chord']), np.array(out_dict['Rooty']))
+            sm.set_training_values(np.array(var_dict['var_0']), np.array(out_dict['Rooty']))
+            sm.train()
+
+            # predicted value
+            val_y = sm.predict_values(np.array(params['r_max_chord']))
+
+            # predicted curve
+            num = 100
+            fit_x = np.linspace(0.1, 0.5, num)
+            fit_y = sm.predict_values(np.array(fit_x))
+
+            plt.figure()
+            plt.title('r_max_chord')
+            # plt.plot(var_dict['r_max_chord'], out_dict['Rooty'], 'o')
+            # plt.plot(var_dict['var_0'], out_dict['Rooty'], 'o')
+            plt.plot(params['r_max_chord'], val_y, 'x')
+            plt.plot(fit_x, fit_y)
+            plt.xlabel('r_max_chord')
+            plt.ylabel('Root DEMx (kN*m)')
+            # plt.legend(['Training data', 'Calculated Value', 'Prediction'])
+            plt.legend(['Calculated Value', 'Prediction'])
+            # plt.savefig('/Users/bingersoll/Desktop/sm_ex.eps')
+            plt.savefig('/Users/bingersoll/Desktop/sm_ex.png')
+            plt.show()
+
+            quit()
+
+        # Do a cross validation, check for total error
+        if self.do_cv == 'true':
+
+            print('Running cross validation...')
+
+            # fit from earlier: sm_x, sm_y
+
+            # === from _var.txt, predict values === #
+            # need to get cross validation address
+            f_cv = open(self.cv_var_filename, "r")
+
+            cv_lines = list(f_cv)
+
+            # read in variables
+            cv_var_dict = dict()
+            for i in range(0, len(var_names)):
+                cv_var_dict[var_names[i]] = []
+
+            for i in range(header_len, len(cv_lines)):
+                cur_line = cv_lines[i].split()
+
+                # for the case where only varied variables are recorded in sm_var.txt
+                if len(cur_line) == num_var + 1:
+                    for j in range(1, len(cur_line)):
+                        cv_var_dict[var_names[j - 1]].append(float(cur_line[j]))
+
+            f_cv.close()
+
+            xt_cv = np.zeros([num_vars, len(cv_var_dict['var_0'])])
+            for i in range(0, num_vars):
+                xt_cv[i,:] = cv_var_dict['var_' + str(i)]
+
+            yt_x_cv_estimated = sm_x.predict_values(np.transpose(xt_cv))
+            yt_y_cv_estimated = sm_y.predict_values(np.transpose(xt_cv))
+
+            # === from _out.txt, get actual values === #
+
+            f_cv = open(self.cv_out_filename, "r")
+
+            lines = list(f_cv)
+
+            # first out line
+            first_line = lines[1].split()
+
+            if len(first_line) == 37:
+                sgp_range = 17 + 1
+            elif len(first_line) == 17:
+                sgp_range = 7 + 1
+
+            cv_out_dict = dict()
+            cv_out_names = []
+
+            cv_out_dict['Rootx'] = []
+            cv_out_names.append('Rootx')
+            for i in range(1, sgp_range):
+                cv_out_dict['DEMx_' + str(i)] = []
+                cv_out_names.append('DEMx_' + str(i))
+
+            cv_out_dict['Rooty'] = []
+            cv_out_names.append('Rooty')
+            for i in range(1, sgp_range):
+                cv_out_dict['DEMy_' + str(i)] = []
+                cv_out_names.append('DEMy_' + str(i))
+
+            for i in range(header_len, len(lines)):
+
+                cur_line = lines[i].split()
+                for j in range(1, len(cur_line)):
+                    cv_out_dict[cv_out_names[j - 1]].append(float(cur_line[j]))
+
+            f_cv.close()
+
+            yt_x_cv_actual = np.zeros([len(DEMx_sm), len(lines)-header_len])
+            yt_y_cv_actual = np.zeros([len(DEMy_sm), len(lines)-header_len])
+
+            for i in range(0, len(DEMx_sm)):
+                for j in range(0, len(lines)-header_len):
+
+                    # output values
+                    yt_x_cv_actual[i, j] = out_dict[out_names[i]][j]
+                    yt_y_cv_actual[i, j] = out_dict[out_names[i + 18]][j]
+
+            # === calculate error === #
+
+            yt_x_cv_actual = np.transpose(yt_x_cv_actual)
+            yt_y_cv_actual = np.transpose(yt_y_cv_actual)
+
+            # reorder yt_x_cv_estimated
+            total_pts = yt_x_cv_estimated.shape[0] * yt_x_cv_estimated.shape[1]
+
+            yt_x_cv_estimated_list = np.zeros([total_pts, 1])
+            for i in range(0, yt_x_cv_estimated.shape[0]):
+                for j in range(0, yt_x_cv_estimated.shape[1]):
+                    yt_x_cv_estimated_list[ i* yt_x_cv_estimated.shape[1] + j ] = yt_x_cv_estimated[i][j]
+
+            yt_x_cv_estimated = np.zeros([yt_x_cv_actual.shape[0], yt_x_cv_actual.shape[1]])
+
+            for i in range(0, yt_x_cv_estimated.shape[1]):
+                for j in range(0, yt_x_cv_estimated.shape[0]):
+                    yt_x_cv_estimated[j,i] = yt_x_cv_estimated_list[ i* yt_x_cv_estimated.shape[0] + j ]
+
+            print(yt_x_cv_estimated)
+            print('# === === #')
+            print(yt_x_cv_actual)
+
+            quit()
+
+        return DEMx_sm, DEMy_sm
+
+
+
+        # linear extrapolation
+        # -- point is going to fall between two other points
+        # easy to visualize for one, two var.
+        # how can we do this for additional var. amounts?
+
+        # probably in create_surr_model, need to create list of what des. var. values are used
+
+        # probably can create fit using tool from Dr. Ning, visualize for at least 1 var
+
+
+
+        # # call function
+        # from FAST_util import FAST_sm
+        # DEMx, DEMy = FAST_sm(self.FASTinfo, params['r_max_chord'], params['chord_sub'], params['theta_sub'],
+        #                      params['sparT'], params['teT'])
+        #
+        # unknowns['DEMx_sm'] = DEMx
+        # unknowns['DEMy_sm'] = DEMy
+
+        return
 
 
 class CreateFASTConfig(Component):
-    def __init__(self, Tmax, dT, DLC_List, caseids):
+    def __init__(self, naero, nstr, FASTinfo, WNDfile_List, caseids):
         super(CreateFASTConfig, self).__init__()
 
         self.caseids = caseids
-        self.DLC_List = DLC_List
-        self.Tmax = Tmax
-        self.dT = dT
+        self.WNDfile_List = WNDfile_List
+
+        self.dT = FASTinfo['dT']
+        self.description = FASTinfo['description']
+        self.path = FASTinfo['path']
+        self.NBlGages = FASTinfo['NBlGages']
+        # self.BldGagNd = FASTinfo['BldGagNd']
+        self.BldGagNd = FASTinfo['BldGagNd_config']
+        self.sgp = FASTinfo['sgp']
+
+        self.nonturb_dir = FASTinfo['nonturb_wnd_dir']
+        self.turb_dir = FASTinfo['turb_wnd_dir']
+        self.wndfiletype = FASTinfo['wnd_type_list']
+        self.parked_type = FASTinfo['parked']
+
+        self.Tmax_turb = FASTinfo['Tmax_turb']
+        self.Tmax_nonturb = FASTinfo['Tmax_nonturb']
+
+        self.FAST_opt_directory = FASTinfo['opt_dir']
+        # self.sgp_dir = FASTinfo['spec_sgp_dir']
+        self.template_dir = FASTinfo['template_dir']
+
+        self.check_stif_spline = FASTinfo['check_stif_spline']
+
+        self.output_list = FASTinfo['output_list']
 
         # add necessary parameters
-
         self.add_param('nBlades', val=0)
 
-        self.add_param('EIyy', val=np.zeros(38))
+        self.add_param('EIyy', val=np.zeros(nstr))
 
         self.add_param('r_max_chord', val=0.0)
         self.add_param('chord_sub', val=np.zeros(4))
         self.add_param('theta_sub', val=np.zeros(4))
         self.add_param('idx_cylinder_aero', val=0)
-        self.add_param('initial_aero_grid', val=np.zeros(17))
+        self.add_param('initial_aero_grid', val=np.zeros(naero))
 
         self.add_param('rho', val=0.0)
         self.add_param('control:tsr', val=0.0)
@@ -3336,28 +3631,28 @@ class CreateFASTConfig(Component):
         self.add_param('precone', val=0.0)
         self.add_param('tilt', val=0.0)
         self.add_param('hubFraction', val=0.0)
-        self.add_param('leLoc', val=np.zeros(38))
+        self.add_param('leLoc', val=np.zeros(nstr))
 
-        self.add_param('FAST_Chord_Aero', val=np.zeros(17))
-        self.add_param('FAST_Theta_Aero', val=np.zeros(17))
+        self.add_param('FAST_Chord_Aero', val=np.zeros(naero))
+        self.add_param('FAST_Theta_Aero', val=np.zeros(naero))
 
-        self.add_param('FAST_Chord_Str', val=np.zeros(38))
-        self.add_param('FAST_Theta_Str', val=np.zeros(38))
+        self.add_param('FAST_Chord_Str', val=np.zeros(nstr))
+        self.add_param('FAST_Theta_Str', val=np.zeros(nstr))
 
-        self.add_param('FAST_r_Aero', val=np.zeros(17))
-        self.add_param('FAST_precurve_Aero', val=np.zeros(17))
-        self.add_param('FAST_precurve_Str', val=np.zeros(38))
+        self.add_param('FAST_r_Aero', val=np.zeros(naero))
+        self.add_param('FAST_precurve_Aero', val=np.zeros(naero))
+        self.add_param('FAST_precurve_Str', val=np.zeros(nstr))
         self.add_param('FAST_Rhub', val=0.0)
         self.add_param('FAST_Rtip', val=0.0)
         self.add_param('V', val=np.zeros(200))
 
-        self.add_param('FlpStff', val=np.zeros(38))
-        self.add_param('EdgStff', val=np.zeros(38))
-        self.add_param('GJStff', val=np.zeros(38))
-        self.add_param('EAStff', val=np.zeros(38))
-        self.add_param('BMassDen', val=np.zeros(38))
+        self.add_param('FlpStff', val=np.zeros(nstr))
+        self.add_param('EdgStff', val=np.zeros(nstr))
+        self.add_param('GJStff', val=np.zeros(nstr))
+        self.add_param('EAStff', val=np.zeros(nstr))
+        self.add_param('BMassDen', val=np.zeros(nstr))
 
-        self.add_param('af_idx', val=np.zeros(17))
+        self.add_param('af_idx', val=np.zeros(naero))
         self.add_param('airfoil_types', val=np.zeros(8))
 
         # Set all constraints to be calculated using finite difference method
@@ -3367,9 +3662,7 @@ class CreateFASTConfig(Component):
 
         # add_output
         self.add_output('cfg_master', val=dict(),pass_by_obj=False)
-        #self.add_output('testFASToutput',val=1.0)
 
-    # needs to be in the def_solve_nonlinear
     def solve_nonlinear(self, params, unknowns, resids):
 
         # # Placeholders for unconnected parameters
@@ -3411,264 +3704,311 @@ class CreateFASTConfig(Component):
         # TODO: change to FoilNm=params['airfoil_types']
         # Will need work; files headers need to be different
 
-        # create config
+        FAST_opt_directory = self.FAST_opt_directory
+
+        # needs to be created just once for optimization
+        if os.path.isdir(FAST_opt_directory):
+            # placeholder
+            print('optimization directory already created')
+        else:
+            os.mkdir(FAST_opt_directory)
+
+        # === create config === #
 
         # Setup input config dictionary of dictionaries.
         caseids = self.caseids
         cfg_master = {}  # master config dictionary (dictionary of dictionaries)
 
-        for DLC in range(0, len(self.DLC_List)):
+        for sgp in range(0,len(self.sgp)):
 
-            # Create dictionary for this particular index
-            cfg = {}
+            sgp_dir = self.FAST_opt_directory + '/' + 'sgp' + str(self.sgp[sgp])
 
-            cfg['fst_runfile'] = '{0}.fst'.format(caseids[DLC])
-            # cfg['fst_rundir'] = os.path.join(''.join((dp, 'RotorSE_FAST/' \
-            #                                               'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/')),
-            #                                  caseids[DLC])
+            for wnd_file in range(0, len(self.WNDfile_List)):
 
-            # Platform
-            run_sc = 0
-            if run_sc == 1:
-                dp = '/fslhome/ingerbry/programs/'
-            else:
-                dp = '/Users/bingersoll/Dropbox/GradPrograms/'
+                spec_caseid = sgp*len(self.WNDfile_List) + wnd_file
 
-            cfg['fst_masterfile'] = 'NRELOffshrBsline5MW_Onshore' + caseids[DLC] + '.fst'
+                # FAST_sgp_directory = self.sgp_dir
+                FAST_sgp_directory = sgp_dir
 
-            cfg[
-                'fst_masterdir'] = ''.join((dp, 'RotorSE_FAST/' \
-                                                'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/NRELOffshrBsline5MW_Onshore_v7_RotorSE/'))
-            cfg['fst_rundir'] = cfg['fst_masterdir']
-            cfg['fst_exe'] = ''.join((dp, 'FAST_glin64'))
-            cfg['fst_file_type'] = 0
-            cfg['ad_file_type'] = 1
+                # FAST_wnd_directory = self.sgp_dir + '/' + caseids[wnd_file]
+                FAST_wnd_directory = sgp_dir + '/' + caseids[spec_caseid]
 
-            def replace_line(file_name, line_num, text):
-                lines = open(file_name, 'r').readlines()
-                lines[line_num] = text
-                out = open(file_name, 'w')
-                out.writelines(lines)
-                out.close()
-
-            aerodyn_file_name = cfg['fst_masterdir'] + 'NRELOffshrBsline5MW_AeroDyn_' + caseids[DLC] + '.ipt'
-
-            replace_line(aerodyn_file_name, 9, self.DLC_List[DLC] + '\n')
-
-            # Put dictionary into master dictionary, keyed by caseid
-            cfg_master[caseids[DLC]] = cfg
-
-            check_optimized_values = 0
-
-            if check_optimized_values == 1:
-                # optimized chord distribution
-
-                rotorse_opt_chord = np.loadtxt('chord_opt.txt')
-                chord_sub = rotorse_opt_chord[1, :]
-                r_max_chord = rotorse_opt_chord[0, 0]
-                r_max_chord = 0.1
-
-                # optimized twist distribution
-                theta_sub = rotorse_opt_chord[0, :]
-
-            cfg['NumBl'] = params['nBlades']
-
-            # cfg['Gravity'] = params['g'][0]
-            cfg['Gravity'] = params['g']
-
-            cfg['RotSpeed'] = params['control:tsr']
-            cfg['TipRad'] = params['FAST_Rtip']
-            cfg['HubRad'] = params['FAST_Rhub']
-            cfg['ShftTilt'] = params['tilt']
-            cfg['PreCone1'] = params['precone']
-            cfg['PreCone2'] = params['precone']
-            cfg['PreCone3'] = params['precone']
-
-            # print(cfg['TipRad'])
-            # print(cfg['HubRad'])
-            # print(cfg['HubRad']+cfg['TipRad'])
-            # quit()
-
-            # exposed parameters (no corresponding RotorSE parameter)
-            cfg['TMax'] = self.Tmax
-            cfg['DT'] = self.dT
-
-            cfg['OutFileFmt'] = 3  # text and binary output files
-
-            # Check fast-connect.txt for parameters we'll eventually want to connect
-
-            # #
-
-            # # Aerodyn File
-
-            # Add DLC .wnd file name to Aerodyn.ipt input file
-            cfg['HH'] = params['hubHt'][0]
-            #cfg['AirDens'] = params['rho'][0]
-            cfg['AirDens'] = params['rho']
-            #cfg['KinVisc'] = params['mu'][0] / params['rho'][0]
-            cfg['KinVisc'] = params['mu'] / params['rho']
-            # cfg['FoilNm'] = FoilNm
-            cfg['NFoil'] = (params['af_idx'] + np.ones(np.size(params['af_idx']))).astype(int)
-            cfg['BldNodes'] = np.size(params['af_idx'])
-
-            # Make akima splines of RNodes/AeroTwst and RNodes/Chord
-            theta_sub_spline = Akima(params['FAST_r_Aero'], params['FAST_Theta_Aero'])
-            chord_sub_spline = Akima(params['FAST_r_Aero'], params['FAST_Chord_Aero'])
-
-            # Redefine RNodes so that DRNodes can be calculated using AeroSubs
-            RNodes = params['FAST_r_Aero']
-            RNodes = np.linspace(RNodes[0], RNodes[-1], len(RNodes))
-
-            cfg['RNodes'] = RNodes
-            # Find new values of AeroTwst and Chord using redefined RNodes
-
-            FAST_Theta = theta_sub_spline.interp(RNodes)[0]
-            FAST_Chord = chord_sub_spline.interp(RNodes)[0]
-
-            cfg['Chord'] = FAST_Chord
-            cfg['AeroTwst'] = FAST_Theta
-
-            DRNodes = np.zeros(np.size(params['af_idx']))
-            for i in range(0, np.size(params['af_idx'])):
-                if i == 0:
-                    DRNodes[i] = 2.0 * (RNodes[0] - params['FAST_Rhub'])
+                # needs to be created for each DLC
+                if os.path.isdir(FAST_sgp_directory):
+                    print('sgp specific directory already created')
                 else:
-                    DRNodes[i] = 2.0 * (RNodes[i] - RNodes[i - 1]) - DRNodes[i - 1]
+                    os.mkdir(FAST_sgp_directory)
 
-            cfg['DRNodes'] = DRNodes
 
-            # # exposed parameters (no corresponding RotorSE parameter)
-            cfg['SysUnits'] = 'SI'
-            cfg['StallMod'] = 'BEDDOES'
-            cfg['UseCm'] = 'NO_CM'
-            cfg['InfModel'] = 'DYNIN'
-            cfg['AToler'] = 0.005
-            cfg['TLModel'] = 'PRANDtl'
-            cfg['HLModel'] = 'NONE'
-            cfg['TwrShad'] = 0.0
-            cfg['ShadHWid'] = 9999.9
-            cfg['T_Shad_Refpt'] = 9999.9
-            cfg['DTAero'] = 0.02479
+                if os.path.isdir(FAST_wnd_directory):
+                    # placeholder
+                    print('.wnd specific directory already created')
+                else:
+                    os.mkdir(FAST_wnd_directory)
 
-            # #
+                    copy_tree(self.template_dir, FAST_wnd_directory)
 
-            # # Blade File
+                # Create dictionary for this particular index
+                cfg = {}
 
-            cfg['NBlInpSt'] = len(params['FlpStff'])
-            cfg['BlFract'] = np.linspace(0, 1, len(params['FlpStff']))
-            cfg['AeroCent'] = params['leLoc']
-            cfg['StrcTwst'] = params['FAST_Theta_Str']
-            cfg['BMassDen'] = params['BMassDen']
-            cfg['FlpStff'] = params['FlpStff']
-            cfg['EdgStff'] = params['EdgStff']
-            cfg['GJStff'] = params['GJStff']
-            cfg['EAStff'] = params['EAStff']
+                # TODO: figure out difference between runfile and masterfile (made same below)
+                # cfg['fst_runfile'] = '{0}.fst'.format(caseids[wnd_file])
 
-            # exposed parameters (no corresponding RotorSE parameter)
-            cfg['CalcBMode'] = 'False'
-            cfg['BldFlDmp1'] = 2.477465
-            cfg['BldFlDmp2'] = 2.477465
-            cfg['BldEdDmp1'] = 2.477465
-            cfg['FlStTunr1'] = 1.0
-            cfg['FlStTunr2'] = 1.0
-            cfg['AdjBlMs'] = 1.04536
-            cfg['AdjFlSt'] = 1.0
-            cfg['AdjEdSt'] = 1.0
+                cfg['fst_masterfile'] = 'NRELOffshrBsline5MW_Onshore.fst'
 
-            # unused parameters (not used by FAST)
-            alpha = 0.5 * np.arctan2(2 * params['EAStff'], params['FlpStff'] - params['EAStff'])
-            for i in range(0, len(alpha)):
-                alpha[i] = min(0.99999, alpha[i])
-            cfg['Alpha'] = alpha
+                # TODO: figure out difference between rundir and masterdir (made same below)
+                cfg['fst_runfile'] = 'fst_runfile.fst'
 
-            cfg['PrecrvRef'] = np.zeros(len(params['FlpStff']))
-            cfg['PreswpRef'] = np.zeros(len(params['FlpStff']))
-            cfg['FlpcgOf'] = np.zeros(len(params['FlpStff']))
-            cfg['Edgcgof'] = np.zeros(len(params['FlpStff']))
-            cfg['FlpEAOf'] = np.zeros(len(params['FlpStff']))
-            cfg['EdgEAOf'] = np.zeros(len(params['FlpStff']))
+                cfg['fst_masterdir'] = FAST_wnd_directory
 
-            # #
+                cfg['fst_rundir'] = cfg['fst_masterdir']
+                cfg['fst_exe'] = ''.join((self.path, 'FAST_glin64'))
+                cfg['fst_file_type'] = 0
+                cfg['ad_file_type'] = 1
 
-            # set EI stiffness
-            BladeAerodynamicProperties = np.loadtxt('RotorSE_InputFiles/BladeAerodynamicProperties.txt')
-            BladeStructureProperties = np.loadtxt('RotorSE_InputFiles/BladeStructureProperties.txt')
+                def replace_line(file_name, line_num, text):
+                    lines = open(file_name, 'r').readlines()
+                    lines[line_num] = text
+                    out = open(file_name, 'w')
+                    out.writelines(lines)
+                    out.close()
 
-            # FlpStff, EdgStff, GJStff, EAStff
-            EI_flp_spline = Akima(params['FAST_precurve_Str'], params['FlpStff'])
-            EI_flp = EI_flp_spline.interp(BladeStructureProperties[:, 0])[0]
+                # === Add .wnd file location to Aerodyn.ipt file === #
+                # turbulent/nonturbulent wind file locations
+                if self.wndfiletype[wnd_file] == 'turb':
+                    wnd_file_path = self.path + self.turb_dir +  self.WNDfile_List[wnd_file]
+                else:
+                    wnd_file_path = self.path + self.nonturb_dir + self.WNDfile_List[wnd_file]
 
-            EI_edge_spline = Akima(params['FAST_precurve_Str'], params['EdgStff'])
-            EI_edge = EI_edge_spline.interp(BladeStructureProperties[:, 0])[0]
+                aerodyn_file_name = cfg['fst_masterdir'] + '/' + 'NRELOffshrBsline5MW_AeroDyn.ipt'
+                replace_line(aerodyn_file_name, 9, wnd_file_path + '\n')
 
-            EI_gj_spline = Akima(params['FAST_precurve_Str'], params['GJStff'])
-            EI_gj = EI_gj_spline.interp(BladeStructureProperties[:, 0])[0]
+                # cfg_master[caseids[wnd_file]] = cfg
+                # cfg_master[caseids[(sgp-1)*len(self.WNDfile_List) + (wnd_file-1)]] = cfg
 
-            EI_ea_spline = Akima(params['FAST_precurve_Str'], params['EAStff'])
-            EI_ea = EI_ea_spline.interp(BladeStructureProperties[:, 0])[0]
+                # add output_list (not sure if it will work, but we'll see)
+                # cfg['Outlist'] = self.output_list
+                # cfg['outlist'] = self.output_list
 
-            match_EI = 0
+                cfg['NumBl'] = params['nBlades']
 
-            if match_EI == 1:
-                cfg['FlpStff'] = EI_flp
-                cfg['EdgStff'] = EI_edge
-                cfg['GJStff'] = EI_gj
-                cfg['EAStff'] = EI_ea
+                if hasattr(params['g'], "__len__"):
+                    cfg['Gravity'] = params['g'][0]
+                else:
+                    cfg['Gravity'] = params['g']
 
-            # calculate c flapwise and c edgewise
+                cfg['RotSpeed'] = params['control:tsr']
+                cfg['TipRad'] = params['FAST_Rtip']
+                cfg['HubRad'] = params['FAST_Rhub']
+                cfg['ShftTilt'] = params['tilt']
+                cfg['PreCone1'] = params['precone']
+                cfg['PreCone2'] = params['precone']
+                cfg['PreCone3'] = params['precone']
 
-            airfoilpath = ''.join((dp, 'RotorSE_FAST/' \
-                                       'AeroelasticSE/src/AeroelasticSE/FAST_mdao/wrapper_examples/' \
-                                       'NRELOffshrBsline5MW_Onshore_v7_RotorSE/5MW_AFFiles_FAST/'))
+                # === parked configuration === #
+                if self.parked_type[wnd_file] == 'yes':
+                    cfg['TimGenOn'] = 9999.9
 
-            airfoil1 = np.loadtxt(''.join((airfoilpath, 'Cylinder.pfl')), skiprows=2)
-            airfoil2 = np.loadtxt(''.join((airfoilpath, 'Cylinder.pfl')), skiprows=2)
-            airfoil3 = np.loadtxt(''.join((airfoilpath, 'DU40_A17.pfl')), skiprows=2)
-            airfoil4 = np.loadtxt(''.join((airfoilpath, 'DU35_A17.pfl')), skiprows=2)
-            airfoil5 = np.loadtxt(''.join((airfoilpath, 'DU30_A17.pfl')), skiprows=2)
-            airfoil6 = np.loadtxt(''.join((airfoilpath, 'DU25_A17.pfl')), skiprows=2)
-            airfoil7 = np.loadtxt(''.join((airfoilpath, 'DU21_A17.pfl')), skiprows=2)
-            airfoil8 = np.loadtxt(''.join((airfoilpath, 'NACA64_A17.pfl')), skiprows=2)
+                # exposed parameters (no corresponding RotorSE parameter)
+                if self.wndfiletype[wnd_file] == 'turb':
+                    cfg['TMax'] = self.Tmax_turb
+                else:
+                    cfg['TMax'] = self.Tmax_nonturb
+                cfg['DT'] = self.dT
 
-            airfoil_h = np.zeros([8, 1])
+                cfg['OutFileFmt'] = 3  # text and binary output files
 
-            airfoil_h[0] = max(airfoil1[:, 1]) - min(airfoil1[:, 1])
-            airfoil_h[1] = max(airfoil2[:, 1]) - min(airfoil2[:, 1])
-            airfoil_h[2] = max(airfoil3[:, 1]) - min(airfoil3[:, 1])
-            airfoil_h[3] = max(airfoil4[:, 1]) - min(airfoil4[:, 1])
-            airfoil_h[4] = max(airfoil5[:, 1]) - min(airfoil5[:, 1])
-            airfoil_h[5] = max(airfoil6[:, 1]) - min(airfoil6[:, 1])
-            airfoil_h[6] = max(airfoil7[:, 1]) - min(airfoil7[:, 1])
-            airfoil_h[7] = max(airfoil8[:, 1]) - min(airfoil8[:, 1])
+                # strain gage placement for bending moment
+                cfg['NBlGages'] = self.NBlGages[sgp]
+                cfg['BldGagNd'] = self.BldGagNd[sgp]
 
-            # calc height
-            h = np.zeros([17, 1])
-            for i in range(0, 17):
-                h[i] = airfoil_h[int(BladeAerodynamicProperties[i, 4] - 1)] * FAST_Chord[i]
+                # print('in create fast config')
+                # print(cfg['BldGagNd'])
+                # print(self.BldGagNd[sgp])
+                # print('---------------------')
 
-            # plt.figure()
-            # plt.plot(BladeAerodynamicProperties[:,0], h)
-            # plt.show()
-            # quit()
+                #  parameters we'll eventually want to connect
 
-            c_flapwise = h / 2.0
+                # #
 
-            # calculate c_edgewise
-            aerocent_spline = Akima(BladeStructureProperties[:, 0] * params['FAST_Rtip'], BladeStructureProperties[:, 1])
-            aerocent_c = aerocent_spline.interp(BladeAerodynamicProperties[:, 0])[0]
+                # # Aerodyn File
 
-            c_edgewise = (1 - aerocent_c) * FAST_Chord
+                # Add DLC .wnd file name to Aerodyn.ipt input file
+                cfg['HH'] = params['hubHt'][0]
 
-            cfg_master[caseids[DLC]] = cfg
+                if hasattr(params['rho'], "__len__"):
+                    cfg['AirDens'] = params['rho'][0]
+                    cfg['KinVisc'] = params['mu'][0] / params['rho'][0]
+                else:
+                    cfg['AirDens'] = params['rho']
+                    cfg['KinVisc'] = params['mu'] / params['rho']
+
+                # cfg['FoilNm'] = FoilNm
+                cfg['NFoil'] = (params['af_idx'] + np.ones(np.size(params['af_idx']))).astype(int)
+                cfg['BldNodes'] = np.size(params['af_idx'])
+
+                # Make akima splines of RNodes/AeroTwst and RNodes/Chord
+                theta_sub_spline = Akima(params['FAST_r_Aero'], params['FAST_Theta_Aero'])
+                chord_sub_spline = Akima(params['FAST_r_Aero'], params['FAST_Chord_Aero'])
+
+                # Redefine RNodes so that DRNodes can be calculated using AeroSubs
+                RNodes = params['FAST_r_Aero']
+                RNodes = np.linspace(RNodes[0], RNodes[-1], len(RNodes))
+
+                cfg['RNodes'] = RNodes
+                # Find new values of AeroTwst and Chord using redefined RNodes
+
+                FAST_Theta = theta_sub_spline.interp(RNodes)[0]
+                FAST_Chord = chord_sub_spline.interp(RNodes)[0]
+
+                cfg['Chord'] = FAST_Chord
+                cfg['AeroTwst'] = FAST_Theta
+
+                DRNodes = np.zeros(np.size(params['af_idx']))
+                for i in range(0, np.size(params['af_idx'])):
+                    if i == 0:
+                        DRNodes[i] = 2.0 * (RNodes[0] - params['FAST_Rhub'])
+                    else:
+                        DRNodes[i] = 2.0 * (RNodes[i] - RNodes[i - 1]) - DRNodes[i - 1]
+
+                cfg['DRNodes'] = DRNodes
+
+                # # exposed parameters (no corresponding RotorSE parameter)
+                cfg['SysUnits'] = 'SI'
+                cfg['StallMod'] = 'BEDDOES'
+                cfg['UseCm'] = 'NO_CM'
+                cfg['InfModel'] = 'DYNIN'
+                cfg['AToler'] = 0.005
+                cfg['TLModel'] = 'PRANDtl'
+                cfg['HLModel'] = 'NONE'
+                cfg['TwrShad'] = 0.0
+                cfg['ShadHWid'] = 9999.9
+                cfg['T_Shad_Refpt'] = 9999.9
+                cfg['DTAero'] = 0.02479
+
+                # #
+
+                # # Blade File
+
+                cfg['NBlInpSt'] = len(params['FlpStff'])
+                cfg['BlFract'] = np.linspace(0, 1, len(params['FlpStff']))
+                cfg['AeroCent'] = params['leLoc']
+                cfg['StrcTwst'] = params['FAST_Theta_Str']
+                cfg['BMassDen'] = params['BMassDen']
+
+                cfg['FlpStff'] = params['FlpStff']
+                cfg['EdgStff'] = params['EdgStff']
+                cfg['GJStff'] = params['GJStff']
+                cfg['EAStff'] = params['EAStff']
+
+                # exposed parameters (no corresponding RotorSE parameter)
+                cfg['CalcBMode'] = 'False'
+                cfg['BldFlDmp1'] = 2.477465
+                cfg['BldFlDmp2'] = 2.477465
+                cfg['BldEdDmp1'] = 2.477465
+                cfg['FlStTunr1'] = 1.0
+                cfg['FlStTunr2'] = 1.0
+                cfg['AdjBlMs'] = 1.04536
+                cfg['AdjFlSt'] = 1.0
+                cfg['AdjEdSt'] = 1.0
+
+                # unused parameters (not used by FAST)
+                alpha = 0.5 * np.arctan2(2 * params['EAStff'], params['FlpStff'] - params['EAStff'])
+                for i in range(0, len(alpha)):
+                    alpha[i] = min(0.99999, alpha[i])
+                cfg['Alpha'] = alpha
+
+                cfg['PrecrvRef'] = np.zeros(len(params['FlpStff']))
+                cfg['PreswpRef'] = np.zeros(len(params['FlpStff']))
+                cfg['FlpcgOf'] = np.zeros(len(params['FlpStff']))
+                cfg['Edgcgof'] = np.zeros(len(params['FlpStff']))
+                cfg['FlpEAOf'] = np.zeros(len(params['FlpStff']))
+                cfg['EdgEAOf'] = np.zeros(len(params['FlpStff']))
+
+                # #
+
+                # set EI stiffness
+                # TODO: just get this from the blade input file
+                BladeAerodynamicProperties = np.loadtxt('FAST_Files/RotorSE_InputFiles/BladeAerodynamicProperties.txt')
+                BladeStructureProperties = np.loadtxt('FAST_Files/RotorSE_InputFiles/BladeStructureProperties.txt')
+
+                # Blade Structural Properties
+                #0 BlFract
+                #1 AeroCent
+                #2 StrcTwst
+                #3 BMassDen
+                #4 FlpStff
+                #5 EdgStff
+                #6 GJStff
+                #7 EAStff
+                #8 Alpha
+                #9 FlpIner
+                #10 EdgIner
+                #11 PrecrvRef
+                #12 PreswpRef
+                #13 FlpcgOf
+                #14 EdgcgOf
+                #15 FlpEAOf
+                #16 EdgEAOf
+
+                # FlpStff, EdgStff, GJStff, EAStff
+                EI_flp_spline = Akima(params['FAST_precurve_Str'], params['FlpStff'])
+                EI_flp = EI_flp_spline.interp(BladeStructureProperties[:, 0])[0]
+
+                EI_edge_spline = Akima(params['FAST_precurve_Str'], params['EdgStff'])
+                EI_edge = EI_edge_spline.interp(BladeStructureProperties[:, 0])[0]
+
+                EI_gj_spline = Akima(params['FAST_precurve_Str'], params['GJStff'])
+                EI_gj = EI_gj_spline.interp(BladeStructureProperties[:, 0])[0]
+
+                EI_ea_spline = Akima(params['FAST_precurve_Str'], params['EAStff'])
+                EI_ea = EI_ea_spline.interp(BladeStructureProperties[:, 0])[0]
+
+                if self.check_stif_spline == 'true':
+
+                    # plots
+                    BlFract = BladeStructureProperties[:, 0]
+                    FlpStff = BladeStructureProperties[:, 4]
+                    EdgStff = BladeStructureProperties[:, 5]
+                    GJStff = BladeStructureProperties[:, 6]
+                    EAStff = BladeStructureProperties[:, 7]
+
+                    plt.figure()
+                    plt.plot(BlFract, EI_flp, label='RotorSE spline')
+                    plt.plot(BlFract, FlpStff, label='FAST nominal value')
+                    plt.legend()
+                    plt.title('FlpStff')
+
+                    plt.figure()
+                    plt.plot(BlFract, EI_edge, label='RotorSE spline')
+                    plt.plot(BlFract, EdgStff, label='FAST nominal value')
+                    plt.legend()
+                    plt.title('EdgStff')
+
+                    plt.figure()
+                    plt.plot(BlFract, EI_gj, label='RotorSE spline')
+                    plt.plot(BlFract, GJStff, label='FAST nominal value')
+                    plt.legend()
+                    plt.title('GJStff Stiffness')
+
+                    plt.figure()
+                    plt.plot(BlFract, EI_ea, label='RotorSE spline')
+                    plt.plot(BlFract, EAStff, label='FAST nominal value')
+                    plt.legend()
+                    plt.title('EAStff Stiffness')
+
+                    plt.show()
+
+                    quit()
+
+                    cfg['EAStff'] = EI_ea
+
+                cfg_master["WNDfile{0}".format(wnd_file+1) + '_sgp' + str(self.sgp[sgp])] = cfg
 
         unknowns['cfg_master'] = cfg_master
-        #print (cfg_master)
-        #quit()
-
-
 
 class ObjandCons(Component):
-    def __init__(self, nstr, npower, num_airfoils, af_dof):
+    def __init__(self, nstr, npower, num_airfoils, af_dof, FASTinfo):
         super(ObjandCons, self).__init__()
         self.add_param('COE', val=0.1)
         self.add_param('strainU_spar', val=np.zeros(nstr))
@@ -3686,6 +4026,17 @@ class ObjandCons(Component):
         self.add_param('control:ratedPower', val=0.0)
         self.add_param('ratedConditions:T', val=0.0)
 
+        self.add_param('damageU_spar', val=np.zeros(nstr))
+        self.add_param('damageL_spar', val=np.zeros(nstr))
+        self.add_param('damageU_te', val=np.zeros(nstr))
+        self.add_param('damageL_te', val=np.zeros(nstr))
+
+        self.add_param('max_tip_def', val=0.0)
+
+        self.useFAST = FASTinfo['use_FAST']
+        if self.useFAST == 'true':
+            self.use_tip_def_cons = FASTinfo['use_tip_def_cons']
+
         self.add_output('obj', val=1.0)
         self.add_output('con_strain_spar', val=np.zeros(7))
         self.add_output('con_strainU_te', val=np.zeros(8))
@@ -3693,6 +4044,14 @@ class ObjandCons(Component):
         self.add_output('con_eps_spar', val=np.zeros(8))
         self.add_output('con_eps_te', val=np.zeros(7))
         self.add_output('con_freq', val=np.zeros(2))
+
+        self.add_output('con_damageU_spar', val=np.zeros(8))
+        self.add_output('con_damageL_spar', val=np.zeros(8))
+        self.add_output('con_damageU_te', val=np.zeros(8))
+        self.add_output('con_damageL_te', val=np.zeros(8))
+
+        self.add_output('con_max_tip_def', val=0.0)
+
         if af_dof == 8:
             self.add_output('con_afp', val=np.zeros((num_airfoils,af_dof/2)))
         elif af_dof == 2 or af_dof == 1:
@@ -3715,6 +4074,13 @@ class ObjandCons(Component):
         self.con5_indices = [10, 12, 13, 14, 21, 28, 33]
         unknowns['obj'] = params['COE']*100.0
         unknowns['con_strain_spar'] = params['strainU_spar'][self.con1_indices]*self.eta_strain/params['strain_ult_spar']
+
+        #
+
+        # print('------------------')
+        # print(unknowns['con_strain_spar'])
+        # print('------------------')
+
         unknowns['con_strainU_te'] = params['strainU_te'][self.con2_indices]*self.eta_strain/params['strain_ult_te']
         unknowns['con_strainL_te'] = params['strainL_te'][self.con3_indices]*self.eta_strain/params['strain_ult_te']
         unknowns['con_eps_spar'] = (params['eps_crit_spar'][self.con4_indices] - params['strainU_spar'][self.con4_indices]) / params['strain_ult_spar']
@@ -3731,6 +4097,30 @@ class ObjandCons(Component):
 
         unknowns['con_power'] = (params['power'][-1] - params['control:ratedPower']) / 1.e6
         unknowns['con_thrust'] = params['ratedConditions:T'] / 1.e6
+
+        unknowns['con_damageU_spar'] = params['damageU_spar'][self.con2_indices]
+        unknowns['con_damageL_spar'] = params['damageL_spar'][self.con2_indices]
+        unknowns['con_damageU_te'] = params['damageU_te'][self.con2_indices]
+        unknowns['con_damageL_te'] = params['damageL_te'][self.con2_indices]
+
+        if self.useFAST == 'true':
+            if self.use_tip_def_cons == 'true':
+                unknowns['con_max_tip_def'] = params['max_tip_def']
+
+        # print(params['damageU_spar'])
+        # print(params['damageL_spar'])
+        # print(params['damageU_te'])
+        # print(params['damageL_te'])
+        #
+        # print(unknowns['con_damageU_spar'])
+        # print(unknowns['con_damageL_spar'])
+        # print(unknowns['con_damageU_te'])
+        # print(unknowns['con_damageL_te'])
+
+        # print(unknowns['con_strainU_te'])
+        # print(unknowns['con_strainL_te'])
+
+        # quit()
 
     def linearize(self, params, unknowns, resids):
         J = {}
@@ -3929,7 +4319,7 @@ class RotorSE(Group):
         self.add('Mxb_damage', IndepVarComp('Mxb_damage', val=np.zeros(naero+1), units='N*m', desc='damage equivalent moments about blade c.s. x-direction'), promotes=['*'])
         self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(naero+1), units='N*m', desc='damage equivalent moments about blade c.s. y-direction'), promotes=['*'])
         self.add('strain_ult_spar', IndepVarComp('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap'), promotes=['*'])
-        self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
+        self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='ultimate strain in trailing-edge panels'), promotes=['*'])
         self.add('eta_damage', IndepVarComp('eta_damage', val=1.755, desc='safety factor for fatigue'), promotes=['*'])
         self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
         self.add('N_damage', IndepVarComp('N_damage', val=365*24*3600*20.0, desc='number of cycles used in fatigue analysis'), promotes=['*'])
@@ -4143,7 +4533,8 @@ class RotorSE(Group):
         self.add('loads_pc_defl', TotalLoads(nstr))
         self.add('loads_strain', TotalLoads(nstr))
         self.add('damage', DamageLoads(naero, nstr))
-        self.add('struc', RotorWithpBEAM(nstr))
+        # self.add('struc', RotorWithpBEAM(nstr))
+        self.add('struc', RotorWithpBEAM(nstr,FASTinfo))
         self.add('tip', TipDeflection())
         self.add('root_moment', RootMoment(nstr))
         self.add('mass', MassProperties())
@@ -4157,51 +4548,48 @@ class RotorSE(Group):
         self.add('root_moment_240', RootMoment(nstr))
         self.add('output_struc', OutputsStructures(nstr), promotes=['*'])
 
-        # test so only two FAST calls
+        # === Turbine Dynamic Response Incorporation - FAST === #
+
+        # === use surrogate model of FAST outputs === #
+        if FASTinfo['Use_FAST_sm'] == 'true':
+            self.add('FAST_sm', Use_FAST_surr_model(FASTinfo, naero, nstr), promotes=['DEMx_sm','DEMy_sm'])
+
         if FASTinfo['use_FAST'] == 'true':
-            DLC_List = FASTinfo['DLC_List'][0:2]
 
-            # create DLC case ids
+            WND_File_List = FASTinfo['wnd_list']
+
+            # create WNDfile case ids
             caseids = []
-            for i in range(0+1, len(DLC_List)+1):
-                caseids.append("DLC{0}".format(i))
 
-            #print(caseids)
-            #quit()
-            # Config Component
-            self.add('FASTconfig', CreateFASTConfig(FASTinfo['Tmax'], FASTinfo['dT'], DLC_List, caseids), promotes=['*'])
+            for j in range(0, len(FASTinfo['sgp'])):
+                for i in range(0+1, len(WND_File_List)+1):
+                    caseids.append("WNDfile{0}".format(i) + '_sgp' + str(FASTinfo['sgp'][j]))
+
+            self.add('FASTconfig', CreateFASTConfig(naero, nstr, FASTinfo, WND_File_List, caseids), promotes=['cfg_master'])
 
             from FST7_aeroelasticsolver import FST7Workflow, FST7AeroElasticSolver
 
-            #self.connect('cfg_master', 'FASTcfg')
+            self.add('ParallelFASTCases', FST7AeroElasticSolver(caseids, FASTinfo['Tmax_turb'],
+                FASTinfo['Tmax_nonturb'],FASTinfo['wnd_type_list'], FASTinfo['dT'], FASTinfo['output_list']))
 
-            # print(len(DLC_List))
-            # print(DLC_List)
-            # print(DLC_List[0:2])
-            # quit()
-
-            #caseids = ['DLC1']
-
-            #from FST7_aeroelasticsolver import FST7Workflow, FST7AeroElasticSolver
-
-            self.add('ParallelFASTCases', FST7AeroElasticSolver(caseids))
             self.connect('cfg_master', 'ParallelFASTCases.cfg_master')
-            # self.add('FASTresults', RunFASTinParallel(), promotes=['*'])
 
-            self.add('FASTConstraints',CreateFASTConstraints(caseids), promotes=['ELT5500_sigma_x','ELT5500_sigma_y','Carbon_sigma_y','Triax_sigma_x','fatigue','crit_def'])
-            for i in range(0 + 1, len(DLC_List) + 1):
-                self.connect('ParallelFASTCases.DLC{0}'.format(i), 'FASTConstraints.DLC{0}'.format(i))
+            self.add('FASTConstraints', CreateFASTConstraints(naero, nstr, FASTinfo, WND_File_List, caseids),
+                     promotes=['DEMx', 'DEMy', 'max_tip_def', 'Edg_max', 'Flp_max'])
+
+            for j in range(0, len(FASTinfo['sgp'])):
+                for i in range(0 + 1, len(WND_File_List) + 1):
+                    self.connect('ParallelFASTCases.WNDfile{0}'.format(i)+ '_sgp' + str(FASTinfo['sgp'][j]),
+                                 'FASTConstraints.WNDfile{0}'.format(i)+ '_sgp' + str(FASTinfo['sgp'][j]))
+
             self.connect('cfg_master', 'FASTConstraints.cfg_master')
 
-            #print(self.FASTconfig.unknowns.cfg)
-            #quit()
-            # print(RotorSE.FASTconfig)
-            # quit()
-            # self.add('FASTcons', FAST_Cons, promotes=['*'])
+            if FASTinfo['calc_surr_model'] == 'true':
+                self.add('FAST_calc_sm', CreateFAST_surr_model(FASTinfo, naero,nstr))
 
         # outputs
         self.add('coe', COE(), promotes=['*'])
-        self.add('obj_cons', ObjandCons(nstr, npower, num_airfoils, af_dof), promotes=['*'])
+        self.add('obj_cons', ObjandCons(nstr, npower, num_airfoils, af_dof, FASTinfo), promotes=['*'])
 
         # connections to curvature
         self.connect('spline.r_str', 'curvature.r')
@@ -4409,13 +4797,29 @@ class RotorSE(Group):
 
         # connections to damage
         self.connect('rstar_damage', 'damage.rstar')
-        self.connect('Mxb_damage', 'damage.Mxb')
-        self.connect('Myb_damage', 'damage.Myb')
+
+        # use FAST surrogate model
+        if FASTinfo['Use_FAST_sm'] == 'true':
+            self.connect('DEMx_sm', 'damage.Mxb')
+            self.connect('DEMy_sm', 'damage.Myb')
+
+        # use FAST @ every iteration
+        if FASTinfo['use_FAST'] == 'true':
+            if FASTinfo['use_fatigue_cons'] == 'true':
+                self.connect('DEMx', 'damage.Mxb')
+                self.connect('DEMy', 'damage.Myb')
+            else:
+                self.connect('Mxb_damage', 'damage.Mxb')
+                self.connect('Myb_damage', 'damage.Myb')
+
+        # use FAST precalculated/fixed DEMs OR not using FAST
+        if FASTinfo['use_FAST'] == 'false' and FASTinfo['Use_FAST_sm'] == 'false':
+            self.connect('Mxb_damage', 'damage.Mxb')
+            self.connect('Myb_damage', 'damage.Myb')
+
         self.connect('spline.theta_str', 'damage.theta')
         self.connect('beam.beam:z', 'damage.r')
 
-
-        # connections to struc
         self.connect('beam.beam:z', 'struc.beam:z')
         self.connect('beam.beam:EA', 'struc.beam:EA')
         self.connect('beam.beam:EIxx', 'struc.beam:EIxx')
@@ -4451,6 +4855,7 @@ class RotorSE(Group):
         self.connect('eta_damage', 'struc.eta_damage')
         self.connect('m_damage', 'struc.m_damage')
         self.connect('N_damage', 'struc.N_damage')
+
 
         # connections to curvefem
         self.connect('powercurve.ratedConditions:Omega', 'curvefem.Omega')
@@ -4522,6 +4927,7 @@ class RotorSE(Group):
         self.connect('spline0.precurve_str', 'blade_defl.precurve_str0')
         self.connect('bladeLength', 'blade_defl.bladeLength0')
         # self.connect('precurve_sub', 'blade_defl.precurve_sub0')
+
 
         # connect to outputs
         self.connect('turbineclass.V_extreme', 'V_extreme_in')
@@ -4609,25 +5015,88 @@ class RotorSE(Group):
         self.connect('root_moment_240.Fxyz', 'Fxyz_240_in')
         #azimuths not passed. assumed 0,120,240 in drivese function
 
+
+        # use FAST surrogate model
+        if FASTinfo['Use_FAST_sm'] == 'true':
+            # design variables
+            self.connect('r_max_chord', 'FAST_sm.r_max_chord')
+            self.connect('chord_sub', 'FAST_sm.chord_sub')
+            self.connect('theta_sub', 'FAST_sm.theta_sub')
+            self.connect('sparT', 'FAST_sm.sparT')
+            self.connect('teT', 'FAST_sm.teT')
+
+
         # Top Level Connections for Call FAST (in ObjandCons)
         if FASTinfo['use_FAST'] == 'true':
-            self.connect('beam.beam:EIxx','EdgStff')
-            self.connect('beam.beam:EIyy', 'FlpStff')
-            self.connect('beam.beam:rhoA', 'BMassDen')
-            self.connect('beam.beam:GJ', 'GJStff')
-            self.connect('beam.beam:EA', 'EAStff')
 
-            self.connect('spline1.theta_str', 'FAST_Theta_Str')
-            self.connect('spline1.chord_str', 'FAST_Chord_Str')
-            self.connect('spline.chord_aero', 'FAST_Chord_Aero')
-            self.connect('spline.theta_aero', 'FAST_Theta_Aero')
+            # FAST config
+            self.connect('nBlades', 'FASTconfig.nBlades')
 
-            self.connect('spline.r_aero', 'FAST_r_Aero')
-            self.connect('spline.precurve_aero', 'FAST_precurve_Aero')
-            self.connect('initial_str_grid', 'FAST_precurve_Str')
-            self.connect('spline.Rhub', 'FAST_Rhub')
-            self.connect('spline.Rtip', 'FAST_Rtip')
+            self.connect('beam.beam:EIyy', 'FASTconfig.EIyy')
 
+            self.connect('r_max_chord', 'FASTconfig.r_max_chord')
+            self.connect('chord_sub', 'FASTconfig.chord_sub')
+            self.connect('theta_sub', 'FASTconfig.theta_sub')
+            self.connect('idx_cylinder_aero', 'FASTconfig.idx_cylinder_aero')
+            self.connect('initial_aero_grid', 'FASTconfig.initial_aero_grid')
+
+            self.connect('rho', 'FASTconfig.rho')
+            self.connect('control:tsr', 'FASTconfig.control:tsr')
+            self.connect('g', 'FASTconfig.g')
+            self.connect('hubHt', 'FASTconfig.hubHt')
+            self.connect('mu', 'FASTconfig.mu')
+            self.connect('precone', 'FASTconfig.precone')
+            self.connect('tilt', 'FASTconfig.tilt')
+            self.connect('hubFraction', 'FASTconfig.hubFraction')
+            self.connect('leLoc', 'FASTconfig.leLoc')
+
+            self.connect('af_idx', 'FASTconfig.af_idx')
+            self.connect('airfoil_types', 'FASTconfig.airfoil_types')
+
+
+            self.connect('beam.beam:EIxx', 'FASTconfig.EdgStff')
+            self.connect('beam.beam:EIyy', 'FASTconfig.FlpStff')
+            self.connect('beam.beam:rhoA', 'FASTconfig.BMassDen')
+            self.connect('beam.beam:GJ', 'FASTconfig.GJStff')
+            self.connect('beam.beam:EA', 'FASTconfig.EAStff')
+
+            self.connect('spline1.theta_str', 'FASTconfig.FAST_Theta_Str')
+            self.connect('spline1.chord_str', 'FASTconfig.FAST_Chord_Str')
+            self.connect('spline.chord_aero', 'FASTconfig.FAST_Chord_Aero')
+            self.connect('spline.theta_aero', 'FASTconfig.FAST_Theta_Aero')
+
+            self.connect('spline.r_aero', 'FASTconfig.FAST_r_Aero')
+            self.connect('spline.precurve_aero', 'FASTconfig.FAST_precurve_Aero')
+            self.connect('initial_str_grid', 'FASTconfig.FAST_precurve_Str')
+            self.connect('spline.Rhub', 'FASTconfig.FAST_Rhub')
+            self.connect('spline.Rtip', 'FASTconfig.FAST_Rtip')
+
+
+
+            # FAST Constraints
+            self.connect('initial_aero_grid', 'FASTConstraints.initial_aero_grid')
+            self.connect('initial_str_grid', 'FASTConstraints.initial_str_grid')
+            self.connect('rstar_damage', 'FASTConstraints.rstar_damage')
+
+            # struct
+            self.connect('Edg_max', 'struc.Edg_max')
+            self.connect('Flp_max', 'struc.Flp_max')
+
+            # create FAST surrogate model
+            if FASTinfo['train_sm'] == 'true':
+
+                # FAST outputs
+                self.connect('Flp_max', 'FAST_calc_sm.Flp_max')
+                self.connect('Edg_max', 'FAST_calc_sm.Edg_max')
+                self.connect('DEMx', 'FAST_calc_sm.DEMx')
+                self.connect('DEMy', 'FAST_calc_sm.DEMy')
+
+                # design variables
+                self.connect('r_max_chord', 'FAST_calc_sm.r_max_chord')
+                self.connect('chord_sub', 'FAST_calc_sm.chord_sub')
+                self.connect('theta_sub', 'FAST_calc_sm.theta_sub')
+                self.connect('sparT', 'FAST_calc_sm.sparT')
+                self.connect('teT', 'FAST_calc_sm.teT')
 
 if __name__ == '__main__':
 
@@ -4637,7 +5106,7 @@ if __name__ == '__main__':
     from openmdao.api import Problem
     # from rotorse.rotor import RotorSE  (include this line)
 
-    bl_case = int(sys.argv[1])
+    bl_case = 20 #int(sys.argv[1])
 
     bl_nom = 61.5
     bl_min = bl_nom * 0.9
@@ -4688,7 +5157,7 @@ if __name__ == '__main__':
     rotor['precone'] = 2.5  # (Float, deg): precone angle
     rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
     rotor['yaw'] = 0.0  # (Float, deg): yaw error
-    rotor['nBlades'] = 2  # (Int): number of blades
+    rotor['nBlades'] = 3  # (Int): number of blades
     # ------------------
 
     # === airfoil files ===
@@ -4836,7 +5305,7 @@ if __name__ == '__main__':
 
     # === run and outputs ===
     rotor.run()
-    quit()
+    #quit()
     print("================== RotorSE Outputs ==================")
     print('COE =', rotor['COE']*100, 'cents/kWh')
     print('AEP =', rotor['AEP'])
@@ -4853,6 +5322,8 @@ if __name__ == '__main__':
     print('tip_deflection =', rotor['tip_deflection'])
     print('root_bending_moment =', rotor['root_bending_moment'])
     print('totalCone =', rotor['TotalCone'])
+
+    quit()
 
     plt.figure()
     plt.plot(rotor['V'], rotor['P']/1e6)
