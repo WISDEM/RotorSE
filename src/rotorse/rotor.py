@@ -2378,26 +2378,17 @@ class CreateFASTConstraints(Component):
         resultsdict = params["WNDfile{0}".format(1) + '_sgp' + str(self.sgp[0])]
         if self.check_results == 'true':
             # bm_param = 'Spn4MLxb1'
-            # bm_param = 'RootMxb1'
-            bm_param = 'RootMyb1'
-            plt.figure()
-            plt.plot(resultsdict[bm_param])
-            plt.xlabel('Simulation Step')
-            plt.ylabel(bm_param + '(kN*m)')
-            plt.title(bm_param)  #: Bending Moment at Spanwise Station #4, Blade #1')
-            plt.savefig('/Users/bingersoll/Desktop/plots/param_plots/' + bm_param + '.png')
+            bm_param = ['RootMyb1', 'OoPDefl1']
+            bm_param_units = ['kN*m', 'm']
+            for i in range(0, len(bm_param)):
+                plt.figure()
+                plt.plot(resultsdict[bm_param[i]])
+                plt.xlabel('Simulation Step')
+                plt.ylabel(bm_param[i] + ' (' + bm_param_units[i] + ')')
+                plt.title(bm_param[i])
+                plt.savefig('/Users/bingersoll/Desktop/plots/param_plots/' + bm_param[i] + '_test.png')
 
-            plt.show()
-
-            bm_param = 'OoPDefl1'
-            plt.figure()
-            plt.plot(resultsdict[bm_param])
-            plt.xlabel('Simulation Step')
-            plt.ylabel(bm_param + '(m)')
-            plt.title(bm_param)  #: Bending Moment at Spanwise Station #4, Blade #1')
-            plt.savefig('/Users/bingersoll/Desktop/plots/param_plots/' + bm_param + '.png')
-
-            plt.show()
+                plt.show()
 
             quit()
 
@@ -2804,6 +2795,10 @@ class CreateFASTConstraints(Component):
 
         DEMy_spline = Akima(spline_pos,DEMy_max)
         unknowns['DEMy'] = DEMy_spline.interp(spline_extr)[0]
+
+        print(unknowns['DEMx'])
+        print(unknowns['DEMy'])
+        quit()
 
 
         if self.check_nom_DEM_damage == 'true':

@@ -1,7 +1,0 @@
-include README.md
-include CHANGELOG.md
-include LICENSE.txt
-recursive-include src/rotorse/test *.py
-global-exclude openmdao_log.txt
-graft src/rotorse/5MW_AFFiles
-graft src/rotorse/5MW_PreCompFiles

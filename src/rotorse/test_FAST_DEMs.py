@@ -34,7 +34,7 @@ FASTinfo['calc_surr_model'] = 'false'
 FASTinfo['opt_with_surr_model'] = 'false'
 
 # description
-description = 'test_sm_chord'
+description = 'test_fixedDEM'
 
 
 FASTinfo = setupFAST(rotor, FASTinfo, description)
@@ -228,7 +228,7 @@ else:
 
             rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
             rotor['chord_sub'] = np.array([3.2612, 5.3, 3.3178,1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-            # 3.2612, 4.5709, 3.3178,1.4621
+            # 3.2612, 4.5709, 3.3178, 1.4621
             rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,
                                            -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
             rotor['sparT'] = np.array(
@@ -422,7 +422,7 @@ else:
         3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
 
 rotor['strain_ult_spar'] = 1.0e-2 * 2  # (Float): ultimate strain in spar cap
-rotor['strain_ult_te'] = 2500*1e-5 * 2   # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
+rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
 rotor['eta_damage'] = 1.35*1.3*1.0  # (Float): safety factor for fatigue
 rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
 rotor['N_damage'] = 365*24*3600*20/6.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed

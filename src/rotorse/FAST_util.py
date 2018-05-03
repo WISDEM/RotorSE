@@ -11,14 +11,14 @@ def setupFAST_checks(FASTinfo):
 
     # === check splines / results === #
     # if any are set as true, optimization will stop
-    FASTinfo['check_results'] = 'false'  # Opt. stops if set as 'true'
+    FASTinfo['check_results'] = 'true'  # Opt. stops if set as 'true'
     FASTinfo['check_sgp_spline'] = 'false'  # Opt. stops if set as 'true'
     FASTinfo['check_stif_spline'] = 'false'  # Opt. stops if set as 'true'
-    FASTinfo['check_peaks'] = 'true'  # Opt. stops if set as 'true'
+    FASTinfo['check_peaks'] = 'false'  # Opt. stops if set as 'true'
     FASTinfo['check_rainflow'] = 'false'  # Opt. stops if set as 'true'
     FASTinfo['check_rm_time'] = 'false'  # Opt. stops if set as 'true'
 
-    FASTinfo['check_damage'] = 'false'  # Opt. stops if set as 'true
+    FASTinfo['check_damage'] = 'true'  # Opt. stops if set as 'true
     FASTinfo['check_nom_DEM_damage'] = 'false' # only works when check_damage is set as 'true'
 
     FASTinfo['check_fit'] = 'false'  # Opt. stops if set as 'true
