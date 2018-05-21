@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import os
+import random
 
 # ========================================================================================================= #
 
@@ -11,21 +12,24 @@ def setupFAST_checks(FASTinfo):
 
     # === check splines / results === #
     # if any are set as true, optimization will stop
-    FASTinfo['check_results'] = 'true'  # Opt. stops if set as 'true'
-    FASTinfo['check_sgp_spline'] = 'false'  # Opt. stops if set as 'true'
-    FASTinfo['check_stif_spline'] = 'false'  # Opt. stops if set as 'true'
-    FASTinfo['check_peaks'] = 'false'  # Opt. stops if set as 'true'
-    FASTinfo['check_rainflow'] = 'false'  # Opt. stops if set as 'true'
-    FASTinfo['check_rm_time'] = 'false'  # Opt. stops if set as 'true'
+    FASTinfo['check_results'] = False  # Opt. stops if set as True
+    FASTinfo['check_sgp_spline'] = False  # Opt. stops if set as True
+    FASTinfo['check_stif_spline'] = False  # Opt. stops if set as True
+    FASTinfo['check_peaks'] = False  # Opt. stops if set as True
+    FASTinfo['check_rainflow'] = False  # Opt. stops if set as True
+    FASTinfo['check_rm_time'] = False  # Opt. stops if set as True
 
-    FASTinfo['check_damage'] = 'true'  # Opt. stops if set as 'true
-    FASTinfo['check_nom_DEM_damage'] = 'false' # only works when check_damage is set as 'true'
+    FASTinfo['check_damage'] = False  # Opt. stops if set as True
+    FASTinfo['check_nom_DEM_damage'] = False # only works when check_damage is set as True
 
-    FASTinfo['check_fit'] = 'false'  # Opt. stops if set as 'true
-    FASTinfo['do_cv'] = 'false'  # cross validation of surrogate model
-    FASTinfo['check_point_dist'] = 'false'  # plot distribution of points (works best in 2D)
-    FASTinfo['check_cv'] = 'false' # works best in 2D
-    FASTinfo['check_opt_DEMs'] = 'false' # only called when opt_with_fixed_DEMs is true
+    FASTinfo['check_fit'] = False  # Opt. stops if set as True
+    FASTinfo['check_opt_DEMs'] = False # only called when opt_with_fixed_DEMs is True
+
+    FASTinfo['do_cv'] = True  # cross validation of surrogate model
+    FASTinfo['check_point_dist'] = False  # plot distribution of points (works best in 2D)
+    FASTinfo['check_cv'] = False # works best in 2D
+
+    FASTinfo['print_sm'] = False
 
     return FASTinfo
 
@@ -40,31 +44,39 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo = setupFAST_checks(FASTinfo)
 
     # === constraint groups === #
-    FASTinfo['use_fatigue_cons'] = 'true'
-    FASTinfo['use_struc_cons'] = 'false'
-    FASTinfo['use_tip_def_cons'] = 'false'
+    FASTinfo['use_fatigue_cons'] = True
+    FASTinfo['use_struc_cons'] = True
+    FASTinfo['use_tip_def_cons'] = True
 
     #=== ===#
 
     FASTinfo['description'] = description
 
     # === Platform (Local or SC) === #
-    run_sc = 0
-    if run_sc == 1:
-        FASTinfo['path'] = '/fslhome/ingerbry/programs/'
-    else:
-        FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+
+    # FASTinfo['path'] = '/fslhome/ingerbry/programs/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+
+    # === dir_saved_plots === #
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/programs/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
         'RotorSE/src/rotorse/FAST_files/Opt_Files/', FASTinfo['description']))
+
+    if os.path.isdir(FASTinfo['opt_dir']):
+        # placeholder
+        print('optimization directory already created')
+    else:
+        os.mkdir(FASTinfo['opt_dir'])
 
     FASTinfo['template_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
         'RotorSE/src/rotorse/FAST_files/FAST_file_templates/'))
 
     # === options if previous optimizations have been performed === #
 
-    if FASTinfo['seq_run'] == 'true':
+    if FASTinfo['seq_run']:
         FASTinfo['prev_description'] = 'tst_path'
 
         # for running multiple times
@@ -73,10 +85,10 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === Surrogate Model Options === #
 
-    if FASTinfo['train_sm'] == 'true' or FASTinfo['Use_FAST_sm'] == 'true':
+    if FASTinfo['train_sm'] or FASTinfo['Use_FAST_sm']:
         FASTinfo = create_surr_model_params(FASTinfo)
 
-    if FASTinfo['train_sm'] == 'true':
+    if FASTinfo['train_sm']:
 
         if FASTinfo['training_point_dist'] == 'linear':
             FASTinfo, rotor = create_surr_model_linear_options(FASTinfo, rotor)
@@ -88,8 +100,6 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === Add FAST outputs === #
     FASTinfo = add_outputs(FASTinfo)
-    # print(FASTinfo['output_list'])
-    # quit()
 
     # === FAST Run Time === #
     FASTinfo['Tmax_turb'] = 100.0 # 640.0
@@ -103,12 +113,14 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo['turb_sf'] = 1.0
 
     # option for cross validation
-    if FASTinfo['do_cv'] == 'true':
+    if FASTinfo['do_cv']:
 
-        FASTinfo['cv_description'] = FASTinfo['description'] + '_cv'
+        FASTinfo = kfold_params(FASTinfo)
 
-        FASTinfo['cv_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-        'RotorSE/src/rotorse/FAST_files/Opt_Files/', FASTinfo['cv_description']))
+        # FASTinfo['cv_description'] = FASTinfo['description'] + '_cv'
+        #
+        # FASTinfo['cv_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
+        # 'RotorSE/src/rotorse/FAST_files/Opt_Files/', FASTinfo['cv_description']))
 
     # === strain gage placement === #
     # FASTinfo['sgp'] = [1,2,3]
@@ -142,11 +154,11 @@ def setupFAST(rotor, FASTinfo, description):
     # === specify which DLCs will be included === #
 
     # === options if active DLC list has been created === #
-    FASTinfo['use_DLC_list'] = 'false'
-    if FASTinfo['use_DLC_list'] == 'true':
+    FASTinfo['use_DLC_list'] = False
+    if FASTinfo['use_DLC_list']:
         FASTinfo['DLC_list_loc'] = FASTinfo['opt_dir'] + '/' + 'active_wnd.txt'
 
-    if not (FASTinfo['use_DLC_list'] == 'true'):
+    if not FASTinfo['use_DLC_list']:
 
         # === for optimization === #
         # DLC_List = ['DLC_1_2','DLC_1_3', 'DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
@@ -209,73 +221,127 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir/'
     FASTinfo['nonturb_wnd_dir'] = 'RotorSE_FAST/WND_Files/nonturb_wnd_dir/'
 
-    rotor.driver.add_constraint('max_tip_def', lower=-10.5, upper=10.5)  # tip deflection constraint
-
     return FASTinfo
 
 
 # ========================================================================================================= #
 
-def setup_top_level_options(FASTinfo):
+def kfold_params(FASTinfo):
 
-    if FASTinfo['opt_with_FAST_in_loop'] == 'true':
-        FASTinfo['use_FAST'] = 'true'
-        FASTinfo['Run_Once'] = 'false'
-        FASTinfo['train_sm'] = 'false'
-        FASTinfo['Use_FAST_Fixed_DEMs'] = 'false'
-        FASTinfo['Use_FAST_sm'] = 'false'
-        FASTinfo['seq_run'] = 'false'
+    # number of folds
+    FASTinfo['num_folds'] = 5
 
-    elif FASTinfo['opt_without_FAST'] == 'true':
-        FASTinfo['use_FAST'] = 'false'
-        FASTinfo['Run_Once'] = 'false'
-        FASTinfo['train_sm'] = 'false'
-        FASTinfo['Use_FAST_Fixed_DEMs'] = 'false'
-        FASTinfo['Use_FAST_sm'] = 'false'
-        FASTinfo['seq_run'] = 'false'
+    # check that num_pts/num_folds doesn't have a remainder (is divisible)
+    if (FASTinfo['num_pts'] % FASTinfo['num_folds']) > 0:
+        raise Exception('Number of folds (k) should be a factor of num_pts.')
+    if FASTinfo['num_folds'] == FASTinfo['num_pts']:
+        raise Exception('Number of folds (k) needs to be less than num_pts (for current setup).')
+    num_pts_in_grp = FASTinfo['num_pts'] / FASTinfo['num_folds']
 
-    elif FASTinfo['calc_fixed_DEMs'] == 'true':
-        FASTinfo['use_FAST'] = 'true'
-        FASTinfo['Run_Once'] = 'true'
-        FASTinfo['train_sm'] = 'false'
-        FASTinfo['Use_FAST_Fixed_DEMs'] = 'false'
-        FASTinfo['Use_FAST_sm'] = 'false'
-        FASTinfo['seq_run'] = 'false'
+    # randomly divide pts into num_folds groups
+    num_pts_list = np.linspace(0, FASTinfo['num_pts']-1, FASTinfo['num_pts']) # -1 so it's zero-based
 
-    elif FASTinfo['opt_with_fixed_DEMs'] == 'true':
-        FASTinfo['use_FAST'] = 'false'
-        FASTinfo['Run_Once'] = 'false'
-        FASTinfo['train_sm'] = 'false'
-        FASTinfo['Use_FAST_Fixed_DEMs'] = 'true'
-        FASTinfo['Use_FAST_sm'] = 'false'
-        FASTinfo['seq_run'] = 'false'
+    # === shuffled list === #
+    shuffled_list_file = FASTinfo['opt_dir'] + '/shuffled_list.txt'
 
-    elif FASTinfo['opt_with_fixed_DEMs_seq'] == 'true':
-        FASTinfo['use_FAST'] = 'false'
-        FASTinfo['Run_Once'] = 'false'
-        FASTinfo['train_sm'] = 'false'
-        FASTinfo['Use_FAST_Fixed_DEMs'] = 'true'
-        FASTinfo['Use_FAST_sm'] = 'false'
-        FASTinfo['seq_run'] = 'true'
+    use_preset_shuffled_list = True
 
-    elif FASTinfo['calc_surr_model'] == 'true':
-        FASTinfo['use_FAST'] = 'true'
-        FASTinfo['Run_Once'] = 'true'
-        FASTinfo['train_sm'] = 'true'
-        FASTinfo['Use_FAST_Fixed_DEMs'] = 'false'
-        FASTinfo['Use_FAST_sm'] = 'false'
-        FASTinfo['seq_run'] = 'false'
+    if use_preset_shuffled_list:
 
-    elif FASTinfo['opt_with_surr_model'] == 'true':
-        FASTinfo['use_FAST'] = 'false'
-        FASTinfo['Run_Once'] = 'false'
-        FASTinfo['train_sm'] = 'false'
-        FASTinfo['Use_FAST_Fixed_DEMs'] = 'false'
-        FASTinfo['Use_FAST_sm'] = 'true'
-        FASTinfo['seq_run'] = 'false'
+        if not os.path.isfile(shuffled_list_file):
+
+            # create shuffled list
+            shuffled_list = random.sample(num_pts_list, len(num_pts_list))
+
+            f = open(shuffled_list_file, "w+")
+
+            for i in range(0, FASTinfo['num_pts']):
+                    f.write(str(shuffled_list[i]) + '\n')
+
+            f.close()
+
+        else:
+
+            shuffled_list_lines = open(shuffled_list_file, "r+").readlines()
+            shuffled_list = []
+            for i in range(FASTinfo['num_pts']):
+                shuffled_list.append(float(shuffled_list_lines[i]))
 
     else:
-        Exception('Must choose a FAST option.')
+        shuffled_list = random.sample(num_pts_list, len(num_pts_list))
+
+    FASTinfo['kfolds'] = []
+    for i in range(FASTinfo['num_folds']):
+        FASTinfo['kfolds'].append(shuffled_list[i*num_pts_in_grp:(i+1)*num_pts_in_grp])
+
+    # check
+    # print(num_pts_list)
+    # print(random.sample(num_pts_list, len(num_pts_list)))
+
+    return FASTinfo
+
+# ========================================================================================================= #
+
+def setup_top_level_options(FASTinfo):
+
+    if FASTinfo['opt_with_FAST_in_loop']:
+        FASTinfo['use_FAST'] = True
+        FASTinfo['Run_Once'] = False
+        FASTinfo['train_sm'] = False
+        FASTinfo['Use_FAST_Fixed_DEMs'] = False
+        FASTinfo['Use_FAST_sm'] = False
+        FASTinfo['seq_run'] = False
+
+    elif FASTinfo['opt_without_FAST']:
+        FASTinfo['use_FAST'] = False
+        FASTinfo['Run_Once'] = False
+        FASTinfo['train_sm'] = False
+        FASTinfo['Use_FAST_Fixed_DEMs'] = False
+        FASTinfo['Use_FAST_sm'] = False
+        FASTinfo['seq_run'] = False
+
+    elif FASTinfo['calc_fixed_DEMs']:
+        FASTinfo['use_FAST'] = True
+        FASTinfo['Run_Once'] = True
+        FASTinfo['train_sm'] = False
+        FASTinfo['Use_FAST_Fixed_DEMs'] = False
+        FASTinfo['Use_FAST_sm'] = False
+        FASTinfo['seq_run'] = False
+
+    elif FASTinfo['opt_with_fixed_DEMs']:
+        FASTinfo['use_FAST'] = False
+        FASTinfo['Run_Once'] = False
+        FASTinfo['train_sm'] = False
+        FASTinfo['Use_FAST_Fixed_DEMs'] = True
+        FASTinfo['Use_FAST_sm'] = False
+        FASTinfo['seq_run'] = False
+
+    elif FASTinfo['opt_with_fixed_DEMs_seq']:
+        FASTinfo['use_FAST'] = False
+        FASTinfo['Run_Once'] = False
+        FASTinfo['train_sm'] = False
+        FASTinfo['Use_FAST_Fixed_DEMs'] = True
+        FASTinfo['Use_FAST_sm'] = False
+        FASTinfo['seq_run'] = True
+
+    elif FASTinfo['calc_surr_model']:
+        FASTinfo['use_FAST'] = True
+        FASTinfo['Run_Once'] = True
+        FASTinfo['train_sm'] = True
+        FASTinfo['Use_FAST_Fixed_DEMs'] = False
+        FASTinfo['Use_FAST_sm'] = False
+        FASTinfo['seq_run'] = False
+
+    elif FASTinfo['opt_with_surr_model']:
+        FASTinfo['use_FAST'] = False
+        FASTinfo['Run_Once'] = False
+        FASTinfo['train_sm'] = False
+        FASTinfo['Use_FAST_Fixed_DEMs'] = False
+        FASTinfo['Use_FAST_sm'] = True
+        FASTinfo['seq_run'] = False
+
+    else:
+        raise Exception('Must choose a FAST option.')
 
     return FASTinfo
 
@@ -309,43 +375,60 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 
 def create_surr_model_params(FASTinfo):
 
+    # approximation model
+    # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
+    FASTinfo['approximation_model'] = 'second_order_poly'
+    # FASTinfo['approximation_model'] = 'least_squares'
+    # FASTinfo['approximation_model'] = 'kriging'
+    # FASTinfo['approximation_model'] = 'KPLS'
+    # FASTinfo['approximation_model'] = 'KPLSK'
+
     # training point distribution
     FASTinfo['training_point_dist'] = 'lhs'
     # FASTinfo['training_point_dist'] = 'linear'
 
-    # name of sm .txt files (will be in description folder)
-    FASTinfo['sm_var_file'] = 'sm_var.txt'
-    FASTinfo['sm_out_file'] = 'sm_out.txt'
-    # FASTinfo['sm_param_file'] = 'sm_param.txt'
+    if FASTinfo['training_point_dist'] == 'lhs':
+
+        FASTinfo['sm_var_out_dir'] = 'sm_var_dir'
+
+        FASTinfo['sm_var_file_template'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_var_'
+        FASTinfo['sm_DEM_file_template'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_DEM_'
+        FASTinfo['sm_load_file_template'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_load_'
+        FASTinfo['sm_def_file_template'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_def_'
+    else:
+        FASTinfo['sm_var_file'] = 'sm_var.txt'
+        FASTinfo['sm_DEM_file'] = 'sm_DEM.txt'
 
     # how many different points will be used (linear)
     # FASTinfo['sm_var_max'] = [[4], [2,2,2,2]]
-    # FASTinfo['sm_var_max'] = [[5]]
+    FASTinfo['sm_var_max'] = [[10]]
     # FASTinfo['sm_var_max'] = [[4, 4]]
     # FASTinfo['sm_var_max'] = [[3], [3, 3]]
     # FASTinfo['sm_var_max'] = [[3], [3]]
-    FASTinfo['sm_var_max'] = [[3,3,3,3]]
+    # FASTinfo['sm_var_max'] = [[3,3,3,3]]
 
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 20
+    FASTinfo['num_pts'] = 10
 
     # list of variables that we are varying
-    # FASTinfo['sm_var_names'] = ['r_max_chord']
-    FASTinfo['sm_var_names'] = ['chord_sub']
+    FASTinfo['sm_var_names'] = ['r_max_chord']
+    # FASTinfo['sm_var_names'] = ['chord_sub']
     # FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub']
 
     # indices of which variables are used
     # FASTinfo['sm_var_index'] = [[1]] # second point in distribution
     # FASTinfo['sm_var_index'] = [[1, 2]] # second/third point in distribution
     # FASTinfo['sm_var_index'] = [[0], [1, 2]] # r_max_chord & second/third point in distribution
-    # FASTinfo['sm_var_index'] = [[0], [1]] # r_max_chord & second/third point in distribution
-    FASTinfo['sm_var_index'] = [[0,1,2,3]] # chord_sub distribution
+    # FASTinfo['sm_var_index'] = [[0], [1]] # r_max_chord & second in chord distribution
+    # FASTinfo['sm_var_index'] = [[0,1,2,3]] # chord_sub distribution
+    FASTinfo['sm_var_index'] = [[0]] # r_max_chord
 
     return FASTinfo
 
 # ========================================================================================================= #
 
+# full factorial data choice
 def create_surr_model_linear_options(FASTinfo, rotor):
 
     var_index = []
@@ -436,7 +519,7 @@ def create_surr_model_linear_options(FASTinfo, rotor):
     # set design variables in rotor dictionary
 
     # print(FASTinfo['chord_sub_init'])
-    if FASTinfo['check_point_dist'] == 'true':
+    if FASTinfo['check_point_dist']:
 
         plt.figure()
 
@@ -453,7 +536,7 @@ def create_surr_model_linear_options(FASTinfo, rotor):
                 plt.plot( FASTinfo['var_range'][0][i], FASTinfo['var_range'][1][j], 'ob', label='training points')
 
         # plt.legend()
-        plt.savefig('/Users/bingersoll/Desktop/linear_' + FASTinfo['description'] + '.png')
+        plt.savefig(FASTinfo['dir_saved_plots'] + '/linear_' + FASTinfo['description'] + '.png')
         plt.show()
 
         quit()
@@ -462,9 +545,26 @@ def create_surr_model_linear_options(FASTinfo, rotor):
 
 # ========================================================================================================= #
 
+# Latin Hypercube-Sampling data choice
 def create_surr_model_lhs_options(FASTinfo, rotor):
 
     # latin hypercube spacing for surrogate model
+
+    try:
+        FASTinfo['sm_var_spec'] = int(sys.argv[1])
+    except:
+        # raise Exception('Need to have system input when latin-hypercube sampling used.')
+        FASTinfo['sm_var_spec'] = 0
+
+    # name of sm .txt files (will be in description folder)
+
+    if not os.path.isdir(FASTinfo['opt_dir'] + '/' + FASTinfo['sm_var_out_dir']):
+        os.mkdir(FASTinfo['opt_dir'] + '/' + FASTinfo['sm_var_out_dir'])
+
+    FASTinfo['sm_var_file'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_var_' + str(FASTinfo['sm_var_spec']) + '.txt'
+    FASTinfo['sm_DEM_file'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_DEM_' + str(FASTinfo['sm_var_spec']) + '.txt'
+    FASTinfo['sm_load_file'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_load_' + str(FASTinfo['sm_var_spec']) + '.txt'
+    FASTinfo['sm_def_file'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_def_' + str(FASTinfo['sm_var_spec']) + '.txt'
 
     # total num of variables used, variable index
     var_index = []
@@ -484,11 +584,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
 
     point_file = FASTinfo['opt_dir'] + '/pointfile.txt'
 
-    if os.path.isdir(FASTinfo['opt_dir']):
-        # placeholder
-        print('optimization directory already created')
-    else:
-        os.mkdir(FASTinfo['opt_dir'])
+    if not os.path.isfile(point_file):
 
         points = lhs(num_var, samples=FASTinfo['num_pts'], criterion='center')
 
@@ -502,8 +598,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
             f.write('\n')
 
         f.close()
-
-    point_file = FASTinfo['opt_dir'] + '/pointfile.txt'
 
     lines = open(point_file,"r+").readlines()
 
@@ -542,7 +636,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
 
     # === plot checks === #
 
-    if FASTinfo['check_cv'] == 'true':
+    if FASTinfo['check_cv']:
 
         cv_point_file = FASTinfo['opt_dir'] + '_cv' + '/pointfile.txt'
 
@@ -588,14 +682,14 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         plt.plot(cv_points[:,0], cv_points[:,1], 'o', label='cross-validation points')
         plt.legend()
 
-        plt.savefig('/Users/bingersoll/Desktop/lhs_cv_' + FASTinfo['description'] + '.png')
+        plt.savefig(FASTinfo['dir_saved_plots'] + '/lhs_cv_' + FASTinfo['description'] + '.png')
         plt.show()
 
         quit()
 
 
 
-    if FASTinfo['check_point_dist'] == 'true':
+    if FASTinfo['check_point_dist']:
 
         plt.figure()
 
@@ -609,7 +703,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         plt.plot(points[:,0], points[:,1], 'o', label='training points')
         plt.legend()
 
-        plt.savefig('/Users/bingersoll/Desktop/lhs_' + FASTinfo['description'] + '.png')
+        plt.savefig(FASTinfo['dir_saved_plots'] + '/lhs_' + FASTinfo['description'] + '.png')
         plt.show()
 
         quit()
@@ -618,11 +712,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
     FASTinfo = initialize_dv(FASTinfo)
 
     # assign values
-
-    try:
-        FASTinfo['sm_var_spec'] = int(sys.argv[1])
-    except:
-        raise Exception('Need to have system input when lh sampling used.')
 
     cur_var = 0
     for i in range(0, len(FASTinfo['sm_var_names'])):
@@ -837,9 +926,9 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
         # TODO: plot check for different wnd files
 
     # create DEM plots using DEMx_master_array, DEMy_master_array
-    FASTinfo['createDEMplot'] = 'false'
+    FASTinfo['createDEMplot'] = False
 
-    if FASTinfo['createDEMplot'] == 'true':
+    if FASTinfo['createDEMplot']:
 
         plt.figure()
         plt.xlabel('strain gage position')
@@ -920,7 +1009,7 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
         file_y.write(str(rotor['Myb_damage'][j]) + '\n')
     file_y.close()
 
-    if checkplots == 'true':
+    if checkplots:
         plot_DEMs(rotor)
         quit()
 

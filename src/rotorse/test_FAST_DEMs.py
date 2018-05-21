@@ -23,19 +23,21 @@ FASTinfo = dict()
 # === Top Level Options for FAST use === #
 # can only do one at a time
 
-FASTinfo['opt_without_FAST'] = 'false'
+FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
-FASTinfo['opt_with_FAST_in_loop'] = 'false'
-FASTinfo['calc_fixed_DEMs'] = 'true'
-FASTinfo['opt_with_fixed_DEMs'] = 'false'
-FASTinfo['opt_with_fixed_DEMs_seq'] = 'false'
-FASTinfo['calc_surr_model'] = 'false'
-FASTinfo['opt_with_surr_model'] = 'false'
+FASTinfo['opt_with_FAST_in_loop'] = False
+FASTinfo['calc_fixed_DEMs'] = False
+FASTinfo['opt_with_fixed_DEMs'] = False
+FASTinfo['opt_with_fixed_DEMs_seq'] = False
+FASTinfo['calc_surr_model'] = False
+FASTinfo['opt_with_surr_model'] = True
 
 # description
-description = 'test_fixedDEM'
 
+description = 'cv_test_error'
+
+print('Run ' + description + ' is running...')
 
 FASTinfo = setupFAST(rotor, FASTinfo, description)
 
@@ -43,8 +45,8 @@ FASTinfo = setupFAST(rotor, FASTinfo, description)
 rotor.root = RotorSE(FASTinfo = FASTinfo, naero=17, nstr=38, npower=20)#, af_dof=2)
 
 # === SETUP OPTIMIZATION === #
-if FASTinfo['use_FAST'] == 'true':
-    if not (FASTinfo['Run_Once'] == 'true'):
+if FASTinfo['use_FAST']:
+    if not FASTinfo['Run_Once']:
         rotor.driver = pyOptSparseDriver()
         rotor.driver.options['optimizer'] = 'SNOPT'
         rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
@@ -56,8 +58,8 @@ else:
     rotor.driver.options['optimizer'] = 'SNOPT'
     rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
 
-    rotor.driver.opt_settings['Print file'] = 'Opt_Files/' + description + '/SNOPT_print_' + description +'.out'
-    rotor.driver.opt_settings['Summary file'] = 'Opt_Files/' + description + '/SNOPT_summary_' + description +'.out'
+    rotor.driver.opt_settings['Print file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_print_' + description +'.out'
+    rotor.driver.opt_settings['Summary file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_summary_' + description +'.out'
 
 # recorder = SqliteRecorder(os.sep + 'recorder_' + description +'.sql')
 # recorder.options['record_params'] = True
@@ -68,11 +70,11 @@ else:
 rotor.driver.add_objective('obj')
 
 rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
-rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+# rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
+# rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
 # rotor.driver.add_desvar('control:tsr', lower=3.0, upper=9.0)
-rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)
-rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)
+# rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)
+# rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)
 
 # === Setup constraints === #
 rotor.driver.add_constraint('con_strain_spar', lower=-1.0, upper=1.0)  # rotor strain sparL
@@ -90,13 +92,17 @@ rotor.driver.add_constraint('con_damageL_spar', lower=-1.0, upper=1.0)  # damage
 rotor.driver.add_constraint('con_damageU_te', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
 rotor.driver.add_constraint('con_damageL_te', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
 
+if FASTinfo['use_tip_def_cons']:
+    rotor.driver.add_constraint('con_max_tip_def', lower=-10.5, upper=10.5)  # tip deflection constraint
+
+
 rotor.setup(check=False)
 
 # Extract RotorSE inputs
-# use_input_file = 'true'
-use_input_file = 'false'
+# use_input_file = True
+use_input_file = False
 
-if use_input_file is 'true':
+if use_input_file:
     fp = open("FAST_files/RotorSE_InputFiles/Nom_Case/main.txt")
     line = fp.readlines()
 
@@ -207,14 +213,14 @@ else:
     # ------------------
 
     # === design variables === #
-    if FASTinfo['use_FAST'] == 'true':
-        if FASTinfo['seq_run'] == 'true':
+    if FASTinfo['use_FAST']:
+        if FASTinfo['seq_run']:
 
             from FAST_util import setup_FAST_seq_run_des_var
 
             rotor = setup_FAST_seq_run_des_var(rotor, FASTinfo)
 
-        elif FASTinfo['train_sm'] == 'true':
+        elif FASTinfo['train_sm']:
 
             print("Creating Surrogate Model...")
 
@@ -227,7 +233,7 @@ else:
         else:
 
             rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
-            rotor['chord_sub'] = np.array([3.2612, 5.3, 3.3178,1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+            rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
             # 3.2612, 4.5709, 3.3178, 1.4621
             rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,
                                            -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
@@ -239,7 +245,7 @@ else:
         # not using FAST in the loop, so either using surrogate model or just RotorSE
         rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
 
-        rotor['chord_sub'] = np.array([3.2612, 5.3, 3.3178,
+        rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178,
                                        1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
         # 3.2612, 4.5709, 3.3178,1.4621
         rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,
@@ -406,7 +412,7 @@ rotor['profile'] = profile  # (List): airfoil shape at each radial position
 
 
 # === fatigue ===
-if FASTinfo['Use_FAST_Fixed_DEMs'] == 'true':
+if FASTinfo['Use_FAST_Fixed_DEMs']:
 
     rotor = Use_FAST_DEMs(FASTinfo,rotor,FASTinfo['check_opt_DEMs'])
 
@@ -421,9 +427,11 @@ else:
         1.8459E+003, 1.5582E+003, 1.2896E+003, 1.0427E+003, 8.2015E+002, 6.2449E+002, 4.5229E+002,
         3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
 
-rotor['strain_ult_spar'] = 1.0e-2 * 2  # (Float): ultimate strain in spar cap
-rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
-rotor['eta_damage'] = 1.35*1.3*1.0  # (Float): safety factor for fatigue
+# rotor['strain_ult_spar'] = 1.0e-2  # (Float): ultimate strain in spar cap
+rotor['strain_ult_spar'] = 2.0e-2  # (Float): ultimate strain in spar cap
+# rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
+rotor['strain_ult_te'] = 2.00*1e-2    # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
+rotor['eta_damage'] = 1.15*1.2*1.0  # (Float): safety factor for fatigue
 rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
 rotor['N_damage'] = 365*24*3600*20/6.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
 
@@ -436,7 +444,7 @@ rotor['N_damage'] = 365*24*3600*20/6.0  # (Float): number of cycles used in fati
 rotor.run()
 
 # save values
-if FASTinfo['use_FAST'] == 'true':
+if FASTinfo['use_FAST']:
     extract_results(rotor,FASTinfo)
 
 
