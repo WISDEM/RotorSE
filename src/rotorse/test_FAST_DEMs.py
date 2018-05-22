@@ -30,12 +30,13 @@ FASTinfo['opt_with_FAST_in_loop'] = False
 FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = False
-FASTinfo['opt_with_surr_model'] = True
+FASTinfo['calc_surr_model'] = True
+FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'cv_test_error'
+description = 'sc_test_all_var'
+# description = 'cv_test_error'
 
 print('Run ' + description + ' is running...')
 

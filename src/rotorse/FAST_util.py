@@ -54,16 +54,16 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === Platform (Local or SC) === #
 
-    # FASTinfo['path'] = '/fslhome/ingerbry/programs/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/programs/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-        'RotorSE/src/rotorse/FAST_files/Opt_Files/', FASTinfo['description']))
+        'RotorSE/src/rotorse/FAST_Files/Opt_Files/', FASTinfo['description']))
 
     if os.path.isdir(FASTinfo['opt_dir']):
         # placeholder
@@ -72,7 +72,7 @@ def setupFAST(rotor, FASTinfo, description):
         os.mkdir(FASTinfo['opt_dir'])
 
     FASTinfo['template_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-        'RotorSE/src/rotorse/FAST_files/FAST_file_templates/'))
+        'RotorSE/src/rotorse/FAST_Files/FAST_File_templates/'))
 
     # === options if previous optimizations have been performed === #
 
@@ -81,7 +81,7 @@ def setupFAST(rotor, FASTinfo, description):
 
         # for running multiple times
         FASTinfo['prev_opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-            'RotorSE/src/rotorse/FAST_files/Opt_Files/', FASTinfo['prev_description']))
+            'RotorSE/src/rotorse/FAST_Files/Opt_Files/', FASTinfo['prev_description']))
 
     # === Surrogate Model Options === #
 
@@ -409,12 +409,12 @@ def create_surr_model_params(FASTinfo):
 
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 10
+    FASTinfo['num_pts'] = 100
 
     # list of variables that we are varying
-    FASTinfo['sm_var_names'] = ['r_max_chord']
+    # FASTinfo['sm_var_names'] = ['r_max_chord']
     # FASTinfo['sm_var_names'] = ['chord_sub']
-    # FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub']
+    FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub', 'theta_sub']
 
     # indices of which variables are used
     # FASTinfo['sm_var_index'] = [[1]] # second point in distribution
@@ -422,7 +422,8 @@ def create_surr_model_params(FASTinfo):
     # FASTinfo['sm_var_index'] = [[0], [1, 2]] # r_max_chord & second/third point in distribution
     # FASTinfo['sm_var_index'] = [[0], [1]] # r_max_chord & second in chord distribution
     # FASTinfo['sm_var_index'] = [[0,1,2,3]] # chord_sub distribution
-    FASTinfo['sm_var_index'] = [[0]] # r_max_chord
+    # FASTinfo['sm_var_index'] = [[0]] # r_max_chord
+    FASTinfo['sm_var_index'] = [[0], [0,1,2,3], [0,1,2,3]]
 
     return FASTinfo
 
