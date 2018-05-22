@@ -54,12 +54,12 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === Platform (Local or SC) === #
 
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -632,6 +632,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
 
         #
         points[:,i] = points[:,i]*(var_range[1]-var_range[0]) + var_range[0]
+
         FASTinfo['var_range'].append(var_range)
 
 
@@ -712,12 +713,13 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
     # determine initial values
     FASTinfo = initialize_dv(FASTinfo)
 
-    # assign values
+    # === assign values === #
 
     cur_var = 0
     for i in range(0, len(FASTinfo['sm_var_names'])):
 
-        spec_var_name = FASTinfo['sm_var_names'][var_index[i]]
+        # spec_var_name = FASTinfo['sm_var_names'][var_index[i]]
+        spec_var_name = FASTinfo['sm_var_names'][i]
 
         for j in range(0, len(FASTinfo['sm_var_index'][i])):
 
@@ -731,10 +733,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
                 FASTinfo[spec_var_name + '_init'] = points[FASTinfo['sm_var_spec'],cur_var]
 
             cur_var += 1
-
-    # print(FASTinfo['r_max_chord_init'])
-    # print(FASTinfo['chord_sub_init'])
-    # quit()
 
     return FASTinfo, rotor
 
