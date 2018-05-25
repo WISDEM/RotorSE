@@ -54,12 +54,12 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === Platform (Local or SC) === #
 
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -102,13 +102,13 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 100.0 # 640.0
-    FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
+    FASTinfo['Tmax_turb'] = 10.0 # 640.0
+    FASTinfo['Tmax_nonturb'] = 10.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 40.0 # 40.0
+    FASTinfo['rm_time'] = 0.0 # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -229,7 +229,7 @@ def setupFAST(rotor, FASTinfo, description):
 def kfold_params(FASTinfo):
 
     # number of folds
-    FASTinfo['num_folds'] = 5
+    FASTinfo['num_folds'] = 2
 
     # check that num_pts/num_folds doesn't have a remainder (is divisible)
     if (FASTinfo['num_pts'] % FASTinfo['num_folds']) > 0:
@@ -375,10 +375,13 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 
 def create_surr_model_params(FASTinfo):
 
+    # total number of points (lhs)
+    FASTinfo['num_pts'] = 100
+
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
-    FASTinfo['approximation_model'] = 'second_order_poly'
-    # FASTinfo['approximation_model'] = 'least_squares'
+    # FASTinfo['approximation_model'] = 'second_order_poly'
+    FASTinfo['approximation_model'] = 'least_squares'
     # FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
@@ -399,18 +402,6 @@ def create_surr_model_params(FASTinfo):
         FASTinfo['sm_var_file'] = 'sm_var.txt'
         FASTinfo['sm_DEM_file'] = 'sm_DEM.txt'
 
-    # how many different points will be used (linear)
-    # FASTinfo['sm_var_max'] = [[4], [2,2,2,2]]
-    FASTinfo['sm_var_max'] = [[10]]
-    # FASTinfo['sm_var_max'] = [[4, 4]]
-    # FASTinfo['sm_var_max'] = [[3], [3, 3]]
-    # FASTinfo['sm_var_max'] = [[3], [3]]
-    # FASTinfo['sm_var_max'] = [[3,3,3,3]]
-
-
-    # total number of points (lhs)
-    FASTinfo['num_pts'] = 100
-
     # list of variables that we are varying
     # FASTinfo['sm_var_names'] = ['r_max_chord']
     # FASTinfo['sm_var_names'] = ['chord_sub']
@@ -425,12 +416,23 @@ def create_surr_model_params(FASTinfo):
     # FASTinfo['sm_var_index'] = [[0]] # r_max_chord
     FASTinfo['sm_var_index'] = [[0], [0,1,2,3], [0,1,2,3]]
 
+    # use smaller domain to sample points
+    FASTinfo['restrict_lhs_domain'] = True
+
     return FASTinfo
 
 # ========================================================================================================= #
 
 # full factorial data choice
 def create_surr_model_linear_options(FASTinfo, rotor):
+
+    # how many different points will be used (linear)
+    # FASTinfo['sm_var_max'] = [[4], [2,2,2,2]]
+    FASTinfo['sm_var_max'] = [[10]]
+    # FASTinfo['sm_var_max'] = [[4, 4]]
+    # FASTinfo['sm_var_max'] = [[3], [3, 3]]
+    # FASTinfo['sm_var_max'] = [[3], [3]]
+    # FASTinfo['sm_var_max'] = [[3,3,3,3]]
 
     var_index = []
     for i in range(0, len(FASTinfo['sm_var_max'])):
@@ -487,12 +489,6 @@ def create_surr_model_linear_options(FASTinfo, rotor):
 
         for j in range(0, len(FASTinfo['sm_var_max'][i])):
 
-            # print('--- check ---')
-            # print(i)
-            # print(j)
-            # print(FASTinfo['sm_var_index'])
-            # print('--- ---')
-
             index = FASTinfo['sm_var_index'][i][j]
 
             sm_range = np.linspace(var_range[0], var_range[1], FASTinfo['sm_var_max'][i][j])
@@ -500,26 +496,15 @@ def create_surr_model_linear_options(FASTinfo, rotor):
             FASTinfo['var_range'].append(sm_range)
 
             if hasattr(FASTinfo[FASTinfo['sm_var_names'][i]+'_init'], '__len__'):
-                # FASTinfo[FASTinfo['sm_var_names'][i]+'_init'][j] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
-
-                # print('--- check ---')
-                # print(index)
-                # print(sm_range)
-                #
-                # print(i)
-                # print(j)
-                # print(FASTinfo['sm_var_spec'])
-                # print(FASTinfo['sm_var_spec'][i][j]-1)
 
                 FASTinfo[FASTinfo['sm_var_names'][i]+'_init'][index] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
+
             else:
-                # FASTinfo[FASTinfo['sm_var_names'][i] + '_init'] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
 
                 FASTinfo[FASTinfo['sm_var_names'][i] + '_init'] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
 
     # set design variables in rotor dictionary
 
-    # print(FASTinfo['chord_sub_init'])
     if FASTinfo['check_point_dist']:
 
         plt.figure()
@@ -549,13 +534,22 @@ def create_surr_model_linear_options(FASTinfo, rotor):
 # Latin Hypercube-Sampling data choice
 def create_surr_model_lhs_options(FASTinfo, rotor):
 
-    # latin hypercube spacing for surrogate model
+    # determine initial values
+    FASTinfo = initialize_dv(FASTinfo)
 
     try:
         FASTinfo['sm_var_spec'] = int(sys.argv[1])
     except:
         # raise Exception('Need to have system input when latin-hypercube sampling used.')
         FASTinfo['sm_var_spec'] = 0
+
+
+    # add FASTinfo['sm_dir'] so simultaneous runs don't clobber each other
+    FASTinfo['sm_dir'] = FASTinfo['opt_dir'] + '/sm_' + str(FASTinfo['sm_var_spec'])
+
+    # create directory
+    if not os.path.isdir(FASTinfo['opt_dir']):
+        os.mkdir(FASTinfo['opt_dir'])
 
     # name of sm .txt files (will be in description folder)
 
@@ -608,9 +602,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         for j in range(0, len(spec_line)):
             points[i,j] = float(spec_line[j])
 
-    # print(points)
-    # quit()
-
     FASTinfo['var_range'] = []
     for i in range(0, num_var):
 
@@ -630,12 +621,49 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         else:
             Exception('A surrogate model variable was listed that is not a design variable.')
 
-        #
+        # decrease var_range
+        # doing this will increase surrogate model accuracy,
+        # since the points sampled are going to clustered closer together
+        if FASTinfo['restrict_lhs_domain']:
+
+            index = -1
+            # determine which index in spec_var_name we're at
+
+            for j in range(len(var_index[0:i+1])):
+                if var_index[i] == var_index[j]:
+                    index += 1
+
+            # get specific variable initial value
+            if spec_var_name == 'r_max_chord':
+                spec_val = FASTinfo[spec_var_name + '_init']
+            else:
+                spec_val = FASTinfo[spec_var_name + '_init'][index]
+
+            # create new range
+            range_frac = 0.25
+            range_len = var_range[1]-var_range[0]
+            new_var_range = [spec_val-range_frac*range_len, spec_val+range_frac*range_len]
+
+            # if new range is smaller/larger than old range, adjust
+            if new_var_range[0] < var_range[0]:
+                new_var_range[0] = var_range[0]
+            if new_var_range[1] > var_range[1]:
+                new_var_range[1] = var_range[1]
+
+            # print('test')
+            # print(spec_val)
+            # print(new_var_range)
+            # print(var_range)
+            # print('--- ---')
+
+            # set var_range to new_var_range
+            var_range = new_var_range
+
         points[:,i] = points[:,i]*(var_range[1]-var_range[0]) + var_range[0]
 
         FASTinfo['var_range'].append(var_range)
 
-
+    # quit()
     # === plot checks === #
 
     if FASTinfo['check_cv']:
@@ -689,8 +717,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
 
         quit()
 
-
-
     if FASTinfo['check_point_dist']:
 
         plt.figure()
@@ -709,9 +735,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         plt.show()
 
         quit()
-
-    # determine initial values
-    FASTinfo = initialize_dv(FASTinfo)
 
     # === assign values === #
 
@@ -882,15 +905,10 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
             elif j == DEMrange[3]:
                 sgp = sgp_range[3]
 
-            # spec_wnd_dir = FASTinfo['description'] + '/' + caseids[i - 1]
-            # spec_wnd_dir = FASTinfo['description'] + '/' + 'sgp' + str(sgp) + '/' + caseids[i - 1]
             spec_wnd_dir = FASTinfo['description'] + '/' + 'sgp' + str(sgp) + '/' + caseids[i - 1] + '_sgp' + str(sgp)
 
             FAST_wnd_directory = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
                     'RotorSE/src/rotorse/FAST_files/Opt_Files/', spec_wnd_dir))
-
-            FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-                    'RotorSE/src/rotorse/FAST_files/Opt_Files/', FASTinfo['description']))
 
             # xDEM / yDEM files
 

@@ -35,7 +35,10 @@ FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'sc_test_all_var'
+description = 'test_ranges'
+
+# description = 'sc_test_all_var'
+# description = 'sc_test_1_var'
 # description = 'cv_test_error'
 
 print('Run ' + description + ' is running...')
@@ -71,11 +74,11 @@ else:
 rotor.driver.add_objective('obj')
 
 rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-# rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
-# rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
+rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
 # rotor.driver.add_desvar('control:tsr', lower=3.0, upper=9.0)
-# rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)
-# rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)
+rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)
+rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)
 
 # === Setup constraints === #
 rotor.driver.add_constraint('con_strain_spar', lower=-1.0, upper=1.0)  # rotor strain sparL

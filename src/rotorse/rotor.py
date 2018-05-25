@@ -2348,6 +2348,11 @@ class CreateFASTConstraints(Component):
         self.description = FASTinfo['description']
         self.path = FASTinfo['path']
         self.opt_dir = FASTinfo['opt_dir']
+
+        self.train_sm = FASTinfo['train_sm']
+        if self.train_sm:
+            self.sm_dir = FASTinfo['sm_dir']
+
         self.NBlGages = FASTinfo['NBlGages']
         self.BldGagNd = FASTinfo['BldGagNd']
         self.Run_Once = FASTinfo['Run_Once']
@@ -2396,11 +2401,6 @@ class CreateFASTConstraints(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        # print('in start of create fast constraints')
-        # print(self.BldGagNd)
-        # print(self.test_BldGagNd)
-        # print('-----------------------------------')
-
         # === Check Results === #
         resultsdict = params["WNDfile{0}".format(1) + '_sgp' + str(self.sgp[0])]
         if self.check_results:
@@ -2419,7 +2419,7 @@ class CreateFASTConstraints(Component):
 
             quit()
 
-
+        # total number of virtual strain gages
         tot_BldGagNd = []
         for i in range(0, len(self.BldGagNd)):
             for j in range(0, self.NBlGages[i]):
@@ -2432,15 +2432,6 @@ class CreateFASTConstraints(Component):
             max_gage = max(max_gage, max(self.BldGagNd[i]))
 
         # === DEM / structural calculations === #
-
-        # print('--- DEM ---')
-        # print(self.BldGagNd)
-        #
-        # print(self.WNDfile_List)
-        # print(type(self.WNDfile_List))
-        # print(max_gage)
-        # print(type(max_gage))
-        # print('--- ---')
 
         DEMx_master_array = np.zeros([len(self.WNDfile_List), 1 + max_gage])
         DEMy_master_array = np.zeros([len(self.WNDfile_List), 1 + max_gage])
@@ -2456,6 +2447,7 @@ class CreateFASTConstraints(Component):
         Edg_max = np.zeros([1 + total_num_bl_gages, 1])
         Flp_max = np.zeros([1 + total_num_bl_gages, 1])
 
+        # === extrapolated loads variables === #
         # peaks master
         peaks_master_x = dict()
         peaks_master_x['root'] = []
@@ -2478,6 +2470,13 @@ class CreateFASTConstraints(Component):
         for i in range(0, total_num_bl_gages):
             peaks_max_y['bld_gage_' + str(tot_BldGagNd[i])] = []
 
+        # === cycle through each set of strain gages (k) and each wind file (i) === #
+        if self.train_sm:
+            FAST_opt_dir = self.sm_dir
+        else:
+            FAST_opt_dir = self.opt_dir
+
+
         for k in range(0, len(self.NBlGages)):
 
             for i in range(0 + 1, len(self.WNDfile_List) + 1):
@@ -2485,9 +2484,7 @@ class CreateFASTConstraints(Component):
                 spec_caseid = k*len(self.WNDfile_List)+(i-1)
                 resultsdict = params[self.caseids[spec_caseid]]
 
-                spec_wnd_dir = self.description + '/' + 'sgp' + str(self.sgp[k]) + '/' + self.caseids[spec_caseid]
-
-                FAST_wnd_directory = self.opt_dir + '/' + 'sgp' + str(self.sgp[k]) + '/' + self.caseids[spec_caseid]
+                FAST_wnd_directory = FAST_opt_dir + '/' + 'sgp' + str(self.sgp[k]) + '/' + self.caseids[spec_caseid]
 
                 # === rainflow calculation files === #
 
@@ -3938,12 +3935,16 @@ class CreateFASTConfig(Component):
         self.Tmax_nonturb = FASTinfo['Tmax_nonturb']
 
         self.FAST_opt_directory = FASTinfo['opt_dir']
-        # self.sgp_dir = FASTinfo['spec_sgp_dir']
         self.template_dir = FASTinfo['template_dir']
+
+        self.train_sm = FASTinfo['train_sm']
+        if self.train_sm:
+            self.sm_dir = FASTinfo['sm_dir']
 
         self.check_stif_spline = FASTinfo['check_stif_spline']
 
         self.output_list = FASTinfo['output_list']
+
 
         # add necessary parameters
         self.add_param('nBlades', val=0)
@@ -4037,7 +4038,11 @@ class CreateFASTConfig(Component):
         # TODO: change to FoilNm=params['airfoil_types']
         # Will need work; files headers need to be different
 
-        FAST_opt_directory = self.FAST_opt_directory
+        # create file directory for each surrogate model training point
+        if self.train_sm:
+            FAST_opt_directory = self.sm_dir
+        else:
+            FAST_opt_directory = self.FAST_opt_directory
 
         # needs to be created just once for optimization
         if os.path.isdir(FAST_opt_directory):
@@ -4054,7 +4059,7 @@ class CreateFASTConfig(Component):
 
         for sgp in range(0,len(self.sgp)):
 
-            sgp_dir = self.FAST_opt_directory + '/' + 'sgp' + str(self.sgp[sgp])
+            sgp_dir = FAST_opt_directory + '/' + 'sgp' + str(self.sgp[sgp])
 
             for wnd_file in range(0, len(self.WNDfile_List)):
 
