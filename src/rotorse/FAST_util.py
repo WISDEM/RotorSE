@@ -102,13 +102,13 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 10.0 # 640.0
-    FASTinfo['Tmax_nonturb'] = 10.0 # 100.0
+    FASTinfo['Tmax_turb'] = 100.0 # 640.0
+    FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 0.0 # 40.0
+    FASTinfo['rm_time'] = 40.0 # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
