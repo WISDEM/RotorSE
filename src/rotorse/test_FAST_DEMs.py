@@ -35,7 +35,10 @@ FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'test_ranges'
+description = 'test_sgp_1'
+description = 'test_sgp_3'
+
+# description = 'test_ranges'
 
 # description = 'sc_test_all_var'
 # description = 'sc_test_1_var'

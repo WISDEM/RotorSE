@@ -3246,6 +3246,7 @@ class Use_FAST_surr_model(Component):
         self.dir_saved_plots = FASTinfo['dir_saved_plots']
 
         self.sm_var_index = FASTinfo['sm_var_index']
+        self.var_index = FASTinfo['var_index']
         self.sm_var_names = FASTinfo['sm_var_names']
 
         self.NBlGages = FASTinfo['NBlGages']
@@ -3255,13 +3256,19 @@ class Use_FAST_surr_model(Component):
         self.add_param('DEMy', shape=18, desc='DEMy')
 
         self.check_fit = FASTinfo['check_fit']
-        self.do_cv = FASTinfo['do_cv']
+
+        self.do_cv_DEM = FASTinfo['do_cv_DEM']
+        self.do_cv_Load = FASTinfo['do_cv_Load']
+        self.do_cv_def = FASTinfo['do_cv_def']
+
         self.print_sm = FASTinfo['print_sm']
 
-        if self.do_cv:
+        if self.do_cv_DEM or self.do_cv_Load or self.do_cv_def:
 
             self.kfolds = FASTinfo['kfolds']
             self.num_folds = FASTinfo['num_folds']
+
+            self.theta0_val = FASTinfo['theta0_val']
 
             # self.cv_dir = FASTinfo['cv_dir']
             #
@@ -3545,7 +3552,11 @@ class Use_FAST_surr_model(Component):
             cv_y_fit = LS()
 
         elif self.approximation_model == 'kriging':
-            theta0_val = [1e-2]
+
+            # initial hyperparameters
+            theta0_val = np.zeros([len(self.var_index), 1])
+            for i in range(len(theta0_val)):
+                theta0_val[i] = self.theta0_val[0]
 
             sm_x_fit = KRG(theta0=theta0_val)
             sm_y_fit = KRG(theta0=theta0_val)
@@ -3559,7 +3570,7 @@ class Use_FAST_surr_model(Component):
             cv_y_fit = KRG(theta0=theta0_val)
 
         elif self.approximation_model == 'KPLS':
-            theta0_val = [1e-2]
+            theta0_val = self.theta0_val
 
             sm_x_fit = KPLS(theta0=theta0_val)
             sm_y_fit = KPLS(theta0=theta0_val)
@@ -3573,7 +3584,7 @@ class Use_FAST_surr_model(Component):
             cv_y_fit = KPLS(theta0=theta0_val)
 
         elif self.approximation_model == 'KPLSK':
-            theta0_val = [1e-2]
+            theta0_val = self.theta0_val
 
             sm_x_fit = KPLSK(theta0=theta0_val)
             sm_y_fit = KPLSK(theta0=theta0_val)
@@ -3735,36 +3746,39 @@ class Use_FAST_surr_model(Component):
 
             quit()
 
-        # Do a cross validation, check for total error
-        if self.do_cv:
+        # === Do a cross validation, check for total error === #
 
-            print('Running cross validation...')
+        if self.do_cv_DEM:
+
+            print('Running DEM cross validation...')
 
             # === initialize error === #
-            error_x = np.zeros([len(DEMx_sm), self.num_folds])
-            percent_error_x = np.zeros([len(DEMx_sm), self.num_folds])
+            DEM_error_x = np.zeros([len(DEMx_sm), self.num_folds])
+            percent_DEM_error_x = np.zeros([len(DEMx_sm), self.num_folds])
 
-            error_y = np.zeros([len(DEMy_sm), self.num_folds])
-            percent_error_y = np.zeros([len(DEMy_sm), self.num_folds])
+            DEM_error_y = np.zeros([len(DEMy_sm), self.num_folds])
+            percent_DEM_error_y = np.zeros([len(DEMy_sm), self.num_folds])
 
             for j in range(len(self.kfolds)):
 
-                cur_error_x = np.zeros([len(DEMx_sm), len(self.kfolds[j])])
-                cur_percent_error_x = np.zeros([len(DEMx_sm), len(self.kfolds[j])])
+                cur_DEM_error_x = np.zeros([len(DEMx_sm), len(self.kfolds[j])])
+                cur_percent_DEM_error_x = np.zeros([len(DEMx_sm), len(self.kfolds[j])])
 
-                cur_error_y = np.zeros([len(DEMx_sm), len(self.kfolds[j])])
-                cur_percent_error_y = np.zeros([len(DEMx_sm), len(self.kfolds[j])])
+                cur_DEM_error_y = np.zeros([len(DEMx_sm), len(self.kfolds[j])])
+                cur_percent_DEM_error_y = np.zeros([len(DEMx_sm), len(self.kfolds[j])])
 
                 for k in range(len(self.kfolds[j])):
 
                     cur_kfold = self.kfolds[j]
 
+                    # choose training point indices
                     train_pts = np.linspace(0, self.num_pts-1, self.num_pts) # -1 so it's zero-based
                     train_pts = train_pts.tolist()
 
                     for i in range(0, len(cur_kfold)):
                         train_pts.remove(cur_kfold[i])
 
+                    # choose training point values
                     train_xt = xt[:,train_pts]
                     kfold_xt = xt[:,cur_kfold]
 
@@ -3775,6 +3789,7 @@ class Use_FAST_surr_model(Component):
                     kfold_yt_y = yt_y[:,cur_kfold]
 
                     # using current design variable values, predict output
+
                     cv_x = cv_x_fit
                     cv_x.set_training_values(np.transpose(train_xt), np.transpose(train_yt_x))
                     cv_x.options['print_global'] = self.print_sm
@@ -3788,100 +3803,101 @@ class Use_FAST_surr_model(Component):
                     DEMx_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:,k]] ) ))
                     DEMy_cv = np.transpose(cv_y.predict_values(np.array([kfold_xt[:,k]] ) ))
 
-                    for i in range(len(error_x)):
-                        cur_error_x[i][k] = DEMx_cv[i] - kfold_yt_x[:,0][i]
-                        cur_percent_error_x[i][k] = abs(DEMx_cv[i] - kfold_yt_x[:, k][i])/kfold_yt_x[:, k][i]
+                    for i in range(len(DEM_error_x)):
+                        cur_DEM_error_x[i][k] = DEMx_cv[i] - kfold_yt_x[:,0][i]
+                        cur_percent_DEM_error_x[i][k] = abs(DEMx_cv[i] - kfold_yt_x[:, k][i])/kfold_yt_x[:, k][i]
 
-                        cur_error_y[i][k] = DEMy_cv[i] - kfold_yt_y[:, 0][i]
-                        cur_percent_error_y[i][k] = abs(DEMy_cv[i] - kfold_yt_y[:, k][i]) / kfold_yt_y[:, k][i]
+                        cur_DEM_error_y[i][k] = DEMy_cv[i] - kfold_yt_y[:, 0][i]
+                        cur_percent_DEM_error_y[i][k] = abs(DEMy_cv[i] - kfold_yt_y[:, k][i]) / kfold_yt_y[:, k][i]
 
                 # average error for specific k-fold
-                for i in range(len(error_x)):
-                    error_x[i][j] = sum(cur_error_x[i,:])/len(cur_error_x[i,:])
-                    percent_error_x[i][j] = sum(cur_percent_error_x[i,:])/len(cur_percent_error_x[i,:])
+                for i in range(len(DEM_error_x)):
+                    DEM_error_x[i][j] = sum(cur_DEM_error_x[i,:])/len(cur_DEM_error_x[i,:])
+                    percent_DEM_error_x[i][j] = sum(cur_percent_DEM_error_x[i,:])/len(cur_percent_DEM_error_x[i,:])
 
-                    error_y[i][j] = sum(cur_error_y[i,:])/len(cur_error_y[i,:])
-                    percent_error_y[i][j] = sum(cur_percent_error_y[i,:])/len(cur_percent_error_y[i,:])
+                    DEM_error_y[i][j] = sum(cur_DEM_error_y[i,:])/len(cur_DEM_error_y[i,:])
+                    percent_DEM_error_y[i][j] = sum(cur_percent_DEM_error_y[i,:])/len(cur_percent_DEM_error_y[i,:])
 
 
             # average percent error over all k-folds
-            avg_percent_error_x = np.zeros([len(error_x), 1])
-            avg_percent_error_y = np.zeros([len(error_y), 1])
+            avg_percent_DEM_error_x = np.zeros([len(DEM_error_x), 1])
+            avg_percent_DEM_error_y = np.zeros([len(DEM_error_y), 1])
 
-            rms_percent_error_x = np.zeros([len(error_x), 1])
-            rms_percent_error_y = np.zeros([len(error_y), 1])
+            rms_percent_DEM_error_x = np.zeros([len(DEM_error_x), 1])
+            rms_percent_DEM_error_y = np.zeros([len(DEM_error_y), 1])
 
-            for i in range(len(error_x)):
+            # calculate root mean square error
+            for i in range(len(DEM_error_x)):
 
-                avg_percent_error_x[i] = sum(percent_error_x[i,:])/len(percent_error_x[i,:])
-                avg_percent_error_y[i] = sum(percent_error_y[i,:])/len(percent_error_y[i,:])
+                avg_percent_DEM_error_x[i] = sum(percent_DEM_error_x[i,:])/len(percent_DEM_error_x[i,:])
+                avg_percent_DEM_error_y[i] = sum(percent_DEM_error_y[i,:])/len(percent_DEM_error_y[i,:])
 
                 squared_total_x = 0.0
                 squared_total_y = 0.0
-                for index in range(len(percent_error_x[i, :])):
-                    squared_total_x += percent_error_x[i, index]**2.0
-                    squared_total_y += percent_error_y[i, index]**2.0
+                for index in range(len(percent_DEM_error_x[i, :])):
+                    squared_total_x += percent_DEM_error_x[i, index]**2.0
+                    squared_total_y += percent_DEM_error_y[i, index]**2.0
 
-                rms_percent_error_x[i] = (squared_total_x/len(percent_error_x[i,:]))**0.5
-                rms_percent_error_y[i] = (squared_total_y/len(percent_error_y[i,:]))**0.5
+                rms_percent_DEM_error_x[i] = (squared_total_x/len(percent_DEM_error_x[i,:]))**0.5
+                rms_percent_DEM_error_y[i] = (squared_total_y/len(percent_DEM_error_y[i,:]))**0.5
 
             # maximum percent error over all k-folds
-            max_percent_error_x = np.zeros([len(error_x), 1])
-            max_percent_error_y = np.zeros([len(error_y), 1])
+            max_percent_DEM_error_x = np.zeros([len(DEM_error_x), 1])
+            max_percent_DEM_error_y = np.zeros([len(DEM_error_y), 1])
 
-            for i in range(len(error_x)):
-                max_percent_error_x[i] = max(percent_error_x[i,:])
-                max_percent_error_y[i] = max(percent_error_y[i,:])
+            for i in range(len(DEM_error_x)):
+                max_percent_DEM_error_x[i] = max(percent_DEM_error_x[i,:])
+                max_percent_DEM_error_y[i] = max(percent_DEM_error_y[i,:])
 
             # root mean square error over all DEMx, DEMy points
             total_squared_total_x = 0.0
             total_squared_total_y = 0.0
-            for index in range(len(rms_percent_error_x)):
-                total_squared_total_x += rms_percent_error_x[index] ** 2.0
-                total_squared_total_y += rms_percent_error_y[index] ** 2.0
+            for index in range(len(rms_percent_DEM_error_x)):
+                total_squared_total_x += rms_percent_DEM_error_x[index] ** 2.0
+                total_squared_total_y += rms_percent_DEM_error_y[index] ** 2.0
 
-            rms_error_x = (total_squared_total_x / len(rms_percent_error_x)) ** 0.5
-            rms_error_y = (total_squared_total_y / len(rms_percent_error_y)) ** 0.5
+            rms_DEM_error_x = (total_squared_total_x / len(rms_percent_DEM_error_x)) ** 0.5
+            rms_DEM_error_y = (total_squared_total_y / len(rms_percent_DEM_error_y)) ** 0.5
 
             # root mean square error overall
-            rms_error = ( ( (rms_error_x**2.0 + rms_error_y**2.0) )/2.0 )**0.5
+            rms_error = ( ( (rms_DEM_error_x**2.0 + rms_DEM_error_y**2.0) )/2.0 )**0.5
 
-            # print('avg_percent_error_x')
-            # print(avg_percent_error_x)
-            # print('max_percent_error_x')
-            # print(max_percent_error_x)
-            # print('rms_percent_error_x')
-            # print(rms_percent_error_x)
-            # print('rms_error_x')
-            # print(rms_error_x)
+            # print('avg_percent_DEM_error_x')
+            # print(avg_percent_DEM_error_x)
+            # print('max_percent_DEM_error_x')
+            # print(max_percent_DEM_error_x)
+            # print('rms_percent_DEM_error_x')
+            # print(rms_percent_DEM_error_x)
+            # print('rms_DEM_error_x')
+            # print(rms_DEM_error_x)
 
-            # print('rms_percent_error_y')
-            # print(rms_percent_error_y)
-            # print('avg_percent_error_y')
-            # print(avg_percent_error_y)
-            # print('max_percent_error_y')
-            # print(max_percent_error_y)
-            # print('rms_error_y')
-            # print(rms_error_y)
+            # print('rms_percent_DEM_error_y')
+            # print(rms_percent_DEM_error_y)
+            # print('avg_percent_DEM_error_y')
+            # print(avg_percent_DEM_error_y)
+            # print('max_percent_DEM_error_y')
+            # print(max_percent_DEM_error_y)
+            # print('rms_DEM_error_y')
+            # print(rms_DEM_error_y)
 
-            # print('rms_error')
-            # print(rms_error)
+            print('rms_error')
+            print(rms_error)
             # quit()
 
 
             # save error values in .txt file
             error_file_name = str(self.opt_dir) + '/error_' + self.approximation_model + '_' + str(self.num_pts) + '.txt'
             ferror = open(error_file_name, "w+")
-            ferror.write(str(rms_error_x[0]) + '\n')
-            ferror.write(str(rms_error_y[0]))
+            ferror.write(str(rms_DEM_error_x[0]) + '\n')
+            ferror.write(str(rms_DEM_error_y[0]))
             ferror.close()
 
             # DEMx plot
             plt.figure()
             plt.title('DEMx k-fold check (surrogate model accuracy)')
 
-            plt.plot(avg_percent_error_x*100.0, 'x', label= 'avg error')
-            plt.plot(max_percent_error_x*100.0, 'o', label = 'max error')
+            plt.plot(avg_percent_DEM_error_x*100.0, 'x', label= 'avg error')
+            plt.plot(max_percent_DEM_error_x*100.0, 'o', label = 'max error')
             plt.xlabel('strain gage position')
             plt.ylabel('model accuracy (%)')
             plt.legend()
@@ -3892,14 +3908,252 @@ class Use_FAST_surr_model(Component):
             plt.figure()
             plt.title('DEMy k-fold check (surrogate model accuracy)')
 
-            plt.plot(avg_percent_error_y*100.0, 'x', label= 'avg error')
-            plt.plot(max_percent_error_y*100.0, 'o', label = 'max error')
+            plt.plot(avg_percent_DEM_error_y*100.0, 'x', label= 'avg error')
+            plt.plot(max_percent_DEM_error_y*100.0, 'o', label = 'max error')
             plt.xlabel('strain gage position')
             plt.ylabel('model accuracy (%)')
             plt.legend()
             plt.savefig(self.dir_saved_plots + '/DEMy_kfold.png')
             plt.show()
 
+            quit()
+
+        if self.do_cv_Load:
+
+            print('Running extreme loads cross validation...')
+
+            # === initialize error === #
+            Edg_error = np.zeros([len(Edg_sm), self.num_folds])
+            percent_Edg_error = np.zeros([len(Edg_sm), self.num_folds])
+
+            Flp_error = np.zeros([len(Flp_sm), self.num_folds])
+            percent_Flp_error = np.zeros([len(Flp_sm), self.num_folds])
+
+            for j in range(len(self.kfolds)):
+
+                cur_Edg_error = np.zeros([len(Edg_sm), len(self.kfolds[j])])
+                cur_percent_Edg_error = np.zeros([len(Edg_sm), len(self.kfolds[j])])
+
+                cur_Flp_error = np.zeros([len(Flp_sm), len(self.kfolds[j])])
+                cur_percent_Flp_error = np.zeros([len(Flp_sm), len(self.kfolds[j])])
+
+                for k in range(len(self.kfolds[j])):
+
+                    cur_kfold = self.kfolds[j]
+
+                    # choose training point indices
+                    train_pts = np.linspace(0, self.num_pts-1, self.num_pts) # -1 so it's zero-based
+                    train_pts = train_pts.tolist()
+
+                    for i in range(0, len(cur_kfold)):
+                        train_pts.remove(cur_kfold[i])
+
+                    # choose training point values
+                    train_xt = xt[:,train_pts]
+                    kfold_xt = xt[:,cur_kfold]
+
+                    train_yt_x = yt_x_load[:,train_pts]
+                    kfold_yt_x = yt_x_load[:,cur_kfold]
+
+
+                    train_yt_y = yt_y_load[:,train_pts]
+                    kfold_yt_y = yt_y_load[:,cur_kfold]
+
+                    # using current design variable values, predict output
+
+                    cv_x = cv_x_fit
+                    cv_x.set_training_values(np.transpose(train_xt), np.transpose(train_yt_x))
+                    cv_x.options['print_global'] = self.print_sm
+                    cv_x.train()
+
+                    cv_y = cv_y_fit
+                    cv_y.set_training_values(np.transpose(train_xt), np.transpose(train_yt_y))
+                    cv_y.options['print_global'] = self.print_sm
+                    cv_y.train()
+
+                    Edg_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:,k]] ) ))
+                    Flp_cv = np.transpose(cv_y.predict_values(np.array([kfold_xt[:,k]] ) ))
+
+                    for i in range(len(Edg_error)):
+                        cur_Edg_error[i][k] = Edg_cv[i] - kfold_yt_x[:,0][i]
+                        cur_percent_Edg_error[i][k] = abs(Edg_cv[i] - kfold_yt_x[:, k][i]) / kfold_yt_x[:, k][i]
+
+                        cur_Flp_error[i][k] = Flp_cv[i] - kfold_yt_y[:, 0][i]
+                        cur_percent_Flp_error[i][k] = abs(Flp_cv[i] - kfold_yt_y[:, k][i]) / kfold_yt_y[:, k][i]
+
+                # average error for specific k-fold
+                for i in range(len(Edg_error)):
+                    Edg_error[i][j] = sum(cur_Edg_error[i,:])/len(cur_Edg_error[i,:])
+                    percent_Edg_error[i][j] = sum(cur_percent_Edg_error[i,:])/len(cur_percent_Edg_error[i,:])
+
+                    Flp_error[i][j] = sum(cur_Flp_error[i,:])/len(cur_Flp_error[i,:])
+                    percent_Flp_error[i][j] = sum(cur_percent_Flp_error[i,:])/len(cur_percent_Flp_error[i,:])
+
+
+            # average percent error over all k-folds
+            avg_percent_Edg_error = np.zeros([len(Edg_error), 1])
+            avg_percent_Flp_error = np.zeros([len(Flp_error), 1])
+
+            rms_percent_Edg_error = np.zeros([len(Edg_error), 1])
+            rms_percent_Flp_error = np.zeros([len(Flp_error), 1])
+
+            # calculate root mean square error
+            for i in range(len(Edg_error)):
+
+                avg_percent_Edg_error[i] = sum(percent_Edg_error[i,:])/len(percent_Edg_error[i,:])
+                avg_percent_Flp_error[i] = sum(percent_Flp_error[i,:])/len(percent_Flp_error[i,:])
+
+                squared_total_x = 0.0
+                squared_total_y = 0.0
+                for index in range(len(percent_Edg_error[i, :])):
+                    squared_total_x += percent_Edg_error[i, index]**2.0
+                    squared_total_y += percent_Flp_error[i, index]**2.0
+
+                rms_percent_Edg_error[i] = (squared_total_x/len(percent_Edg_error[i,:]))**0.5
+                rms_percent_Flp_error[i] = (squared_total_y/len(percent_Flp_error[i,:]))**0.5
+
+            # maximum percent error over all k-folds
+            max_percent_Edg_error = np.zeros([len(Edg_error), 1])
+            max_percent_Flp_error = np.zeros([len(Flp_error), 1])
+
+            for i in range(len(Edg_error)):
+                max_percent_Edg_error[i] = max(percent_Edg_error[i,:])
+                max_percent_Flp_error[i] = max(percent_Flp_error[i,:])
+
+            # root mean square error over all DEMx, DEMy points
+            total_squared_total_x = 0.0
+            total_squared_total_y = 0.0
+            for index in range(len(rms_percent_Edg_error)):
+                total_squared_total_x += rms_percent_Edg_error[index] ** 2.0
+                total_squared_total_y += rms_percent_Flp_error[index] ** 2.0
+
+            rms_Edg_error = (total_squared_total_x / len(rms_percent_Edg_error)) ** 0.5
+            rms_Flp_error = (total_squared_total_y / len(rms_percent_Flp_error)) ** 0.5
+
+            # root mean square error overall
+            rms_error = ( ( (rms_Edg_error**2.0 + rms_Flp_error**2.0) )/2.0 )**0.5
+
+            print('rms_error')
+            print(rms_error)
+            # quit()
+
+
+            # save error values in .txt file
+            error_file_name = str(self.opt_dir) + '/error_' + self.approximation_model + '_' + str(self.num_pts) + '.txt'
+            ferror = open(error_file_name, "w+")
+            ferror.write(str(rms_Edg_error[0]) + '\n')
+            ferror.write(str(rms_Flp_error[0]))
+            ferror.close()
+
+            # DEMx plot
+            plt.figure()
+            plt.title('DEMx k-fold check (surrogate model accuracy)')
+
+            plt.plot(avg_percent_Edg_error*100.0, 'x', label= 'avg error')
+            plt.plot(max_percent_Edg_error*100.0, 'o', label = 'max error')
+            plt.xlabel('strain gage position')
+            plt.ylabel('model accuracy (%)')
+            plt.legend()
+            plt.savefig(self.dir_saved_plots + '/DEMx_kfold.png')
+            plt.show()
+
+            # DEMx plot
+            plt.figure()
+            plt.title('DEMy k-fold check (surrogate model accuracy)')
+
+            plt.plot(avg_percent_Flp_error*100.0, 'x', label= 'avg error')
+            plt.plot(max_percent_Flp_error*100.0, 'o', label = 'max error')
+            plt.xlabel('strain gage position')
+            plt.ylabel('model accuracy (%)')
+            plt.legend()
+            plt.savefig(self.dir_saved_plots + '/DEMy_kfold.png')
+            plt.show()
+
+            quit()
+
+        if self.do_cv_def:
+
+            print('Running tip deflection cross validation...')
+
+            # === initialize error === #
+            def_error = np.zeros([len(def_sm), self.num_folds])
+            percent_def_error = np.zeros([len(def_sm), self.num_folds])
+
+            for j in range(len(self.kfolds)):
+
+                cur_def_error = np.zeros([len(def_sm), len(self.kfolds[j])])
+                cur_percent_def_error = np.zeros([len(def_sm), len(self.kfolds[j])])
+
+                for k in range(len(self.kfolds[j])):
+
+                    cur_kfold = self.kfolds[j]
+
+                    # choose training point indices
+                    train_pts = np.linspace(0, self.num_pts-1, self.num_pts) # -1 so it's zero-based
+                    train_pts = train_pts.tolist()
+
+                    for i in range(0, len(cur_kfold)):
+                        train_pts.remove(cur_kfold[i])
+
+                    # choose training point values
+                    train_xt = xt[:,train_pts]
+                    kfold_xt = xt[:,cur_kfold]
+
+                    train_yt_x = yt_def[:,train_pts]
+                    kfold_yt_x = yt_def[:,cur_kfold]
+
+                    # using current design variable values, predict output
+
+                    cv_x = cv_x_fit
+                    cv_x.set_training_values(np.transpose(train_xt), np.transpose(train_yt_x))
+                    cv_x.options['print_global'] = self.print_sm
+                    cv_x.train()
+
+                    def_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:,k]] ) ))
+
+                    for i in range(len(def_error)):
+                        cur_def_error[i][k] = def_cv[i] - kfold_yt_x[:,0][i]
+                        cur_percent_def_error[i][k] = abs(def_cv[i] - kfold_yt_x[:, k][i]) / kfold_yt_x[:, k][i]
+
+                # average error for specific k-fold
+                for i in range(len(def_error)):
+                    def_error[i][j] = sum(cur_def_error[i,:])/len(cur_def_error[i,:])
+                    percent_def_error[i][j] = sum(cur_percent_def_error[i,:])/len(cur_percent_def_error[i,:])
+
+            # average percent error over all k-folds
+            avg_percent_def_error = np.zeros([len(def_error), 1])
+
+            rms_percent_def_error = np.zeros([len(def_error), 1])
+
+            # calculate root mean square error
+            for i in range(len(def_error)):
+
+                avg_percent_def_error[i] = sum(percent_def_error[i,:])/len(percent_def_error[i,:])
+
+                squared_total_x = 0.0
+                for index in range(len(percent_def_error[i, :])):
+                    squared_total_x += percent_def_error[i, index]**2.0
+
+                rms_percent_def_error[i] = (squared_total_x/len(percent_def_error[i,:]))**0.5
+
+            # maximum percent error over all k-folds
+            max_percent_def_error = np.zeros([len(def_error), 1])
+
+            for i in range(len(def_error)):
+                max_percent_def_error[i] = max(percent_def_error[i,:])
+
+            # root mean square error over all DEMx, DEMy points
+            total_squared_total_x = 0.0
+            for index in range(len(rms_percent_def_error)):
+                total_squared_total_x += rms_percent_def_error[index] ** 2.0
+
+            rms_def_error = (total_squared_total_x / len(rms_percent_def_error)) ** 0.5
+
+            # root mean square error overall
+            rms_error = rms_def_error
+
+            print('rms_error')
+            print(rms_error)
             quit()
 
         def_sm = def_sm[0][0]

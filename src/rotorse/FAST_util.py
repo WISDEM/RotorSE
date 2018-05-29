@@ -25,9 +25,14 @@ def setupFAST_checks(FASTinfo):
     FASTinfo['check_fit'] = False  # Opt. stops if set as True
     FASTinfo['check_opt_DEMs'] = False # only called when opt_with_fixed_DEMs is True
 
-    FASTinfo['do_cv'] = True  # cross validation of surrogate model
+    FASTinfo['do_cv_DEM'] = False  # cross validation of surrogate model for DEMs
+    FASTinfo['do_cv_Load'] = False  # cross validation of surrogate model for extreme loads
+    FASTinfo['do_cv_def'] = False  # cross validation of surrogate model for tip deflection
+
     FASTinfo['check_point_dist'] = False  # plot distribution of points (works best in 2D)
     FASTinfo['check_cv'] = False # works best in 2D
+
+    FASTinfo['check_var_domains'] = False # plots
 
     FASTinfo['print_sm'] = False
 
@@ -52,14 +57,15 @@ def setupFAST(rotor, FASTinfo, description):
 
     FASTinfo['description'] = description
 
-    # === Platform (Local or SC) === #
+    # === Platform (Local or SC) - unique to each user === #
 
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # path to RotorSE_FAST upper directory
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -113,7 +119,7 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo['turb_sf'] = 1.0
 
     # option for cross validation
-    if FASTinfo['do_cv']:
+    if FASTinfo['do_cv_DEM'] or FASTinfo['do_cv_Load'] or FASTinfo['do_cv_def']:
 
         FASTinfo = kfold_params(FASTinfo)
 
@@ -229,7 +235,7 @@ def setupFAST(rotor, FASTinfo, description):
 def kfold_params(FASTinfo):
 
     # number of folds
-    FASTinfo['num_folds'] = 2
+    FASTinfo['num_folds'] = 10
 
     # check that num_pts/num_folds doesn't have a remainder (is divisible)
     if (FASTinfo['num_pts'] % FASTinfo['num_folds']) > 0:
@@ -380,11 +386,14 @@ def create_surr_model_params(FASTinfo):
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
-    # FASTinfo['approximation_model'] = 'second_order_poly'
-    FASTinfo['approximation_model'] = 'least_squares'
+    FASTinfo['approximation_model'] = 'second_order_poly'
+    # FASTinfo['approximation_model'] = 'least_squares'
     # FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
+
+    # initial hyperparameter value (kriging, KPLS, KPLSK only use)
+    FASTinfo['theta0_val'] = [1e-2]
 
     # training point distribution
     FASTinfo['training_point_dist'] = 'lhs'
@@ -416,6 +425,19 @@ def create_surr_model_params(FASTinfo):
     # FASTinfo['sm_var_index'] = [[0]] # r_max_chord
     FASTinfo['sm_var_index'] = [[0], [0,1,2,3], [0,1,2,3]]
 
+
+    # total num of variables used, variable index
+    var_index = []
+    num_var = 0
+
+    for i in range(0, len(FASTinfo['sm_var_names'])):
+        for j in range(0, len(FASTinfo['sm_var_index'][i])):
+            num_var += 1
+            var_index.append(i)
+
+    FASTinfo['var_index'] = var_index
+    FASTinfo['num_var'] = num_var
+
     # use smaller domain to sample points
     FASTinfo['restrict_lhs_domain'] = True
 
@@ -438,6 +460,8 @@ def create_surr_model_linear_options(FASTinfo, rotor):
     for i in range(0, len(FASTinfo['sm_var_max'])):
         for j in range(0, len(FASTinfo['sm_var_max'][i])):
             var_index.append(i)
+
+    FASTinfo['var_index'] = var_index
 
     # which specific points will be used for this run
     # probably argv variables from command line
@@ -561,14 +585,8 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
     FASTinfo['sm_load_file'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_load_' + str(FASTinfo['sm_var_spec']) + '.txt'
     FASTinfo['sm_def_file'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_def_' + str(FASTinfo['sm_var_spec']) + '.txt'
 
-    # total num of variables used, variable index
-    var_index = []
-    num_var = 0
-
-    for i in range(0, len(FASTinfo['sm_var_names'])):
-        for j in range(0, len(FASTinfo['sm_var_index'][i])):
-            num_var += 1
-            var_index.append(i)
+    var_index = FASTinfo['var_index']
+    num_var = FASTinfo['num_var']
 
     # ranges of said variables
     # min, max values of design variables
@@ -580,6 +598,8 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
     point_file = FASTinfo['opt_dir'] + '/pointfile.txt'
 
     if not os.path.isfile(point_file):
+
+        print('Creating training point file...')
 
         points = lhs(num_var, samples=FASTinfo['num_pts'], criterion='center')
 
@@ -602,7 +622,10 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         for j in range(0, len(spec_line)):
             points[i,j] = float(spec_line[j])
 
+    new_var_list = []
+    old_var_list = []
     FASTinfo['var_range'] = []
+
     for i in range(0, num_var):
 
         spec_var_name = FASTinfo['sm_var_names'][var_index[i]]
@@ -624,6 +647,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         # decrease var_range
         # doing this will increase surrogate model accuracy,
         # since the points sampled are going to clustered closer together
+
         if FASTinfo['restrict_lhs_domain']:
 
             index = -1
@@ -640,7 +664,8 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
                 spec_val = FASTinfo[spec_var_name + '_init'][index]
 
             # create new range
-            range_frac = 0.25
+            FASTinfo['range_frac'] = 0.35  # 0.15, 0.25, 0.35
+            range_frac =  FASTinfo['range_frac']
             range_len = var_range[1]-var_range[0]
             new_var_range = [spec_val-range_frac*range_len, spec_val+range_frac*range_len]
 
@@ -649,6 +674,11 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
                 new_var_range[0] = var_range[0]
             if new_var_range[1] > var_range[1]:
                 new_var_range[1] = var_range[1]
+
+            # append lists
+            new_var_list.append(new_var_range)
+            old_var_list.append(var_range)
+
 
             # print('test')
             # print(spec_val)
@@ -662,6 +692,54 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         points[:,i] = points[:,i]*(var_range[1]-var_range[0]) + var_range[0]
 
         FASTinfo['var_range'].append(var_range)
+
+    if FASTinfo['check_var_domains']:
+
+        # chord_sub domain plot
+        plt.figure()
+        j = 1
+
+        for i in range(len(FASTinfo['var_index'])):
+
+            if FASTinfo['var_index'][i] == 1: # chord_sub
+                plt.plot([j,j], old_var_list[i], 'bx')
+                plt.plot([j,j], new_var_list[i], '--rx')
+                j += 1
+
+        plt.xticks(np.linspace(1,j-1,j-1))
+        plt.xlabel('chord variable index')
+        plt.ylabel('Var Domain (m)')
+        plt.title('chord domain, restriction: ' + str(FASTinfo['range_frac']*100.0) + '%')
+
+
+        plt.savefig(FASTinfo['dir_saved_plots'] + '/' + 'chord_sub_domain' + str(int(FASTinfo['range_frac']*100.0)) + '.png')
+        plt.show()
+
+        plt.close()
+
+        # theta_sub domain plot
+        plt.figure()
+        j = 1
+
+        for i in range(len(FASTinfo['var_index'])):
+
+            if FASTinfo['var_index'][i] == 2: # theta_sub
+                plt.plot([j,j], old_var_list[i], 'bx')
+                plt.plot([j,j], new_var_list[i], '--rx')
+                j += 1
+
+        plt.xticks(np.linspace(1,j-1,j-1))
+        plt.xlabel('twist variable index')
+        plt.ylabel('Var Domain (m)')
+        plt.title('twist domain, restriction: ' + str(FASTinfo['range_frac']*100.0) + '%')
+
+
+        plt.savefig(FASTinfo['dir_saved_plots'] + '/' + 'theta_sub_domain_' + str(int(FASTinfo['range_frac']*100.0)) + '.png')
+        plt.show()
+
+        plt.close()
+
+        quit()
 
     # quit()
     # === plot checks === #
