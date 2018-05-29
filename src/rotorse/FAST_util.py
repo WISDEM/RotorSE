@@ -60,12 +60,12 @@ def setupFAST(rotor, FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST upper directory
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -129,8 +129,8 @@ def setupFAST(rotor, FASTinfo, description):
         # 'RotorSE/src/rotorse/FAST_files/Opt_Files/', FASTinfo['cv_description']))
 
     # === strain gage placement === #
-    # FASTinfo['sgp'] = [1,2,3]
-    FASTinfo['sgp'] = [4]
+    FASTinfo['sgp'] = [1,2,3]
+    # FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []

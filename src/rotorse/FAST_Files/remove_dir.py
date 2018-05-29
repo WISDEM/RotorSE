@@ -4,10 +4,11 @@
 
 import os, shutil
 
-sm_name = 'test_ranges'
+sm_name = ['test_sgp_1', 'test_sgp_3']
 num_pts = 100
 
-for i in range(num_pts):
+for j in range(len(sm_name)):
+	for i in range(num_pts):
 
-    dir_name = 'Opt_Files/' + sm_name + '/sm_' + str(i)
-    shutil.rmtree(dir_name)
+    		dir_name = 'Opt_Files/' + sm_name[j] + '/sm_' + str(i)
+    		shutil.rmtree(dir_name)
