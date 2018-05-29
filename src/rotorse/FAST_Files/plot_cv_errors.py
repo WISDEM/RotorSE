@@ -1,8 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-file_dir_name = "sc_test_1_var"
+# file_dir_name = "sc_test_1_var"
 # file_dir_name = "sc_test_all_var"
+
+file_dir_name = "test_sgp_3"
+
+
 
 file_dir = "Opt_Files/" + file_dir_name
 
@@ -28,11 +32,18 @@ for i in range(len(fit_types)):
 
 plt.figure()
 
+max_data = []
+
 for i in range(len(fit_types)):
-    plt.plot(i, ((data[i,0]**2.0+data[i,1]**2.0)/2.0)**0.5*100.0, 'o', label=fit_types[i])
+    plt.plot(i, ((data[i,0]**2.0+data[i,1]**2.0)/2.0)**0.5*30.0, 'o', label=fit_types[i])
+    max_data.append(((data[i,0]**2.0+data[i,1]**2.0)/2.0)**0.5*30.0)
+
+print(min(max_data))
 
 plt.ylabel('RMS (%)')
 plt.title('Overall RMS for test: ' + file_dir_name)
+
+plt.ylim([0,10])
 
 plt.legend()
 # plt.savefig('/Users/bingersoll/Desktop' + file_dir_name + '.png')
