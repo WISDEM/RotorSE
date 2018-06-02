@@ -10,7 +10,7 @@ import re
 
 import numpy as np
 
-from FAST_util import setupFAST, Use_FAST_DEMs, extract_results
+from FAST_util import setupFAST, Use_FAST_DEMs, extract_results, define_des_var_domains
 
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 # -------------------
@@ -30,10 +30,12 @@ FASTinfo['opt_with_FAST_in_loop'] = False
 FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = True
-FASTinfo['opt_with_surr_model'] = False
+FASTinfo['calc_surr_model'] = False
+FASTinfo['opt_with_surr_model'] = True
 
 # description
+
+# description = 'test_domain'
 
 # description = 'test_sgp_1'
 description = 'test_sgp_3'
@@ -76,9 +78,15 @@ else:
 # === Setup design variables and objective === #
 rotor.driver.add_objective('obj')
 
-rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
-rotor.driver.add_desvar('chord_sub', lower=1.3, upper=5.3)
-rotor.driver.add_desvar('theta_sub', lower=-10.0, upper=30.0)
+if FASTinfo['Use_FAST_sm']:
+
+    FASTinfo, rotor = define_des_var_domains(FASTinfo, rotor)
+
+else:
+    rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+    rotor.driver.add_desvar('chord_sub', lower=1.3 * np.ones(4), upper=5.3 * np.ones(4))
+    rotor.driver.add_desvar('theta_sub', lower=-10.0 * np.ones(4), upper=30.0 * np.ones(4))
+
 # rotor.driver.add_desvar('control:tsr', lower=3.0, upper=9.0)
 rotor.driver.add_desvar('sparT', lower=0.005, upper=0.2)
 rotor.driver.add_desvar('teT', lower=0.005, upper=0.2)

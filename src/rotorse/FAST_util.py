@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import sys
 import os
 import random
+import re
 
 # ========================================================================================================= #
 
@@ -25,12 +26,13 @@ def setupFAST_checks(FASTinfo):
     FASTinfo['check_fit'] = False  # Opt. stops if set as True
     FASTinfo['check_opt_DEMs'] = False # only called when opt_with_fixed_DEMs is True
 
-    FASTinfo['do_cv_DEM'] = False  # cross validation of surrogate model for DEMs
+    FASTinfo['do_cv_DEM'] = True  # cross validation of surrogate model for DEMs
     FASTinfo['do_cv_Load'] = False  # cross validation of surrogate model for extreme loads
     FASTinfo['do_cv_def'] = False  # cross validation of surrogate model for tip deflection
 
     FASTinfo['check_point_dist'] = False  # plot distribution of points (works best in 2D)
     FASTinfo['check_cv'] = False # works best in 2D
+    FASTinfo['check_kfold'] = True # plot how folds are distributed among training points
 
     FASTinfo['check_var_domains'] = False # plots
 
@@ -60,12 +62,12 @@ def setupFAST(rotor, FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST upper directory
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -123,10 +125,10 @@ def setupFAST(rotor, FASTinfo, description):
 
         FASTinfo = kfold_params(FASTinfo)
 
-        # FASTinfo['cv_description'] = FASTinfo['description'] + '_cv'
-        #
-        # FASTinfo['cv_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-        # 'RotorSE/src/rotorse/FAST_files/Opt_Files/', FASTinfo['cv_description']))
+        # check kfold
+        if  FASTinfo['check_kfold']:
+            plot_kfolds(FASTinfo)
+
 
     # === strain gage placement === #
     FASTinfo['sgp'] = [1,2,3]
@@ -235,7 +237,7 @@ def setupFAST(rotor, FASTinfo, description):
 def kfold_params(FASTinfo):
 
     # number of folds
-    FASTinfo['num_folds'] = 10
+    FASTinfo['num_folds'] = 5
 
     # check that num_pts/num_folds doesn't have a remainder (is divisible)
     if (FASTinfo['num_pts'] % FASTinfo['num_folds']) > 0:
@@ -287,6 +289,54 @@ def kfold_params(FASTinfo):
     return FASTinfo
 
 # ========================================================================================================= #
+
+def plot_kfolds(FASTinfo):
+
+    point_file = FASTinfo['opt_dir'] + '/pointfile.txt'
+
+    f = open(point_file, "r")
+
+    lines = f.readlines()
+
+    var1 = []
+    var2 = []
+
+    for i in range(FASTinfo['num_pts']):
+        line_test = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", lines[i].strip('\n'))
+
+        var1.append(0.1+0.4*float(line_test[0]))
+        var2.append(1.3+4.0*float(line_test[1]))
+
+    kfold_dict1 = dict()
+    kfold_dict2 = dict()
+
+    for i in range(FASTinfo['num_folds']):
+        kfold_dict1['kfold_' + str(i)] = []
+        kfold_dict2['kfold_' + str(i)] = []
+
+        for j in range(FASTinfo['num_pts']/FASTinfo['num_folds']):
+
+            kfold_dict1['kfold_' + str(i)].append(var1[int(FASTinfo['kfolds'][i][j]) ] )
+            kfold_dict2['kfold_' + str(i)].append(var2[int(FASTinfo['kfolds'][i][j]) ] )
+
+    plt.figure()
+
+    for i in range(FASTinfo['num_folds']):
+        if i == 0:
+            plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'rx', label='1st k-fold group')
+        else:
+            plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'kx')
+
+    plt.xlabel('Maximum Chord Position')
+    plt.ylabel('1st Chord Point (m)')
+    plt.title('K-Fold Example')
+    plt.legend()
+
+    plt.savefig(FASTinfo['dir_saved_plots'] + '/kfold_example.png')
+
+    plt.show()
+
+    quit()
 
 def setup_top_level_options(FASTinfo):
 
@@ -386,9 +436,9 @@ def create_surr_model_params(FASTinfo):
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
-    FASTinfo['approximation_model'] = 'second_order_poly'
+    # FASTinfo['approximation_model'] = 'second_order_poly'
     # FASTinfo['approximation_model'] = 'least_squares'
-    # FASTinfo['approximation_model'] = 'kriging'
+    FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
 
@@ -693,6 +743,21 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
 
         FASTinfo['var_range'].append(var_range)
 
+    # create .txt files for surrogate model use
+    for i in range(len(FASTinfo['sm_var_names'])):
+
+        domain_file = FASTinfo['opt_dir'] + '/' + 'domain_' + FASTinfo['sm_var_names'][i] + '.txt'
+
+        f = open(domain_file, 'w+')
+        f.write(FASTinfo['sm_var_names'][i] + '\n')
+
+        for j in range(len(FASTinfo['var_index'])):
+            if FASTinfo['var_index'][j] == i:
+                f.write(str(FASTinfo['var_range'][j][0]) + '\n')
+                f.write(str(FASTinfo['var_range'][j][1]) + '\n')
+        f.close()
+
+    # plotting routine
     if FASTinfo['check_var_domains']:
 
         # chord_sub domain plot
@@ -730,7 +795,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
 
         plt.xticks(np.linspace(1,j-1,j-1))
         plt.xlabel('twist variable index')
-        plt.ylabel('Var Domain (m)')
+        plt.ylabel('Var Domain (deg)')
         plt.title('twist domain, restriction: ' + str(FASTinfo['range_frac']*100.0) + '%')
 
 
@@ -834,6 +899,40 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
                 FASTinfo[spec_var_name + '_init'] = points[FASTinfo['sm_var_spec'],cur_var]
 
             cur_var += 1
+
+    return FASTinfo, rotor
+
+# ========================================================================================================= #
+
+def define_des_var_domains(FASTinfo, rotor):
+
+    for i in range(len(FASTinfo['sm_var_names'])):
+
+        domain_file = FASTinfo['opt_dir'] + '/' + 'domain_' + FASTinfo['sm_var_names'][i] + '.txt'
+
+        if os.path.isfile(domain_file):
+
+            f = open(domain_file, "r")
+            des_var = f.readlines()
+            des_var_name = des_var[0].strip('\n')
+
+            lower_array = np.zeros(int((len(des_var)-1)/2.0))
+            upper_array = np.zeros(int((len(des_var)-1)/2.0))
+
+            for j in range(1, (len(des_var)+1)/2):
+                lower_array[j-1] = float(des_var[2*j-1].strip('\n'))
+                upper_array[j-1] = float(des_var[2*j].strip('\n'))
+
+            # print(des_var_name)
+            # print(lower_array)
+            # print(upper_array)
+
+            rotor.driver.add_desvar(des_var_name, lower=lower_array, upper=upper_array)
+
+        else:
+            rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+            rotor.driver.add_desvar('chord_sub', lower=1.3 * np.ones(4), upper=5.3 * np.ones(4))
+            rotor.driver.add_desvar('theta_sub', lower=-10.0 * np.ones(4), upper=30.0 * np.ones(4))
 
     return FASTinfo, rotor
 
