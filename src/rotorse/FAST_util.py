@@ -26,13 +26,13 @@ def setupFAST_checks(FASTinfo):
     FASTinfo['check_fit'] = False  # Opt. stops if set as True
     FASTinfo['check_opt_DEMs'] = False # only called when opt_with_fixed_DEMs is True
 
-    FASTinfo['do_cv_DEM'] = True  # cross validation of surrogate model for DEMs
+    FASTinfo['do_cv_DEM'] = False  # cross validation of surrogate model for DEMs
     FASTinfo['do_cv_Load'] = False  # cross validation of surrogate model for extreme loads
     FASTinfo['do_cv_def'] = False  # cross validation of surrogate model for tip deflection
 
     FASTinfo['check_point_dist'] = False  # plot distribution of points (works best in 2D)
     FASTinfo['check_cv'] = False # works best in 2D
-    FASTinfo['check_kfold'] = True # plot how folds are distributed among training points
+    FASTinfo['check_kfold'] = False # plot how folds are distributed among training points
 
     FASTinfo['check_var_domains'] = False # plots
 
@@ -432,7 +432,7 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 100
+    FASTinfo['num_pts'] = 2000
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
@@ -612,7 +612,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
     FASTinfo = initialize_dv(FASTinfo)
 
     try:
-        FASTinfo['sm_var_spec'] = int(sys.argv[1])
+        FASTinfo['sm_var_spec'] = int(sys.argv[1])+1000
     except:
         # raise Exception('Need to have system input when latin-hypercube sampling used.')
         FASTinfo['sm_var_spec'] = 0

@@ -35,10 +35,10 @@ FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'test_100'
+# description = 'test_100'
 # description = 'test_500'
 # description = 'test_1000'
-# description = 'test_2000'
+description = 'test_2000'
 
 # description = 'test_domain'
 

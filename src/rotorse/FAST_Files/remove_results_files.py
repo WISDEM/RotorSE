@@ -4,8 +4,8 @@
 
 import os, shutil
 
-sm_name = ['cv_test_error']
-num_pts = [10]
+sm_name = ['test_1000', 'test_2000']
+num_pts = [1000, 2000]
 
 file_type = ['def', 'load', 'DEM', 'var']
 

@@ -6,7 +6,7 @@
 
 # need to run twice (comment out array that isn't running)
 
-#SBATCH --array=1-99 # job array size
+#SBATCH --array=0-999 # job array size
 
 # LOAD MODULES, INSERT CODE, AND RUN YOUR PROGRAMS HERE
 
