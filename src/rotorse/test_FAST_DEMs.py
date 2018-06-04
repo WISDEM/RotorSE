@@ -30,15 +30,20 @@ FASTinfo['opt_with_FAST_in_loop'] = False
 FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = False
-FASTinfo['opt_with_surr_model'] = True
+FASTinfo['calc_surr_model'] = True
+FASTinfo['opt_with_surr_model'] = False
 
 # description
+
+description = 'test_100'
+# description = 'test_500'
+# description = 'test_1000'
+# description = 'test_2000'
 
 # description = 'test_domain'
 
 # description = 'test_sgp_1'
-description = 'test_sgp_3'
+# description = 'test_sgp_3'
 
 # description = 'test_ranges'
 
