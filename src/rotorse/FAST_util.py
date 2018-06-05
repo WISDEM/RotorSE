@@ -26,7 +26,7 @@ def setupFAST_checks(FASTinfo):
     FASTinfo['check_fit'] = False  # Opt. stops if set as True
     FASTinfo['check_opt_DEMs'] = False # only called when opt_with_fixed_DEMs is True
 
-    FASTinfo['do_cv_DEM'] = False  # cross validation of surrogate model for DEMs
+    FASTinfo['do_cv_DEM'] = True  # cross validation of surrogate model for DEMs
     FASTinfo['do_cv_Load'] = False  # cross validation of surrogate model for extreme loads
     FASTinfo['do_cv_def'] = False  # cross validation of surrogate model for tip deflection
 
@@ -36,7 +36,7 @@ def setupFAST_checks(FASTinfo):
 
     FASTinfo['check_var_domains'] = False # plots
 
-    FASTinfo['print_sm'] = False
+    FASTinfo['print_sm'] = False # turns off/on print statements from smt (surrogate model toolbox)
 
     return FASTinfo
 
@@ -62,12 +62,12 @@ def setupFAST(rotor, FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST upper directory
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -432,13 +432,13 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 2000
+    FASTinfo['num_pts'] = 100
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
-    # FASTinfo['approximation_model'] = 'second_order_poly'
+    FASTinfo['approximation_model'] = 'second_order_poly'
     # FASTinfo['approximation_model'] = 'least_squares'
-    FASTinfo['approximation_model'] = 'kriging'
+    # FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
 
@@ -453,10 +453,10 @@ def create_surr_model_params(FASTinfo):
 
         FASTinfo['sm_var_out_dir'] = 'sm_var_dir'
 
-        FASTinfo['sm_var_file_template'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_var_'
-        FASTinfo['sm_DEM_file_template'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_DEM_'
-        FASTinfo['sm_load_file_template'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_load_'
-        FASTinfo['sm_def_file_template'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_def_'
+        FASTinfo['sm_var_file_master'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_master_var.txt'
+        FASTinfo['sm_DEM_file_master'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_master_DEM.txt'
+        FASTinfo['sm_load_file_master'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_master_load.txt'
+        FASTinfo['sm_def_file_master'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_master_def.txt'
     else:
         FASTinfo['sm_var_file'] = 'sm_var.txt'
         FASTinfo['sm_DEM_file'] = 'sm_DEM.txt'
@@ -611,8 +611,14 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
     # determine initial values
     FASTinfo = initialize_dv(FASTinfo)
 
+    # if more than 1000 points are trained for surrogate model, need to use second sys.argv
     try:
-        FASTinfo['sm_var_spec'] = int(sys.argv[1])+1000
+        FASTinfo['sm_var_spec'] = int(sys.argv[1]) + int(sys.argv[2])*10e3
+    except:
+        pass
+    # if less than 1000 points are trained for sm, only need one sys.argv
+    try:
+        FASTinfo['sm_var_spec'] = int(sys.argv[1])
     except:
         # raise Exception('Need to have system input when latin-hypercube sampling used.')
         FASTinfo['sm_var_spec'] = 0

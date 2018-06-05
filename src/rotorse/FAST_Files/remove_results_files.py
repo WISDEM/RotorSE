@@ -4,8 +4,8 @@
 
 import os, shutil
 
-sm_name = ['test_1000', 'test_2000']
-num_pts = [1000, 2000]
+sm_name = ['test_100', 'test_500']
+num_pts = [100, 500]
 
 file_type = ['def', 'load', 'DEM', 'var']
 

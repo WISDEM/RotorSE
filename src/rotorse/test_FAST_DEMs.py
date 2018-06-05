@@ -30,15 +30,15 @@ FASTinfo['opt_with_FAST_in_loop'] = False
 FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = True
-FASTinfo['opt_with_surr_model'] = False
+FASTinfo['calc_surr_model'] = False
+FASTinfo['opt_with_surr_model'] = True
 
 # description
 
-# description = 'test_100'
+description = 'test_100'
 # description = 'test_500'
 # description = 'test_1000'
-description = 'test_2000'
+# description = 'test_2000'
 
 # description = 'test_domain'
 
@@ -51,7 +51,7 @@ description = 'test_2000'
 # description = 'sc_test_1_var'
 # description = 'cv_test_error'
 
-print('Run ' + description + ' is running...')
+print('Run ' + description + ' is starting...')
 
 FASTinfo = setupFAST(rotor, FASTinfo, description)
 
