@@ -23,10 +23,10 @@ def setupFAST_checks(FASTinfo):
     FASTinfo['check_damage'] = False  # Opt. stops if set as True
     FASTinfo['check_nom_DEM_damage'] = False # only works when check_damage is set as True
 
-    FASTinfo['check_fit'] = False  # Opt. stops if set as True
     FASTinfo['check_opt_DEMs'] = False # only called when opt_with_fixed_DEMs is True
 
-    FASTinfo['do_cv_DEM'] = True  # cross validation of surrogate model for DEMs
+    FASTinfo['check_fit'] = False  # Opt. stops if set as True
+    FASTinfo['do_cv_DEM'] = False  # cross validation of surrogate model for DEMs
     FASTinfo['do_cv_Load'] = False  # cross validation of surrogate model for extreme loads
     FASTinfo['do_cv_def'] = False  # cross validation of surrogate model for tip deflection
 
@@ -436,8 +436,8 @@ def create_surr_model_params(FASTinfo):
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
-    FASTinfo['approximation_model'] = 'second_order_poly'
-    # FASTinfo['approximation_model'] = 'least_squares'
+    # FASTinfo['approximation_model'] = 'second_order_poly'
+    FASTinfo['approximation_model'] = 'least_squares'
     # FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'

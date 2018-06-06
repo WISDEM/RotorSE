@@ -33,6 +33,7 @@ from scipy import stats
 import os
 import time
 import matplotlib.pyplot as plt
+import pickle
 
 # Import AeroelasticSE
 import sys
@@ -3202,6 +3203,7 @@ class Calculate_FAST_sm_training_points(Component):
 
         return
 
+
 class calc_FAST_sm_fit(Component):
 
     def __init__(self, FASTinfo, naero, nstr):
@@ -3270,13 +3272,6 @@ class calc_FAST_sm_fit(Component):
 
             self.theta0_val = FASTinfo['theta0_val']
 
-        self.add_output('DEMx_sm', val=np.zeros(18))#, pass_by_obj=False)
-        self.add_output('DEMy_sm', val=np.zeros(18))#, pass_by_obj=False)
-
-        self.add_output('Edg_sm', val=np.zeros(nstr))#, pass_by_obj=False)
-        self.add_output('Flp_sm', val=np.zeros(nstr))#, pass_by_obj=False)
-
-        self.add_output('def_sm', val=0.0)#, pass_by_obj=False)
 
         self.nstr = nstr
 
@@ -3482,24 +3477,8 @@ class calc_FAST_sm_fit(Component):
 
                         out_dict[def_names[j - 1]].append(float(cur_line[j]))
 
-        # === estimate outputs === #
-
-        # current design variable values
-        sv = []
-        for i in range(0, len(self.sm_var_names)):
-
-            if hasattr(params[self.sm_var_names[i]], '__len__'):
-                for j in range(0, len(self.sm_var_names[i])):
-
-                    if j in self.sm_var_index[i]:
-                        sv.append(params[self.sm_var_names[i]][j])
-            else:
-                sv.append(params[self.sm_var_names[i]])
-
-        # second-order polynomial approximation
-        from smt.surrogate_models import QP, LS, KRG, KPLS, KPLSK
-
         # === Approximation Model === #
+        from smt.surrogate_models import QP, LS, KRG, KPLS, KPLSK
 
         if self.approximation_model == 'second_order_poly':
             sm_x_fit = QP()
@@ -3575,17 +3554,28 @@ class calc_FAST_sm_fit(Component):
         else:
             raise Exception('Need to specify which approximation model will be used in surrogate model.')
 
-        # === DEMx_sm, DEMy_sm calculations === #
+        # === initialize predicted values === #
 
+        # DEMs
         DEMx_sm = np.zeros([18, 1])
         DEMy_sm = np.zeros([18, 1])
 
+        # loads
+        Edg_sm = np.zeros([self.nstr, 1])
+        Flp_sm = np.zeros([self.nstr, 1])
+
+        # tip deflection
+        def_sm = np.zeros([1, 1])
+
+        # need to get training values: xt -
         num_pts = len(out_dict['Rootx'])
         num_vars = len(var_names)
 
-        # need to get training values: xt - design variable values; yt - outputs
         xt = np.zeros([num_vars, num_pts])
 
+        # === DEMx_sm, DEMy_sm fit creation === #
+
+        # design variable values; yt - outputs
         yt_x = np.zeros([len(DEMx_sm), num_pts])
         yt_y = np.zeros([len(DEMy_sm), num_pts])
 
@@ -3601,8 +3591,6 @@ class calc_FAST_sm_fit(Component):
                 yt_x[i, j] = out_dict[DEM_names[i]][j]
                 yt_y[i, j] = out_dict[DEM_names[i + 18]][j]
 
-        # using current design variable values, predict output
-
         sm_x = sm_x_fit
         sm_x.set_training_values(np.transpose(xt),np.transpose(yt_x))
         sm_x.options['print_global'] = self.print_sm
@@ -3613,23 +3601,7 @@ class calc_FAST_sm_fit(Component):
         sm_y.options['print_global'] = self.print_sm
         sm_y.train()
 
-        print('printing sm:')
-        print(sm_x)
-        print(sm_y)
-        quit()
-
-        # predicted values
-        int_sv = np.zeros([len(sv),1])
-        for i in range(0, len(int_sv)):
-            int_sv[i] = sv[i]
-
-        DEMx_sm = np.transpose(sm_x.predict_values(np.transpose(int_sv)))
-        DEMy_sm = np.transpose(sm_y.predict_values(np.transpose(int_sv)))
-
-        # === Edg_sm, Flp_sm calculations === #
-
-        Edg_sm = np.zeros([self.nstr, 1])
-        Flp_sm = np.zeros([self.nstr, 1])
+        # === Edg_sm, Flp_sm fit creation === #
 
         num_pts_load = len(out_dict['Edg0'])
 
@@ -3644,8 +3616,6 @@ class calc_FAST_sm_fit(Component):
                 yt_x_load[i, j] = out_dict[load_names[i]][j]
                 yt_y_load[i, j] = out_dict[load_names[i + self.nstr]][j]
 
-        # using current design variable values, predict output
-
         sm_x_load = sm_x_load_fit
         sm_x_load.set_training_values(np.transpose(xt),np.transpose(yt_x_load))
         sm_x_load.options['print_global'] = self.print_sm
@@ -3656,17 +3626,7 @@ class calc_FAST_sm_fit(Component):
         sm_y_load.options['print_global'] = self.print_sm
         sm_y_load.train()
 
-        # predicted values
-        int_sv = np.zeros([len(sv),1])
-        for i in range(0, len(int_sv)):
-            int_sv[i] = sv[i]
-
-        Edg_sm = np.transpose(sm_x_load.predict_values(np.transpose(int_sv)))
-        Flp_sm = np.transpose(sm_y_load.predict_values(np.transpose(int_sv)))
-
-        # === deflection calculations === #
-
-        def_sm = np.zeros([1, 1])
+        # === tip deflection fit creation === #
 
         num_pts_def = len(out_dict[def_names[0]])
 
@@ -3678,21 +3638,21 @@ class calc_FAST_sm_fit(Component):
                 # output values
                 yt_def[i, j] = out_dict[def_names[i]][j]
 
-        # using current design variable values, predict output
-
         sm_def = sm_def_fit
         sm_def.set_training_values(np.transpose(xt), np.transpose(yt_def))
         sm_def.options['print_global'] = self.print_sm
         sm_def.train()
 
-        # predicted values
-        int_sv = np.zeros([len(sv), 1])
-        for i in range(0, len(int_sv)):
-            int_sv[i] = sv[i]
+        # === created surrogate models to .pkl files
 
-        def_sm = np.transpose(sm_def.predict_values(np.transpose(int_sv)))
+        sm_list = [sm_x, sm_y, sm_x_load, sm_y_load, sm_def]
+        sm_string_list = ['sm_x', 'sm_y', 'sm_x_load', 'sm_y_load', 'sm_def']
 
-        # === === #
+        for i in range(len(sm_list)):
+            pkl_file_name = self.opt_dir + '/' + sm_string_list[i] + '_' + self.approximation_model + '.pkl'
+            file_handle = open(pkl_file_name, "w+")
+            pickle.dump(sm_list[i], file_handle)
+
 
         if self.check_fit:
             sm = sm_check_fit
@@ -3751,7 +3711,7 @@ class calc_FAST_sm_fit(Component):
                     cur_kfold = self.kfolds[j]
 
                     # choose training point indices
-                    train_pts = np.linspace(0, self.num_pts-1, self.num_pts) # -1 so it's zero-based
+                    train_pts = np.linspace(0, self.num_pts - 1, self.num_pts)  # -1 so it's zero-based
                     train_pts = train_pts.tolist()
 
                     for i in range(0, len(cur_kfold)):
@@ -3759,14 +3719,14 @@ class calc_FAST_sm_fit(Component):
 
                     # choose training point values
 
-                    train_xt = xt[:,train_pts]
-                    kfold_xt = xt[:,cur_kfold]
+                    train_xt = xt[:, train_pts]
+                    kfold_xt = xt[:, cur_kfold]
 
-                    train_yt_x = yt_x[:,train_pts]
-                    kfold_yt_x = yt_x[:,cur_kfold]
+                    train_yt_x = yt_x[:, train_pts]
+                    kfold_yt_x = yt_x[:, cur_kfold]
 
-                    train_yt_y = yt_y[:,train_pts]
-                    kfold_yt_y = yt_y[:,cur_kfold]
+                    train_yt_y = yt_y[:, train_pts]
+                    kfold_yt_y = yt_y[:, cur_kfold]
 
                     # using current design variable values, predict output
 
@@ -3780,24 +3740,23 @@ class calc_FAST_sm_fit(Component):
                     cv_y.options['print_global'] = self.print_sm
                     cv_y.train()
 
-                    DEMx_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:,k]] ) ))
-                    DEMy_cv = np.transpose(cv_y.predict_values(np.array([kfold_xt[:,k]] ) ))
+                    DEMx_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:, k]])))
+                    DEMy_cv = np.transpose(cv_y.predict_values(np.array([kfold_xt[:, k]])))
 
                     for i in range(len(DEM_error_x)):
-                        cur_DEM_error_x[i][k] = DEMx_cv[i] - kfold_yt_x[:,0][i]
-                        cur_percent_DEM_error_x[i][k] = abs(DEMx_cv[i] - kfold_yt_x[:, k][i])/kfold_yt_x[:, k][i]
+                        cur_DEM_error_x[i][k] = DEMx_cv[i] - kfold_yt_x[:, 0][i]
+                        cur_percent_DEM_error_x[i][k] = abs(DEMx_cv[i] - kfold_yt_x[:, k][i]) / kfold_yt_x[:, k][i]
 
                         cur_DEM_error_y[i][k] = DEMy_cv[i] - kfold_yt_y[:, 0][i]
                         cur_percent_DEM_error_y[i][k] = abs(DEMy_cv[i] - kfold_yt_y[:, k][i]) / kfold_yt_y[:, k][i]
 
                 # average error for specific k-fold
                 for i in range(len(DEM_error_x)):
-                    DEM_error_x[i][j] = sum(cur_DEM_error_x[i,:])/len(cur_DEM_error_x[i,:])
-                    percent_DEM_error_x[i][j] = sum(cur_percent_DEM_error_x[i,:])/len(cur_percent_DEM_error_x[i,:])
+                    DEM_error_x[i][j] = sum(cur_DEM_error_x[i, :]) / len(cur_DEM_error_x[i, :])
+                    percent_DEM_error_x[i][j] = sum(cur_percent_DEM_error_x[i, :]) / len(cur_percent_DEM_error_x[i, :])
 
-                    DEM_error_y[i][j] = sum(cur_DEM_error_y[i,:])/len(cur_DEM_error_y[i,:])
-                    percent_DEM_error_y[i][j] = sum(cur_percent_DEM_error_y[i,:])/len(cur_percent_DEM_error_y[i,:])
-
+                    DEM_error_y[i][j] = sum(cur_DEM_error_y[i, :]) / len(cur_DEM_error_y[i, :])
+                    percent_DEM_error_y[i][j] = sum(cur_percent_DEM_error_y[i, :]) / len(cur_percent_DEM_error_y[i, :])
 
             # average percent error over all k-folds
             avg_percent_DEM_error_x = np.zeros([len(DEM_error_x), 1])
@@ -3809,25 +3768,25 @@ class calc_FAST_sm_fit(Component):
             # calculate root mean square error
             for i in range(len(DEM_error_x)):
 
-                avg_percent_DEM_error_x[i] = sum(percent_DEM_error_x[i,:])/len(percent_DEM_error_x[i,:])
-                avg_percent_DEM_error_y[i] = sum(percent_DEM_error_y[i,:])/len(percent_DEM_error_y[i,:])
+                avg_percent_DEM_error_x[i] = sum(percent_DEM_error_x[i, :]) / len(percent_DEM_error_x[i, :])
+                avg_percent_DEM_error_y[i] = sum(percent_DEM_error_y[i, :]) / len(percent_DEM_error_y[i, :])
 
                 squared_total_x = 0.0
                 squared_total_y = 0.0
                 for index in range(len(percent_DEM_error_x[i, :])):
-                    squared_total_x += percent_DEM_error_x[i, index]**2.0
-                    squared_total_y += percent_DEM_error_y[i, index]**2.0
+                    squared_total_x += percent_DEM_error_x[i, index] ** 2.0
+                    squared_total_y += percent_DEM_error_y[i, index] ** 2.0
 
-                rms_percent_DEM_error_x[i] = (squared_total_x/len(percent_DEM_error_x[i,:]))**0.5
-                rms_percent_DEM_error_y[i] = (squared_total_y/len(percent_DEM_error_y[i,:]))**0.5
+                rms_percent_DEM_error_x[i] = (squared_total_x / len(percent_DEM_error_x[i, :])) ** 0.5
+                rms_percent_DEM_error_y[i] = (squared_total_y / len(percent_DEM_error_y[i, :])) ** 0.5
 
             # maximum percent error over all k-folds
             max_percent_DEM_error_x = np.zeros([len(DEM_error_x), 1])
             max_percent_DEM_error_y = np.zeros([len(DEM_error_y), 1])
 
             for i in range(len(DEM_error_x)):
-                max_percent_DEM_error_x[i] = max(percent_DEM_error_x[i,:])
-                max_percent_DEM_error_y[i] = max(percent_DEM_error_y[i,:])
+                max_percent_DEM_error_x[i] = max(percent_DEM_error_x[i, :])
+                max_percent_DEM_error_y[i] = max(percent_DEM_error_y[i, :])
 
             # root mean square error over all DEMx, DEMy points
             total_squared_total_x = 0.0
@@ -3840,7 +3799,7 @@ class calc_FAST_sm_fit(Component):
             rms_DEM_error_y = (total_squared_total_y / len(rms_percent_DEM_error_y)) ** 0.5
 
             # root mean square error overall
-            rms_error = ( ( (rms_DEM_error_x**2.0 + rms_DEM_error_y**2.0) )/2.0 )**0.5
+            rms_error = (((rms_DEM_error_x ** 2.0 + rms_DEM_error_y ** 2.0)) / 2.0) ** 0.5
 
             # print('avg_percent_DEM_error_x')
             # print(avg_percent_DEM_error_x)
@@ -3866,7 +3825,8 @@ class calc_FAST_sm_fit(Component):
 
 
             # save error values in .txt file
-            error_file_name = str(self.opt_dir) + '/error_' + self.approximation_model + '_' + str(self.num_pts) + '.txt'
+            error_file_name = str(self.opt_dir) + '/error_' + self.approximation_model + '_' + str(
+                self.num_pts) + '.txt'
             ferror = open(error_file_name, "w+")
             ferror.write(str(rms_DEM_error_x[0]) + '\n')
             ferror.write(str(rms_DEM_error_y[0]))
@@ -3876,8 +3836,8 @@ class calc_FAST_sm_fit(Component):
             plt.figure()
             plt.title('DEMx k-fold check (surrogate model accuracy)')
 
-            plt.plot(avg_percent_DEM_error_x*100.0, 'x', label= 'avg error')
-            plt.plot(max_percent_DEM_error_x*100.0, 'o', label = 'max error')
+            plt.plot(avg_percent_DEM_error_x * 100.0, 'x', label='avg error')
+            plt.plot(max_percent_DEM_error_x * 100.0, 'o', label='max error')
             plt.xlabel('strain gage position')
             plt.ylabel('model accuracy (%)')
             plt.legend()
@@ -3888,8 +3848,8 @@ class calc_FAST_sm_fit(Component):
             plt.figure()
             plt.title('DEMy k-fold check (surrogate model accuracy)')
 
-            plt.plot(avg_percent_DEM_error_y*100.0, 'x', label= 'avg error')
-            plt.plot(max_percent_DEM_error_y*100.0, 'o', label = 'max error')
+            plt.plot(avg_percent_DEM_error_y * 100.0, 'x', label='avg error')
+            plt.plot(max_percent_DEM_error_y * 100.0, 'o', label='max error')
             plt.xlabel('strain gage position')
             plt.ylabel('model accuracy (%)')
             plt.legend()
@@ -3922,22 +3882,21 @@ class calc_FAST_sm_fit(Component):
                     cur_kfold = self.kfolds[j]
 
                     # choose training point indices
-                    train_pts = np.linspace(0, self.num_pts-1, self.num_pts) # -1 so it's zero-based
+                    train_pts = np.linspace(0, self.num_pts - 1, self.num_pts)  # -1 so it's zero-based
                     train_pts = train_pts.tolist()
 
                     for i in range(0, len(cur_kfold)):
                         train_pts.remove(cur_kfold[i])
 
                     # choose training point values
-                    train_xt = xt[:,train_pts]
-                    kfold_xt = xt[:,cur_kfold]
+                    train_xt = xt[:, train_pts]
+                    kfold_xt = xt[:, cur_kfold]
 
-                    train_yt_x = yt_x_load[:,train_pts]
-                    kfold_yt_x = yt_x_load[:,cur_kfold]
+                    train_yt_x = yt_x_load[:, train_pts]
+                    kfold_yt_x = yt_x_load[:, cur_kfold]
 
-
-                    train_yt_y = yt_y_load[:,train_pts]
-                    kfold_yt_y = yt_y_load[:,cur_kfold]
+                    train_yt_y = yt_y_load[:, train_pts]
+                    kfold_yt_y = yt_y_load[:, cur_kfold]
 
                     # using current design variable values, predict output
 
@@ -3951,11 +3910,11 @@ class calc_FAST_sm_fit(Component):
                     cv_y.options['print_global'] = self.print_sm
                     cv_y.train()
 
-                    Edg_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:,k]] ) ))
-                    Flp_cv = np.transpose(cv_y.predict_values(np.array([kfold_xt[:,k]] ) ))
+                    Edg_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:, k]])))
+                    Flp_cv = np.transpose(cv_y.predict_values(np.array([kfold_xt[:, k]])))
 
                     for i in range(len(Edg_error)):
-                        cur_Edg_error[i][k] = Edg_cv[i] - kfold_yt_x[:,0][i]
+                        cur_Edg_error[i][k] = Edg_cv[i] - kfold_yt_x[:, 0][i]
                         cur_percent_Edg_error[i][k] = abs(Edg_cv[i] - kfold_yt_x[:, k][i]) / kfold_yt_x[:, k][i]
 
                         cur_Flp_error[i][k] = Flp_cv[i] - kfold_yt_y[:, 0][i]
@@ -3963,12 +3922,11 @@ class calc_FAST_sm_fit(Component):
 
                 # average error for specific k-fold
                 for i in range(len(Edg_error)):
-                    Edg_error[i][j] = sum(cur_Edg_error[i,:])/len(cur_Edg_error[i,:])
-                    percent_Edg_error[i][j] = sum(cur_percent_Edg_error[i,:])/len(cur_percent_Edg_error[i,:])
+                    Edg_error[i][j] = sum(cur_Edg_error[i, :]) / len(cur_Edg_error[i, :])
+                    percent_Edg_error[i][j] = sum(cur_percent_Edg_error[i, :]) / len(cur_percent_Edg_error[i, :])
 
-                    Flp_error[i][j] = sum(cur_Flp_error[i,:])/len(cur_Flp_error[i,:])
-                    percent_Flp_error[i][j] = sum(cur_percent_Flp_error[i,:])/len(cur_percent_Flp_error[i,:])
-
+                    Flp_error[i][j] = sum(cur_Flp_error[i, :]) / len(cur_Flp_error[i, :])
+                    percent_Flp_error[i][j] = sum(cur_percent_Flp_error[i, :]) / len(cur_percent_Flp_error[i, :])
 
             # average percent error over all k-folds
             avg_percent_Edg_error = np.zeros([len(Edg_error), 1])
@@ -3980,25 +3938,25 @@ class calc_FAST_sm_fit(Component):
             # calculate root mean square error
             for i in range(len(Edg_error)):
 
-                avg_percent_Edg_error[i] = sum(percent_Edg_error[i,:])/len(percent_Edg_error[i,:])
-                avg_percent_Flp_error[i] = sum(percent_Flp_error[i,:])/len(percent_Flp_error[i,:])
+                avg_percent_Edg_error[i] = sum(percent_Edg_error[i, :]) / len(percent_Edg_error[i, :])
+                avg_percent_Flp_error[i] = sum(percent_Flp_error[i, :]) / len(percent_Flp_error[i, :])
 
                 squared_total_x = 0.0
                 squared_total_y = 0.0
                 for index in range(len(percent_Edg_error[i, :])):
-                    squared_total_x += percent_Edg_error[i, index]**2.0
-                    squared_total_y += percent_Flp_error[i, index]**2.0
+                    squared_total_x += percent_Edg_error[i, index] ** 2.0
+                    squared_total_y += percent_Flp_error[i, index] ** 2.0
 
-                rms_percent_Edg_error[i] = (squared_total_x/len(percent_Edg_error[i,:]))**0.5
-                rms_percent_Flp_error[i] = (squared_total_y/len(percent_Flp_error[i,:]))**0.5
+                rms_percent_Edg_error[i] = (squared_total_x / len(percent_Edg_error[i, :])) ** 0.5
+                rms_percent_Flp_error[i] = (squared_total_y / len(percent_Flp_error[i, :])) ** 0.5
 
             # maximum percent error over all k-folds
             max_percent_Edg_error = np.zeros([len(Edg_error), 1])
             max_percent_Flp_error = np.zeros([len(Flp_error), 1])
 
             for i in range(len(Edg_error)):
-                max_percent_Edg_error[i] = max(percent_Edg_error[i,:])
-                max_percent_Flp_error[i] = max(percent_Flp_error[i,:])
+                max_percent_Edg_error[i] = max(percent_Edg_error[i, :])
+                max_percent_Flp_error[i] = max(percent_Flp_error[i, :])
 
             # root mean square error over all DEMx, DEMy points
             total_squared_total_x = 0.0
@@ -4011,7 +3969,7 @@ class calc_FAST_sm_fit(Component):
             rms_Flp_error = (total_squared_total_y / len(rms_percent_Flp_error)) ** 0.5
 
             # root mean square error overall
-            rms_error = ( ( (rms_Edg_error**2.0 + rms_Flp_error**2.0) )/2.0 )**0.5
+            rms_error = (((rms_Edg_error ** 2.0 + rms_Flp_error ** 2.0)) / 2.0) ** 0.5
 
             print('rms_error')
             print(rms_error)
@@ -4019,7 +3977,8 @@ class calc_FAST_sm_fit(Component):
 
 
             # save error values in .txt file
-            error_file_name = str(self.opt_dir) + '/error_' + self.approximation_model + '_' + str(self.num_pts) + '.txt'
+            error_file_name = str(self.opt_dir) + '/error_' + self.approximation_model + '_' + str(
+                self.num_pts) + '.txt'
             ferror = open(error_file_name, "w+")
             ferror.write(str(rms_Edg_error[0]) + '\n')
             ferror.write(str(rms_Flp_error[0]))
@@ -4029,8 +3988,8 @@ class calc_FAST_sm_fit(Component):
             plt.figure()
             plt.title('DEMx k-fold check (surrogate model accuracy)')
 
-            plt.plot(avg_percent_Edg_error*100.0, 'x', label= 'avg error')
-            plt.plot(max_percent_Edg_error*100.0, 'o', label = 'max error')
+            plt.plot(avg_percent_Edg_error * 100.0, 'x', label='avg error')
+            plt.plot(max_percent_Edg_error * 100.0, 'o', label='max error')
             plt.xlabel('strain gage position')
             plt.ylabel('model accuracy (%)')
             plt.legend()
@@ -4041,8 +4000,8 @@ class calc_FAST_sm_fit(Component):
             plt.figure()
             plt.title('DEMy k-fold check (surrogate model accuracy)')
 
-            plt.plot(avg_percent_Flp_error*100.0, 'x', label= 'avg error')
-            plt.plot(max_percent_Flp_error*100.0, 'o', label = 'max error')
+            plt.plot(avg_percent_Flp_error * 100.0, 'x', label='avg error')
+            plt.plot(max_percent_Flp_error * 100.0, 'o', label='max error')
             plt.xlabel('strain gage position')
             plt.ylabel('model accuracy (%)')
             plt.legend()
@@ -4069,18 +4028,18 @@ class calc_FAST_sm_fit(Component):
                     cur_kfold = self.kfolds[j]
 
                     # choose training point indices
-                    train_pts = np.linspace(0, self.num_pts-1, self.num_pts) # -1 so it's zero-based
+                    train_pts = np.linspace(0, self.num_pts - 1, self.num_pts)  # -1 so it's zero-based
                     train_pts = train_pts.tolist()
 
                     for i in range(0, len(cur_kfold)):
                         train_pts.remove(cur_kfold[i])
 
                     # choose training point values
-                    train_xt = xt[:,train_pts]
-                    kfold_xt = xt[:,cur_kfold]
+                    train_xt = xt[:, train_pts]
+                    kfold_xt = xt[:, cur_kfold]
 
-                    train_yt_x = yt_def[:,train_pts]
-                    kfold_yt_x = yt_def[:,cur_kfold]
+                    train_yt_x = yt_def[:, train_pts]
+                    kfold_yt_x = yt_def[:, cur_kfold]
 
                     # using current design variable values, predict output
 
@@ -4089,16 +4048,16 @@ class calc_FAST_sm_fit(Component):
                     cv_x.options['print_global'] = self.print_sm
                     cv_x.train()
 
-                    def_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:,k]] ) ))
+                    def_cv = np.transpose(cv_x.predict_values(np.array([kfold_xt[:, k]])))
 
                     for i in range(len(def_error)):
-                        cur_def_error[i][k] = def_cv[i] - kfold_yt_x[:,0][i]
+                        cur_def_error[i][k] = def_cv[i] - kfold_yt_x[:, 0][i]
                         cur_percent_def_error[i][k] = abs(def_cv[i] - kfold_yt_x[:, k][i]) / kfold_yt_x[:, k][i]
 
                 # average error for specific k-fold
                 for i in range(len(def_error)):
-                    def_error[i][j] = sum(cur_def_error[i,:])/len(cur_def_error[i,:])
-                    percent_def_error[i][j] = sum(cur_percent_def_error[i,:])/len(cur_percent_def_error[i,:])
+                    def_error[i][j] = sum(cur_def_error[i, :]) / len(cur_def_error[i, :])
+                    percent_def_error[i][j] = sum(cur_percent_def_error[i, :]) / len(cur_percent_def_error[i, :])
 
             # average percent error over all k-folds
             avg_percent_def_error = np.zeros([len(def_error), 1])
@@ -4108,19 +4067,19 @@ class calc_FAST_sm_fit(Component):
             # calculate root mean square error
             for i in range(len(def_error)):
 
-                avg_percent_def_error[i] = sum(percent_def_error[i,:])/len(percent_def_error[i,:])
+                avg_percent_def_error[i] = sum(percent_def_error[i, :]) / len(percent_def_error[i, :])
 
                 squared_total_x = 0.0
                 for index in range(len(percent_def_error[i, :])):
-                    squared_total_x += percent_def_error[i, index]**2.0
+                    squared_total_x += percent_def_error[i, index] ** 2.0
 
-                rms_percent_def_error[i] = (squared_total_x/len(percent_def_error[i,:]))**0.5
+                rms_percent_def_error[i] = (squared_total_x / len(percent_def_error[i, :])) ** 0.5
 
             # maximum percent error over all k-folds
             max_percent_def_error = np.zeros([len(def_error), 1])
 
             for i in range(len(def_error)):
-                max_percent_def_error[i] = max(percent_def_error[i,:])
+                max_percent_def_error[i] = max(percent_def_error[i, :])
 
             # root mean square error over all DEMx, DEMy points
             total_squared_total_x = 0.0
@@ -4136,6 +4095,138 @@ class calc_FAST_sm_fit(Component):
             print(rms_error)
             quit()
 
+
+class use_FAST_surr_model(Component):
+    def __init__(self, FASTinfo, naero, nstr):
+        super(use_FAST_surr_model, self).__init__()
+
+        self.deriv_options['type'] = 'fd'
+        self.deriv_options['step_calc'] = 'relative'
+
+        self.FASTinfo = FASTinfo
+
+        self.add_param('r_max_chord', val=0.0)
+        self.add_param('chord_sub', val=np.zeros(4))
+        self.add_param('theta_sub', val=np.zeros(4))
+        self.add_param('sparT', val=np.zeros(5))
+        self.add_param('teT', val=np.zeros(5))
+
+        self.approximation_model = FASTinfo['approximation_model']
+
+        self.training_point_dist = FASTinfo['training_point_dist']  # 'linear', 'lhs'
+
+        if self.training_point_dist == 'lhs':
+            self.num_pts = FASTinfo['num_pts']
+
+            self.sm_var_file = FASTinfo['sm_var_file_master']
+            self.sm_DEM_file = FASTinfo['sm_DEM_file_master']
+            self.sm_load_file = FASTinfo['sm_load_file_master']
+            self.sm_def_file = FASTinfo['sm_def_file_master']
+
+        else:
+            self.sm_var_max = FASTinfo['sm_var_max']
+
+            self.sm_var_file = FASTinfo['sm_var_file']
+            self.sm_DEM_file = FASTinfo['sm_DEM_file']
+
+        self.opt_dir = FASTinfo['opt_dir']
+
+        self.var_filename = self.opt_dir + '/' + self.sm_var_file
+        self.DEM_filename = self.opt_dir + '/' + self.sm_DEM_file
+        self.load_filename = self.opt_dir + '/' + self.sm_load_file
+        self.def_filename = self.opt_dir + '/' + self.sm_def_file
+
+        self.dir_saved_plots = FASTinfo['dir_saved_plots']
+
+        self.sm_var_index = FASTinfo['sm_var_index']
+        self.var_index = FASTinfo['var_index']
+        self.sm_var_names = FASTinfo['sm_var_names']
+
+        self.NBlGages = FASTinfo['NBlGages']
+        self.BldGagNd = FASTinfo['BldGagNd']
+
+        self.add_param('DEMx', shape=18, desc='DEMx')
+        self.add_param('DEMy', shape=18, desc='DEMy')
+
+        self.check_fit = FASTinfo['check_fit']
+
+        self.do_cv_DEM = FASTinfo['do_cv_DEM']
+        self.do_cv_Load = FASTinfo['do_cv_Load']
+        self.do_cv_def = FASTinfo['do_cv_def']
+
+        self.print_sm = FASTinfo['print_sm']
+
+        if self.do_cv_DEM or self.do_cv_Load or self.do_cv_def:
+            self.kfolds = FASTinfo['kfolds']
+            self.num_folds = FASTinfo['num_folds']
+
+            self.theta0_val = FASTinfo['theta0_val']
+
+        self.add_output('DEMx_sm', val=np.zeros(18))  # , pass_by_obj=False)
+        self.add_output('DEMy_sm', val=np.zeros(18))  # , pass_by_obj=False)
+
+        self.add_output('Edg_sm', val=np.zeros(nstr))  # , pass_by_obj=False)
+        self.add_output('Flp_sm', val=np.zeros(nstr))  # , pass_by_obj=False)
+
+        self.add_output('def_sm', val=0.0)  # , pass_by_obj=False)
+
+        self.nstr = nstr
+
+    def solve_nonlinear(self, params, unknowns, resids):
+
+
+        # === load surrogate model fits === #
+        sm_name_list = ['sm_x', 'sm_y', 'sm_x_load', 'sm_y_load', 'sm_def']
+
+        for i in range(len(sm_name_list)):
+            pkl_file_name = self.opt_dir + '/' + sm_name_list[i] + '_' + self.approximation_model + '.pkl'
+
+            file_handle = open(pkl_file_name, "r")
+
+            if sm_name_list[i] == 'sm_x':
+                sm_x = pickle.load(file_handle)
+            elif sm_name_list[i] == 'sm_y':
+                sm_y = pickle.load(file_handle)
+            elif sm_name_list[i] == 'sm_x_load':
+                sm_x_load = pickle.load(file_handle)
+            elif sm_name_list[i] == 'sm_y_load':
+                sm_y_load = pickle.load(file_handle)
+            elif sm_name_list[i] == 'sm_def':
+                sm_def = pickle.load(file_handle)
+
+        # === estimate outputs === #
+
+        # current design variable values
+        sv = []
+        for i in range(0, len(self.sm_var_names)):
+
+            if hasattr(params[self.sm_var_names[i]], '__len__'):
+                for j in range(0, len(self.sm_var_names[i])):
+
+                    if j in self.sm_var_index[i]:
+                        sv.append(params[self.sm_var_names[i]][j])
+            else:
+                sv.append(params[self.sm_var_names[i]])
+
+        # === predict values === #
+
+        int_sv = np.zeros([len(sv), 1])
+        for i in range(0, len(int_sv)):
+            int_sv[i] = sv[i]
+
+        # DEMs
+        DEMx_sm = np.transpose(sm_x.predict_values(np.transpose(int_sv)))
+        DEMy_sm = np.transpose(sm_y.predict_values(np.transpose(int_sv)))
+
+        # extreme loads
+        Edg_sm = np.transpose(sm_x_load.predict_values(np.transpose(int_sv)))
+        Flp_sm = np.transpose(sm_y_load.predict_values(np.transpose(int_sv)))
+
+        # tip deflections
+        def_sm = np.transpose(sm_def.predict_values(np.transpose(int_sv)))
+
+        # === === #
+
         def_sm = def_sm[0][0]
 
         unknowns['DEMx_sm'] = DEMx_sm
@@ -4143,7 +4234,6 @@ class calc_FAST_sm_fit(Component):
         unknowns['Edg_sm'] = Edg_sm
         unknowns['Flp_sm'] = Flp_sm
         unknowns['def_sm'] = def_sm
-
 
 class CreateFASTConfig(Component):
     def __init__(self, naero, nstr, FASTinfo, WNDfile_List, caseids):
@@ -5052,7 +5142,14 @@ class RotorSE(Group):
 
         # === use surrogate model of FAST outputs === #
         if FASTinfo['Use_FAST_sm']:
-            self.add('FAST_sm_fit', calc_FAST_sm_fit(FASTinfo, naero, nstr), promotes=['DEMx_sm','DEMy_sm', 'Flp_sm', 'Edg_sm', 'def_sm'])
+
+            # create fit - can check to see if files already created either here or in component
+            pkl_file_name = FASTinfo['opt_dir'] + '/' + 'sm_x' + '_' + FASTinfo['approximation_model'] + '.pkl'
+            if not os.path.isfile(pkl_file_name):
+                self.add('FAST_sm_fit', calc_FAST_sm_fit(FASTinfo, naero, nstr))
+
+            # use fit
+            self.add('use_FAST_sm_fit', use_FAST_surr_model(FASTinfo, naero, nstr), promotes=['DEMx_sm','DEMy_sm', 'Flp_sm', 'Edg_sm', 'def_sm'])
 
         if FASTinfo['use_FAST']:
 
@@ -5518,11 +5615,11 @@ class RotorSE(Group):
         # FAST surrogate model
         if FASTinfo['Use_FAST_sm']:
             # design variables
-            self.connect('r_max_chord', 'FAST_sm_fit.r_max_chord')
-            self.connect('chord_sub', 'FAST_sm_fit.chord_sub')
-            self.connect('theta_sub', 'FAST_sm_fit.theta_sub')
-            self.connect('sparT', 'FAST_sm_fit.sparT')
-            self.connect('teT', 'FAST_sm_fit.teT')
+            self.connect('r_max_chord', 'use_FAST_sm_fit.r_max_chord')
+            self.connect('chord_sub', 'use_FAST_sm_fit.chord_sub')
+            self.connect('theta_sub', 'use_FAST_sm_fit.theta_sub')
+            self.connect('sparT', 'use_FAST_sm_fit.sparT')
+            self.connect('teT', 'use_FAST_sm_fit.teT')
 
             # Loads
             self.connect('Edg_sm', 'struc.Edg_max')
