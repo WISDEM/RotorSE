@@ -25,6 +25,6 @@ filename = "test_FAST_DEMs.py"
 #         os.system("python " + filename + " " + str(i) + " " + str(j))
 
 # === lhs surrogate model === #
-total_pts = 10
+total_pts = 1
 for i in range(0, total_pts):
     os.system("python " + filename + " " + str(i))

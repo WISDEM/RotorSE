@@ -10,7 +10,7 @@ import re
 
 import numpy as np
 
-from FAST_util import setupFAST, Use_FAST_DEMs, extract_results, define_des_var_domains
+from FAST_util import setupFAST, Use_FAST_DEMs, extract_results, define_des_var_domains, remove_dir
 
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 # -------------------
@@ -30,12 +30,14 @@ FASTinfo['opt_with_FAST_in_loop'] = False
 FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = False
-FASTinfo['opt_with_surr_model'] = True
+FASTinfo['calc_surr_model'] = True
+FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'test_100'
+description = 'test_nondim'
+
+# description = 'test_100'
 # description = 'test_500'
 # description = 'test_1000'
 # description = 'test_2000'
@@ -467,6 +469,9 @@ rotor.run()
 if FASTinfo['use_FAST']:
     extract_results(rotor,FASTinfo)
 
+# delete optimization directories
+if FASTinfo['remove_sm_dir']:
+    remove_dir(FASTinfo)
 
 print("================== RotorSE Outputs ==================")
 

@@ -6,6 +6,7 @@ import sys
 import os
 import random
 import re
+import shutil
 
 # ========================================================================================================= #
 
@@ -42,6 +43,14 @@ def setupFAST_checks(FASTinfo):
 
 # ========================================================================================================= #
 
+def setupFAST_other(FASTinfo):
+
+    FASTinfo['remove_sm_dir'] = True
+
+    return FASTinfo
+
+# ========================================================================================================= #
+
 def setupFAST(rotor, FASTinfo, description):
 
     # === set up FAST top level options === #
@@ -49,6 +58,9 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === set up FAST check options === #
     FASTinfo = setupFAST_checks(FASTinfo)
+
+    # === set up other FAST options === #
+    FASTinfo = setupFAST_other(FASTinfo)
 
     # === constraint groups === #
     FASTinfo['use_fatigue_cons'] = True
@@ -110,13 +122,13 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 100.0 # 640.0
-    FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
+    FASTinfo['Tmax_turb'] = 10.0 # 640.0
+    FASTinfo['Tmax_nonturb'] = 10.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 40.0 # 40.0
+    FASTinfo['rm_time'] = 4.0 # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -184,8 +196,8 @@ def setupFAST(rotor, FASTinfo, description):
         # DLC_List = ['DLC_6_1']
 
         #turbulent DLCs
-        # DLC_List = ['DLC_1_2','DLC_1_3']
-        DLC_List=['DLC_1_3']
+        DLC_List = ['DLC_1_2','DLC_1_3']
+        # DLC_List=['DLC_1_3']
 
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
@@ -1290,3 +1302,13 @@ def extract_results(rotor,FASTinfo):
 
 # ========================================================================================================= #
 
+def remove_dir(FASTinfo):
+
+    spec_point = FASTinfo['sm_var_spec']
+
+    dir_name = FASTinfo['opt_dir'] + '/sm_' + str(spec_point)
+
+    shutil.rmtree(dir_name)
+
+
+# ========================================================================================================= #
