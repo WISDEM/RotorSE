@@ -4,8 +4,8 @@
 
 import os, shutil
 
-sm_name = ['test_100', 'test_500']
-num_pts = [100, 500]
+sm_name = ['test_nondim']
+num_pts = [10]
 
 file_type = ['def', 'load', 'DEM', 'var']
 

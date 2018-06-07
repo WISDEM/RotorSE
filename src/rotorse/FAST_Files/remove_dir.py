@@ -9,9 +9,8 @@ num_pts = [1000, 2000]
 
 for j in range(len(sm_name)):
 	for i in range(num_pts[j]):
-
-    		dir_name = 'Opt_Files/' + sm_name[j] + '/sm_' + str(i)
-    		try:
+		dir_name = 'Opt_Files/' + sm_name[j] + '/sm_' + str(i)
+		try:
 			shutil.rmtree(dir_name)
 		except:
-			x = 0
+			pass

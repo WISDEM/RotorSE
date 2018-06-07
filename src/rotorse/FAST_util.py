@@ -1,4 +1,5 @@
-# FAST_util.py
+# FAST_util.py includes a number of necessary parameters and functions, as well as optional plotting functions, that
+# define how FAST is used in the optimization routine
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -37,15 +38,21 @@ def setupFAST_checks(FASTinfo):
 
     FASTinfo['check_var_domains'] = False # plots
 
-    FASTinfo['print_sm'] = False # turns off/on print statements from smt (surrogate model toolbox)
-
     return FASTinfo
 
 # ========================================================================================================= #
 
 def setupFAST_other(FASTinfo):
+    # these are options that can be changed, where optimization/calculations continue
 
+    # turns off/on print statements from smt (surrogate model toolbox)
+    FASTinfo['print_sm'] = False
+
+    # use this when training points for surrogate model
     FASTinfo['remove_sm_dir'] = True
+
+    # use this when training points for surrogate model and using surrogate model
+    FASTinfo['nondimensionalize_chord'] = True
 
     return FASTinfo
 
@@ -143,8 +150,8 @@ def setupFAST(rotor, FASTinfo, description):
 
 
     # === strain gage placement === #
-    FASTinfo['sgp'] = [1,2,3]
-    # FASTinfo['sgp'] = [4]
+    # FASTinfo['sgp'] = [1,2,3]
+    FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -196,8 +203,8 @@ def setupFAST(rotor, FASTinfo, description):
         # DLC_List = ['DLC_6_1']
 
         #turbulent DLCs
-        DLC_List = ['DLC_1_2','DLC_1_3']
-        # DLC_List=['DLC_1_3']
+        # DLC_List = ['DLC_1_2','DLC_1_3']
+        DLC_List=['DLC_1_3']
 
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
@@ -444,7 +451,7 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 100
+    FASTinfo['num_pts'] = 10
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK

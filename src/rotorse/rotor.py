@@ -2960,6 +2960,10 @@ class Calculate_FAST_sm_training_points(Component):
         for i in range(0, len(self.NBlGages)):
             total_num_bl_gages += self.NBlGages[i]
 
+        # to nondimensionalize chord_sub
+        self.add_param('bladeLength', shape=1, desc='Blade length')
+        self.nondimensionalize_chord = FASTinfo['nondimensionalize_chord']
+
     def solve_nonlinear(self, params, unknowns, resids):
 
         # print('new surrogate model params:')
@@ -3087,12 +3091,18 @@ class Calculate_FAST_sm_training_points(Component):
 
             for i in range(0, len(self.sm_var_names)):
 
+                # chord_sub, theta_sub
                 if hasattr(params[self.sm_var_names[i]],'__len__'):
-
                     for j in range(0, len(params[self.sm_var_names[i]])):
                         if j in self.sm_var_index[i]:
-                            var_text += ' ' + str(params[self.sm_var_names[i]][j])
 
+                            # nondimensionalize chord_sub (replace c with c/r)
+                            if self.sm_var_names[i] == 'chord_sub' and self.nondimensionalize_chord:
+                                var_text += ' ' + str(params[self.sm_var_names[i]][j]/params['bladeLength'])
+                            else:
+                                var_text += ' ' + str(params[self.sm_var_names[i]][j])
+
+                # r_max_chord
                 else:
                     var_text += ' ' + str(params[self.sm_var_names[i]])
 
@@ -3131,10 +3141,18 @@ class Calculate_FAST_sm_training_points(Component):
 
             for i in range(0, len(self.sm_var_names)):
 
+                # chord_sub, theta_sub
                 if hasattr(params[self.sm_var_names[i]],'__len__'):
                     for j in range(0, len(params[self.sm_var_names[i]])):
                         if j in self.sm_var_index[i]:
-                            var_text += ' ' + str(params[self.sm_var_names[i]][j])
+
+                            # nondimensionalize chord_sub (replace c with c/r)
+                            if self.sm_var_names[i] == 'chord_sub' and self.nondimensionalize_chord:
+                                var_text += ' ' + str(params[self.sm_var_names[i]][j]/params['bladeLength'])
+                            else:
+                                var_text += ' ' + str(params[self.sm_var_names[i]][j])
+
+                # r_max_chord
                 else:
                     var_text += ' ' + str(params[self.sm_var_names[i]])
 
@@ -3213,12 +3231,6 @@ class calc_FAST_sm_fit(Component):
         self.deriv_options['step_calc'] = 'relative'
 
         self.FASTinfo = FASTinfo
-
-        self.add_param('r_max_chord', val=0.0)
-        self.add_param('chord_sub',  val=np.zeros(4))
-        self.add_param('theta_sub', val=np.zeros(4))
-        self.add_param('sparT', val=np.zeros(5))
-        self.add_param('teT', val=np.zeros(5))
 
         self.approximation_model = FASTinfo['approximation_model']
 
@@ -4172,6 +4184,10 @@ class use_FAST_surr_model(Component):
 
         self.nstr = nstr
 
+        # to nondimensionalize chord_sub
+        self.add_param('bladeLength', shape=1, desc='Blade length')
+        self.nondimensionalize_chord = FASTinfo['nondimensionalize_chord']
+
     def solve_nonlinear(self, params, unknowns, resids):
 
 
@@ -4200,11 +4216,18 @@ class use_FAST_surr_model(Component):
         sv = []
         for i in range(0, len(self.sm_var_names)):
 
+            # chord_sub, theta_sub
             if hasattr(params[self.sm_var_names[i]], '__len__'):
                 for j in range(0, len(self.sm_var_names[i])):
 
                     if j in self.sm_var_index[i]:
-                        sv.append(params[self.sm_var_names[i]][j])
+
+                        # nondimensionalize chord_sub
+                        if self.sm_var_names[i] == 'chord_sub' and self.nondimensionalize_chord:
+                            sv.append(params[self.sm_var_names[i]][j]/params['bladeLength'])
+                        else:
+                            sv.append(params[self.sm_var_names[i]][j])
+            # chord_sub
             else:
                 sv.append(params[self.sm_var_names[i]])
 
@@ -5625,6 +5648,9 @@ class RotorSE(Group):
             self.connect('Edg_sm', 'struc.Edg_max')
             self.connect('Flp_sm', 'struc.Flp_max')
 
+            # nondimensionalize chord_sub
+            self.connect('bladeLength', 'use_FAST_sm_fit.bladeLength')
+
             # Tip deflection
             if FASTinfo['use_tip_def_cons']:
                 self.connect('def_sm', 'max_tip_def_in')
@@ -5704,6 +5730,9 @@ class RotorSE(Group):
                 self.connect('theta_sub', 'calc_FAST_sm_training_points.theta_sub')
                 self.connect('sparT', 'calc_FAST_sm_training_points.sparT')
                 self.connect('teT', 'calc_FAST_sm_training_points.teT')
+
+                # nondimensionalize chord
+                self.connect('bladeLength', 'calc_FAST_sm_training_points.bladeLength')
 
 if __name__ == '__main__':
 
