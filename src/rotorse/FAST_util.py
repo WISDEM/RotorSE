@@ -130,7 +130,7 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === FAST Run Time === #
     FASTinfo['Tmax_turb'] = 10.0 # 640.0
-    FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
+    FASTinfo['Tmax_nonturb'] = 15.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
@@ -203,8 +203,10 @@ def setupFAST(rotor, FASTinfo, description):
         # DLC_List = ['DLC_6_1']
 
         #turbulent DLCs
-        DLC_List = ['DLC_1_2','DLC_1_3']
+        # DLC_List = ['DLC_1_2','DLC_1_3']
         # DLC_List=['DLC_1_3']
+
+        DLC_List = ['DLC_1_3', 'DLC_6_1']
 
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
@@ -240,6 +242,21 @@ def setupFAST(rotor, FASTinfo, description):
             = DLC_call(FASTinfo['DLC_List'][i], FASTinfo['wnd_list'], FASTinfo['wnd_type_list'],
                        FASTinfo['rand_seeds'], FASTinfo['mws'], len(FASTinfo['sgp']), FASTinfo['parked'])
 
+
+    reordered_type_list = []
+    reordered_parked_list = []
+    for j in range(len(FASTinfo['sgp'])):
+        for i in range(len(FASTinfo['wnd_list'])):
+            reordered_type_list.append(FASTinfo['wnd_type_list'][i*len(FASTinfo['sgp'])+j])
+            reordered_parked_list.append(FASTinfo['parked'][i*len(FASTinfo['sgp'])+j])
+
+    # print(reordered_type_list)
+    # print(reordered_parked_list)
+    # print(FASTinfo['wnd_type_list'])
+    # print(FASTinfo['parked'])
+    # quit()
+    FASTinfo['wnd_type_list'] = reordered_type_list
+    FASTinfo['parked'] = reordered_parked_list
 
 
     # fatigue options
