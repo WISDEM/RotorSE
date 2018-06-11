@@ -130,12 +130,12 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === FAST Run Time === #
     FASTinfo['Tmax_turb'] = 10.0 # 640.0
-    FASTinfo['Tmax_nonturb'] = 10.0 # 100.0
+    FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 4.0 # 40.0
+    FASTinfo['rm_time'] = 5.0 # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -150,8 +150,8 @@ def setupFAST(rotor, FASTinfo, description):
 
 
     # === strain gage placement === #
-    # FASTinfo['sgp'] = [1,2,3]
-    FASTinfo['sgp'] = [4]
+    FASTinfo['sgp'] = [1,2,3]
+    # FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -203,8 +203,8 @@ def setupFAST(rotor, FASTinfo, description):
         # DLC_List = ['DLC_6_1']
 
         #turbulent DLCs
-        # DLC_List = ['DLC_1_2','DLC_1_3']
-        DLC_List=['DLC_1_3']
+        DLC_List = ['DLC_1_2','DLC_1_3']
+        # DLC_List=['DLC_1_3']
 
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
@@ -239,6 +239,7 @@ def setupFAST(rotor, FASTinfo, description):
         FASTinfo['wnd_list'], FASTinfo['wnd_type_list'] \
             = DLC_call(FASTinfo['DLC_List'][i], FASTinfo['wnd_list'], FASTinfo['wnd_type_list'],
                        FASTinfo['rand_seeds'], FASTinfo['mws'], len(FASTinfo['sgp']), FASTinfo['parked'])
+
 
 
     # fatigue options

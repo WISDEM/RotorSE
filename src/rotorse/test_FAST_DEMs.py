@@ -27,15 +27,17 @@ FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = False
+FASTinfo['calc_fixed_DEMs'] = True
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = True
+FASTinfo['calc_surr_model'] = False
 FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'test_nondim'
+description = 'test_peaks'
+
+# description = 'test_wnd'
 
 # description = 'test_100'
 # description = 'test_500'

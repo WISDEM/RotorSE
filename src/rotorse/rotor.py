@@ -2450,15 +2450,20 @@ class CreateFASTConstraints(Component):
 
         # === extrapolated loads variables === #
         # peaks master
-        peaks_master_x = dict()
-        peaks_master_x['root'] = []
-        for i in range(0, total_num_bl_gages):
-            peaks_master_x['bld_gage_' + str(tot_BldGagNd[i])] = []
 
-        peaks_master_y = dict()
-        peaks_master_y['root'] = []
-        for i in range(0, total_num_bl_gages):
-            peaks_master_y['bld_gage_' + str(tot_BldGagNd[i])] = []
+        peaks_wnd_x = dict()
+        for j in range(len(self.WNDfile_List)):
+            peaks_wnd_x[str(j+1)] = dict()
+            peaks_wnd_x[str(j+1)]['root'] = []
+            for i in range(0, total_num_bl_gages):
+                peaks_wnd_x[str(j+1)]['bld_gage_' + str(tot_BldGagNd[i])] = []
+
+        peaks_wnd_y = dict()
+        for j in range(len(self.WNDfile_List)):
+            peaks_wnd_y[str(j+1)] = dict()
+            peaks_wnd_y[str(j+1)]['root'] = []
+            for i in range(0, total_num_bl_gages):
+                peaks_wnd_y[str(j+1)]['bld_gage_' + str(tot_BldGagNd[i])] = []
 
         # peaks max (will be promoted)
         peaks_max_x = dict()
@@ -2481,6 +2486,20 @@ class CreateFASTConstraints(Component):
         for k in range(0, len(self.NBlGages)):
 
             for i in range(0 + 1, len(self.WNDfile_List) + 1):
+
+                # === extrapolated loads variables === #
+                # peaks master
+                peaks_master_x = dict()
+                peaks_master_x['root'] = []
+                for i_index in range(0, total_num_bl_gages):
+                    peaks_master_x['bld_gage_' + str(tot_BldGagNd[i_index])] = []
+
+                peaks_master_y = dict()
+                peaks_master_y['root'] = []
+                for i_index in range(0, total_num_bl_gages):
+                    peaks_master_y['bld_gage_' + str(tot_BldGagNd[i_index])] = []
+
+                # === naming conventions === #
 
                 spec_caseid = k*len(self.WNDfile_List)+(i-1)
                 resultsdict = params[self.caseids[spec_caseid]]
@@ -2540,6 +2559,7 @@ class CreateFASTConstraints(Component):
                     Tmax = self.Tmax_nonturb
 
                 # === perform rainflow calculations === #
+                # print(files)
                 from rainflow import do_rainflow
                 allres, peaks_list, orig_data, rm_data, data_name = \
                     do_rainflow(files, output_array, SNslope, self.dir_saved_plots, Tmax, self.dT, self.rm_time, self.check_rm_time)
@@ -2713,76 +2733,168 @@ class CreateFASTConstraints(Component):
                     file_x.close()
                     file_y.close()
 
-        # === turbulent extreme moment extrapolation === #
-        from scipy.stats import norm
+                # === turbulent extreme moment extrapolation === #
 
-        for j in range(0, 2):  # for both x,y bending moments
-            if j == 1:
-                peaks_master = peaks_master_x
-                data_type = 'x'
-            else:
-                peaks_master = peaks_master_y
-                data_type = 'y'
+                from scipy.stats import norm
 
-            for i in range(0, total_num_bl_gages+1): # +1 for root bending moment
+                for j_index in range(0, 2):  # for both x,y bending moments
 
-                if i == 0:
-                    data_name = 'root'
-                else:
-                    data_name = 'bld_gage_' + str(tot_BldGagNd[i-1])
-                root_peaks = peaks_master[data_name]
-
-                # get data
-                rp_list = []
-                for i in range(0, len(root_peaks)):
-                    for j in range(0, len(root_peaks[i])):
-                        rp_list.append(root_peaks[i][j])
-
-                # normal distribution
-                norm_dist = True
-                if norm_dist:
-                    # get fit
-                    data = rp_list
-
-                    plt.figure()
-                    # Fit a normal distribution to the data:
-                    mu, std = norm.fit(data)
-
-                    # Plot the histogram.
-                    plt.hist(data, bins=25, normed=True, alpha=0.6, color='g')
-
-                    # Plot the PDF.
-                    xmin, xmax = plt.xlim()
-                    x = np.linspace(xmin, xmax, 100)
-                    p = norm.pdf(x, mu, std)
-                    plt.plot(x, p, 'k', linewidth=2)
-                    plt.title(data_name + data_type + ' Turbulent Peaks, Normal Dist. Fit')
-                    plt.ylabel('Normalized Frequency')
-                    plt.xlabel('Load Bins (kN*m)')
-
-                    # add extrapolated, extreme moment
-                    spec_sd = 3.7*10.0**(-8.0)
-
-                    extreme_mom = max(abs(mu + std*norm.ppf(spec_sd)), abs(mu + std*norm.ppf(1.0-spec_sd)))
-
-                    if data_type == 'x':
-                        peaks_max_x[data_name] = extreme_mom
+                    if j_index == 1:
+                        peaks_master = peaks_master_x
+                        data_type = 'x'
                     else:
-                        peaks_max_y[data_name] = extreme_mom
-                    # print(peaks_max[data_name])
+                        peaks_master = peaks_master_y
+                        data_type = 'y'
 
-                    # show plot, quit routine
-                    if self.check_peaks:
-                        plt.savefig(self.dir_saved_plots + '/plots/hist_' + str(data_name) + str(data_type) + '.png')
-                        plt.show()
-                        # quit()
-                    plt.close()
+                    for i_index in range(0, total_num_bl_gages+1): # +1 for root bending moment
+
+                        if i_index == 0:
+                            data_name = 'root'
+                        else:
+                            data_name = 'bld_gage_' + str(tot_BldGagNd[i_index-1])
+                        root_peaks = peaks_master[data_name]
+
+                        # get data
+                        rp_list = []
+                        for m_index in range(0, len(root_peaks)):
+                            for j in range(0, len(root_peaks[m_index])):
+                                rp_list.append(root_peaks[m_index][j])
+
+                        # two distributions
+                        if data_type == 'x':
+
+                            # normal distribution
+                            norm_dist = True
+                            if norm_dist:
+                                # get fit
+                                data = rp_list
+
+                                if len(data) == 0:
+                                    pass
+                                else:
+
+                                    data_min = min(data)
+                                    data_max = max(data)
+
+                                    data1_subset = []
+                                    data2_subset = []
+
+                                    for k_index in range(0, len(data)):
+                                        if abs(data[k_index] - data_min) < abs(data[k_index] - data_max):
+                                            data1_subset.append(data[k_index])
+                                        else:
+                                            data2_subset.append(data[k_index])
+
+                                    for l in range(2):
+
+                                        if l == 0:
+                                            data = data1_subset
+                                        else:
+                                            data = data2_subset
+
+                                        plt.figure()
+                                        # Fit a normal distribution to the data:
+                                        mu, std = norm.fit(data)
+
+                                        # Plot the histogram.
+                                        plt.hist(data, bins=25, normed=True, alpha=0.6, color='g')
+
+                                        # Plot the PDF.
+                                        xmin, xmax = plt.xlim()
+                                        x = np.linspace(xmin, xmax, 100)
+                                        p = norm.pdf(x, mu, std)
+                                        plt.plot(x, p, 'k', linewidth=2)
+                                        plt.title(data_name + data_type + ' Turbulent Peaks, Normal Dist. Fit, data subset: ' + str(l+1))
+                                        plt.ylabel('Normalized Frequency')
+                                        plt.xlabel('Load Bins (kN*m)')
+
+                                        # add extrapolated, extreme moment
+                                        spec_sd = 3.7*10.0**(-8.0)
+
+                                        extreme_mom = max(abs(mu + std*norm.ppf(spec_sd)), abs(mu + std*norm.ppf(1.0-spec_sd)))
+
+                                        # checks max, since we're doing it for both data subsets
+                                        peaks_wnd_x[str(i)][data_name] = max(extreme_mom, peaks_wnd_x[str(i)][data_name])
+
+
+                                        # show plot, quit routine
+                                        if self.check_peaks:
+                                            plt.savefig(
+                                                self.dir_saved_plots + '/plots/hist_' + str(data_name) + str(data_type) + '_' + str(l) + '.png')
+                                            plt.show()
+                                            # quit()
+                                        plt.close()
+
+                        # one distribution
+                        elif data_type == 'y':
+
+                            # normal distribution
+                            norm_dist = True
+                            if norm_dist:
+                                # get fit
+                                data = rp_list
+
+                                if len(data) == 0:
+                                    pass
+                                else:
+
+                                    plt.figure()
+                                    # Fit a normal distribution to the data:
+                                    mu, std = norm.fit(data)
+
+                                    # Plot the histogram.
+                                    plt.hist(data, bins=25, normed=True, alpha=0.6, color='g')
+
+                                    # Plot the PDF.
+                                    xmin, xmax = plt.xlim()
+                                    x = np.linspace(xmin, xmax, 100)
+                                    p = norm.pdf(x, mu, std)
+                                    plt.plot(x, p, 'k', linewidth=2)
+                                    plt.title(data_name + data_type + ' Turbulent Peaks, Normal Dist. Fit')
+                                    plt.ylabel('Normalized Frequency')
+                                    plt.xlabel('Load Bins (kN*m)')
+
+                                    # add extrapolated, extreme moment
+                                    spec_sd = 3.7 * 10.0 ** (-8.0)
+
+                                    extreme_mom = max(abs(mu + std * norm.ppf(spec_sd)),
+                                                      abs(mu + std * norm.ppf(1.0 - spec_sd)))
+
+                                    peaks_wnd_y[str(i)][data_name] = extreme_mom
+
+                                    # show plot, quit routine
+                                    if self.check_peaks:
+                                        plt.savefig(
+                                            self.dir_saved_plots + '/plots/hist_' + str(data_name) + str(data_type) + '.png')
+                                        plt.show()
+                                        # quit()
+                                    plt.close()
+
+        for j in range(len(Edg_max)):
+
+            cur_var_x = []
+            cur_var_y = []
+
+            for i in range(len(self.WNDfile_List)):
+
+                if j == 0:
+                    cur_var_x.append(peaks_wnd_x[str(i+1)]['root'])
+                    cur_var_y.append(peaks_wnd_y[str(i+1)]['root'])
+                else:
+                    cur_var_x.append(peaks_wnd_x[str(i+1)]['bld_gage_' + str(tot_BldGagNd[j-1])])
+                    cur_var_y.append(peaks_wnd_y[str(i+1)]['bld_gage_' + str(tot_BldGagNd[j-1])])
+
+            if j == 0:
+                peaks_max_x['root'] = max(cur_var_x)
+                peaks_max_y['root'] = max(cur_var_y)
+            else:
+                peaks_max_x['bld_gage_' + str(tot_BldGagNd[j-1])] = max(cur_var_x)
+                peaks_max_y['bld_gage_' + str(tot_BldGagNd[j-1])] = max(cur_var_y)
 
         if self.check_peaks:
             quit()
 
         # compare peaks_max_x, peaks_max_y with Edg_max, Flp_max
-        # not super necessary, since peaks should always be greater
         for i in range(0, len(Edg_max)):
             if i == 0:
                 Edg_max[i] = max(Edg_max[i],peaks_max_x['root'])
