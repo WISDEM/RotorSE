@@ -35,7 +35,7 @@ FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'test_peaks'
+description = 'test_fixedDEMs'
 
 # description = 'test_wnd'
 

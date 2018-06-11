@@ -81,12 +81,12 @@ def setupFAST(rotor, FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST upper directory
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -129,13 +129,13 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 10.0 # 640.0
-    FASTinfo['Tmax_nonturb'] = 15.0 # 100.0
+    FASTinfo['Tmax_turb'] = 640.0 # 640.0
+    FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 5.0 # 40.0
+    FASTinfo['rm_time'] = 40.0 # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -204,9 +204,7 @@ def setupFAST(rotor, FASTinfo, description):
 
         #turbulent DLCs
         # DLC_List = ['DLC_1_2','DLC_1_3']
-        # DLC_List=['DLC_1_3']
-
-        DLC_List = ['DLC_1_3', 'DLC_6_1']
+        DLC_List=['DLC_1_3']
 
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
@@ -219,8 +217,9 @@ def setupFAST(rotor, FASTinfo, description):
 
     # === turbulent wind file parameters === #
     #  random seeds (np.linspace(1,6,6) is pre-calculated)
-    FASTinfo['rand_seeds'] = np.linspace(1, 1, 1)
+    # FASTinfo['rand_seeds'] = np.linspace(1, 1, 1)
     # FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
+    FASTinfo['rand_seeds'] = np.linspace(1, 4, 4)
 
     #  mean wind speeds (np.linspace(5,23,10) is pre-calculated)
     FASTinfo['mws'] = np.linspace(11, 11, 1)
