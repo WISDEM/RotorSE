@@ -15,7 +15,10 @@ from FAST_util import setupFAST, Use_FAST_DEMs, extract_results, define_des_var_
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 # -------------------
 
-rotor = Problem()
+# rotor = Problem()
+
+from openmdao.core.petsc_impl import PetscImpl
+rotor = Problem(impl = PetscImpl)
 
 # === Top Level Inputs for FAST === #
 FASTinfo = dict()

@@ -49,7 +49,7 @@ def setupFAST_other(FASTinfo):
     FASTinfo['print_sm'] = False
 
     # use this when training points for surrogate model
-    FASTinfo['remove_sm_dir'] = True
+    FASTinfo['remove_sm_dir'] = False
 
     # use this when training points for surrogate model and using surrogate model
     FASTinfo['nondimensionalize_chord'] = True
@@ -129,13 +129,13 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 640.0 # 640.0
+    FASTinfo['Tmax_turb'] = 10.0 # 640.0
     FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 40.0 # 40.0
+    FASTinfo['rm_time'] = 5.0 # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -150,8 +150,8 @@ def setupFAST(rotor, FASTinfo, description):
 
 
     # === strain gage placement === #
-    FASTinfo['sgp'] = [1,2,3]
-    # FASTinfo['sgp'] = [4]
+    # FASTinfo['sgp'] = [1,2,3]
+    FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
