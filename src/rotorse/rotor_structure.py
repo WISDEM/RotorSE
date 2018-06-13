@@ -747,10 +747,8 @@ class RotorWithpBEAM(StrucBase):
         # create finite element objects
         p_section = _pBEAM.SectionData(nsec, params['beam:z'], params['beam:EA'], params['beam:EIxx'],
             params['beam:EIyy'], params['beam:GJ'], params['beam:rhoA'], params['beam:rhoJ'])
-        # p_loads = _pBEAM.Loads(nsec)  # no loads
         p_tip = _pBEAM.TipData()  # no tip mass
-        k = np.array([float('inf'), float('inf'), float('inf'), float('inf'), float('inf'), float('inf')])
-        p_base = _pBEAM.BaseData(k, float('inf'))  # rigid base
+        p_base = _pBEAM.BaseData(np.ones(6), 1.0)  # rigid base
 
 
         # ----- tip deflection -----
