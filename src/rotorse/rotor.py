@@ -2387,7 +2387,7 @@ class CreateFASTConstraints(Component):
         self.add_param('initial_aero_grid', shape=naero, desc='initial structural grid on unit radius')
 
         for i in range(0, len(caseids)):
-            self.add_param(caseids[i], dict())
+            self.add_param(caseids[i], val=dict())
 
         # DEMs
         self.add_output('DEMx', val=np.zeros(naero+1))
@@ -2403,7 +2403,7 @@ class CreateFASTConstraints(Component):
     def solve_nonlinear(self, params, unknowns, resids):
 
         # === Check Results === #
-        resultsdict = params["WNDfile{0}".format(1) + '_sgp' + str(self.sgp[0])]
+        resultsdict = params[self.caseids[0]]
         if self.check_results:
             # bm_param = 'Spn4MLxb1'
             bm_param = ['RootMyb1', 'OoPDefl1']
@@ -4512,7 +4512,8 @@ class CreateFASTConfig(Component):
         # needs to be created just once for optimization
         if os.path.isdir(FAST_opt_directory):
             # placeholder
-            print('optimization directory already created')
+            # print('optimization directory already created')
+            pass
         else:
             os.mkdir(FAST_opt_directory)
 
@@ -4530,15 +4531,14 @@ class CreateFASTConfig(Component):
 
                 spec_caseid = sgp*len(self.WNDfile_List) + wnd_file
 
-                # FAST_sgp_directory = self.sgp_dir
                 FAST_sgp_directory = sgp_dir
 
-                # FAST_wnd_directory = self.sgp_dir + '/' + caseids[wnd_file]
                 FAST_wnd_directory = sgp_dir + '/' + caseids[spec_caseid]
 
                 # needs to be created for each DLC
                 if os.path.isdir(FAST_sgp_directory):
-                    print('sgp specific directory already created')
+                    # print('sgp specific directory already created')
+                    pass
                 else:
                     os.mkdir(FAST_sgp_directory)
 
@@ -4798,7 +4798,7 @@ class CreateFASTConfig(Component):
 
                     quit()
 
-                cfg_master["WNDfile{0}".format(wnd_file+1) + '_sgp' + str(self.sgp[sgp])] = cfg
+                cfg_master[self.caseids[spec_caseid]] = cfg
 
         unknowns['cfg_master'] = cfg_master
 
@@ -5300,11 +5300,7 @@ class RotorSE(Group):
             WND_File_List = FASTinfo['wnd_list']
 
             # create WNDfile case ids
-            caseids = []
-
-            for j in range(0, len(FASTinfo['sgp'])):
-                for i in range(0+1, len(WND_File_List)+1):
-                    caseids.append("WNDfile{0}".format(i) + '_sgp' + str(FASTinfo['sgp'][j]))
+            caseids = FASTinfo['caseids']
 
             self.add('FASTconfig', CreateFASTConfig(naero, nstr, FASTinfo, WND_File_List, caseids), promotes=['cfg_master'])
 
@@ -5318,10 +5314,14 @@ class RotorSE(Group):
             self.add('FASTConstraints', CreateFASTConstraints(naero, nstr, FASTinfo, WND_File_List, caseids),
                      promotes=['DEMx', 'DEMy', 'max_tip_def', 'Edg_max', 'Flp_max'])
 
-            for j in range(0, len(FASTinfo['sgp'])):
-                for i in range(0 + 1, len(WND_File_List) + 1):
-                    self.connect('ParallelFASTCases.WNDfile{0}'.format(i)+ '_sgp' + str(FASTinfo['sgp'][j]),
-                                 'FASTConstraints.WNDfile{0}'.format(i)+ '_sgp' + str(FASTinfo['sgp'][j]))
+            # for j in range(0, len(FASTinfo['sgp'])):
+            #     for i in range(0 + 1, len(WND_File_List) + 1):
+            #
+            #         self.connect('ParallelFASTCases.WNDfile{0}'.format(i)+ '_sgp' + str(FASTinfo['sgp'][j]),
+            #                      'FASTConstraints.WNDfile{0}'.format(i)+ '_sgp' + str(FASTinfo['sgp'][j]))
+            for i in range(len(caseids)):
+                self.connect('ParallelFASTCases.' + caseids[i], 'FASTConstraints.' + caseids[i])
+
 
             self.connect('cfg_master', 'FASTConstraints.cfg_master')
 

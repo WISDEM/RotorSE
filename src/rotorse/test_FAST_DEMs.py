@@ -10,15 +10,10 @@ import re
 
 import numpy as np
 
-from FAST_util import setupFAST, Use_FAST_DEMs, extract_results, define_des_var_domains, remove_dir
+from FAST_util import setupFAST, Use_FAST_DEMs, extract_results, define_des_var_domains, remove_dir, initialize_rotor_dv
 
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 # -------------------
-
-# rotor = Problem()
-
-from openmdao.core.petsc_impl import PetscImpl
-rotor = Problem(impl = PetscImpl)
 
 # === Top Level Inputs for FAST === #
 FASTinfo = dict()
@@ -30,15 +25,17 @@ FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = True
+FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
-FASTinfo['opt_with_fixed_DEMs_seq'] = False
+FASTinfo['opt_with_fixed_DEMs_seq'] = True
 FASTinfo['calc_surr_model'] = False
 FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'test_fixedDEMs'
+description = 'test_batch_1'
+
+# description = 'test_fixedDEMs'
 
 # description = 'test_wnd'
 
@@ -60,7 +57,7 @@ description = 'test_fixedDEMs'
 
 print('Run ' + description + ' is starting...')
 
-FASTinfo = setupFAST(rotor, FASTinfo, description)
+FASTinfo, rotor = setupFAST(FASTinfo, description)
 
 # === initialize === #
 rotor.root = RotorSE(FASTinfo = FASTinfo, naero=17, nstr=38, npower=20)#, af_dof=2)
@@ -240,14 +237,19 @@ else:
     # ------------------
 
     # === design variables === #
-    if FASTinfo['use_FAST']:
-        if FASTinfo['seq_run']:
 
-            from FAST_util import setup_FAST_seq_run_des_var
+    if FASTinfo['seq_run']:
+        from FAST_util import setup_FAST_seq_run_des_var
 
-            rotor = setup_FAST_seq_run_des_var(rotor, FASTinfo)
+        rotor = setup_FAST_seq_run_des_var(rotor, FASTinfo)
 
-        elif FASTinfo['train_sm']:
+        print('rotor:')
+        print(rotor)
+        quit()
+
+    elif FASTinfo['use_FAST']:
+
+        if FASTinfo['train_sm']:
 
             print("Creating Surrogate Model...")
 
@@ -259,28 +261,11 @@ else:
 
         else:
 
-            rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
-            rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-            # 3.2612, 4.5709, 3.3178, 1.4621
-            rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,
-                                           -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-            rotor['sparT'] = np.array(
-                [0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-            rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569]) # (Array, m): trailing-edge thickness parameters
+            rotor = initialize_rotor_dv(rotor)
 
     else:
         # not using FAST in the loop, so either using surrogate model or just RotorSE
-        rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
-
-        rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178,
-                                       1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-        # 3.2612, 4.5709, 3.3178,1.4621
-        rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,
-                                       -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-        rotor['sparT'] = np.array(
-            [0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-        rotor['teT'] = np.array(
-            [0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+        rotor = initialize_rotor_dv(rotor)
 
     # === blade grid ===
     rotor['initial_aero_grid'] = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,
@@ -441,7 +426,7 @@ rotor['profile'] = profile  # (List): airfoil shape at each radial position
 # === fatigue ===
 if FASTinfo['Use_FAST_Fixed_DEMs']:
 
-    rotor = Use_FAST_DEMs(FASTinfo,rotor,FASTinfo['check_opt_DEMs'])
+    rotor = Use_FAST_DEMs(FASTinfo, rotor, FASTinfo['check_opt_DEMs'])
 
 else:
 

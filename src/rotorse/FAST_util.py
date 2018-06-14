@@ -1,6 +1,7 @@
 # FAST_util.py includes a number of necessary parameters and functions, as well as optional plotting functions, that
 # define how FAST is used in the optimization routine
 
+from openmdao.api import Problem
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
@@ -42,23 +43,7 @@ def setupFAST_checks(FASTinfo):
 
 # ========================================================================================================= #
 
-def setupFAST_other(FASTinfo):
-    # these are options that can be changed, where optimization/calculations continue
-
-    # turns off/on print statements from smt (surrogate model toolbox)
-    FASTinfo['print_sm'] = False
-
-    # use this when training points for surrogate model
-    FASTinfo['remove_sm_dir'] = False
-
-    # use this when training points for surrogate model and using surrogate model
-    FASTinfo['nondimensionalize_chord'] = True
-
-    return FASTinfo
-
-# ========================================================================================================= #
-
-def setupFAST(rotor, FASTinfo, description):
+def setupFAST(FASTinfo, description):
 
     # === set up FAST top level options === #
     FASTinfo = setup_top_level_options(FASTinfo)
@@ -69,10 +54,13 @@ def setupFAST(rotor, FASTinfo, description):
     # === set up other FAST options === #
     FASTinfo = setupFAST_other(FASTinfo)
 
+    # === set up rotor === #
+    rotor = setup_rotor(FASTinfo)
+
     # === constraint groups === #
     FASTinfo['use_fatigue_cons'] = True
-    FASTinfo['use_struc_cons'] = True
-    FASTinfo['use_tip_def_cons'] = True
+    FASTinfo['use_struc_cons'] = False
+    FASTinfo['use_tip_def_cons'] = False
 
     #=== ===#
 
@@ -81,12 +69,12 @@ def setupFAST(rotor, FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST upper directory
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -104,7 +92,7 @@ def setupFAST(rotor, FASTinfo, description):
     # === options if previous optimizations have been performed === #
 
     if FASTinfo['seq_run']:
-        FASTinfo['prev_description'] = 'tst_path'
+        FASTinfo['prev_description'] = 'test_batch'
 
         # for running multiple times
         FASTinfo['prev_opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -129,13 +117,13 @@ def setupFAST(rotor, FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 10.0 # 640.0
+    FASTinfo['Tmax_turb'] = 100.0 # 640.0
     FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 5.0 # 40.0
+    FASTinfo['rm_time'] = 40.0 # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -150,8 +138,8 @@ def setupFAST(rotor, FASTinfo, description):
 
 
     # === strain gage placement === #
-    # FASTinfo['sgp'] = [1,2,3]
-    FASTinfo['sgp'] = [4]
+    FASTinfo['sgp'] = [1,2,3]
+    # FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -179,7 +167,67 @@ def setupFAST(rotor, FASTinfo, description):
     # FASTinfo['spec_sgp_dir'] = FASTinfo['opt_dir'] + '/' + 'sgp' + str(FASTinfo['sgp'])
 
     # === specify which DLCs will be included === #
+    FASTinfo = specify_DLCs(FASTinfo)
 
+    # turbulent, nonturbulent directories
+    FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir/'
+    FASTinfo['nonturb_wnd_dir'] = 'RotorSE_FAST/WND_Files/nonturb_wnd_dir/'
+
+    # fatigue options
+    FASTinfo['m_value'] = 10.0
+
+    # === caseids === #
+    FASTinfo['caseids'] = []
+    for j in range(0, len(FASTinfo['sgp'])):
+        for i in range(0 + 1, len(FASTinfo['wnd_list']) + 1):
+
+            if 'wnd_number' in FASTinfo:
+                cur_wnd_num = FASTinfo['wnd_number'] + 1
+            else:
+                cur_wnd_num = i
+
+            FASTinfo['caseids'].append("WNDfile{0}".format(cur_wnd_num) + '_sgp' + str(FASTinfo['sgp'][j]))
+
+    # print(FASTinfo['caseids'])
+    # quit()
+
+    return FASTinfo, rotor
+
+# ========================================================================================================= #
+
+def setupFAST_other(FASTinfo):
+    # these are options that can be changed, where optimization/calculations continue
+
+    # turns off/on print statements from smt (surrogate model toolbox)
+    FASTinfo['print_sm'] = False
+
+    # use this when training points for surrogate model
+    FASTinfo['remove_sm_dir'] = False
+
+    # use this when training points for surrogate model and using surrogate model
+    FASTinfo['nondimensionalize_chord'] = True
+
+    # sequential or parallel calculation of turbine response for each .wnd file
+    # note: currently only sequential calculation works. Major MPI reworking needed, might have to rework OpenMDAO class
+    FASTinfo['calculation_type'] = 'sequential'
+
+    return FASTinfo
+
+# ========================================================================================================= #
+
+def setup_rotor(FASTinfo):
+
+    if FASTinfo['calculation_type'] == 'sequential':
+        rotor = Problem()
+    else:
+        from openmdao.core.petsc_impl import PetscImpl
+        rotor = Problem(impl=PetscImpl)
+
+    return rotor
+
+# ========================================================================================================= #
+
+def specify_DLCs(FASTinfo):
     # === options if active DLC list has been created === #
     FASTinfo['use_DLC_list'] = False
     if FASTinfo['use_DLC_list']:
@@ -195,16 +243,16 @@ def setupFAST(rotor, FASTinfo, description):
         # nominal wind file
         # DLC_List = ['DLC_0_0']
 
-        #non turbulent DLCs
+        # non turbulent DLCs
         # DLC_List = ['DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
 
-        #non turbulent extreme events
-        # DLC_List = ['DLC_6_1','DLC_6_3']
+        # non turbulent extreme events
+        DLC_List = ['DLC_6_1', 'DLC_6_3']
         # DLC_List = ['DLC_6_1']
 
-        #turbulent DLCs
+        # turbulent DLCs
         # DLC_List = ['DLC_1_2','DLC_1_3']
-        DLC_List=['DLC_1_3']
+        # DLC_List=['DLC_1_3']
 
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
@@ -218,12 +266,12 @@ def setupFAST(rotor, FASTinfo, description):
     # === turbulent wind file parameters === #
     #  random seeds (np.linspace(1,6,6) is pre-calculated)
     # FASTinfo['rand_seeds'] = np.linspace(1, 1, 1)
-    # FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
-    FASTinfo['rand_seeds'] = np.linspace(1, 4, 4)
+    FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
+    # FASTinfo['rand_seeds'] = np.linspace(1, 2, 2)
 
     #  mean wind speeds (np.linspace(5,23,10) is pre-calculated)
-    FASTinfo['mws'] = np.linspace(11, 11, 1)
-    # FASTinfo['mws'] = np.linspace(5, 23, 10)
+    # FASTinfo['mws'] = np.linspace(11, 11, 1)
+    FASTinfo['mws'] = np.linspace(5, 23, 10)
 
     # === create list of .wnd files === #
     # .wnd files list
@@ -235,38 +283,65 @@ def setupFAST(rotor, FASTinfo, description):
     # list of whether turbine is parked or not
     FASTinfo['parked'] = []
 
-    for i in range(0, len(FASTinfo['DLC_List'])+0):
+    for i in range(0, len(FASTinfo['DLC_List']) + 0):
         # call DLC function
         FASTinfo['wnd_list'], FASTinfo['wnd_type_list'] \
             = DLC_call(FASTinfo['DLC_List'][i], FASTinfo['wnd_list'], FASTinfo['wnd_type_list'],
                        FASTinfo['rand_seeds'], FASTinfo['mws'], len(FASTinfo['sgp']), FASTinfo['parked'])
 
-
     reordered_type_list = []
     reordered_parked_list = []
     for j in range(len(FASTinfo['sgp'])):
         for i in range(len(FASTinfo['wnd_list'])):
-            reordered_type_list.append(FASTinfo['wnd_type_list'][i*len(FASTinfo['sgp'])+j])
-            reordered_parked_list.append(FASTinfo['parked'][i*len(FASTinfo['sgp'])+j])
+            reordered_type_list.append(FASTinfo['wnd_type_list'][i * len(FASTinfo['sgp']) + j])
+            reordered_parked_list.append(FASTinfo['parked'][i * len(FASTinfo['sgp']) + j])
 
-    # print(reordered_type_list)
-    # print(reordered_parked_list)
-    # print(FASTinfo['wnd_type_list'])
-    # print(FASTinfo['parked'])
-    # quit()
     FASTinfo['wnd_type_list'] = reordered_type_list
     FASTinfo['parked'] = reordered_parked_list
 
-
-    # fatigue options
-    FASTinfo['m_value'] = 10.0
-
-    # turbulent, nonturbulent directories
-    FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir/'
-    FASTinfo['nonturb_wnd_dir'] = 'RotorSE_FAST/WND_Files/nonturb_wnd_dir/'
+    if FASTinfo['calc_fixed_DEMs']:
+        FASTinfo = choose_wnd_file(FASTinfo)
 
     return FASTinfo
 
+def choose_wnd_file(FASTinfo):
+
+    # print('show all wnd_types')
+    # print(FASTinfo['wnd_type_list'])
+    # print(FASTinfo['parked'])
+    # print(FASTinfo['wnd_list'])
+    # print('\n')
+
+    try:
+        FASTinfo['wnd_number'] = int(sys.argv[1])
+
+        num_wnd_files = len(FASTinfo['wnd_list'])
+
+        wnd_list = []
+        wnd_list.append(FASTinfo['wnd_list'][FASTinfo['wnd_number']])
+        FASTinfo['wnd_list'] = wnd_list
+
+        FASTinfo['parked'] = [FASTinfo['parked'][FASTinfo['wnd_number']],
+                              FASTinfo['parked'][FASTinfo['wnd_number']],
+                              FASTinfo['parked'][FASTinfo['wnd_number']]]
+
+        FASTinfo['wnd_type_list'] = [FASTinfo['wnd_type_list'][FASTinfo['wnd_number']],
+                                     FASTinfo['wnd_type_list'][FASTinfo['wnd_number']],
+                                     FASTinfo['wnd_type_list'][FASTinfo['wnd_number']]]
+
+        # print('test choose_wnd_file')
+        # print(FASTinfo['wnd_type_list'])
+        # print(FASTinfo['parked'])
+        # print(FASTinfo['wnd_list'])
+        # quit()
+
+        # for i in range(3):
+        #     print(FASTinfo['wnd_type_list'][i*num_wnd_files:(i+1)*num_wnd_files])
+
+    except:
+        pass
+
+    return FASTinfo
 
 # ========================================================================================================= #
 
@@ -441,7 +516,12 @@ def setup_top_level_options(FASTinfo):
 
 def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 
-    rotor_desvar0, rotor_desvar1, rotor_desvar2, rotor_desvar3, rotor_desvar4 = [], [], [], [], []
+    rotor_test = dict()
+    for i in range(5):
+        rotor_test['rotor_desvar'+str(i)] = []
+        rotor_test['rotor_desvar_strings'+str(i)] = []
+
+    # rotor_desvar0, rotor_desvar1, rotor_desvar2, rotor_desvar3, rotor_desvar4 = [], [], [], [], []
 
     file_name = FASTinfo['prev_opt_dir'] + '/' + 'opt_results.txt'
 
@@ -449,17 +529,20 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
     line = fp.readlines()
 
     for i in range(0, 5):
-        globals()['desvar%s' % i] = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[i])
+        # globals()['desvar%s' % i] = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[i])
+        rotor_test['rotor_desvar_strings' + str(i)] = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[i])
 
-        globals()['rotor_desvar%s' % i] = np.zeros(len(globals()['desvar%s' % i]))
-        for j in range(0, len(globals()['desvar%s' % i])):
-            globals()['rotor_desvar%s' % i][j] = float(globals()['desvar%s' % i][j])
+        # globals()['rotor_desvar%s' % i] = np.zeros(len(globals()['desvar%s' % i]))
+        rotor_test['rotor_desvar' + str(i)] = np.zeros(len(rotor_test['rotor_desvar_strings'+str(i)]))
+        for j in range(0, len(rotor_test['rotor_desvar' + str(i)])):
+            rotor_test['rotor_desvar' + str(i)][j] = float(rotor_test['rotor_desvar_strings'+str(i)][j])
 
-    rotor['r_max_chord'] = rotor_desvar0
-    rotor['chord_sub'] = rotor_desvar1
-    rotor['theta_sub'] = rotor_desvar2
-    rotor['sparT'] = rotor_desvar3
-    rotor['teT'] = rotor_desvar4
+
+    rotor['r_max_chord'] = rotor_test['rotor_desvar'+str(0)]
+    rotor['chord_sub'] = rotor_test['rotor_desvar'+str(1)]
+    rotor['theta_sub'] = rotor_test['rotor_desvar'+str(2)]
+    rotor['sparT'] = rotor_test['rotor_desvar'+str(3)]
+    rotor['teT'] = rotor_test['rotor_desvar'+str(4)]
 
     return rotor
 
@@ -468,12 +551,12 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 10
+    FASTinfo['num_pts'] = 500
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
-    # FASTinfo['approximation_model'] = 'second_order_poly'
-    FASTinfo['approximation_model'] = 'least_squares'
+    FASTinfo['approximation_model'] = 'second_order_poly'
+    # FASTinfo['approximation_model'] = 'least_squares'
     # FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
@@ -994,6 +1077,21 @@ def initialize_dv(FASTinfo):
 
     return FASTinfo
 
+# ========================================================================================================= #
+
+# initialize design variables
+def initialize_rotor_dv(rotor):
+
+    rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
+    rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178,
+                                   1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,
+                                   -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
+    rotor['sparT'] = np.array(
+        [0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
+    rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+
+    return rotor
 
 # ========================================================================================================= #
 
