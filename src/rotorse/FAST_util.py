@@ -69,12 +69,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST upper directory
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -92,7 +92,7 @@ def setupFAST(FASTinfo, description):
     # === options if previous optimizations have been performed === #
 
     if FASTinfo['seq_run']:
-        FASTinfo['prev_description'] = 'test_batch'
+        FASTinfo['prev_description'] = 'test_batch_1'
 
         # for running multiple times
         FASTinfo['prev_opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -117,7 +117,7 @@ def setupFAST(FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 100.0 # 640.0
+    FASTinfo['Tmax_turb'] = 640.0 # 640.0
     FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
     FASTinfo['dT'] = 0.0125
 
@@ -236,7 +236,7 @@ def specify_DLCs(FASTinfo):
     if not FASTinfo['use_DLC_list']:
 
         # === for optimization === #
-        # DLC_List = ['DLC_1_2','DLC_1_3', 'DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
+        DLC_List = ['DLC_1_2','DLC_1_3', 'DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
 
         # === for testing === #
 
@@ -247,7 +247,7 @@ def specify_DLCs(FASTinfo):
         # DLC_List = ['DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
 
         # non turbulent extreme events
-        DLC_List = ['DLC_6_1', 'DLC_6_3']
+        # DLC_List = ['DLC_6_1', 'DLC_6_3']
         # DLC_List = ['DLC_6_1']
 
         # turbulent DLCs
@@ -1225,7 +1225,7 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
             spec_wnd_dir = FASTinfo['description'] + '/' + 'sgp' + str(sgp) + '/' + caseids[i - 1] + '_sgp' + str(sgp)
 
             FAST_wnd_directory = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-                    'RotorSE/src/rotorse/FAST_files/Opt_Files/', spec_wnd_dir))
+                    'RotorSE/src/rotorse/FAST_Files/Opt_Files/', spec_wnd_dir))
 
             # xDEM / yDEM files
 
