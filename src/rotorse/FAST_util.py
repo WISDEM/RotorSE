@@ -68,13 +68,13 @@ def setupFAST(FASTinfo, description):
 
     # === Platform (Local or SC) - unique to each user === #
 
-    # path to RotorSE_FAST upper directory
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # path to RotorSE_FAST directory
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -82,7 +82,8 @@ def setupFAST(FASTinfo, description):
 
     if os.path.isdir(FASTinfo['opt_dir']):
         # placeholder
-        print('optimization directory already created')
+        # print('optimization directory already created')
+        pass
     else:
         os.mkdir(FASTinfo['opt_dir'])
 
@@ -97,6 +98,9 @@ def setupFAST(FASTinfo, description):
         # for running multiple times
         FASTinfo['prev_opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
             'RotorSE/src/rotorse/FAST_Files/Opt_Files/', FASTinfo['prev_description']))
+
+    FASTinfo['max_DEMx_file'] = FASTinfo['opt_dir'] + '/xDEM_max.txt'
+    FASTinfo['max_DEMy_file'] = FASTinfo['opt_dir'] + '/yDEM_max.txt'
 
     # === Surrogate Model Options === #
 
@@ -203,6 +207,9 @@ def setupFAST_other(FASTinfo):
 
     # use this when training points for surrogate model
     FASTinfo['remove_sm_dir'] = False
+
+    # use this when calculating DEMs for fixed-DEMs calculation
+    FASTinfo['remove_fixedcalc_dir'] = True
 
     # use this when training points for surrogate model and using surrogate model
     FASTinfo['nondimensionalize_chord'] = True
@@ -1191,13 +1198,14 @@ def DLC_call(dlc, wnd_list, wnd_list_type, rand_seeds, mws, num_sgp, parked_list
 
 # ========================================================================================================= #
 
+def Calc_max_DEMs(FASTinfo, rotor):
 
-def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
+    checkplots = FASTinfo['check_opt_DEMs']
 
     # from FASTinfo, get number of wind files
     caseids = []
     for i in range(0, len(FASTinfo['wnd_list'])):
-        caseids.append("WNDfile{0}".format(i+1))
+        caseids.append("WNDfile{0}".format(i + 1))
 
     # create array to hold all DEMs (for each wnd_file)
     DEMx_master_array = np.zeros([len(FASTinfo['wnd_list']), 18])
@@ -1205,8 +1213,8 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
 
     for i in range(0, len(FASTinfo['wnd_list'])):
 
-        DEMrange = [0,1,8,15]
-        sgp_range = [1,1,2,3]
+        DEMrange = [0, 1, 8, 15]
+        sgp_range = [1, 1, 2, 3]
 
         lines_x = []
         lines_y = []
@@ -1225,7 +1233,7 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
             spec_wnd_dir = FASTinfo['description'] + '/' + 'sgp' + str(sgp) + '/' + caseids[i - 1] + '_sgp' + str(sgp)
 
             FAST_wnd_directory = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-                    'RotorSE/src/rotorse/FAST_Files/Opt_Files/', spec_wnd_dir))
+                                                            'RotorSE/src/rotorse/FAST_Files/Opt_Files/', spec_wnd_dir))
 
             # xDEM / yDEM files
 
@@ -1242,14 +1250,13 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
         xDEM = []
         yDEM = []
 
-        for j in range(0,4):
+        for j in range(0, 4):
             for k in range(0, len(lines_x[j])):
                 xDEM.append(float(lines_x[j][k]))
 
-        for j in range(0,4):
+        for j in range(0, 4):
             for k in range(0, len(lines_y[j])):
                 yDEM.append(float(lines_y[j][k]))
-
 
         xDEM = np.array(xDEM)
         yDEM = np.array(yDEM)
@@ -1269,30 +1276,26 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
         plt.ylabel('DEM (kN*m)')
         plt.title('DEMx for different .wnd files')  #: Bending Moment at Spanwise Station #1, Blade #1')
         for i in range(0, len(FASTinfo['wnd_list'])):
-            plt.plot(DEMx_master_array[i][0:18], label = FASTinfo['wnd_list'][i])
+            plt.plot(DEMx_master_array[i][0:18], label=FASTinfo['wnd_list'][i])
 
         plt.legend()
         plt.show()
 
         quit()
 
-    # set rotor parameters
-    rotor['rstar_damage'] = np.insert(rotor['r_aero'],0,0.0)
-
     # From DEMx_master_array, DEMy_master_array, determine DEMx_max, DEMy_max
-    DEMx_max = np.zeros([1+len(rotor['r_aero']), 1])
-    DEMy_max = np.zeros([1+len(rotor['r_aero']), 1])
+    DEMx_max = np.zeros([1 + len(rotor['r_aero']), 1])
+    DEMy_max = np.zeros([1 + len(rotor['r_aero']), 1])
 
     # DEMx_max_wnd_list = np.zeros([len(DEMx_max),1])
     DEMx_max_wnd_list = []
     DEMy_max_wnd_list = []
 
-    for i in range(0,len(DEMx_max)):
+    for i in range(0, len(DEMx_max)):
         for j in range(0, len(FASTinfo['wnd_list'])):
 
             # determine max DEMx
-            if DEMx_max[i] < DEMx_master_array[j][i] :
-
+            if DEMx_max[i] < DEMx_master_array[j][i]:
                 # add name of .wnd file
                 DEMx_max_wnd_list.append(FASTinfo['wnd_list'][j])
 
@@ -1300,8 +1303,7 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
                 DEMx_max[i] = DEMx_master_array[j][i]
 
             # determine max DEMy
-            if DEMy_max[i] < DEMy_master_array[j][i] :
-
+            if DEMy_max[i] < DEMy_master_array[j][i]:
                 # add name of .wnd file
                 # DEMy_max_wnd_list[i] = FASTinfo['wnd_list'][j]
                 DEMy_max_wnd_list.append(FASTinfo['wnd_list'][j])
@@ -1325,27 +1327,60 @@ def Use_FAST_DEMs(FASTinfo, rotor, checkplots):
         file_wnd.write(str(DEM_master_wnd_list[j]) + '\n')
     file_wnd.close()
 
-    rotor['Mxb_damage'] = DEMx_max*10.0**3.0 # kN*m to N*m
-    rotor['Myb_damage'] = DEMy_max*10.0**3.0 # kN*m to N*m
+    Mxb_damage = DEMx_max * 10.0 ** 3.0  # kN*m to N*m
+    Myb_damage = DEMy_max * 10.0 ** 3.0  # kN*m to N*m
 
     # xDEM/yDEM files
     xDEM_file = FASTinfo['opt_dir'] + '/' + 'xDEM_max.txt'
     file_x = open(xDEM_file, "w")
-    for j in range(0, len(rotor['Mxb_damage'])):
+    for j in range(0, len(Mxb_damage)):
         # write to xDEM file
-        file_x.write(str(rotor['Mxb_damage'][j]) + '\n')
+        file_x.write(str(Mxb_damage[j]) + '\n')
     file_x.close()
 
     yDEM_file = FASTinfo['opt_dir'] + '/' + 'yDEM_max.txt'
     file_y = open(yDEM_file, "w")
-    for j in range(0, len(rotor['Myb_damage'])):
+    for j in range(0, len(Myb_damage)):
         # write to xDEM file
-        file_y.write(str(rotor['Myb_damage'][j]) + '\n')
+        file_y.write(str(Myb_damage[j]) + '\n')
     file_y.close()
 
     if checkplots:
         plot_DEMs(rotor)
         quit()
+
+# ========================================================================================================= #
+
+def Use_FAST_DEMs(FASTinfo, rotor):
+
+    # set rotor parameters
+    rotor['rstar_damage'] = np.insert(rotor['r_aero'], 0, 0.0)
+
+    # set DEM parameters
+    DEMx_max = np.zeros([len(rotor['rstar_damage']), 1])
+    DEMy_max = np.zeros([len(rotor['rstar_damage']), 1])
+
+    fx = open(FASTinfo['max_DEMx_file'], "r")
+
+    linesx = fx.readlines()
+    for i in range(len(linesx)):
+        DEMx_max[i] = float(linesx[i])
+    fx.close()
+
+    fy = open(FASTinfo['max_DEMy_file'], "r")
+
+    linesy = fy.readlines()
+    for i in range(len(linesy)):
+        DEMy_max[i] = float(linesy[i])
+    fy.close()
+
+    # print(DEMx_max)
+    # print(DEMy_max)
+    # quit()
+
+    rotor['Mxb_damage'] = DEMx_max
+    rotor['Myb_damage'] = DEMy_max
+
 
     return rotor
 
@@ -1424,7 +1459,7 @@ def extract_results(rotor,FASTinfo):
 
 # ========================================================================================================= #
 
-def remove_dir(FASTinfo):
+def remove_sm_dir(FASTinfo):
 
     spec_point = FASTinfo['sm_var_spec']
 
@@ -1432,5 +1467,17 @@ def remove_dir(FASTinfo):
 
     shutil.rmtree(dir_name)
 
+
+# ========================================================================================================= #
+
+def removed_fixcalc_dir(FASTinfo):
+
+    for i in range(1,5):
+
+        dir_name = FASTinfo['opt_dir'] + '/sgp' + str[i]
+
+        if os.path.isdir(dir_name):
+
+            shutil.rmtree(dir_name)
 
 # ========================================================================================================= #

@@ -10,7 +10,8 @@ import re
 
 import numpy as np
 
-from FAST_util import setupFAST, Use_FAST_DEMs, extract_results, define_des_var_domains, remove_dir, initialize_rotor_dv
+from FAST_util import setupFAST, Calc_max_DEMs, Use_FAST_DEMs, \
+    extract_results, define_des_var_domains, remove_sm_dir, initialize_rotor_dv, removed_fixcalc_dir
 
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 # -------------------
@@ -33,7 +34,8 @@ FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'test_batch_1'
+# description = 'test_batch_1'
+description = 'test_batch'
 
 # description = 'test_fixedDEMs'
 
@@ -423,10 +425,14 @@ rotor['profile'] = profile  # (List): airfoil shape at each radial position
 # --------------------------------------
 
 
-# === fatigue ===
+# === fatigue === #
 if FASTinfo['Use_FAST_Fixed_DEMs']:
 
-    rotor = Use_FAST_DEMs(FASTinfo, rotor, FASTinfo['check_opt_DEMs'])
+    if not os.path.isfile(FASTinfo['max_DEMx_file']):
+
+        Calc_max_DEMs(FASTinfo)
+
+    rotor = Use_FAST_DEMs(FASTinfo, rotor)
 
 else:
 
@@ -442,7 +448,7 @@ else:
 # rotor['strain_ult_spar'] = 1.0e-2  # (Float): ultimate strain in spar cap
 rotor['strain_ult_spar'] = 2.0e-2  # (Float): ultimate strain in spar cap
 # rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
-rotor['strain_ult_te'] = 2.00*1e-2    # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
+rotor['strain_ult_te'] = 2.0*1e-2    # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
 rotor['eta_damage'] = 1.15*1.2*1.0  # (Float): safety factor for fatigue
 rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
 rotor['N_damage'] = 365*24*3600*20/6.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
@@ -460,8 +466,11 @@ if FASTinfo['use_FAST']:
     extract_results(rotor,FASTinfo)
 
 # delete optimization directories
+if FASTinfo['remove_fixedcalc_dir'] and not FASTinfo['calc_fixed_DEMs']:
+    removed_fixcalc_dir(FASTinfo)
+
 if FASTinfo['remove_sm_dir']:
-    remove_dir(FASTinfo)
+    remove_sm_dir(FASTinfo)
 
 print("================== RotorSE Outputs ==================")
 
