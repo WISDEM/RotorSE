@@ -1474,7 +1474,7 @@ def removed_fixcalc_dir(FASTinfo):
 
     for i in range(1,5):
 
-        dir_name = FASTinfo['opt_dir'] + '/sgp' + str[i]
+        dir_name = FASTinfo['opt_dir'] + '/sgp' + str(i)
 
         if os.path.isdir(dir_name):
 

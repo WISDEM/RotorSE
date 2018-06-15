@@ -4892,10 +4892,10 @@ class ObjandCons(Component):
         unknowns['con_power'] = (params['power'][-1] - params['control:ratedPower']) / 1.e6
         unknowns['con_thrust'] = params['ratedConditions:T'] / 1.e6
 
-        unknowns['con_damageU_spar'] = params['damageU_spar'][self.con2_indices]
-        unknowns['con_damageL_spar'] = params['damageL_spar'][self.con2_indices]
-        unknowns['con_damageU_te'] = params['damageU_te'][self.con2_indices]
-        unknowns['con_damageL_te'] = params['damageL_te'][self.con2_indices]
+        unknowns['con_damageU_spar'] = params['damageU_spar'][self.con2_indices]#*0.0
+        unknowns['con_damageL_spar'] = params['damageL_spar'][self.con2_indices]#*0.0
+        unknowns['con_damageU_te'] = params['damageU_te'][self.con2_indices]#*0.0
+        unknowns['con_damageL_te'] = params['damageL_te'][self.con2_indices]#*0.0
 
         # print('---FAST calculated tip deflection check---')
         # print(params['max_tip_deflection'])

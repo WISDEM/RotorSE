@@ -34,8 +34,8 @@ FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-# description = 'test_batch_1'
-description = 'test_batch'
+description = 'test_batch_1'
+# description = 'test_batch'
 
 # description = 'test_fixedDEMs'
 
@@ -75,11 +75,12 @@ if FASTinfo['use_FAST']:
         rotor.driver.opt_settings['Summary file'] = FASTinfo['opt_dir'] + '/' + 'SNOPT_summary_' + description + '.out'
 else:
     rotor.driver = pyOptSparseDriver()
-    rotor.driver.options['optimizer'] = 'SNOPT'
-    rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
-
-    rotor.driver.opt_settings['Print file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_print_' + description +'.out'
-    rotor.driver.opt_settings['Summary file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_summary_' + description +'.out'
+    rotor.driver.options['optimizer'] = 'NSGA2'
+    # rotor.driver.options['optimizer'] = 'SNOPT'
+    # rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
+    #
+    # rotor.driver.opt_settings['Print file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_print_' + description +'.out'
+    # rotor.driver.opt_settings['Summary file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_summary_' + description +'.out'
 
 # recorder = SqliteRecorder(os.sep + 'recorder_' + description +'.sql')
 # recorder.options['record_params'] = True
@@ -451,7 +452,7 @@ rotor['strain_ult_spar'] = 2.0e-2  # (Float): ultimate strain in spar cap
 rotor['strain_ult_te'] = 2.0*1e-2    # (Float): ultimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
 rotor['eta_damage'] = 1.15*1.2*1.0  # (Float): safety factor for fatigue
 rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
-rotor['N_damage'] = 365*24*3600*20/6.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
+rotor['N_damage'] = 365*24*3600*20/30.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
 
 # ----------------
 
