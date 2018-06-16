@@ -20,26 +20,9 @@ from commonse.utilities import vstack, trapz_deriv, linspace_with_deriv, smooth_
 from commonse.environment import PowerWind
 #from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 from akima import Akima
-from rotor_geometry import RotorGeometry
+from rotor_geometry import RotorGeometry, NAERO, NSTR
 
-from rotorse import RPM2RS, RS2RPM, TURBINE_CLASS, DRIVETRAIN_TYPE, r_aero, r_str
-
-naero = len(r_aero)
-nstr = len(r_str)
-
-class AirfoilProperties():
-    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles')
-    airfoil_types = [0]*8
-    airfoil_types[0] = os.path.join(basepath, 'Cylinder1.dat')
-    airfoil_types[1] = os.path.join(basepath, 'Cylinder2.dat')
-    airfoil_types[2] = os.path.join(basepath, 'DU40_A17.dat')
-    airfoil_types[3] = os.path.join(basepath, 'DU35_A17.dat')
-    airfoil_types[4] = os.path.join(basepath, 'DU30_A17.dat')
-    airfoil_types[5] = os.path.join(basepath, 'DU25_A17.dat')
-    airfoil_types[6] = os.path.join(basepath, 'DU21_A17.dat')
-    airfoil_types[7] = os.path.join(basepath, 'NACA64_A17.dat')
-    af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
-    airfoil_files = [airfoil_types[m] for m in af_idx]
+from rotorse import RPM2RS, RS2RPM, TURBINE_CLASS, DRIVETRAIN_TYPE, REFERENCE_TURBINE
 
 class VarSpeedMachine(Component):
     """variable speed machines"""
@@ -821,7 +804,7 @@ class RotorAeroPower(Group):
         self.add('hubloss', IndepVarComp('hubloss', True, pass_by_obj=True), promotes=['*'])
         self.add('wakerotation', IndepVarComp('wakerotation', True, pass_by_obj=True), promotes=['*'])
         self.add('usecd', IndepVarComp('usecd', True, pass_by_obj=True), promotes=['*'])
-        self.add('airfoil_files', IndepVarComp('airfoil_files', AirfoilProperties.airfoil_files, pass_by_obj=True), promotes=['*'])
+        #self.add('airfoil_files', IndepVarComp('airfoil_files', AirfoilProperties.airfoil_files, pass_by_obj=True), promotes=['*'])
         
         # --- control ---
         self.add('c_Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
@@ -848,7 +831,7 @@ class RotorAeroPower(Group):
 
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed(npts_coarse_power_curve))
-        self.add('analysis', CCBladePower(naero, npts_coarse_power_curve))
+        self.add('analysis', CCBladePower(NAERO, npts_coarse_power_curve))
         self.add('dt', CSMDrivetrain(npts_coarse_power_curve))
         self.add('powercurve', RegulatedPowerCurve(npts_coarse_power_curve, npts_spline_power_curve))
         self.add('wind', PowerWind(1))
@@ -877,7 +860,7 @@ class RotorAeroPower(Group):
         self.connect('spline.chord_aero', 'analysis.chord')
         self.connect('spline.theta_aero', 'analysis.theta')
         self.connect('spline.precurve_aero', 'analysis.precurve')
-        self.connect('spline.precurve_str', 'analysis.precurveTip', src_indices=[nstr-1])
+        self.connect('spline.precurve_str', 'analysis.precurveTip', src_indices=[NSTR-1])
         self.connect('spline.Rhub', 'analysis.Rhub')
         self.connect('spline.Rtip', 'analysis.Rtip')
         self.connect('hub_height', 'analysis.hubHt')
@@ -961,8 +944,8 @@ class RotorAeroPower(Group):
         self.connect('geom.diameter', 'diameter_in')
         self.connect('turbineclass.V_extreme', 'V_extreme_in')
         self.connect('spline.Rtip', 'Rtip_in')
-        self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[nstr-1])
-        self.connect('spline.presweep_str', 'presweepTip_in', src_indices=[nstr-1])
+        self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[NSTR-1])
+        self.connect('spline.presweep_str', 'presweepTip_in', src_indices=[NSTR-1])
 
 
 if __name__ == '__main__':
@@ -975,6 +958,8 @@ if __name__ == '__main__':
     
     #rotor.setup(check=False)
     rotor.setup()
+
+    rotor['reference_turbine'] = REFERENCE_TURBINE['5MW']  # (Enum): IEC turbine class
     
     # === blade grid ===
     rotor['idx_cylinder_aero'] = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here

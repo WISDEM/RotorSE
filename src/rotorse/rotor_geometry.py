@@ -1,11 +1,9 @@
 import numpy as np
 from openmdao.api import Component, Group, IndepVarComp
 from akima import Akima, akima_interp_with_derivs
-from rotorse import TURBINE_CLASS, r_aero, r_str
+from rotorse import TURBINE_CLASS, REFERENCE_TURBINE
 from ccblade.ccblade_component import CCBladeGeometry
-
-naero = len(r_aero)
-nstr = len(r_str)
+from reference_turbine import ReferenceTurbine, NAERO, NSTR
 
 class Location(Component):
     def __init__(self):
@@ -53,6 +51,9 @@ class GeometrySpline(Component):
     def __init__(self):
         super(GeometrySpline, self).__init__()
         # variables
+        self.add_param('r_aero_in', shape=NAERO, desc='non-dimensional aerodynamic grid')
+        self.add_param('r_str_in', shape=NSTR, desc='non-dimensional structural grid')
+        
         self.add_param('r_max_chord', shape=1, desc='location of max chord on unit radius')
         self.add_param('chord_sub', shape=4, units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
         self.add_param('theta_sub', shape=4, units='deg', desc='twist at control points')  # defined at linearly spaced locations from r[idx_cylinder] to tip
@@ -69,18 +70,18 @@ class GeometrySpline(Component):
         # out
         self.add_output('Rhub', shape=1, units='m', desc='dimensional radius of hub')
         self.add_output('Rtip', shape=1, units='m', desc='dimensional radius of tip')
-        self.add_output('r_aero', shape=naero, units='m', desc='dimensional aerodynamic grid')
-        self.add_output('r_str', shape=nstr, units='m', desc='dimensional structural grid')
+        self.add_output('r_aero', shape=NAERO, units='m', desc='dimensional aerodynamic grid')
+        self.add_output('r_str', shape=NSTR, units='m', desc='dimensional structural grid')
         self.add_output('max_chord', shape=1, units='m', desc='maximum chord length')
-        self.add_output('chord_aero', shape=naero, units='m', desc='chord at airfoil locations')
-        self.add_output('chord_str', shape=nstr, units='m', desc='chord at structural locations')
-        self.add_output('theta_aero', shape=naero, units='deg', desc='twist at airfoil locations')
-        self.add_output('theta_str', shape=nstr, units='deg', desc='twist at structural locations')
-        self.add_output('precurve_aero', shape=naero, units='m', desc='precurve at airfoil locations')
-        self.add_output('precurve_str', shape=nstr, units='m', desc='precurve at structural locations')
-        self.add_output('presweep_str', shape=nstr, units='m', desc='presweep at structural locations')
-        self.add_output('sparT_str', shape=nstr, units='m', desc='dimensional spar cap thickness distribution')
-        self.add_output('teT_str', shape=nstr, units='m', desc='dimensional trailing-edge panel thickness distribution')
+        self.add_output('chord_aero', shape=NAERO, units='m', desc='chord at airfoil locations')
+        self.add_output('chord_str', shape=NSTR, units='m', desc='chord at structural locations')
+        self.add_output('theta_aero', shape=NAERO, units='deg', desc='twist at airfoil locations')
+        self.add_output('theta_str', shape=NSTR, units='deg', desc='twist at structural locations')
+        self.add_output('precurve_aero', shape=NAERO, units='m', desc='precurve at airfoil locations')
+        self.add_output('precurve_str', shape=NSTR, units='m', desc='precurve at structural locations')
+        self.add_output('presweep_str', shape=NSTR, units='m', desc='presweep at structural locations')
+        self.add_output('sparT_str', shape=NSTR, units='m', desc='dimensional spar cap thickness distribution')
+        self.add_output('teT_str', shape=NSTR, units='m', desc='dimensional trailing-edge panel thickness distribution')
         self.add_output('r_sub_precurve', shape=3, desc='precurve locations (used internally)')
 
         self.add_output('diameter', shape=1, units='m')
@@ -107,7 +108,7 @@ class GeometrySpline(Component):
         nt = len(params['theta_sub'])
         idxc_aero = params['idx_cylinder_aero']
         idxc_str = params['idx_cylinder_str']
-        r_cylinder = Rhub + (Rtip-Rhub)*r_aero[idxc_aero]
+        r_cylinder = Rhub + (Rtip-Rhub)*params['r_aero_in'][idxc_aero]
         rt = np.linspace(r_cylinder, Rtip, nt)
         theta_spline = Akima(rt, params['theta_sub'])
 
@@ -120,8 +121,8 @@ class GeometrySpline(Component):
         unknowns['Rhub'] = Rhub
         unknowns['Rtip'] = Rtip
         unknowns['diameter'] = 2.0*Rhub
-        unknowns['r_aero'] = Rhub + (Rtip-Rhub)*r_aero
-        unknowns['r_str'] = Rhub + (Rtip-Rhub)*r_str
+        unknowns['r_aero'] = Rhub + (Rtip-Rhub)*params['r_aero_in']
+        unknowns['r_str'] = Rhub + (Rtip-Rhub)*params['r_str_in']
         unknowns['max_chord'], _, _, _ = chord_spline.interp(params['r_max_chord'])
         unknowns['chord_aero'], _, _, _ = chord_spline.interp(unknowns['r_aero'])
         unknowns['chord_str'], _, _, _ = chord_spline.interp(unknowns['r_str'])
@@ -148,6 +149,7 @@ class RotorGeometry(Group):
         super(RotorGeometry, self).__init__()
         """rotor model"""
 
+        self.add('reference_turbine', IndepVarComp('reference_turbine', val=REFERENCE_TURBINE['5MW'], pass_by_obj=True), promotes=['*'])
         self.add('idx_cylinder_aero', IndepVarComp('idx_cylinder_aero', 0, pass_by_obj=True), promotes=['*'])
         self.add('idx_cylinder_str', IndepVarComp('idx_cylinder_str', 0, pass_by_obj=True), promotes=['*'])
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
@@ -165,6 +167,9 @@ class RotorGeometry(Group):
         # --- composite sections ---
         self.add('sparT', IndepVarComp('sparT', val=np.zeros(5), units='m', desc='spar cap thickness parameters'), promotes=['*'])
         self.add('teT', IndepVarComp('teT', val=np.zeros(5), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
+
+        # --- Reference Turbine starting point ---
+        self.add('ref', ReferenceTurbine(), promotes=['*'])
         
         # --- Rotor Definition ---
         self.add('loc', Location(), promotes=['*'])
@@ -172,6 +177,10 @@ class RotorGeometry(Group):
         self.add('spline0', GeometrySpline())
         self.add('spline', GeometrySpline())
         self.add('geom', CCBladeGeometry())
+
+        # Connections from reference turbine
+        self.connect('r_aero',['spline0.r_aero_in', 'spline.r_aero_in'])
+        self.connect('r_str',['spline0.r_str_in', 'spline.r_str_in'])
         
         # connections to turbineclass
         self.connect('turbine_class', 'turbineclass.turbine_class')
@@ -204,4 +213,4 @@ class RotorGeometry(Group):
         # self.spline['precurve_str'] = np.zeros(1)
         self.connect('spline.Rtip', 'geom.Rtip')
         self.connect('precone', 'geom.precone')
-        self.connect('spline.precurve_str', 'geom.precurveTip', src_indices=[naero-1])
+        self.connect('spline.precurve_str', 'geom.precurveTip', src_indices=[NAERO-1])

@@ -11,19 +11,17 @@ Copyright (c)  NREL. All rights reserved.
 import numpy as np
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem, ExecComp
-from rotor_aeropower import AirfoilProperties, SetupRunVarSpeed, CSMDrivetrain, RegulatedPowerCurve, RegulatedPowerCurveGroup, AEP, OutputsAero
+from rotor_aeropower import SetupRunVarSpeed, CSMDrivetrain, RegulatedPowerCurve, RegulatedPowerCurveGroup, AEP, OutputsAero
 from rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, PreCompSections, RotorWithpBEAM, ConstraintsStructures
 
 from ccblade.ccblade_component import CCBladeGeometry, CCBladePower, CCBladeLoads
 from commonse.distribution import RayleighCDF, WeibullWithMeanCDF
 from commonse.environment import PowerWind
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection
-from rotor_geometry import RotorGeometry
+from rotor_geometry import RotorGeometry, NAERO, NSTR
 
-from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE, r_aero, r_str
+from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE, REFERENCE_TURBINE
 
-naero = len(r_aero)
-nstr = len(r_str)
 
 class RotorSE(Group):
     def __init__(self, npts_coarse_power_curve=20, npts_spline_power_curve=200):
@@ -51,9 +49,9 @@ class RotorSE(Group):
 
 
         # --- fatigue ---
-        self.add('rstar_damage', IndepVarComp('rstar_damage', val=np.zeros(naero+1), desc='nondimensional radial locations of damage equivalent moments'), promotes=['*'])
-        self.add('Mxb_damage', IndepVarComp('Mxb_damage', val=np.zeros(naero+1), units='N*m', desc='damage equivalent moments about blade c.s. x-direction'), promotes=['*'])
-        self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(naero+1), units='N*m', desc='damage equivalent moments about blade c.s. y-direction'), promotes=['*'])
+        self.add('rstar_damage', IndepVarComp('rstar_damage', val=np.zeros(NAERO+1), desc='nondimensional radial locations of damage equivalent moments'), promotes=['*'])
+        self.add('Mxb_damage', IndepVarComp('Mxb_damage', val=np.zeros(NAERO+1), units='N*m', desc='damage equivalent moments about blade c.s. x-direction'), promotes=['*'])
+        self.add('Myb_damage', IndepVarComp('Myb_damage', val=np.zeros(NAERO+1), units='N*m', desc='damage equivalent moments about blade c.s. y-direction'), promotes=['*'])
         self.add('strain_ult_spar', IndepVarComp('strain_ult_spar', val=0.01, desc='ultimate strain in spar cap'), promotes=['*'])
         self.add('strain_ult_te', IndepVarComp('strain_ult_te', val=2500*1e-6, desc='uptimate strain in trailing-edge panels'), promotes=['*'])
         self.add('m_damage', IndepVarComp('m_damage', val=10.0, desc='slope of S-N curve for fatigue analysis'), promotes=['*'])
@@ -70,15 +68,13 @@ class RotorSE(Group):
         self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
         #self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
         self.add('shape_parameter', IndepVarComp('shape_parameter', val=0.0), promotes=['*'])
-        self.add('airfoil_files', IndepVarComp('airfoil_files', AirfoilProperties.airfoil_files, pass_by_obj=True), promotes=['*'])
-
         
         # --- Rotor Aero & Power ---
         self.add('rotorGeom', RotorGeometry(), promotes=['*'])
 
         # self.add('tipspeed', MaxTipSpeed())
         self.add('setup', SetupRunVarSpeed(npts_coarse_power_curve))
-        self.add('analysis', CCBladePower(naero, npts_coarse_power_curve))
+        self.add('analysis', CCBladePower(NAERO, npts_coarse_power_curve))
         self.add('dt', CSMDrivetrain(npts_coarse_power_curve))
         #self.add('powercurve', RegulatedPowerCurveGroup(npts_coarse_power_curve, npts_spline_power_curve))
         self.add('powercurve', RegulatedPowerCurve(npts_coarse_power_curve, npts_spline_power_curve))
@@ -95,10 +91,10 @@ class RotorSE(Group):
         self.add('resize', ResizeCompositeSection())
         self.add('gust', GustETM())
         self.add('setuppc',  SetupPCModVarSpeed())
-        self.add('aero_rated', CCBladeLoads(naero, 1))
-        self.add('aero_extrm', CCBladeLoads(naero,  1))
-        self.add('aero_extrm_forces', CCBladePower(naero, 2))
-        self.add('aero_defl_powercurve', CCBladeLoads(naero,  1))
+        self.add('aero_rated', CCBladeLoads(NAERO, 1))
+        self.add('aero_extrm', CCBladeLoads(NAERO,  1))
+        self.add('aero_extrm_forces', CCBladePower(NAERO, 2))
+        self.add('aero_defl_powercurve', CCBladeLoads(NAERO,  1))
         self.add('beam', PreCompSections())
         self.add('loads_defl', TotalLoads())
         self.add('loads_pc_defl', TotalLoads())
@@ -111,9 +107,9 @@ class RotorSE(Group):
         self.add('mass', MassProperties())
         self.add('extreme', ExtremeLoads())
         self.add('blade_defl', BladeDeflection())
-        self.add('aero_0', CCBladeLoads(naero,  1))
-        self.add('aero_120', CCBladeLoads(naero,  1))
-        self.add('aero_240', CCBladeLoads(naero,  1))
+        self.add('aero_0', CCBladeLoads(NAERO,  1))
+        self.add('aero_120', CCBladeLoads(NAERO,  1))
+        self.add('aero_240', CCBladeLoads(NAERO,  1))
         self.add('root_moment_0', RootMoment())
         self.add('root_moment_120', RootMoment())
         self.add('root_moment_240', RootMoment())
@@ -139,7 +135,7 @@ class RotorSE(Group):
         self.connect('spline.chord_aero', 'analysis.chord')
         self.connect('spline.theta_aero', 'analysis.theta')
         self.connect('spline.precurve_aero', 'analysis.precurve')
-        self.connect('spline.precurve_str', 'analysis.precurveTip', src_indices=[nstr-1])
+        self.connect('spline.precurve_str', 'analysis.precurveTip', src_indices=[NSTR-1])
         self.connect('spline.Rhub', 'analysis.Rhub')
         self.connect('spline.Rtip', 'analysis.Rtip')
         self.connect('precone', 'analysis.precone')
@@ -207,7 +203,7 @@ class RotorSE(Group):
         self.connect('spline.diameter', 'hub_diameter_in')
         self.connect('spline.max_chord', 'max_chord_in')
         self.connect('geom.diameter', 'diameter_in')
-        self.connect('spline.presweep_str', 'presweepTip_in', src_indices=[nstr-1])
+        self.connect('spline.presweep_str', 'presweepTip_in', src_indices=[NSTR-1])
 
         
         # Structures connections
@@ -223,6 +219,12 @@ class RotorSE(Group):
         self.connect('spline.chord_str', 'resize.chord_str')
         self.connect('spline.sparT_str', 'resize.sparT_str')
         self.connect('spline.teT_str', 'resize.teT_str')
+        self.connect('upperCS', 'resize.upperCS_in')
+        self.connect('lowerCS', 'resize.lowerCS_in')
+        self.connect('websCS', 'resize.websCS_in')
+        self.connect('chord_str_ref', 'resize.chord_str_ref')
+        self.connect('sector_idx_strain_spar', ['resize.sector_idx_strain_spar','beam.sector_idx_strain_spar'])
+        self.connect('sector_idx_strain_te', ['resize.sector_idx_strain_te','beam.sector_idx_strain_te'])
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')
@@ -242,7 +244,7 @@ class RotorSE(Group):
         self.connect('spline.chord_aero', 'aero_rated.chord')
         self.connect('spline.theta_aero', 'aero_rated.theta')
         self.connect('spline.precurve_aero', 'aero_rated.precurve')
-        self.connect('spline.precurve_str', 'aero_rated.precurveTip', src_indices=[nstr-1])
+        self.connect('spline.precurve_str', 'aero_rated.precurveTip', src_indices=[NSTR-1])
         self.connect('spline.Rhub', 'aero_rated.Rhub')
         self.connect('spline.Rtip', 'aero_rated.Rtip')
         self.connect('precone', 'aero_rated.precone')
@@ -262,7 +264,7 @@ class RotorSE(Group):
         self.connect('spline.chord_aero', 'aero_extrm.chord')
         self.connect('spline.theta_aero', 'aero_extrm.theta')
         self.connect('spline.precurve_aero', 'aero_extrm.precurve')
-        self.connect('spline.precurve_str', 'aero_extrm.precurveTip', src_indices=[nstr-1])
+        self.connect('spline.precurve_str', 'aero_extrm.precurveTip', src_indices=[NSTR-1])
         self.connect('spline.Rhub', 'aero_extrm.Rhub')
         self.connect('spline.Rtip', 'aero_extrm.Rtip')
         self.connect('precone', 'aero_extrm.precone')
@@ -281,7 +283,7 @@ class RotorSE(Group):
         self.connect('spline.chord_aero', 'aero_extrm_forces.chord')
         self.connect('spline.theta_aero', 'aero_extrm_forces.theta')
         self.connect('spline.precurve_aero', 'aero_extrm_forces.precurve')
-        self.connect('spline.precurve_str', 'aero_extrm_forces.precurveTip', src_indices=[nstr-1])
+        self.connect('spline.precurve_str', 'aero_extrm_forces.precurveTip', src_indices=[NSTR-1])
         self.connect('spline.Rhub', 'aero_extrm_forces.Rhub')
         self.connect('spline.Rtip', 'aero_extrm_forces.Rtip')
         self.connect('precone', 'aero_extrm_forces.precone')
@@ -303,7 +305,7 @@ class RotorSE(Group):
         self.connect('spline.chord_aero', 'aero_defl_powercurve.chord')
         self.connect('spline.theta_aero', 'aero_defl_powercurve.theta')
         self.connect('spline.precurve_aero', 'aero_defl_powercurve.precurve')
-        self.connect('spline.precurve_str', 'aero_defl_powercurve.precurveTip', src_indices=[nstr-1])
+        self.connect('spline.precurve_str', 'aero_defl_powercurve.precurveTip', src_indices=[NSTR-1])
         self.connect('spline.Rhub', 'aero_defl_powercurve.Rhub')
         self.connect('spline.Rtip', 'aero_defl_powercurve.Rtip')
         self.connect('precone', 'aero_defl_powercurve.precone')
@@ -322,9 +324,12 @@ class RotorSE(Group):
         self.connect('spline.r_str', 'beam.r')
         self.connect('spline.chord_str', 'beam.chord')
         self.connect('spline.theta_str', 'beam.theta')
-        self.connect('resize.upperCSOut', 'beam.upperCS')
-        self.connect('resize.lowerCSOut', 'beam.lowerCS')
-        self.connect('resize.websCSOut', 'beam.websCS')
+        self.connect('resize.upperCS', 'beam.upperCS')
+        self.connect('resize.lowerCS', 'beam.lowerCS')
+        self.connect('resize.websCS', 'beam.websCS')
+        self.connect('profile', 'beam.profile')
+        self.connect('le_location', 'beam.le_location')
+        self.connect('materials', 'beam.materials')
 
         # connections to loads_defl
         self.connect('aero_rated.loads:Omega', 'loads_defl.aeroLoads:Omega')
@@ -436,14 +441,14 @@ class RotorSE(Group):
         #self.connect('nF', 'curvefem.nF')
 
         # connections to tip
-        self.connect('struc.dx_defl', 'tip.dx', src_indices=[nstr-1])
-        self.connect('struc.dy_defl', 'tip.dy', src_indices=[nstr-1])
-        self.connect('struc.dz_defl', 'tip.dz', src_indices=[nstr-1])
-        self.connect('spline.theta_str', 'tip.theta', src_indices=[nstr-1])
+        self.connect('struc.dx_defl', 'tip.dx', src_indices=[NSTR-1])
+        self.connect('struc.dy_defl', 'tip.dy', src_indices=[NSTR-1])
+        self.connect('struc.dz_defl', 'tip.dz', src_indices=[NSTR-1])
+        self.connect('spline.theta_str', 'tip.theta', src_indices=[NSTR-1])
         self.connect('aero_rated.loads:pitch', 'tip.pitch')
         self.connect('aero_rated.loads:azimuth', 'tip.azimuth')
         self.connect('tilt', 'tip.tilt')
-        self.connect('curvature.totalCone', 'tip.totalConeTip', src_indices=[nstr-1])
+        self.connect('curvature.totalCone', 'tip.totalConeTip', src_indices=[NSTR-1])
         self.connect('dynamic_amplication_tip_deflection', 'tip.dynamicFactor')
 
         # connections to root moment
@@ -507,7 +512,7 @@ class RotorSE(Group):
         self.connect('blade_defl.delta_precurve_sub', 'delta_precurve_sub_out_in')
 
         self.connect('spline.Rtip', 'Rtip_in')
-        self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[nstr-1])
+        self.connect('spline.precurve_str', 'precurveTip_in', src_indices=[NSTR-1])
 
         ### adding for the drivetrain root moment calculations:
         # TODO - number and value of azimuth angles should be arbitrary user inputs
@@ -520,7 +525,7 @@ class RotorSE(Group):
         self.connect('spline.chord_aero', ['aero_0.chord', 'aero_120.chord', 'aero_240.chord'])
         self.connect('spline.theta_aero', ['aero_0.theta', 'aero_120.theta', 'aero_240.theta'])
         self.connect('spline.precurve_aero', ['aero_0.precurve', 'aero_120.precurve', 'aero_240.precurve'])
-        self.connect('spline.precurve_str', ['aero_0.precurveTip', 'aero_120.precurveTip', 'aero_240.precurveTip'], src_indices=[naero-1])
+        self.connect('spline.precurve_str', ['aero_0.precurveTip', 'aero_120.precurveTip', 'aero_240.precurveTip'], src_indices=[NAERO-1])
         self.connect('spline.Rhub', ['aero_0.Rhub', 'aero_120.Rhub', 'aero_240.Rhub'])
         self.connect('spline.Rtip', ['aero_0.Rtip', 'aero_120.Rtip', 'aero_240.Rtip'])
         self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
@@ -557,7 +562,7 @@ class RotorSE(Group):
         self.connect('root_moment_0.Mxyz','Mxyz_1_in')
         self.connect('root_moment_120.Mxyz','Mxyz_2_in')
         self.connect('root_moment_240.Mxyz','Mxyz_3_in')
-        self.connect('curvature.totalCone','TotalCone_in', src_indices=[nstr-1])
+        self.connect('curvature.totalCone','TotalCone_in', src_indices=[NSTR-1])
         self.connect('aero_0.pitch_load','Pitch_in')
         self.connect('root_moment_0.Fxyz', 'Fxyz_1_in')
         self.connect('root_moment_120.Fxyz', 'Fxyz_2_in')
@@ -569,159 +574,164 @@ class RotorSE(Group):
 
         self.add('obj_cmp', ExecComp('obj = -AEP', AEP=1000000.0), promotes=['*'])
 
+
+
+        
 if __name__ == '__main__':
 
-	rotor = Problem()
-	npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
-	npts_spline_power_curve = 200  # (Int): number of points to use in fitting spline to power curve
+    rotor = Problem()
+    npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
+    npts_spline_power_curve = 200  # (Int): number of points to use in fitting spline to power curve
 
-	rotor.root = RotorSE(npts_coarse_power_curve, npts_spline_power_curve)
-	rotor.setup()
+    rotor.root = RotorSE(npts_coarse_power_curve, npts_spline_power_curve)
+    rotor.setup()
 
-	# === blade grid ===
-	rotor['idx_cylinder_aero'] = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
-	rotor['idx_cylinder_str'] = 14  # (Int): first idx in r_str_unit of non-cylindrical section
-	rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
-	# ------------------
+    rotor['reference_turbine'] = REFERENCE_TURBINE['5MW']  # (Enum): IEC turbine class
 
-	# === blade geometry ===
-	rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
-	rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-	rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317, -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-	rotor['precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-	# rotor['delta_precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading
-	rotor['sparT'] = np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-	rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
-	rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
-	# rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
-	rotor['precone'] = 2.5  # (Float, deg): precone angle
-	rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
-	rotor['yaw'] = 0.0  # (Float, deg): yaw error
-	rotor['nBlades'] = 3  # (Int): number of blades
-	# ------------------
+    # === blade grid ===
+    rotor['idx_cylinder_aero'] = 3  # (Int): first idx in r_aero_unit of non-cylindrical section, constant twist inboard of here
+    rotor['idx_cylinder_str'] = 14  # (Int): first idx in r_str_unit of non-cylindrical section
+    rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
+    # ------------------
 
-	# === atmosphere ===
-	rotor['analysis.rho'] = 1.225  # (Float, kg/m**3): density of air
-	rotor['analysis.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
-	rotor['wind.shearExp'] = 0.25  # (Float): shear exponent
-	rotor['hub_height'] = 90.0  # (Float, m): hub height
-	rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
-	rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
-	rotor['wind.zref'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
-        rotor['gust_stddev'] = 3
-	# ----------------------
+    # === blade geometry ===
+    rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
+    rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317, -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
+    rotor['precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
+    # rotor['delta_precurve_sub'] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading
+    rotor['sparT'] = np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
+    rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+    rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+    # rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
+    rotor['precone'] = 2.5  # (Float, deg): precone angle
+    rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
+    rotor['yaw'] = 0.0  # (Float, deg): yaw error
+    rotor['nBlades'] = 3  # (Int): number of blades
+    # ------------------
 
-	# === control ===
-        rotor['control:Vin'] = 3.0  # (Float, m/s): cut-in wind speed
-        rotor['control:Vout'] = 25.0  # (Float, m/s): cut-out wind speed
-	rotor['machine_rating'] = 5e6  # (Float, W): rated power
-	rotor['control:minOmega'] = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
-	rotor['control:maxOmega'] = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
-	rotor['control:tsr'] = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-	rotor['control:pitch'] = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
-	rotor['pitch_extreme'] = 0.0  # (Float, deg): worst-case pitch at survival wind condition
-	rotor['azimuth_extreme'] = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
-	rotor['VfactorPC'] = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
-	# ----------------------
+    # === atmosphere ===
+    rotor['analysis.rho'] = 1.225  # (Float, kg/m**3): density of air
+    rotor['analysis.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
+    rotor['wind.shearExp'] = 0.25  # (Float): shear exponent
+    rotor['hub_height'] = 90.0  # (Float, m): hub height
+    rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
+    rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
+    rotor['wind.zref'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
+    rotor['gust_stddev'] = 3
+    # ----------------------
 
-	# === aero and structural analysis options ===
-	rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
-	rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
-	rotor['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']  # (Enum)
-	rotor['nF'] = 5  # (Int): number of natural frequencies to compute
-	rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
-	# ----------------------
+    # === control ===
+    rotor['control:Vin'] = 3.0  # (Float, m/s): cut-in wind speed
+    rotor['control:Vout'] = 25.0  # (Float, m/s): cut-out wind speed
+    rotor['machine_rating'] = 5e6  # (Float, W): rated power
+    rotor['control:minOmega'] = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
+    rotor['control:maxOmega'] = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
+    rotor['control:tsr'] = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    rotor['control:pitch'] = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    rotor['pitch_extreme'] = 0.0  # (Float, deg): worst-case pitch at survival wind condition
+    rotor['azimuth_extreme'] = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
+    rotor['VfactorPC'] = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
+    # ----------------------
+
+    # === aero and structural analysis options ===
+    rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
+    rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
+    rotor['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']  # (Enum)
+    rotor['nF'] = 5  # (Int): number of natural frequencies to compute
+    rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
+    # ----------------------
 
 
-	# === fatigue ===
-	rotor['rstar_damage'] = np.array([0.000, 0.022, 0.067, 0.111, 0.167, 0.233, 0.300, 0.367, 0.433, 0.500,
-	    0.567, 0.633, 0.700, 0.767, 0.833, 0.889, 0.933, 0.978])  # (Array): nondimensional radial locations of damage equivalent moments
-	rotor['Mxb_damage'] = 1e3*np.array([2.3743E+003, 2.0834E+003, 1.8108E+003, 1.5705E+003, 1.3104E+003,
-	    1.0488E+003, 8.2367E+002, 6.3407E+002, 4.7727E+002, 3.4804E+002, 2.4458E+002, 1.6339E+002,
-	    1.0252E+002, 5.7842E+001, 2.7349E+001, 1.1262E+001, 3.8549E+000, 4.4738E-001])  # (Array, N*m): damage equivalent moments about blade c.s. x-direction
-	rotor['Myb_damage'] = 1e3*np.array([2.7732E+003, 2.8155E+003, 2.6004E+003, 2.3933E+003, 2.1371E+003,
-	    1.8459E+003, 1.5582E+003, 1.2896E+003, 1.0427E+003, 8.2015E+002, 6.2449E+002, 4.5229E+002,
-	    3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
-	rotor['strain_ult_spar'] = 1.0e-2  # (Float): ultimate strain in spar cap
-	rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
-        rotor['gamma_fatigue'] = 1.755 # (Float): safety factor for fatigue
-        rotor['gamma_f'] = 1.35 # (Float): safety factor for loads/stresses
-        rotor['gamma_m'] = 1.1 # (Float): safety factor for materials
-        rotor['gamma_freq'] = 1.1 # (Float): safety factor for resonant frequencies
-	rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
-	rotor['struc.lifetime'] = 20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
-	# ----------------
+    # === fatigue ===
+    rotor['rstar_damage'] = np.array([0.000, 0.022, 0.067, 0.111, 0.167, 0.233, 0.300, 0.367, 0.433, 0.500,
+        0.567, 0.633, 0.700, 0.767, 0.833, 0.889, 0.933, 0.978])  # (Array): nondimensional radial locations of damage equivalent moments
+    rotor['Mxb_damage'] = 1e3*np.array([2.3743E+003, 2.0834E+003, 1.8108E+003, 1.5705E+003, 1.3104E+003,
+        1.0488E+003, 8.2367E+002, 6.3407E+002, 4.7727E+002, 3.4804E+002, 2.4458E+002, 1.6339E+002,
+        1.0252E+002, 5.7842E+001, 2.7349E+001, 1.1262E+001, 3.8549E+000, 4.4738E-001])  # (Array, N*m): damage equivalent moments about blade c.s. x-direction
+    rotor['Myb_damage'] = 1e3*np.array([2.7732E+003, 2.8155E+003, 2.6004E+003, 2.3933E+003, 2.1371E+003,
+        1.8459E+003, 1.5582E+003, 1.2896E+003, 1.0427E+003, 8.2015E+002, 6.2449E+002, 4.5229E+002,
+        3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
+    rotor['strain_ult_spar'] = 1.0e-2  # (Float): ultimate strain in spar cap
+    rotor['strain_ult_te'] = 2500*1e-6 * 2   # (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
+    rotor['gamma_fatigue'] = 1.755 # (Float): safety factor for fatigue
+    rotor['gamma_f'] = 1.35 # (Float): safety factor for loads/stresses
+    rotor['gamma_m'] = 1.1 # (Float): safety factor for materials
+    rotor['gamma_freq'] = 1.1 # (Float): safety factor for resonant frequencies
+    rotor['m_damage'] = 10.0  # (Float): slope of S-N curve for fatigue analysis
+    rotor['struc.lifetime'] = 20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
+    # ----------------
 
-	# from myutilities import plt
+    # from myutilities import plt
 
-	# === run and outputs ===
-	rotor.run()
+    # === run and outputs ===
+    rotor.run()
 
-	print 'AEP =', rotor['AEP']
-	print 'diameter =', rotor['diameter']
-	print 'ratedConditions.V =', rotor['ratedConditions:V']
-	print 'ratedConditions.Omega =', rotor['ratedConditions:Omega']
-	print 'ratedConditions.pitch =', rotor['ratedConditions:pitch']
-	print 'ratedConditions.T =', rotor['ratedConditions:T']
-	print 'ratedConditions.Q =', rotor['ratedConditions:Q']
-	print 'mass_one_blade =', rotor['mass_one_blade']
-	print 'mass_all_blades =', rotor['mass_all_blades']
-	print 'I_all_blades =', rotor['I_all_blades']
-	print 'freq =', rotor['freq']
-	print 'tip_deflection =', rotor['tip_deflection']
-	print 'root_bending_moment =', rotor['root_bending_moment']
-        #for io in rotor.root.unknowns:
-        #    print(io + ' ' + str(rotor.root.unknowns[io]))
-        '''
-        print 'Pn_margin', rotor[ 'Pn_margin']
-        print 'P1_margin', rotor[ 'P1_margin']
-        print 'Pn_margin_cfem', rotor[ 'Pn_margin_cfem']
-        print 'P1_margin_cfem', rotor[ 'P1_margin_cfem']
-        print 'rotor_strain_sparU', rotor[ 'rotor_strain_sparU']
-        print 'rotor_strain_sparL', rotor[ 'rotor_strain_sparL']
-        print 'rotor_strain_teU', rotor[ 'rotor_strain_teU']
-        print 'rotor_strain_teL', rotor[ 'rotor_strain_teL']
-        print 'eps_crit_spar', rotor['eps_crit_spar']
-        print 'strain_ult_spar', rotor['strain_ult_spar']
-        print 'eps_crit_te', rotor['eps_crit_te']
-        print 'strain_ult_te', rotor['strain_ult_te']
-        print 'rotor_buckling_sparU', rotor[ 'rotor_buckling_sparU']
-        print 'rotor_buckling_sparL', rotor[ 'rotor_buckling_sparL']
-        print 'rotor_buckling_teU', rotor[ 'rotor_buckling_teU']
-        print 'rotor_buckling_teL', rotor[ 'rotor_buckling_teL']
-        print 'rotor_damage_sparU', rotor[ 'rotor_damage_sparU']
-        print 'rotor_damage_sparL', rotor[ 'rotor_damage_sparL']
-        print 'rotor_damage_teU', rotor[ 'rotor_damage_teU']
-        print 'rotor_damage_teL', rotor[ 'rotor_damage_teL']
-        '''
-        
-        import matplotlib.pyplot as plt
-        plt.figure()
-	plt.plot(rotor['V'], rotor['P']/1e6)
-	plt.xlabel('wind speed (m/s)')
-	plt.xlabel('power (W)')
+    print 'AEP =', rotor['AEP']
+    print 'diameter =', rotor['diameter']
+    print 'ratedConditions.V =', rotor['ratedConditions:V']
+    print 'ratedConditions.Omega =', rotor['ratedConditions:Omega']
+    print 'ratedConditions.pitch =', rotor['ratedConditions:pitch']
+    print 'ratedConditions.T =', rotor['ratedConditions:T']
+    print 'ratedConditions.Q =', rotor['ratedConditions:Q']
+    print 'mass_one_blade =', rotor['mass_one_blade']
+    print 'mass_all_blades =', rotor['mass_all_blades']
+    print 'I_all_blades =', rotor['I_all_blades']
+    print 'freq =', rotor['freq']
+    print 'tip_deflection =', rotor['tip_deflection']
+    print 'root_bending_moment =', rotor['root_bending_moment']
+    #for io in rotor.root.unknowns:
+    #    print(io + ' ' + str(rotor.root.unknowns[io]))
+    '''
+    print 'Pn_margin', rotor[ 'Pn_margin']
+    print 'P1_margin', rotor[ 'P1_margin']
+    print 'Pn_margin_cfem', rotor[ 'Pn_margin_cfem']
+    print 'P1_margin_cfem', rotor[ 'P1_margin_cfem']
+    print 'rotor_strain_sparU', rotor[ 'rotor_strain_sparU']
+    print 'rotor_strain_sparL', rotor[ 'rotor_strain_sparL']
+    print 'rotor_strain_teU', rotor[ 'rotor_strain_teU']
+    print 'rotor_strain_teL', rotor[ 'rotor_strain_teL']
+    print 'eps_crit_spar', rotor['eps_crit_spar']
+    print 'strain_ult_spar', rotor['strain_ult_spar']
+    print 'eps_crit_te', rotor['eps_crit_te']
+    print 'strain_ult_te', rotor['strain_ult_te']
+    print 'rotor_buckling_sparU', rotor[ 'rotor_buckling_sparU']
+    print 'rotor_buckling_sparL', rotor[ 'rotor_buckling_sparL']
+    print 'rotor_buckling_teU', rotor[ 'rotor_buckling_teU']
+    print 'rotor_buckling_teL', rotor[ 'rotor_buckling_teL']
+    print 'rotor_damage_sparU', rotor[ 'rotor_damage_sparU']
+    print 'rotor_damage_sparL', rotor[ 'rotor_damage_sparL']
+    print 'rotor_damage_teU', rotor[ 'rotor_damage_teU']
+    print 'rotor_damage_teL', rotor[ 'rotor_damage_teL']
+    '''
 
-	plt.figure()
-	plt.plot(rotor['spline.r_str'], rotor['strainU_spar'], label='suction')
-	plt.plot(rotor['spline.r_str'], rotor['strainL_spar'], label='pressure')
-	plt.plot(rotor['spline.r_str'], rotor['eps_crit_spar'], label='critical')
-	plt.ylim([-5e-3, 5e-3])
-	plt.xlabel('r')
-	plt.ylabel('strain')
-	plt.legend()
-	# plt.save('/Users/sning/Desktop/strain_spar.pdf')
-	# plt.save('/Users/sning/Desktop/strain_spar.png')
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.plot(rotor['V'], rotor['P']/1e6)
+    plt.xlabel('wind speed (m/s)')
+    plt.xlabel('power (W)')
 
-	plt.figure()
-	plt.plot(rotor['spline.r_str'], rotor['strainU_te'], label='suction')
-	plt.plot(rotor['spline.r_str'], rotor['strainL_te'], label='pressure')
-	plt.plot(rotor['spline.r_str'], rotor['eps_crit_te'], label='critical')
-	plt.ylim([-5e-3, 5e-3])
-	plt.xlabel('r')
-	plt.ylabel('strain')
-	plt.legend()
-	# plt.save('/Users/sning/Desktop/strain_te.pdf')
-	# plt.save('/Users/sning/Desktop/strain_te.png')
+    plt.figure()
+    plt.plot(rotor['spline.r_str'], rotor['strainU_spar'], label='suction')
+    plt.plot(rotor['spline.r_str'], rotor['strainL_spar'], label='pressure')
+    plt.plot(rotor['spline.r_str'], rotor['eps_crit_spar'], label='critical')
+    plt.ylim([-5e-3, 5e-3])
+    plt.xlabel('r')
+    plt.ylabel('strain')
+    plt.legend()
+    # plt.save('/Users/sning/Desktop/strain_spar.pdf')
+    # plt.save('/Users/sning/Desktop/strain_spar.png')
 
-	plt.show()
-	# ----------------
+    plt.figure()
+    plt.plot(rotor['spline.r_str'], rotor['strainU_te'], label='suction')
+    plt.plot(rotor['spline.r_str'], rotor['strainL_te'], label='pressure')
+    plt.plot(rotor['spline.r_str'], rotor['eps_crit_te'], label='critical')
+    plt.ylim([-5e-3, 5e-3])
+    plt.xlabel('r')
+    plt.ylabel('strain')
+    plt.legend()
+    # plt.save('/Users/sning/Desktop/strain_te.pdf')
+    # plt.save('/Users/sning/Desktop/strain_te.png')
+
+    plt.show()
+    # ----------------
