@@ -102,6 +102,9 @@ def setupFAST(FASTinfo, description):
     FASTinfo['max_DEMx_file'] = FASTinfo['opt_dir'] + '/xDEM_max.txt'
     FASTinfo['max_DEMy_file'] = FASTinfo['opt_dir'] + '/yDEM_max.txt'
 
+    # === choose .wnd file directories === #
+    FASTinfo = choose_wnd_dir(FASTinfo)
+
     # === Surrogate Model Options === #
 
     if FASTinfo['train_sm'] or FASTinfo['Use_FAST_sm']:
@@ -173,10 +176,6 @@ def setupFAST(FASTinfo, description):
     # === specify which DLCs will be included === #
     FASTinfo = specify_DLCs(FASTinfo)
 
-    # turbulent, nonturbulent directories
-    FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir/'
-    FASTinfo['nonturb_wnd_dir'] = 'RotorSE_FAST/WND_Files/nonturb_wnd_dir/'
-
     # fatigue options
     FASTinfo['m_value'] = 10.0
 
@@ -191,9 +190,6 @@ def setupFAST(FASTinfo, description):
                 cur_wnd_num = i
 
             FASTinfo['caseids'].append("WNDfile{0}".format(cur_wnd_num) + '_sgp' + str(FASTinfo['sgp'][j]))
-
-    # print(FASTinfo['caseids'])
-    # quit()
 
     return FASTinfo, rotor
 
@@ -310,6 +306,23 @@ def specify_DLCs(FASTinfo):
         FASTinfo = choose_wnd_file(FASTinfo)
 
     return FASTinfo
+
+# ========================================================================================================= #
+
+def choose_wnd_dir(FASTinfo):
+
+    # === turbulence/turbine class === #
+    FASTinfo['turbulence_class'] = 'B'
+    FASTinfo['turbine_class'] = 'I'
+
+    # === turbulent, nonturbulent directories === #
+    # TODO: make function of turbulence_class, turbine_class
+    FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir/'
+    FASTinfo['nonturb_wnd_dir'] = 'RotorSE_FAST/WND_Files/nonturb_wnd_dir/'
+
+    return FASTinfo
+
+# ========================================================================================================= #
 
 def choose_wnd_file(FASTinfo):
 
@@ -482,6 +495,14 @@ def setup_top_level_options(FASTinfo):
         FASTinfo['Use_FAST_sm'] = False
         FASTinfo['seq_run'] = False
 
+    elif FASTinfo['calc_fixed_DEMs_seq']:
+        FASTinfo['use_FAST'] = True
+        FASTinfo['Run_Once'] = True
+        FASTinfo['train_sm'] = False
+        FASTinfo['Use_FAST_Fixed_DEMs'] = False
+        FASTinfo['Use_FAST_sm'] = False
+        FASTinfo['seq_run'] = True
+
     elif FASTinfo['opt_with_fixed_DEMs']:
         FASTinfo['use_FAST'] = False
         FASTinfo['Run_Once'] = False
@@ -558,13 +579,13 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 500
+    FASTinfo['num_pts'] = 100
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
-    FASTinfo['approximation_model'] = 'second_order_poly'
     # FASTinfo['approximation_model'] = 'least_squares'
-    # FASTinfo['approximation_model'] = 'kriging'
+    # FASTinfo['approximation_model'] = 'second_order_poly'
+    FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
 

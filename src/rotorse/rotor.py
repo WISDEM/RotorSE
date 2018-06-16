@@ -3400,7 +3400,7 @@ class calc_FAST_sm_fit(Component):
             self.kfolds = FASTinfo['kfolds']
             self.num_folds = FASTinfo['num_folds']
 
-            self.theta0_val = FASTinfo['theta0_val']
+        self.theta0_val = FASTinfo['theta0_val']
 
 
         self.nstr = nstr
@@ -3726,6 +3726,11 @@ class calc_FAST_sm_fit(Component):
         sm_x.options['print_global'] = self.print_sm
         sm_x.train()
 
+        # print('sm_x type:')
+        # print(sm_x)
+        # print(sm_x.__dict__)
+        # quit()
+
         sm_y = sm_y_fit
         sm_y.set_training_values(np.transpose(xt),np.transpose(yt_y))
         sm_y.options['print_global'] = self.print_sm
@@ -3778,11 +3783,12 @@ class calc_FAST_sm_fit(Component):
         sm_list = [sm_x, sm_y, sm_x_load, sm_y_load, sm_def]
         sm_string_list = ['sm_x', 'sm_y', 'sm_x_load', 'sm_y_load', 'sm_def']
 
-        for i in range(len(sm_list)):
+        for i in range(1):#len(sm_list)):
             pkl_file_name = self.opt_dir + '/' + sm_string_list[i] + '_' + self.approximation_model + '.pkl'
             file_handle = open(pkl_file_name, "w+")
             pickle.dump(sm_list[i], file_handle)
 
+        quit()
 
         if self.check_fit:
             sm = sm_check_fit

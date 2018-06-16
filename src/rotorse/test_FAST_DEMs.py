@@ -27,6 +27,7 @@ FASTinfo['opt_without_FAST'] = False
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
 FASTinfo['calc_fixed_DEMs'] = False
+FASTinfo['calc_fixed_DEMs_seq'] = False
 FASTinfo['opt_with_fixed_DEMs'] = True
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
 FASTinfo['calc_surr_model'] = False
@@ -34,8 +35,8 @@ FASTinfo['opt_with_surr_model'] = False
 
 # description
 
-description = 'test_batch_1'
-# description = 'test_batch'
+# description = 'test_batch_1'
+description = 'test_batch'
 
 # description = 'test_fixedDEMs'
 
@@ -76,8 +77,13 @@ if FASTinfo['use_FAST']:
 else:
     rotor.driver = pyOptSparseDriver()
     rotor.driver.options['optimizer'] = 'NSGA2'
+
+    rotor.driver.opt_settings['maxGen'] = 100 # default is 1000
+    rotor.driver.opt_settings['PopSize'] = 100
+
     # rotor.driver.options['optimizer'] = 'SNOPT'
     # rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
+    # ['ALPSO', 'CONMIN', 'FSQP', 'IPOPT', 'NLPQLP', 'NSGA2', 'PSQP', 'SLSQP', 'SNOPT', 'NLPY_AUGLAG', 'NOMAD']
     #
     # rotor.driver.opt_settings['Print file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_print_' + description +'.out'
     # rotor.driver.opt_settings['Summary file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_summary_' + description +'.out'
@@ -246,9 +252,9 @@ else:
 
         rotor = setup_FAST_seq_run_des_var(rotor, FASTinfo)
 
-        print('rotor:')
-        print(rotor)
-        quit()
+        # print('rotor:')
+        # print(rotor)
+        # quit()
 
     elif FASTinfo['use_FAST']:
 
