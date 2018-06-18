@@ -41,40 +41,39 @@ class AirfoilProperties():
     af_idx = [0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7]
     airfoil_files = [airfoil_types[m] for m in af_idx]
 
-class VarSpeedMachine(Component):
-    """variable speed machines"""
-    def __init__(self):
-        super(VarSpeedMachine, self).__init__()
+# class VarSpeedMachine(Component): # EMG: Remove? Old variable-trees, not in use anymore
+#     """variable speed machines"""
+#     def __init__(self):
+#         super(VarSpeedMachine, self).__init__()
 
-        self.add_param('Vin', shape=1, units='m/s', desc='cut-in wind speed')
-        self.add_param('Vout', shape=1, units='m/s', desc='cut-out wind speed')
-        self.add_param('ratedPower', shape=1, units='W', desc='rated power')
-        self.add_param('minOmega', shape=1, units='rpm', desc='minimum allowed rotor rotation speed')
-        self.add_param('maxOmega', shape=1, units='rpm', desc='maximum allowed rotor rotation speed')
-        self.add_param('tsr', shape=1, desc='tip-speed ratio in Region 2 (should be optimized externally)')
-        self.add_param('pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+#         self.add_param('Vin', shape=1, units='m/s', desc='cut-in wind speed')
+#         self.add_param('Vout', shape=1, units='m/s', desc='cut-out wind speed')
+#         self.add_param('ratedPower', shape=1, units='W', desc='rated power')
+#         self.add_param('minOmega', shape=1, units='rpm', desc='minimum allowed rotor rotation speed')
+#         self.add_param('maxOmega', shape=1, units='rpm', desc='maximum allowed rotor rotation speed')
+#         self.add_param('tsr', shape=1, desc='tip-speed ratio in Region 2 (should be optimized externally)')
+#         self.add_param('pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
-class FixedSpeedMachine(Component):
-    """fixed speed machines"""
-    def __init__(self):
-        super(FixedSpeedMachine, self).__init__()
-        self.add_param('Vin', shape=1, units='m/s', desc='cut-in wind speed')
-        self.add_param('Vout', shape=1, units='m/s', desc='cut-out wind speed')
-        self.add_param('ratedPower', shape=1, units='W', desc='rated power')
-        self.add_param('Omega', shape=1, units='rpm', desc='fixed rotor rotation speed')
-        self.add_param('maxOmega', shape=1, units='rpm', desc='maximum allowed rotor rotation speed')
-        self.add_param('pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+# class FixedSpeedMachine(Component): # EMG: Remove? Old variable-trees, not in use anymore
+#     """fixed speed machines"""
+#     def __init__(self):
+#         super(FixedSpeedMachine, self).__init__()
+#         self.add_param('Vin', shape=1, units='m/s', desc='cut-in wind speed')
+#         self.add_param('Vout', shape=1, units='m/s', desc='cut-out wind speed')
+#         self.add_param('ratedPower', shape=1, units='W', desc='rated power')
+#         self.add_param('Omega', shape=1, units='rpm', desc='fixed rotor rotation speed')
+#         self.add_param('maxOmega', shape=1, units='rpm', desc='maximum allowed rotor rotation speed')
+#         self.add_param('pitch', shape=1, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
-class RatedConditions(Component):
-    """aerodynamic conditions at the rated wind speed"""
-    def __init__(self):
-        super(RatedConditions, self).__init__()
-        self.add_param('V', shape=1, units='m/s', desc='rated wind speed')
-        self.add_param('Omega', shape=1, units='rpm', desc='rotor rotation speed at rated')
-        self.add_param('pitch', shape=1, units='deg', desc='pitch setting at rated')
-        self.add_param('T', shape=1, units='N', desc='rotor aerodynamic thrust at rated')
-        self.add_param('T', shape=1, units='N*m', desc='rotor aerodynamic torque at rated')
-
+# class RatedConditions(Component): # EMG: Remove? Old variable-trees, not in use anymore
+#     """aerodynamic conditions at the rated wind speed"""
+#     def __init__(self):
+#         super(RatedConditions, self).__init__()
+#         self.add_param('V', shape=1, units='m/s', desc='rated wind speed')
+#         self.add_param('Omega', shape=1, units='rpm', desc='rotor rotation speed at rated')
+#         self.add_param('pitch', shape=1, units='deg', desc='pitch setting at rated')
+#         self.add_param('T', shape=1, units='N', desc='rotor aerodynamic thrust at rated')
+#         self.add_param('T', shape=1, units='N*m', desc='rotor aerodynamic torque at rated')
 
 # ---------------------
 # Base Components
@@ -563,28 +562,28 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
     '''
 
     
-class RegulatedPowerCurveGroup(Group):
-    def __init__(self, npts_coarse_power_curve, npts_spline_power_curve):
-        super(RegulatedPowerCurveGroup, self).__init__()
-        self.add('powercurve_comp', RegulatedPowerCurve(npts_coarse_power_curve, npts_spline_power_curve), promotes=['*'])
-        self.nl_solver = Brent()
-        self.ln_solver = ScipyGMRES()
-        self.nl_solver.options['var_lower_bound'] = 'Vin'
-        self.nl_solver.options['var_upper_bound'] = 'Vout'
-        self.nl_solver.options['state_var'] = 'Vrated'
+# class RegulatedPowerCurveGroup(Group): # EMG: Remove? doesn't appear to be in use
+#     def __init__(self, npts_coarse_power_curve, npts_spline_power_curve):
+#         super(RegulatedPowerCurveGroup, self).__init__()
+#         self.add('powercurve_comp', RegulatedPowerCurve(npts_coarse_power_curve, npts_spline_power_curve), promotes=['*'])
+#         self.nl_solver = Brent()
+#         self.ln_solver = ScipyGMRES()
+#         self.nl_solver.options['var_lower_bound'] = 'Vin'
+#         self.nl_solver.options['var_upper_bound'] = 'Vout'
+#         self.nl_solver.options['state_var'] = 'Vrated'
 
-        self.deriv_options['form'] = 'central'
-        self.deriv_options['check_form'] = 'central'
-        self.deriv_options['type'] = 'fd'
-        self.deriv_options['step_calc'] = 'relative'
+#         self.deriv_options['form'] = 'central'
+#         self.deriv_options['check_form'] = 'central'
+#         self.deriv_options['type'] = 'fd'
+#         self.deriv_options['step_calc'] = 'relative'
 
-    def list_deriv_vars(self):
+#     def list_deriv_vars(self):
 
-        inputs = ('control:tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R', 'control:maxOmega')
-        outputs = ('Vrated', 'V', 'P', 'ratedConditions:V', 'ratedConditions:Omega',
-            'ratedConditions:pitch', 'ratedConditions:T', 'ratedConditions:Q')
+#         inputs = ('control:tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R', 'control:maxOmega')
+#         outputs = ('Vrated', 'V', 'P', 'ratedConditions:V', 'ratedConditions:Omega',
+#             'ratedConditions:pitch', 'ratedConditions:T', 'ratedConditions:Q')
 
-        return inputs, outputs
+#         return inputs, outputs
 
     
 class AEP(Component):

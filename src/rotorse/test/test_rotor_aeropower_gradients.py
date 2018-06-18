@@ -9,60 +9,16 @@ Copyright (c) NREL. All rights reserved.
 
 import unittest
 import numpy as np
-# from commonse.utilities import check_gradient_unit_test, check_for_missing_unit_tests
-from rotorse.rotoraero import Coefficients, SetupRunVarSpeed, RegulatedPowerCurve, AEP, RegulatedPowerCurveGroup
-from rotorse.rotoraerodefaults import GeometrySpline, CCBladeGeometry, CCBlade, CSMDrivetrain, \
-    WeibullCDF, WeibullWithMeanCDF, RayleighCDF
+from commonse.utilities import check_gradient_unit_test, check_for_missing_unit_tests
+from rotorse.rotor_aeropower import SetupRunVarSpeed, RegulatedPowerCurve, AEP, CSMDrivetrain, OutputsAero
+from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometry
+from commonse.distribution import WeibullCDF, WeibullWithMeanCDF, RayleighCDF
+
 from enum import Enum
 from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder, BaseRecorder
-from openmdao.drivers.pyoptsparse_driver import pyOptSparseDriver
 import os
 
-# class TestMaxTipSpeed(unittest.TestCase):
-
-#     def test1(self):
-
-#         ts = MaxTipSpeed()
-#         ts.R = 63.0
-#         ts.Vtip_max = 80.0
-
-#         check_gradient_unit_test(self, ts)
-
-
-
-class TestCoefficients(unittest.TestCase):
-
-    def test1(self):
-
-        V = np.array([12.5, 11.5574318317, 10.7470459579, 10.0428591371, 9.42527942463, 8.87925487168, 8.39303048389, 7.95729238704, 7.56456542753, 7.2087807692, 6.88496003209, 6.58898090313, 6.31740071221, 6.06732191135, 5.83628828803, 5.62220402072, 5.42326991915, 5.2379327383])
-        T = np.array([297537.442366, 287373.577926, 276842.263638, 266577.02588, 257357.173035, 249612.50174, 243430.855264, 238328.580357, 232897.327461, 226569.543695, 218948.774702, 210325.108191, 201373.59928, 192450.494842, 183749.591171, 175393.691013, 167431.667222, 159881.687873])
-        Q = np.array([2771187.76066, 2708873.98497, 2608206.05664, 2489419.14819, 2369374.79424, 2256062.60666, 2150350.91314, 2043415.20025, 1921526.97181, 1784742.05328, 1635134.27376, 1484081.73688, 1340896.38225, 1209094.24861, 1089686.69666, 982501.972978, 886537.720876, 800672.778302])
-        P = np.array([1741188.62212, 1702035.72214, 1638784.19732, 1564148.18153, 1488722.08943, 1417525.94222, 1351105.32627, 1283915.63627, 1207331.00366, 1121386.50463, 1027385.16442, 932476.05638, 842510.044742, 759696.321788, 684670.344188, 617324.196089, 557028.078207, 503077.543649])
-        R = 62.9400379597
-        rho = 1.225
-
-        prob = Problem()
-        prob.root = Group()
-        prob.root.add('comp', Coefficients(len(V)), promotes=['*'])
-        prob.root.add('V', IndepVarComp('V', np.zeros(len(V))), promotes=['*'])
-        prob.root.add('T', IndepVarComp('T', np.zeros(len(T))), promotes=['*'])
-        prob.root.add('Q', IndepVarComp('Q', np.zeros(len(Q))), promotes=['*'])
-        prob.root.add('P', IndepVarComp('P', np.zeros(len(P))), promotes=['*'])
-        prob.root.add('R', IndepVarComp('R', 0.0), promotes=['*'])
-        prob.root.add('rho', IndepVarComp('rho', 0.0), promotes=['*'])
-        prob.setup(check=False)
-
-        prob['V'] = V
-        prob['T'] = T
-        prob['Q'] = Q
-        prob['P'] = P
-        prob['R'] = R
-        prob['rho'] = rho
-
-        check_gradient_unit_test(self, prob)
-
-
-
+from rotorse import DRIVETRAIN_TYPE
 
 class TestSetupRunVarSpeed(unittest.TestCase):
 
@@ -72,6 +28,7 @@ class TestSetupRunVarSpeed(unittest.TestCase):
         control_Vout = 25.0
         control_tsr = 7.55
         control_maxOmega = 12.0
+        control_pitch = 0.0
         R = 62.9400379597
 
         prob = Problem()
@@ -81,6 +38,7 @@ class TestSetupRunVarSpeed(unittest.TestCase):
         prob.root.add('c_Vout', IndepVarComp('control:Vout', control_Vout), promotes=['*'])
         prob.root.add('c_tsr', IndepVarComp('control:tsr', control_tsr), promotes=['*'])
         prob.root.add('c_maxOmega', IndepVarComp('control:maxOmega', control_maxOmega), promotes=['*'])
+        prob.root.add('c_pitch', IndepVarComp('control:pitch', control_pitch), promotes=['*'])
         prob.root.add('R', IndepVarComp('R', 0.0), promotes=['*'])
         prob.root.add('rho', IndepVarComp('rho', 0.0), promotes=['*'])
         prob.setup(check=False)
@@ -94,7 +52,7 @@ class TestSetupRunVarSpeed(unittest.TestCase):
         check_gradient_unit_test(self, prob)
 
 
-@unittest.skip("RegulatedPowerCurve")
+# @unittest.skip("RegulatedPowerCurve")
 class TestRegulatedPowerCurve(unittest.TestCase):
 
     def test1(self):
@@ -112,7 +70,8 @@ class TestRegulatedPowerCurve(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('powercurve', RegulatedPowerCurveGroup(len(Vcoarse), 200))
+        prob.root.add('powercurve', RegulatedPowerCurve(len(Vcoarse), 200))
+        # prob.root.add('powercurve', RegulatedPowerCurveGroup(len(Vcoarse), 200))
         prob.root.add('c_Vin', IndepVarComp('control:Vin', control_Vin), promotes=['*'])
         prob.root.add('c_Vout', IndepVarComp('control:Vout', control_Vout), promotes=['*'])
         prob.root.add('c_ratedPower', IndepVarComp('control:ratedPower', control_ratedPower), promotes=['*'])
@@ -153,7 +112,6 @@ class TestRegulatedPowerCurve(unittest.TestCase):
 
 
 
-
 class TestAEP(unittest.TestCase):
 
     def test1(self):
@@ -168,6 +126,9 @@ class TestAEP(unittest.TestCase):
         prob.root.add('CDF_V', IndepVarComp('CDF_V', np.zeros(len(CDF_V))), promotes=['*'])
         prob.root.add('P', IndepVarComp('P', np.zeros(len(P))), promotes=['*'])
         prob.root.add('lossFactor', IndepVarComp('lossFactor', 0.0), promotes=['*'])
+        prob.root.comp.deriv_options['check_step_size'] = 1.
+        prob.root.comp.deriv_options['check_form'] = 'central'
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative'    
         prob.setup(check=False)
 
         prob['CDF_V'] = CDF_V
@@ -175,48 +136,10 @@ class TestAEP(unittest.TestCase):
         prob['lossFactor'] = lossFactor
 
 
-        check_gradient_unit_test(self, prob, step_size=1)  # larger step size b.c. AEP is big value
+        check_gradient_unit_test(self, prob, step_size=1, display=True)  # larger step size b.c. AEP is big value
 
 
-
-class TestGeometrySpline(unittest.TestCase):
-
-    def test1(self):
-
-
-        r_af = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667, 0.43333333, 0.5, 0.56666667, 0.63333333, 0.7, 0.76666667, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
-        idx_cylinder = 3
-        r_max_chord = 0.22
-        Rhub = 1.5
-        Rtip = 63.0
-        chord_sub = np.array([3.2612, 4.5709, 3.3178, 1.4621])
-        theta_sub = np.array([13.2783, 7.46036, 2.89317, -0.0878099])
-
-        prob = Problem()
-        prob.root = Group()
-        prob.root.add('comp', GeometrySpline(len(r_af)), promotes=['*'])
-        prob.root.add('r_af', IndepVarComp('r_af', np.zeros(len(r_af))), promotes=['*'])
-        prob.root.add('idx_cylinder', IndepVarComp('idx_cylinder', 0), promotes=['*'])
-        prob.root.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
-        prob.root.add('Rhub', IndepVarComp('Rhub', 0.0), promotes=['*'])
-        prob.root.add('Rtip', IndepVarComp('Rtip', 0.0), promotes=['*'])
-        prob.root.add('chord_sub', IndepVarComp('chord_sub', np.zeros(len(chord_sub))), promotes=['*'])
-        prob.root.add('theta_sub', IndepVarComp('theta_sub', np.zeros(len(theta_sub))), promotes=['*'])
-        prob.setup(check=False)
-
-        prob['r_af'] = r_af
-        prob['idx_cylinder'] = idx_cylinder
-        prob['r_max_chord'] = r_max_chord
-        prob['Rhub'] = Rhub
-        prob['Rtip'] = Rtip
-        prob['chord_sub'] = chord_sub
-        prob['theta_sub'] = theta_sub
-
-        check_gradient_unit_test(self, prob, tol=5e-5)
-
-
-
-class TestCCBladeGeometry(unittest.TestCase):
+class TestCCBladeGeometry(unittest.TestCase): # EMG: CCBladeGeometry moved from rotoraerodefaults to ccblade.ccblade_component
 
     def test1(self):
 
@@ -240,7 +163,7 @@ class TestCCBladeGeometry(unittest.TestCase):
 
 
 @unittest.skip("CCBlade test takes a long time")
-class TestCCBlade(unittest.TestCase):
+class TestCCBlade(unittest.TestCase): # EMG: move this to CCBlade unit testing?
 
     def test1(self):
 
@@ -253,7 +176,7 @@ class TestCCBlade(unittest.TestCase):
                       6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106])
         Rhub = 1.5
         Rtip = 63.0
-        hubHt = np.array([80.0])
+        hubHt = 80.0
         precone = 2.5
         tilt = -5.0
         yaw = 0.0
@@ -266,7 +189,7 @@ class TestCCBlade(unittest.TestCase):
         precurveTip = 0.0
 
         # airfoils
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles/')
+        basepath = os.path.join(os.path.join(os.path.dirname(os.path.realpath(__file__)),'..'), '5MW_AFFiles/')
 
         # load all airfoils
         airfoil_types = [0]*8
@@ -287,9 +210,9 @@ class TestCCBlade(unittest.TestCase):
         for i in range(n):
             af[i] = airfoil_types[af_idx[i]]
 
-        airfoil_files = np.array(af)
+        airfoil_files = af
 
-        run_case = 'power'
+        # run_case = 'power'
         Uhub = np.array([3.0, 4.15789473684, 5.31578947368, 6.47368421053, 7.63157894737, 8.78947368421, 9.94736842105, 11.1052631579, 12.2631578947, 13.4210526316, 14.5789473684, 15.7368421053, 16.8947368421, 18.0526315789, 19.2105263158, 20.3684210526, 21.5263157895, 22.6842105263, 23.8421052632, 25.0])
         Omega = np.array([3.43647024491, 4.76282718154, 6.08918411817, 7.41554105481, 8.74189799144, 10.0682549281, 11.3946118647, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0])
         pitch = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -297,13 +220,13 @@ class TestCCBlade(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', CCBlade(run_case, n, n2), promotes=['*'])
+        prob.root.add('comp', CCBladePower(n, n2), promotes=['*'])
         prob.root.add('r', IndepVarComp('r', np.zeros(len(r))), promotes=['*'])
         prob.root.add('chord', IndepVarComp('chord', np.zeros(len(chord))), promotes=['*'])
         prob.root.add('theta', IndepVarComp('theta', np.zeros(len(theta))), promotes=['*'])
         prob.root.add('Rhub', IndepVarComp('Rhub', 0.0), promotes=['*'])
         prob.root.add('Rtip', IndepVarComp('Rtip', 0.0), promotes=['*'])
-        prob.root.add('hubHt', IndepVarComp('hubHt', np.zeros(1)), promotes=['*'])
+        prob.root.add('hubHt', IndepVarComp('hubHt', 0.0), promotes=['*'])
         prob.root.add('precone', IndepVarComp('precone', 0.0), promotes=['*'])
         prob.root.add('precurve', IndepVarComp('precurve', precurve), promotes=['*'])
         prob.root.add('precurveTip', IndepVarComp('precurveTip', 0.0), promotes=['*'])
@@ -318,6 +241,9 @@ class TestCCBlade(unittest.TestCase):
         prob.root.add('Uhub', IndepVarComp('Uhub', np.zeros(len(Uhub))), promotes=['*'])
         prob.root.add('Omega', IndepVarComp('Omega', np.zeros(len(Omega))), promotes=['*'])
         prob.root.add('pitch', IndepVarComp('pitch', np.zeros(len(pitch))), promotes=['*'])
+
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative' 
+        prob.root.comp.deriv_options['check_form'] = 'central'
         prob.setup(check=False)
 
         prob['r'] = r
@@ -354,7 +280,7 @@ class TestCCBlade(unittest.TestCase):
                       6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106])
         Rhub = 1.5
         Rtip = 63.0
-        hubHt = np.array([80.0])
+        hubHt = 80.0
         precone = 2.5
         tilt = -5.0
         yaw = 0.0
@@ -366,7 +292,7 @@ class TestCCBlade(unittest.TestCase):
         precurve = np.zeros(len(r))
 
         # airfoils
-        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_AFFiles/')
+        basepath = os.path.join(os.path.join(os.path.dirname(os.path.realpath(__file__)),'..'), '5MW_AFFiles/')
 
         # load all airfoils
         airfoil_types = [0]*8
@@ -387,9 +313,9 @@ class TestCCBlade(unittest.TestCase):
         for i in range(n):
             af[i] = airfoil_types[af_idx[i]]
 
-        airfoil_files = np.array(af)
+        airfoil_files = af
 
-        run_case = 'loads'
+        # run_case = 'loads'
         V_load = 12.0
         Omega_load = 10.0
         pitch_load = 0.0
@@ -398,13 +324,13 @@ class TestCCBlade(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', CCBlade(run_case, n, n2), promotes=['*'])
+        prob.root.add('comp', CCBladeLoads(n, n2), promotes=['*'])
         prob.root.add('r', IndepVarComp('r', np.zeros(len(r))), promotes=['*'])
         prob.root.add('chord', IndepVarComp('chord', np.zeros(len(chord))), promotes=['*'])
         prob.root.add('theta', IndepVarComp('theta', np.zeros(len(theta))), promotes=['*'])
         prob.root.add('Rhub', IndepVarComp('Rhub', 0.0), promotes=['*'])
         prob.root.add('Rtip', IndepVarComp('Rtip', 0.0), promotes=['*'])
-        prob.root.add('hubHt', IndepVarComp('hubHt', np.zeros(1)), promotes=['*'])
+        prob.root.add('hubHt', IndepVarComp('hubHt', 0.0), promotes=['*'])
         prob.root.add('precone', IndepVarComp('precone', 0.0), promotes=['*'])
         prob.root.add('tilt', IndepVarComp('tilt', 0.0), promotes=['*'])
         prob.root.add('yaw', IndepVarComp('yaw', 0.0), promotes=['*'])
@@ -419,6 +345,9 @@ class TestCCBlade(unittest.TestCase):
         prob.root.add('Omega_load', IndepVarComp('Omega_load', 0.0), promotes=['*'])
         prob.root.add('pitch_load', IndepVarComp('pitch_load', 0.0), promotes=['*'])
         prob.root.add('azimuth_load', IndepVarComp('azimuth_load', 0.0), promotes=['*'])
+
+        prob.root.comp.deriv_options['check_form'] = 'central'
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative' 
         prob.setup(check=False)
 
         prob['r'] = r
@@ -458,12 +387,16 @@ class TestCSMDrivetrain(unittest.TestCase):
         prob.root.add('comp', CSMDrivetrain(len(aeroPower)), promotes=['*'])
         prob.root.add('aeroPower', IndepVarComp('aeroPower', np.zeros(len(aeroPower))), promotes=['*'])
         prob.root.add('ratedPower', IndepVarComp('ratedPower', 0.0), promotes=['*'])
-        prob.root.add('drivetrainType', IndepVarComp('drivetrainType', Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
+        prob.root.add('drivetrainType', IndepVarComp('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True), promotes=['*'])
+        # prob.root.add('drivetrainType', IndepVarComp('drivetrainType', Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*']) # EMG: changed to reflect Enum used in Aeropower
+        prob.root.comp.deriv_options['check_form'] = 'central'
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative'    
         prob.setup(check=False)
 
         prob['aeroPower'] = aeroPower
         prob['ratedPower'] = ratedPower
-        prob['drivetrainType'] = 'geared'
+        prob['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']
+        # prob['drivetrainType'] = 'geared'
 
         check_gradient_unit_test(self, prob, tol=6e-4)
 
@@ -478,12 +411,14 @@ class TestCSMDrivetrain(unittest.TestCase):
         prob.root.add('comp', CSMDrivetrain(len(aeroPower)), promotes=['*'])
         prob.root.add('aeroPower', IndepVarComp('aeroPower', np.zeros(len(aeroPower))), promotes=['*'])
         prob.root.add('ratedPower', IndepVarComp('ratedPower', 0.0), promotes=['*'])
-        prob.root.add('drivetrainType', IndepVarComp('drivetrainType', Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
+        prob.root.add('drivetrainType', IndepVarComp('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True), promotes=['*'])
+        # prob.root.add('drivetrainType', IndepVarComp('drivetrainType', Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
         prob.setup(check=False)
 
         prob['aeroPower'] = aeroPower
         prob['ratedPower'] = ratedPower
-        prob['drivetrainType'] = 'geared'
+        prob['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']
+        # prob['drivetrainType'] = 'geared'
 
         check_gradient_unit_test(self, prob)
 
@@ -498,12 +433,14 @@ class TestCSMDrivetrain(unittest.TestCase):
         prob.root.add('comp', CSMDrivetrain(len(aeroPower)), promotes=['*'])
         prob.root.add('aeroPower', IndepVarComp('aeroPower', np.zeros(len(aeroPower))), promotes=['*'])
         prob.root.add('ratedPower', IndepVarComp('ratedPower', 0.0), promotes=['*'])
-        prob.root.add('drivetrainType', IndepVarComp('drivetrainType', Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
+        prob.root.add('drivetrainType', IndepVarComp('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True), promotes=['*'])
+        # prob.root.add('drivetrainType', IndepVarComp('drivetrainType', Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
         prob.setup(check=False)
 
         prob['aeroPower'] = aeroPower
         prob['ratedPower'] = ratedPower
-        prob['drivetrainType'] = 'geared'
+        prob['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']
+        # prob['drivetrainType'] = 'geared'
 
         check_gradient_unit_test(self, prob)
 
@@ -518,19 +455,86 @@ class TestCSMDrivetrain(unittest.TestCase):
         prob.root.add('comp', CSMDrivetrain(len(aeroPower)), promotes=['*'])
         prob.root.add('aeroPower', IndepVarComp('aeroPower', np.zeros(len(aeroPower))), promotes=['*'])
         prob.root.add('ratedPower', IndepVarComp('ratedPower', 0.0), promotes=['*'])
-        prob.root.add('drivetrainType', IndepVarComp('drivetrainType', Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
+        prob.root.add('drivetrainType', IndepVarComp('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True), promotes=['*'])
+        # prob.root.add('drivetrainType', IndepVarComp('drivetrainType', Enum('geared', 'single_stage', 'multi_drive', 'pm_direct_drive'), pass_by_obj=True), promotes=['*'])
         prob.setup(check=False)
 
         prob['aeroPower'] = aeroPower
         prob['ratedPower'] = ratedPower
-        prob['drivetrainType'] = 'geared'
+        prob['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']
+        # prob['drivetrainType'] = 'geared'
+
+        check_gradient_unit_test(self, prob)
+
+
+class TestOutputsAero(unittest.TestCase):
+
+    def test1(self):
+
+        AEP = 23490703.70603071
+        V = np.array([0.178275041966, 0.190296788962, 0.202568028297, 0.215071993446, 0.227791807017, 0.240710518196, 0.253811139789, 0.267076684744, 0.280490202059, 0.294034811963, 0.307693740274, 0.32145035184, 0.335288182978, 0.349190972822, 0.363142693506, 0.377127579106, 0.391130153286, 0.405135255571, 0.419128066214, 0.43309412959, 0.447019376098, 0.460890142513, 0.474693190784, 0.488415725243, 0.502045408211, 0.515570374001, 0.528979241305, 0.54226112398, 0.555405640233, 0.568402920224, 0.581243612108, 0.593918886545, 0.606420439704, 0.618740494789, 0.630871802149, 0.642807637993, 0.654541801767, 0.666068612246, 0.67738290239, 0.68848001302, 0.699355785386, 0.710006552662, 0.720429130464, 0.730620806428, 0.740579328925, 0.750302894983, 0.759790137479, 0.76904011166, 0.778052281079, 0.786826502994, 0.795363013307, 0.803662411103, 0.811725642861, 0.819553986387, 0.827149034543, 0.834512678823, 0.841647092838, 0.848554715765, 0.855238235811, 0.861700573747, 0.867944866556, 0.873974451244, 0.879792848857, 0.885403748745, 0.890810993109, 0.896018561866, 0.90103055787, 0.90585119251, 0.91048477172, 0.914935682413, 0.919208379383, 0.923307372661, 0.927237215373, 0.931002492094, 0.934607807711, 0.93805777681, 0.941357013592, 0.944510122313, 0.947521688261, 0.950396269264, 0.95313838773, 0.955752523204, 0.95824310546, 0.960614508091, 0.962871042612, 0.965016953057, 0.967056411054, 0.968993511377, 0.970832267946, 0.972576610282, 0.974230380379, 0.975797329995, 0.977281118336, 0.978685310119, 0.980013374, 0.981268681344, 0.982454505324, 0.98357402033, 0.984630301666, 0.985626325531, 0.986564969246, 0.987449011729, 0.988281134189, 0.98906392103, 0.989799860938, 0.990491348148, 0.991140683869, 0.991750077849, 0.992321650072, 0.992857432566, 0.993359371317, 0.99382932827, 0.994269083401, 0.994680336859, 0.995064711163, 0.995423753433, 0.995758937661, 0.996071667003, 0.996363276084, 0.996635033314, 0.996888143197, 0.997123748634, 0.997342933215, 0.997546723483, 0.997736091178, 0.997911955448, 0.998075185027, 0.998226600365, 0.998366975728, 0.998497041241, 0.998617484891, 0.99872895447, 0.998832059475, 0.998927372946, 0.999015433252, 0.999096745819, 0.999171784802, 0.999240994698, 0.999304791902, 0.999363566204, 0.999417682229, 0.999467480822, 0.999513280372, 0.999555378083, 0.999594051191, 0.999629558123, 0.999662139611, 0.999692019741, 0.999719406969, 0.999744495073, 0.999767464065, 0.999788481055, 0.99980770107, 0.999825267834, 0.999841314496, 0.999855964334, 0.999869331401, 0.999881521151, 0.999892631024, 0.999902750988, 0.999911964064, 0.999920346811, 0.999927969778, 0.99993489794, 0.999941191092, 0.999946904234, 0.999952087915, 0.999956788569, 0.99996104882, 0.999964907768, 0.99996840126, 0.999971562138, 0.999974420473, 0.999977003779, 0.999979337216, 0.999981443776, 0.999983344458, 0.999985058426, 0.999986603162, 0.999987994599, 0.999989247253, 0.999990374339, 0.999991387879, 0.999992298805, 0.999993117053, 0.999993851641, 0.999994510758, 0.999995101829, 0.999995631585, 0.999996106123, 0.999996530963, 0.999996911098, 0.999997251045, 0.999997554883, 0.999997826298, 0.999998068616, 0.999998284835, 0.999998477661, 0.999998649529, 0.999998802632])
+        P = np.array([22025.3984542, 31942.1185436, 42589.4002304, 53993.2085473, 66179.5085267, 79174.2652013, 93003.4436034, 107693.008766, 123268.925721, 139757.159501, 157183.67514, 175574.437668, 194955.41212, 215352.563527, 236791.856922, 259299.257337, 282900.729806, 307622.23936, 333489.751032, 360529.229855, 388766.640862, 418227.949084, 448939.119554, 480926.117306, 514214.907371, 548831.454781, 584801.724571, 622151.681771, 660907.291415, 701094.518535, 742739.328164, 785867.685334, 830505.555078, 876678.902429, 924413.692418, 973735.890078, 1024671.46044, 1077246.36854, 1131486.57941, 1187418.05809, 1245066.76959, 1304458.67896, 1365619.75124, 1428575.95144, 1493353.24461, 1559977.59577, 1628474.96996, 1698871.33222, 1771192.64757, 1845464.88105, 1921713.99769, 1999965.96251, 2080246.74057, 2162582.29688, 2246998.59648, 2333521.6044, 2422177.28568, 2512991.60535, 2605990.52843, 2701200.01997, 2798646.04499, 2898354.56853, 3000351.55562, 3104662.97129, 3211314.78058, 3320332.94852, 3431743.44013, 3545572.22046, 3661284.29229, 3777883.06101, 3895967.17288, 4015492.83297, 4136416.74759, 4258697.48598, 4382294.05017, 4507165.36302, 4631531.67845, 4757024.71876, 4883638.63072, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0, 5000000.0])
+        rated_V = 11.738606532616528
+        rated_Omega = 12.
+        rated_pitch = 0.0
+        rated_T = 714206.5321080858
+        rated_Q = 3978873.5772973835
+        hub_diameter = 3.075
+        diameter = 125.95500453593273
+        max_chord = 3.0459289459935825
+        V_extreme = 70.0
+        T_extreme = 0.0
+        Q_extreme = 0.0
+        Rtip = 63.0375
+        precurveTip = 0.0
+        precsweepTip = 0.0
+
+        prob = Problem()
+        prob.root = Group()
+        prob.root.add('comp', OutputsAero(len(P)), promotes=['*'])
+        prob.root.add('AEP_in', IndepVarComp('AEP_in', 0.0), promotes=['*'])
+        prob.root.add('V_in', IndepVarComp('V_in', np.zeros(len(V))), promotes=['*'])
+        prob.root.add('P_in', IndepVarComp('P_in', np.zeros(len(P))), promotes=['*'])
+        prob.root.add('r_V_in', IndepVarComp('ratedConditions:V_in', 0.0), promotes=['*'])
+        prob.root.add('r_Omega_in', IndepVarComp('ratedConditions:Omega_in', 0.0), promotes=['*'])
+        prob.root.add('r_pitch_in', IndepVarComp('ratedConditions:pitch_in', 0.0), promotes=['*'])
+        prob.root.add('r_T_in', IndepVarComp('ratedConditions:T_in', 0.0), promotes=['*'])
+        prob.root.add('r_Q_in', IndepVarComp('ratedConditions:Q_in', 0.0), promotes=['*'])
+        prob.root.add('hub_diameter_in', IndepVarComp('hub_diameter_in', 0.0), promotes=['*'])
+        prob.root.add('diameter_in', IndepVarComp('diameter_in', 0.0), promotes=['*'])
+        prob.root.add('max_chord_in', IndepVarComp('max_chord_in', 0.0), promotes=['*'])
+        prob.root.add('V_extreme_in', IndepVarComp('V_extreme_in', 0.0), promotes=['*'])
+        prob.root.add('T_extreme_in', IndepVarComp('T_extreme_in', 0.0), promotes=['*'])
+        prob.root.add('Q_extreme_in', IndepVarComp('Q_extreme_in', 0.0), promotes=['*'])
+        prob.root.add('Rtip_in', IndepVarComp('Rtip_in', 0.0), promotes=['*'])
+        prob.root.add('precurveTip_in', IndepVarComp('precurveTip_in', 0.0), promotes=['*'])
+        prob.root.add('presweepTip_in', IndepVarComp('precsweepTip_in', 0.0), promotes=['*'])
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative' 
+        prob.setup(check=False)
+
+        prob['AEP_in'] = AEP
+        prob['V_in'] = V
+        prob['P_in'] = P
+        prob['ratedConditions:V_in'] = rated_V
+        prob['ratedConditions:Omega_in'] = rated_Omega
+        prob['ratedConditions:pitch_in'] = rated_pitch
+        prob['ratedConditions:T_in'] = rated_T
+        prob['ratedConditions:Q_in'] = rated_Q
+        prob['hub_diameter_in'] = hub_diameter
+        prob['diameter_in'] = diameter
+        prob['max_chord_in'] = max_chord
+        prob['V_extreme_in'] = V_extreme
+        prob['T_extreme_in'] = T_extreme
+        prob['Q_extreme_in'] = Q_extreme
+        prob['Rtip_in'] = Rtip
+        prob['precurveTip_in'] = precurveTip
+        prob['precsweepTip_in'] = precsweepTip
 
         check_gradient_unit_test(self, prob)
 
 
 
-
-class TestWeibullCDF(unittest.TestCase):
+class TestWeibullCDF(unittest.TestCase): # EMG: moved to commonse.distribution
 
     def test1(self):
 
@@ -545,6 +549,8 @@ class TestWeibullCDF(unittest.TestCase):
         prob.root.add('A', IndepVarComp('A', A), promotes=['*'])
         prob.root.add('k', IndepVarComp('k', k), promotes=['*'])
         prob.root.add('x', IndepVarComp('x', x), promotes=['*'])
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative' 
+        prob.root.comp.deriv_options['check_form'] = 'central'
         prob.setup(check=False)
 
         prob['A'] = A
@@ -553,7 +559,7 @@ class TestWeibullCDF(unittest.TestCase):
 
         check_gradient_unit_test(self, prob)
 
-class TestWeibullWithMeanCDF(unittest.TestCase):
+class TestWeibullWithMeanCDF(unittest.TestCase): # EMG: moved to commonse.distribution
 
     def test1(self):
 
@@ -568,6 +574,8 @@ class TestWeibullWithMeanCDF(unittest.TestCase):
         prob.root.add('xbar', IndepVarComp('xbar', xbar), promotes=['*'])
         prob.root.add('k', IndepVarComp('k', k), promotes=['*'])
         prob.root.add('x', IndepVarComp('x', x), promotes=['*'])
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative' 
+        prob.root.comp.deriv_options['check_form'] = 'central'
         prob.setup(check=False)
 
         prob['xbar'] = xbar
@@ -578,7 +586,7 @@ class TestWeibullWithMeanCDF(unittest.TestCase):
 
 
 
-class TestRayleighCDF(unittest.TestCase):
+class TestRayleighCDF(unittest.TestCase): # EMG: moved to commonse.distribution
 
     def test1(self):
 
@@ -590,6 +598,8 @@ class TestRayleighCDF(unittest.TestCase):
         prob.root.add('comp', RayleighCDF(len(x)), promotes=['*'])
         prob.root.add('xbar', IndepVarComp('xbar', 0.0), promotes=['*'])
         prob.root.add('x', IndepVarComp('x', np.zeros(len(x))), promotes=['*'])
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative' 
+        prob.root.comp.deriv_options['check_form'] = 'central'
         prob.setup(check=False)
 
         prob['xbar'] = xbar
@@ -675,6 +685,9 @@ def check_gradient_unit_test(unittest, prob, fd='central', step_size=1e-6, tol=1
                 J = J_fwd[output, input]
                 JFD = J_fd[output, input]
                 m, n = J.shape
+                # print '---------', output, input, '---------'
+                # print 'J', J
+                # print 'JFD', JFD
                 for i in range(m):
                     for j in range(n):
                         if np.abs(J[i, j]) <= tol:
@@ -708,6 +721,7 @@ def check_gradient_unit_test(unittest, prob, fd='central', step_size=1e-6, tol=1
                             unittest.assertLessEqual(error, tol)
                         except AssertionError, e:
                             print '*** error in:', "\n\tOutput: ", output, "\n\tInput: ", input, "\n\tPosition: ", i, j
+                            print JFD[i, j], J[i, j]
                             raise e
     else:
         for key, value in J_fd.iteritems():
@@ -932,8 +946,7 @@ def check_gradient(prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
             fd_func = comp.complex_step_jacobian
         else:
             fd_func = comp.fd_jacobian
-
-        jac_fd = fd_func(params, unknowns, resids)
+        jac_fd = fd_func(params, unknowns, resids, option_overrides=comp.deriv_options) #EMG: derv_options were not being passed
 
         # # Assemble and Return all metrics.
         # _assemble_deriv_data(chain(dparams, states), resids, data[cname],
@@ -945,10 +958,12 @@ def check_gradient(prob, fd='central', step_size=1e-6, tol=1e-6, display=False,
 
 
 if __name__ == '__main__':
-    import rotorse.rotoraero
-    import rotorse.rotoraerodefaults
+    # import rotorse.rotoraero
+    # import rotorse.rotoraerodefaults
+    import rotorse.rotor_aeropower
 
-    check_for_missing_unit_tests([rotorse.rotoraero, rotorse.rotoraerodefaults])
+    # check_for_missing_unit_tests([rotorse.rotoraero, rotorse.rotoraerodefaults])
+    check_for_missing_unit_tests([rotorse.rotor_aeropower])
 
     unittest.main()
 

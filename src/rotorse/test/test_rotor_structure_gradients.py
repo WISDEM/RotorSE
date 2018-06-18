@@ -10,34 +10,35 @@ Copyright (c) NREL. All rights reserved.
 import unittest
 import numpy as np
 #from commonse.utilities import check_gradient_unit_test, check_for_missing_unit_tests
-from test_rotoraero_gradients import check_gradient_unit_test, check_for_missing_unit_tests
-from rotorse.rotor import RGrid, TotalLoads, TipDeflection, RootMoment, MassProperties, \
+from test_rotor_aeropower_gradients import check_gradient_unit_test, check_for_missing_unit_tests
+from rotorse.rotor_structure import TotalLoads, RootMoment, MassProperties, TipDeflection, \
     ExtremeLoads, GustETM, BladeCurvature, SetupPCModVarSpeed, BladeDeflection, DamageLoads
+from rotorse import TURBULENCE_CLASS
 from openmdao.api import IndepVarComp, Problem, Group
 from enum import Enum
 
 
-class TestRGrid(unittest.TestCase):
+# class TestRGrid(unittest.TestCase): #EMG: component changed name?
 
-    def test1(self):
+#     def test1(self):
 
-        r_aero = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333, 0.5, 0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
-        fraction = np.array([0.0, 0.221750339522, 0.293817188822, 0.365884038121, 0.442455065507, 0.514521914807, 0.586588764105, 1.0, 0.050034345133, 0.0860690751106, 1.0, 0.513945366068, 1.0, 0.636330560083, 1.0, 0.429636571789, 1.0, 0.65029839566, 1.0, 0.504611469554, 1.0, 0.506064656711, 1.0, 1.0, 0.312283760506, 1.0, 0.532945578735, 1.0, 0.510375896771, 0.75360738708, 1.0, 0.486304715835, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-        idxj = np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 11, 11, 12, 12, 13, 14, 15, 16, 17])
+#         r_aero = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333, 0.5, 0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333, 0.97777724])
+#         fraction = np.array([0.0, 0.221750339522, 0.293817188822, 0.365884038121, 0.442455065507, 0.514521914807, 0.586588764105, 1.0, 0.050034345133, 0.0860690751106, 1.0, 0.513945366068, 1.0, 0.636330560083, 1.0, 0.429636571789, 1.0, 0.65029839566, 1.0, 0.504611469554, 1.0, 0.506064656711, 1.0, 1.0, 0.312283760506, 1.0, 0.532945578735, 1.0, 0.510375896771, 0.75360738708, 1.0, 0.486304715835, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+#         idxj = np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 11, 11, 12, 12, 13, 14, 15, 16, 17])
 
-        prob = Problem()
-        prob.root = Group()
-        prob.root.add('comp', RGrid(len(r_aero), len(fraction)), promotes=['*'])
-        prob.root.add('r_aero', IndepVarComp('r_aero', np.zeros(len(r_aero))), promotes=['*'])
-        prob.root.add('fraction', IndepVarComp('fraction', np.zeros(len(fraction))), promotes=['*'])
-        prob.root.add('idxj', IndepVarComp('idxj', np.zeros(len(idxj))), promotes=['*'])
-        prob.setup(check=False)
+#         prob = Problem()
+#         prob.root = Group()
+#         prob.root.add('comp', RGrid(len(r_aero), len(fraction)), promotes=['*'])
+#         prob.root.add('r_aero', IndepVarComp('r_aero', np.zeros(len(r_aero))), promotes=['*'])
+#         prob.root.add('fraction', IndepVarComp('fraction', np.zeros(len(fraction))), promotes=['*'])
+#         prob.root.add('idxj', IndepVarComp('idxj', np.zeros(len(idxj))), promotes=['*'])
+#         prob.setup(check=False)
 
-        prob['r_aero'] = r_aero
-        prob['fraction'] = fraction
-        prob['idxj'] = idxj
+#         prob['r_aero'] = r_aero
+#         prob['fraction'] = fraction
+#         prob['idxj'] = idxj
 
-        check_gradient_unit_test(self, prob)
+#         check_gradient_unit_test(self, prob)
 
 
 class TestTotalLoads(unittest.TestCase):
@@ -60,7 +61,7 @@ class TestTotalLoads(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', TotalLoads(len(r)), promotes=['*'])
+        prob.root.add('comp', TotalLoads(), promotes=['*'])
         prob.root.add('aeroLoads_r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
         prob.root.add('aeroLoads_Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
         prob.root.add('aeroLoads_Py', IndepVarComp('aeroLoads:Py', np.zeros(len(aeroLoads_Py))), promotes=['*'])
@@ -111,7 +112,7 @@ class TestTotalLoads(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', TotalLoads(len(r)), promotes=['*'])
+        prob.root.add('comp', TotalLoads(), promotes=['*'])
         prob.root.add('aeroLoads_r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
         prob.root.add('aeroLoads_Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
         prob.root.add('aeroLoads_Py', IndepVarComp('aeroLoads:Py', np.zeros(len(aeroLoads_Py))), promotes=['*'])
@@ -166,7 +167,7 @@ class TestRootMoment(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', RootMoment(len(r_str)), promotes=['*'])
+        prob.root.add('comp', RootMoment(), promotes=['*'])
         prob.root.add('r_str', IndepVarComp('r_str', np.zeros(len(r_str))), promotes=['*'])
         prob.root.add('aeroLoads_r', IndepVarComp('aeroLoads:r', np.zeros(len(aeroLoads_r))), promotes=['*'])
         prob.root.add('aeroLoads_Px', IndepVarComp('aeroLoads:Px', np.zeros(len(aeroLoads_Px))), promotes=['*'])
@@ -211,6 +212,8 @@ class TestMassProperties(unittest.TestCase):
         prob.root.add('blade_moment_of_inertia', IndepVarComp('blade_moment_of_inertia', blade_moment_of_inertia), promotes=['*'])
         prob.root.add('tilt', IndepVarComp('tilt', tilt), promotes=['*'])
         prob.root.add('nBlades', IndepVarComp('nBlades', nBlades), promotes=['*'])
+        prob.root.comp.deriv_options['check_form'] = 'central'
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative'    
 
         prob.setup(check=False)
 
@@ -296,7 +299,6 @@ class TestGustETM(unittest.TestCase):
 
         V_mean = 10.0
         V_hub = 11.7733866478
-        turbulence_class = 'B'
         std = 3
 
 
@@ -305,7 +307,7 @@ class TestGustETM(unittest.TestCase):
         prob.root.add('comp', GustETM(), promotes=['*'])
         prob.root.add('V_mean', IndepVarComp('V_mean', V_mean), promotes=['*'])
         prob.root.add('V_hub', IndepVarComp('V_hub', V_hub), promotes=['*'])
-        prob.root.add('turbulence_class', IndepVarComp('turbulence_class', Enum('A', 'B', 'C')), promotes=['*'])
+        prob.root.add('turbulence_class', IndepVarComp('drivetrainType', val=TURBULENCE_CLASS['B'], pass_by_obj=True), promotes=['*'])
         prob.root.add('std', IndepVarComp('std', std), promotes=['*'])
 
         prob.setup(check=False)
@@ -313,7 +315,7 @@ class TestGustETM(unittest.TestCase):
         prob['V_mean'] = V_mean
         prob['V_hub'] = V_hub
         prob['V_hub'] = V_hub
-        prob['turbulence_class'] = turbulence_class
+        prob['turbulence_class'] = TURBULENCE_CLASS['B']
         prob['std'] = std
 
         check_gradient_unit_test(self, prob)
@@ -331,7 +333,7 @@ class TestBladeCurvature(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', BladeCurvature(len(r)), promotes=['*'])
+        prob.root.add('comp', BladeCurvature(), promotes=['*'])
         prob.root.add('r', IndepVarComp('r', r), promotes=['*'])
         prob.root.add('precurve', IndepVarComp('precurve', precurve), promotes=['*'])
         prob.root.add('presweep', IndepVarComp('presweep', presweep), promotes=['*'])
@@ -398,7 +400,7 @@ class TestBladeDeflection(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', BladeDeflection(len(dx)), promotes=['*'])
+        prob.root.add('comp', BladeDeflection(), promotes=['*'])
         prob.root.add('dx', IndepVarComp('dx', dx), promotes=['*'])
         prob.root.add('dy', IndepVarComp('dy', dy), promotes=['*'])
         prob.root.add('dz', IndepVarComp('dz', dz), promotes=['*'])
@@ -440,12 +442,14 @@ class TestDamageLoads(unittest.TestCase):
 
         prob = Problem()
         prob.root = Group()
-        prob.root.add('comp', DamageLoads(len(r), 17), promotes=['*'])
+        prob.root.add('comp', DamageLoads(), promotes=['*'])
         prob.root.add('rstar', IndepVarComp('rstar', rstar), promotes=['*'])
         prob.root.add('Mxb', IndepVarComp('Mxb', Mxb), promotes=['*'])
         prob.root.add('Myb', IndepVarComp('Myb', Myb), promotes=['*'])
         prob.root.add('theta', IndepVarComp('theta', theta), promotes=['*'])
         prob.root.add('r', IndepVarComp('r', r), promotes=['*'])
+        prob.root.comp.deriv_options['check_form'] = 'central'
+        prob.root.comp.deriv_options['check_step_calc'] = 'relative'   
 
         prob.setup(check=False)
 
