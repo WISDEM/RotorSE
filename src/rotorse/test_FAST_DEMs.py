@@ -11,7 +11,8 @@ import re
 import numpy as np
 
 from FAST_util import setupFAST, Calc_max_DEMs, Use_FAST_DEMs, \
-    extract_results, define_des_var_domains, remove_sm_dir, initialize_rotor_dv, removed_fixcalc_dir
+    extract_results, define_des_var_domains, remove_sm_dir, \
+    initialize_rotor_dv, removed_fixcalc_dir, remove_fixcalc_unnecessary_files
 
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 # -------------------
@@ -67,6 +68,10 @@ description = 'calc_fixedDEMs'
 print('Run ' + description + ' is starting...')
 
 FASTinfo, rotor = setupFAST(FASTinfo, description)
+
+remove_fixcalc_unnecessary_files(FASTinfo)
+
+quit()
 
 # === initialize === #
 rotor.root = RotorSE(FASTinfo = FASTinfo, naero=17, nstr=38, npower=20)#, af_dof=2)
@@ -482,9 +487,13 @@ rotor.run()
 if FASTinfo['use_FAST']:
     extract_results(rotor,FASTinfo)
 
+# remove unnecessary files
+if FASTinfo['remove_unnecessary_files']:
+    remove_fixcalc_unnecessary_files(FASTinfo)
+
 # delete optimization directories
-if FASTinfo['remove_fixedcalc_dir'] and not FASTinfo['calc_fixed_DEMs']:
-    removed_fixcalc_dir(FASTinfo)
+# if FASTinfo['remove_fixedcalc_dir'] and not FASTinfo['calc_fixed_DEMs']:
+#     removed_fixcalc_dir(FASTinfo)
 
 if FASTinfo['remove_sm_dir']:
     remove_sm_dir(FASTinfo)

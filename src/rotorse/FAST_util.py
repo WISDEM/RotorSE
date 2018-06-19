@@ -69,12 +69,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -206,6 +206,7 @@ def setupFAST_other(FASTinfo):
 
     # use this when calculating DEMs for fixed-DEMs calculation
     FASTinfo['remove_fixedcalc_dir'] = True
+    FASTinfo['remove_unnecessary_files'] = True
 
     # use this when training points for surrogate model and using surrogate model
     FASTinfo['nondimensionalize_chord'] = True
@@ -1507,5 +1508,38 @@ def removed_fixcalc_dir(FASTinfo):
         if os.path.isdir(dir_name):
 
             shutil.rmtree(dir_name)
+
+# ========================================================================================================= #
+
+def remove_fixcalc_unnecessary_files(FASTinfo):
+
+
+    for i in range(1,5):
+
+        dir_name = FASTinfo['opt_dir'] + '/sgp' + str(i)
+
+        wnd_dir_name = dir_name + '/WNDfile' + str(FASTinfo['wnd_number']+1) + '_sgp' + str(i)
+
+        if os.path.isdir(wnd_dir_name):
+
+            # remove files
+            shutil.rmtree(wnd_dir_name + '/AeroData')
+
+            os.remove(wnd_dir_name + '/fst_runfile.fsm')
+            os.remove(wnd_dir_name + '/fst_runfile.fst')
+            os.remove(wnd_dir_name + '/fst_runfile.opt')
+            os.remove(wnd_dir_name + '/fst_runfile.out')
+            os.remove(wnd_dir_name + '/fst_runfile.outb')
+
+            os.remove(wnd_dir_name + '/fst_runfile_ADAMS.acf')
+            os.remove(wnd_dir_name + '/fst_runfile_ADAMS.adm')
+            os.remove(wnd_dir_name + '/fst_runfile_ADAMS_LIN.acf')
+
+            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_ADAMSSpecific.dat')
+            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_AeroDyn.ipt')
+            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Blade.dat')
+            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Linear.dat')
+            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Onshore.fst')
+            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Tower_Onshore.dat')
 
 # ========================================================================================================= #
