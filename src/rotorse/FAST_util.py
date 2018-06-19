@@ -69,12 +69,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -124,8 +124,8 @@ def setupFAST(FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 100.0  # 640.0
-    FASTinfo['Tmax_nonturb'] = 60.0  # 100.0
+    FASTinfo['Tmax_turb'] = 640.0  # 640.0
+    FASTinfo['Tmax_nonturb'] = 100.0  # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
@@ -145,8 +145,8 @@ def setupFAST(FASTinfo, description):
 
 
     # === strain gage placement === #
-    # FASTinfo['sgp'] = [1,2,3]
-    FASTinfo['sgp'] = [4]
+    FASTinfo['sgp'] = [1,2,3]
+    # FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -185,7 +185,7 @@ def setupFAST(FASTinfo, description):
         for i in range(0 + 1, len(FASTinfo['wnd_list']) + 1):
 
             if 'wnd_number' in FASTinfo:
-                cur_wnd_num = FASTinfo['wnd_number'] + 1
+                cur_wnd_num = FASTinfo['wnd_number'] + 0
             else:
                 cur_wnd_num = i
 
@@ -1518,7 +1518,7 @@ def remove_fixcalc_unnecessary_files(FASTinfo):
 
         dir_name = FASTinfo['opt_dir'] + '/sgp' + str(i)
 
-        wnd_dir_name = dir_name + '/WNDfile' + str(FASTinfo['wnd_number']+1) + '_sgp' + str(i)
+        wnd_dir_name = dir_name + '/WNDfile' + str(FASTinfo['wnd_number']) + '_sgp' + str(i)
 
         if os.path.isdir(wnd_dir_name):
 

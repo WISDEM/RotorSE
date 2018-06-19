@@ -69,9 +69,6 @@ print('Run ' + description + ' is starting...')
 
 FASTinfo, rotor = setupFAST(FASTinfo, description)
 
-remove_fixcalc_unnecessary_files(FASTinfo)
-
-quit()
 
 # === initialize === #
 rotor.root = RotorSE(FASTinfo = FASTinfo, naero=17, nstr=38, npower=20)#, af_dof=2)
