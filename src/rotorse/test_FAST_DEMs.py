@@ -26,17 +26,23 @@ FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = False
+FASTinfo['calc_fixed_DEMs'] = True
 FASTinfo['calc_fixed_DEMs_seq'] = False
-FASTinfo['opt_with_fixed_DEMs'] = True
+FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
 FASTinfo['calc_surr_model'] = False
 FASTinfo['opt_with_surr_model'] = False
 
 # description
 
+description = 'calc_fixedDEMs'
+
+# description = 'plot_dist_points'
+
+# description = 'check_torque'
+
 # description = 'test_batch_1'
-description = 'test_batch'
+# description = 'test_ batch'
 
 # description = 'test_fixedDEMs'
 
@@ -80,6 +86,10 @@ else:
 
     rotor.driver.opt_settings['maxGen'] = 100 # default is 1000
     rotor.driver.opt_settings['PopSize'] = 100
+
+    rotor.driver.opt_settings['Print file'] = FASTinfo['opt_dir'] + '/' + 'print_' + description + '.out'
+    rotor.driver.opt_settings['Summary file'] = FASTinfo['opt_dir'] + '/' + 'summary_' + description + '.out'
+
 
     # rotor.driver.options['optimizer'] = 'SNOPT'
     # rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
@@ -342,8 +352,8 @@ else:
     rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['shearExp'] = 0.25  # (Float): shear exponent
     rotor['hubHt'] = np.array([90.0])  # (Float, m): hub height
-    rotor['turbine_class'] = 'I'  # (Enum): IEC turbine class
-    rotor['turbulence_class'] = 'B'  # (Enum): IEC turbulence class class
+    rotor['turbine_class'] = FASTinfo['turbine_class']  # (Enum): IEC turbine class
+    rotor['turbulence_class'] = FASTinfo['turbulence_class']  # (Enum): IEC turbulence class class
     rotor[
         'cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
     rotor['g'] = 9.81  # (Float, m/s**2): acceleration of gravity

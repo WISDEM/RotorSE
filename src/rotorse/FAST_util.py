@@ -69,12 +69,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -124,13 +124,13 @@ def setupFAST(FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 640.0 # 640.0
-    FASTinfo['Tmax_nonturb'] = 100.0 # 100.0
+    FASTinfo['Tmax_turb'] = 100.0  # 640.0
+    FASTinfo['Tmax_nonturb'] = 60.0  # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 40.0 # 40.0
+    FASTinfo['rm_time'] = 40.0  # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -145,8 +145,8 @@ def setupFAST(FASTinfo, description):
 
 
     # === strain gage placement === #
-    FASTinfo['sgp'] = [1,2,3]
-    # FASTinfo['sgp'] = [4]
+    # FASTinfo['sgp'] = [1,2,3]
+    FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -211,8 +211,10 @@ def setupFAST_other(FASTinfo):
     FASTinfo['nondimensionalize_chord'] = True
 
     # sequential or parallel calculation of turbine response for each .wnd file
-    # note: currently only sequential calculation works. Major MPI reworking needed, might have to rework OpenMDAO class
     FASTinfo['calculation_type'] = 'sequential'
+
+    # save rated torque
+    FASTinfo['save_rated_torque_&_thrust'] = False
 
     return FASTinfo
 
@@ -239,7 +241,8 @@ def specify_DLCs(FASTinfo):
     if not FASTinfo['use_DLC_list']:
 
         # === for optimization === #
-        DLC_List = ['DLC_1_2','DLC_1_3', 'DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
+        DLC_List = ['DLC_1_2', 'DLC_1_3', 'DLC_1_4',' DLC_1_5', 'DLC_6_1', 'DLC_6_3']
+        # DLC_List = ['DLC_0_0', 'DLC_1_2', 'DLC_1_3', 'DLC_1_4',' DLC_1_5', 'DLC_6_1', 'DLC_6_3']
 
         # === for testing === #
 
@@ -316,8 +319,9 @@ def choose_wnd_dir(FASTinfo):
     FASTinfo['turbine_class'] = 'I'
 
     # === turbulent, nonturbulent directories === #
-    # TODO: make function of turbulence_class, turbine_class
-    FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir/'
+    FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir_' \
+    + FASTinfo['turbulence_class'] + '_' + FASTinfo['turbine_class'] + '/'
+
     FASTinfo['nonturb_wnd_dir'] = 'RotorSE_FAST/WND_Files/nonturb_wnd_dir/'
 
     return FASTinfo
@@ -454,9 +458,9 @@ def plot_kfolds(FASTinfo):
 
     for i in range(FASTinfo['num_folds']):
         if i == 0:
-            plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'rx', label='1st k-fold group')
+            plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'ro', label='1st k-fold group')
         else:
-            plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'kx')
+            plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'bo')
 
     plt.xlabel('Maximum Chord Position')
     plt.ylabel('1st Chord Point (m)')
@@ -584,8 +588,8 @@ def create_surr_model_params(FASTinfo):
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
     # FASTinfo['approximation_model'] = 'least_squares'
-    # FASTinfo['approximation_model'] = 'second_order_poly'
-    FASTinfo['approximation_model'] = 'kriging'
+    FASTinfo['approximation_model'] = 'second_order_poly'
+    # FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
 
@@ -610,14 +614,14 @@ def create_surr_model_params(FASTinfo):
 
     # list of variables that we are varying
     # FASTinfo['sm_var_names'] = ['r_max_chord']
-    # FASTinfo['sm_var_names'] = ['chord_sub']
+    # FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub']
     FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub', 'theta_sub']
 
     # indices of which variables are used
     # FASTinfo['sm_var_index'] = [[1]] # second point in distribution
     # FASTinfo['sm_var_index'] = [[1, 2]] # second/third point in distribution
     # FASTinfo['sm_var_index'] = [[0], [1, 2]] # r_max_chord & second/third point in distribution
-    # FASTinfo['sm_var_index'] = [[0], [1]] # r_max_chord & second in chord distribution
+    # FASTinfo['sm_var_index'] = [[0], [0]] # r_max_chord & first in chord distribution
     # FASTinfo['sm_var_index'] = [[0,1,2,3]] # chord_sub distribution
     # FASTinfo['sm_var_index'] = [[0]] # r_max_chord
     FASTinfo['sm_var_index'] = [[0], [0,1,2,3], [0,1,2,3]]
@@ -647,8 +651,9 @@ def create_surr_model_linear_options(FASTinfo, rotor):
 
     # how many different points will be used (linear)
     # FASTinfo['sm_var_max'] = [[4], [2,2,2,2]]
-    FASTinfo['sm_var_max'] = [[10]]
+    # FASTinfo['sm_var_max'] = [[10]]
     # FASTinfo['sm_var_max'] = [[4, 4]]
+    FASTinfo['sm_var_max'] = [[10], [10]]
     # FASTinfo['sm_var_max'] = [[3], [3, 3]]
     # FASTinfo['sm_var_max'] = [[3], [3]]
     # FASTinfo['sm_var_max'] = [[3,3,3,3]]
@@ -669,16 +674,16 @@ def create_surr_model_linear_options(FASTinfo, rotor):
     # create options for which points are being used for dist. variables
     # how many total for each set of design variables
 
-    try:
-        FASTinfo['sm_var_spec'] = []
-        for i in range(0, len(FASTinfo['sm_var_names'])):
-            FASTinfo['sm_var_spec'].append([])
-
-        for i in range(1, int(len(sys.argv))):
-            FASTinfo['sm_var_spec'][var_index[i-1]].append(int(sys.argv[i]))
-    except:
-        raise Exception('A system argument is needed to calculate training points for the surrogate model.')
-        # FASTinfo['sm_var_spec'] = [[3]]
+    # try:
+    #     FASTinfo['sm_var_spec'] = []
+    #     for i in range(0, len(FASTinfo['sm_var_names'])):
+    #         FASTinfo['sm_var_spec'].append([])
+    #
+    #     for i in range(1, int(len(sys.argv))):
+    #         FASTinfo['sm_var_spec'][var_index[i-1]].append(int(sys.argv[i]))
+    # except:
+        # raise Exception('A system argument is needed to calculate training points for the surrogate model.')
+    FASTinfo['sm_var_spec'] = [[0], [0]]
 
     # print(FASTinfo['sm_var_spec'])
     # quit()
@@ -717,6 +722,8 @@ def create_surr_model_linear_options(FASTinfo, rotor):
             FASTinfo['var_range'].append(sm_range)
 
             if hasattr(FASTinfo[FASTinfo['sm_var_names'][i]+'_init'], '__len__'):
+
+                print(i, j, index)
 
                 FASTinfo[FASTinfo['sm_var_names'][i]+'_init'][index] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
 
@@ -867,7 +874,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
                 spec_val = FASTinfo[spec_var_name + '_init'][index]
 
             # create new range
-            FASTinfo['range_frac'] = 0.35  # 0.15, 0.25, 0.35
+            FASTinfo['range_frac'] = 0.25  # 0.15, 0.25, 0.35
             range_frac =  FASTinfo['range_frac']
             range_len = var_range[1]-var_range[0]
             new_var_range = [spec_val-range_frac*range_len, spec_val+range_frac*range_len]
@@ -1024,7 +1031,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         # plt.xlim(FASTinfo['var_range'][0])
         # plt.ylim(FASTinfo['var_range'][1])
 
-        plt.plot(points[:,0], points[:,1], 'o', label='training points')
+        plt.plot(points[:,0], points[:,1], 'bo', label='training points')
         plt.legend()
 
         plt.savefig(FASTinfo['dir_saved_plots'] + '/lhs_' + FASTinfo['description'] + '.png')

@@ -2377,6 +2377,9 @@ class CreateFASTConstraints(Component):
         self.turb_sf = FASTinfo['turb_sf']
         self.rm_time = FASTinfo['rm_time']
 
+        self.save_tq_thrust = FASTinfo['save_rated_torque_&_thrust']
+        self.DLC_List = FASTinfo['DLC_List']
+
         self.m_value = FASTinfo['m_value']
 
         self.add_param('cfg_master', val=dict(), pass_by_obj=False)
@@ -2406,8 +2409,8 @@ class CreateFASTConstraints(Component):
         resultsdict = params[self.caseids[0]]
         if self.check_results:
             # bm_param = 'Spn4MLxb1'
-            bm_param = ['RootMyb1', 'OoPDefl1']
-            bm_param_units = ['kN*m', 'm']
+            bm_param = ['RootMyb1', 'OoPDefl1', 'GenTq', 'RotThrust', 'RotTorq']
+            bm_param_units = ['kN*m', 'm', 'kN*m', 'kN', 'kN*m']
             for i in range(0, len(bm_param)):
                 plt.figure()
                 plt.plot(resultsdict[bm_param[i]])
@@ -2419,6 +2422,36 @@ class CreateFASTConstraints(Component):
                 plt.show()
 
             quit()
+
+        # === save rated torque
+        if self.save_tq_thrust:
+            if self.DLC_List[0] == 'DLC_0_0':
+                gen_tq_avg = sum(resultsdict['GenTq'])/len(resultsdict['GenTq'])
+
+                rated_tq_file = self.opt_dir + '/rated_tq.txt'
+
+                if os.path.isfile((rated_tq_file)):
+                    print('Rated Tq file already created.')
+                else:
+                    f = open(rated_tq_file, "w+")
+                    f.write(str(gen_tq_avg))
+                    f.close()
+
+                thrust_avg = sum(resultsdict['RotThrust']) / len(resultsdict['RotThrust'])
+
+                rated_thrust_file = self.opt_dir + '/rated_thrust.txt'
+
+                if os.path.isfile((rated_thrust_file)):
+                    print('Rated Thrust file already created.')
+                else:
+                    f = open(rated_thrust_file, "w+")
+                    f.write(str(thrust_avg))
+                    f.close()
+
+                quit()
+
+            else:
+                raise Exception('Need to specify DLC_0_0 as first DLC if you want to save rated torque')
 
         # total number of virtual strain gages
         tot_BldGagNd = []
@@ -2482,13 +2515,11 @@ class CreateFASTConstraints(Component):
         else:
             FAST_opt_dir = self.opt_dir
 
-
         for k in range(0, len(self.NBlGages)):
 
             for i in range(0 + 1, len(self.WNDfile_List) + 1):
 
                 spec_caseid = k*len(self.WNDfile_List) + i - 1
-
 
                 # === extrapolated loads variables === #
                 # peaks master
@@ -2586,8 +2617,8 @@ class CreateFASTConstraints(Component):
                         FAST_rm_time = rm_data[:,0]
 
                         plt.figure()
-                        plt.plot(FAST_b_time,FAST_b,'--',label='all data output')
-                        plt.plot(FAST_rm_time,FAST_rm,label='used data output')
+                        plt.plot(FAST_b_time, FAST_b,'--', label='all data output')
+                        plt.plot(FAST_rm_time, FAST_rm, label='used data output')
 
                         plt.xlabel('Time Step (s)')
                         plt.ylabel('Data')
@@ -2597,7 +2628,7 @@ class CreateFASTConstraints(Component):
                         plt.legend()
                         # plt.savefig(self.dir_saved_plots + '/rainflow_check/' + data_name[m] + '.eps')
                         plt.savefig(self.dir_saved_plots + '/plots/rainflow_check/' + data_name[m] + '.png')
-                        # plt.show()
+                        plt.show()
                         plt.close()
 
                         n = n+1
@@ -3093,6 +3124,20 @@ class Calculate_FAST_sm_training_points(Component):
         # print(params['max_tip_def'])
         # quit()
 
+        # get rated torque
+        rated_tq_file = self.opt_dir + '/rated_tq.txt'
+        f = open(rated_tq_file, "r")
+        lines = f.readlines()
+        rated_tq = float(lines[0])
+        f.close()
+
+        # get rated thrust
+        rated_thrust_file = self.opt_dir + '/rated_thrust.txt'
+        f = open(rated_thrust_file, "r")
+        lines = f.readlines()
+        rated_thrust = float(lines[0])
+        f.close()
+
         def replace_line(file_name, line_num, text):
             lines = open(file_name, 'r').readlines()
             lines[line_num] = text
@@ -3305,25 +3350,29 @@ class Calculate_FAST_sm_training_points(Component):
 
             # put DEMx and DEMy as values on line
             for i in range(0, len(params['DEMx'])):
-                DEM_text += ' ' + str(params['DEMx'][i])
+                # DEM_text += ' ' + str(params['DEMx'][i])
+                DEM_text += ' ' + str(params['DEMx'][i]/rated_tq)
 
             for i in range(0, len(params['DEMy'])):
-                DEM_text += ' ' + str(params['DEMy'][i])
+                # DEM_text += ' ' + str(params['DEMy'][i])
+                DEM_text += ' ' + str(params['DEMy'][i]/rated_tq)
 
             # load file
             load_text = 'pt_' + str(self.sm_var_spec)
 
             # put Edg_max and Flp_max as values on line
             for i in range(0, len(params['Edg_max'])):
-                load_text += ' ' + str(params['Edg_max'][i])
+                # load_text += ' ' + str(params['Edg_max'][i])
+                load_text += ' ' + str(params['Edg_max'][i]/rated_thrust)
 
             for i in range(0, len(params['Flp_max'])):
-                load_text += ' ' + str(params['Flp_max'][i])
+                # load_text += ' ' + str(params['Flp_max'][i])
+                load_text += ' ' + str(params['Flp_max'][i]/rated_thrust)
 
             # def file
             def_text = 'pt_' + str(self.sm_var_spec)
 
-            def_text += ' ' + str(params['max_tip_def'])
+            def_text += ' ' + str(params['max_tip_def']/params['bladeLength'])
 
             # replace lines
             replace_line(self.var_filename, self.sm_var_spec + header_len, var_text + '\n')
@@ -3387,6 +3436,8 @@ class calc_FAST_sm_fit(Component):
         self.add_param('DEMx', shape=18, desc='DEMx')
         self.add_param('DEMy', shape=18, desc='DEMy')
 
+        self.add_param('bladeLength', shape=1, desc='Blade length')
+
         self.check_fit = FASTinfo['check_fit']
 
         self.do_cv_DEM = FASTinfo['do_cv_DEM']
@@ -3406,6 +3457,19 @@ class calc_FAST_sm_fit(Component):
         self.nstr = nstr
 
     def solve_nonlinear(self, params, unknowns, resids):
+
+        # get rated torque
+        rated_tq_file = self.opt_dir + '/rated_tq.txt'
+        f = open(rated_tq_file, "r")
+        lines = f.readlines()
+        rated_tq = float(lines[0])
+
+        # get rated thrust
+        rated_thrust_file = self.opt_dir + '/rated_thrust.txt'
+        f = open(rated_thrust_file, "r")
+        lines = f.readlines()
+        rated_thrust = float(lines[0])
+        f.close()
 
         # === extract variables === #
         header_len = 1
@@ -3502,7 +3566,6 @@ class calc_FAST_sm_fit(Component):
 
         elif self.training_point_dist == 'lhs':
 
-
             # === get design variable values / calculated outputs === #
             f_var = open(self.var_filename, "r")
             lines_var = list(f_var)
@@ -3534,7 +3597,6 @@ class calc_FAST_sm_fit(Component):
                     if len(cur_line) == num_var + 1:
                         for j in range(1, len(cur_line)):
                             var_dict[var_names[j - 1]].append(float(cur_line[j]))
-
 
             # === DEMs, extreme loads, and tip deflection (oh my!) === #
             # first out line
@@ -3585,7 +3647,8 @@ class calc_FAST_sm_fit(Component):
 
                     cur_line = lines_DEM[i].split()
                     for j in range(1, len(cur_line)):
-                        out_dict[DEM_names[j - 1]].append(float(cur_line[j]))
+                        # out_dict[DEM_names[j - 1]].append(float(cur_line[j]))
+                        out_dict[DEM_names[j - 1]].append(float(cur_line[j])*rated_tq)
 
                 # Edg, Flp
 
@@ -3595,7 +3658,8 @@ class calc_FAST_sm_fit(Component):
                     cur_line = lines_load[i].split()
                     for j in range(1, len(cur_line)):
 
-                        out_dict[load_names[j - 1]].append(float(cur_line[j]))
+                        # out_dict[load_names[j - 1]].append(float(cur_line[j]))
+                        out_dict[load_names[j - 1]].append(float(cur_line[j])*rated_thrust)
 
                 # tip deflection
 
@@ -3605,7 +3669,7 @@ class calc_FAST_sm_fit(Component):
                     cur_line = lines_def[i].split()
                     for j in range(1, len(cur_line)):
 
-                        out_dict[def_names[j - 1]].append(float(cur_line[j]))
+                        out_dict[def_names[j - 1]].append(float(cur_line[j])*params['bladeLength'])
 
         # === Approximation Model === #
         from smt.surrogate_models import QP, LS, KRG, KPLS, KPLSK
@@ -5006,7 +5070,7 @@ class RotorSE(Group):
         self.add('shearExp', IndepVarComp('shearExp', val=0.2, desc='shear exponent', pass_by_obj=True), promotes=['*'])
         self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
-        self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
+        self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class', pass_by_obj=True), promotes=['*'])
         self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
         self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
         # cdf_reference_mean_wind_speed = Float(iotype='in')
@@ -5841,7 +5905,7 @@ class RotorSE(Group):
             if FASTinfo['use_tip_def_cons']:
                 self.connect('max_tip_def', 'max_tip_def_in')
 
-            # create FAST surrogate model
+            # train FAST surrogate model points
             if FASTinfo['train_sm']:
 
                 # FAST outputs
@@ -5860,6 +5924,11 @@ class RotorSE(Group):
 
                 # nondimensionalize chord
                 self.connect('bladeLength', 'calc_FAST_sm_training_points.bladeLength')
+
+            # create surrogate model
+            if FASTinfo['Use_FAST_sm']:
+                self.connect('bladeLength', 'FAST_sm_fit.bladeLength')
+
 
 if __name__ == '__main__':
 
