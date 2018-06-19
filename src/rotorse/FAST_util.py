@@ -69,12 +69,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -343,16 +343,16 @@ def choose_wnd_file(FASTinfo):
         num_wnd_files = len(FASTinfo['wnd_list'])
 
         wnd_list = []
-        wnd_list.append(FASTinfo['wnd_list'][FASTinfo['wnd_number']])
+        wnd_list.append(FASTinfo['wnd_list'][FASTinfo['wnd_number']-1])
         FASTinfo['wnd_list'] = wnd_list
 
-        FASTinfo['parked'] = [FASTinfo['parked'][FASTinfo['wnd_number']],
-                              FASTinfo['parked'][FASTinfo['wnd_number']],
-                              FASTinfo['parked'][FASTinfo['wnd_number']]]
+        FASTinfo['parked'] = [FASTinfo['parked'][FASTinfo['wnd_number']-1],
+                              FASTinfo['parked'][FASTinfo['wnd_number']-1],
+                              FASTinfo['parked'][FASTinfo['wnd_number']-1]]
 
-        FASTinfo['wnd_type_list'] = [FASTinfo['wnd_type_list'][FASTinfo['wnd_number']],
-                                     FASTinfo['wnd_type_list'][FASTinfo['wnd_number']],
-                                     FASTinfo['wnd_type_list'][FASTinfo['wnd_number']]]
+        FASTinfo['wnd_type_list'] = [FASTinfo['wnd_type_list'][FASTinfo['wnd_number']-1],
+                                     FASTinfo['wnd_type_list'][FASTinfo['wnd_number']-1],
+                                     FASTinfo['wnd_type_list'][FASTinfo['wnd_number']-1]]
 
         # print('test choose_wnd_file')
         # print(FASTinfo['wnd_type_list'])
