@@ -449,7 +449,7 @@ if FASTinfo['Use_FAST_Fixed_DEMs']:
 
     if not os.path.isfile(FASTinfo['max_DEMx_file']):
 
-        Calc_max_DEMs(FASTinfo)
+        Calc_max_DEMs(FASTinfo, rotor)
 
     rotor = Use_FAST_DEMs(FASTinfo, rotor)
 
