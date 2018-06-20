@@ -2616,7 +2616,8 @@ class RotorStructure(Group):
         self.connect('aero_rated.Omega_load', 'Omega')
         
 if __name__ == '__main__':
-    myref = NREL5MW() #DTU10MW()
+    # myref = NREL5MW() #DTU10MW()
+    myref = DTU10MW()
 
     rotor = Problem()
     rotor.root = RotorStructure(myref)

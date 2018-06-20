@@ -36,9 +36,9 @@ if platform.system() == 'Windows':
 		    package_dir={'': 'src/rotorse'}, 
 		    ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], 
 		        extra_compile_args=['-O2'], 
-		        include_dirs=[''], 
-		        library_dirs=['C:/lapack'], 
-		        libraries=['lapack'] 
+		        include_dirs=['C:/boost_1_55_0'], 
+		        library_dirs=['C:/boost_1_55_0/stage/lib','C:/lapack'], 
+		        libraries=['lapack','blas','boost_python-mgw63-mt-1_55'] 
 		        )], 
 		) 
 elif platform.system() == 'Darwin':

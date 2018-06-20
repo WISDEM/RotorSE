@@ -157,19 +157,19 @@ contains
 
 
         ! ---- Embed ----
-        real(dbp), dimension(n_af_nodes+20) :: xnode_u, xnode_l, ynode_u, ynode_l
+        real(dbp), dimension(n_af_nodes+40) :: xnode_u, xnode_l, ynode_u, ynode_l
         integer :: newnode, nodes_u, nodes_l
         ! --------
 
         ! -- seg info ---
         real(dbp), dimension(nweb) :: weby_u, weby_l
         real(dbp), dimension(:, :), allocatable :: xsec_node
-        real(dbp), dimension(n_af_nodes+20) :: yseg, zseg, wseg, sthseg, &
+        real(dbp), dimension(n_af_nodes+40) :: yseg, zseg, wseg, sthseg, &
             cthseg, s2thseg, c2thseg
 
         integer :: nseg, nseg_l, nseg_u, nseg_p, ndl1, ndu1
         integer, dimension(2) :: n_scts
-        integer, dimension(n_af_nodes+20) :: isur, idsect
+        integer, dimension(n_af_nodes+40) :: isur, idsect
         ! -----------
 
         ! --- QBars ----
