@@ -14,6 +14,7 @@ setup(
     install_requires=['commonse', 'ccblade', 'pbeam'],
     package_dir={'': 'src'},
     packages=['rotorse','rotorse.test','rotorse.5MW_AFFiles','rotorse.5MW_PreCompFiles'],
+    include_package_data=True,
     license='Apache License, Version 2.0',
     dependency_links=['https://github.com/WISDEM/CCBlade/tarball/master#egg=ccblade',
         'https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam',

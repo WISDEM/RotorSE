@@ -11,8 +11,10 @@ Copyright (c)  NREL. All rights reserved.
 import numpy as np
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem, ExecComp
-from rotor_aeropower import SetupRunVarSpeed, CSMDrivetrain, RegulatedPowerCurve, RegulatedPowerCurveGroup, AEP, OutputsAero
-from rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, PreCompSections, RotorWithpBEAM, ConstraintsStructures
+from rotor_aeropower import SetupRunVarSpeed, CSMDrivetrain, RegulatedPowerCurve, AEP, OutputsAero
+from rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, \
+    BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, \
+    PreCompSections, RotorWithpBEAM, ConstraintsStructures
 
 from ccblade.ccblade_component import CCBladeGeometry, CCBladePower, CCBladeLoads
 from commonse.distribution import RayleighCDF, WeibullWithMeanCDF

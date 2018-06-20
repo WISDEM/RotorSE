@@ -477,6 +477,9 @@ class Location(Component):
         super(Location, self).__init__()
         self.add_param('hub_height', val=0.0, units='m', desc='Tower top hub height')
         self.add_output('wind_zvec', val=np.zeros(1), units='m', desc='Tower top hub height as vector')
+        self.deriv_options['type'] = 'fd'
+        self.deriv_options['step_calc'] = 'relative'
+
     def solve_nonlinear(self, params, unknowns, resids):
         unknowns['wind_zvec'] = np.array([ params['hub_height'] ])
 

@@ -11,7 +11,8 @@ from akima import Akima, akima_interp_with_derivs
 from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, NINPUT
 import _pBEAM
 import _curvefem
-import ccblade._bem as _bem  # TODO: move to rotoraero
+# import ccblade._bem as _bem  # TODO: move to rotoraero
+import _bem  # TODO: move to rotoraero
 
 from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, TURBINE_CLASS
 
