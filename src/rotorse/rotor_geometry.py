@@ -290,7 +290,7 @@ class DTU10MW(ReferenceBlade):
         thickness, _, _, _ = myspline.interp(self.r)
         thickness = np.minimum(100.0, thickness)
         #af_thicknesses  = np.array([21.1, 24.1, 27.0, 30.1, 33.0, 36.0, 48.0, 60.0, 72.0, 100.0])
-        af_thicknesses  = np.array([24.1, 30.1, 33.0, 36.0, 48.0, 60.0, 100.0])
+        af_thicknesses  = np.array([24.1, 30.1, 36.0, 48.0, 60.0, 100.0])
         self.airfoils = ['']*self.npts
         for k in range(self.npts):
             idx_thick       = np.where(thickness[k] <= af_thicknesses)[0]
