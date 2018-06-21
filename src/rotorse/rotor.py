@@ -22,7 +22,7 @@ from commonse.environment import PowerWind
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection
 from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, NINPUT
 
-from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
+from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, DRIVETRAIN_TYPE
 
 
 class RotorSE(Group):
@@ -142,7 +142,7 @@ class RotorSE(Group):
         self.connect('spline.chord', 'analysis.chord')
         self.connect('spline.theta', 'analysis.theta')
         self.connect('spline.precurve', 'analysis.precurve')
-        self.connect('spline.precurve', 'analysis.precurveTip', src_indices=[NPTS-1])
+        self.connect('precurve_tip', 'analysis.precurveTip')
         self.connect('spline.Rhub', 'analysis.Rhub')
         self.connect('spline.Rtip', 'analysis.Rtip')
         self.connect('precone', 'analysis.precone')
@@ -210,7 +210,7 @@ class RotorSE(Group):
         self.connect('spline.diameter', 'hub_diameter_in')
         self.connect('spline.max_chord', 'max_chord_in')
         self.connect('geom.diameter', 'diameter_in')
-        self.connect('spline.presweep', 'presweepTip_in', src_indices=[NPTS-1])
+        self.connect('presweep_tip', 'presweepTip_in')
 
         
         # Structures connections
@@ -251,7 +251,7 @@ class RotorSE(Group):
         self.connect('spline.chord', 'aero_rated.chord')
         self.connect('spline.theta', 'aero_rated.theta')
         self.connect('spline.precurve', 'aero_rated.precurve')
-        self.connect('spline.precurve', 'aero_rated.precurveTip', src_indices=[NPTS-1])
+        self.connect('precurve_tip', 'aero_rated.precurveTip')
         self.connect('spline.Rhub', 'aero_rated.Rhub')
         self.connect('spline.Rtip', 'aero_rated.Rtip')
         self.connect('precone', 'aero_rated.precone')
@@ -271,7 +271,7 @@ class RotorSE(Group):
         self.connect('spline.chord', 'aero_extrm.chord')
         self.connect('spline.theta', 'aero_extrm.theta')
         self.connect('spline.precurve', 'aero_extrm.precurve')
-        self.connect('spline.precurve', 'aero_extrm.precurveTip', src_indices=[NPTS-1])
+        self.connect('precurve_tip', 'aero_extrm.precurveTip')
         self.connect('spline.Rhub', 'aero_extrm.Rhub')
         self.connect('spline.Rtip', 'aero_extrm.Rtip')
         self.connect('precone', 'aero_extrm.precone')
@@ -290,7 +290,7 @@ class RotorSE(Group):
         self.connect('spline.chord', 'aero_extrm_forces.chord')
         self.connect('spline.theta', 'aero_extrm_forces.theta')
         self.connect('spline.precurve', 'aero_extrm_forces.precurve')
-        self.connect('spline.precurve', 'aero_extrm_forces.precurveTip', src_indices=[NPTS-1])
+        self.connect('precurve_tip', 'aero_extrm_forces.precurveTip')
         self.connect('spline.Rhub', 'aero_extrm_forces.Rhub')
         self.connect('spline.Rtip', 'aero_extrm_forces.Rtip')
         self.connect('precone', 'aero_extrm_forces.precone')
@@ -312,7 +312,7 @@ class RotorSE(Group):
         self.connect('spline.chord', 'aero_defl_powercurve.chord')
         self.connect('spline.theta', 'aero_defl_powercurve.theta')
         self.connect('spline.precurve', 'aero_defl_powercurve.precurve')
-        self.connect('spline.precurve', 'aero_defl_powercurve.precurveTip', src_indices=[NPTS-1])
+        self.connect('precurve_tip', 'aero_defl_powercurve.precurveTip')
         self.connect('spline.Rhub', 'aero_defl_powercurve.Rhub')
         self.connect('spline.Rtip', 'aero_defl_powercurve.Rtip')
         self.connect('precone', 'aero_defl_powercurve.precone')
@@ -519,7 +519,7 @@ class RotorSE(Group):
         self.connect('blade_defl.delta_precurve_sub', 'delta_precurve_sub_out_in')
 
         self.connect('spline.Rtip', 'Rtip_in')
-        self.connect('spline.precurve', 'precurveTip_in', src_indices=[NPTS-1])
+        self.connect('precurve_tip', 'precurveTip_in')
 
         ### adding for the drivetrain root moment calculations:
         # TODO - number and value of azimuth angles should be arbitrary user inputs
@@ -532,7 +532,7 @@ class RotorSE(Group):
         self.connect('spline.chord', ['aero_0.chord', 'aero_120.chord', 'aero_240.chord'])
         self.connect('spline.theta', ['aero_0.theta', 'aero_120.theta', 'aero_240.theta'])
         self.connect('spline.precurve', ['aero_0.precurve', 'aero_120.precurve', 'aero_240.precurve'])
-        self.connect('spline.precurve', ['aero_0.precurveTip', 'aero_120.precurveTip', 'aero_240.precurveTip'], src_indices=[NPTS-1])
+        self.connect('precurve_tip', ['aero_0.precurveTip', 'aero_120.precurveTip', 'aero_240.precurveTip'])
         self.connect('spline.Rhub', ['aero_0.Rhub', 'aero_120.Rhub', 'aero_240.Rhub'])
         self.connect('spline.Rtip', ['aero_0.Rtip', 'aero_120.Rtip', 'aero_240.Rtip'])
         self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
@@ -595,13 +595,13 @@ if __name__ == '__main__':
     rotor.setup()
 
     # === blade grid ===
-    rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
-    rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+    rotor['hubFraction'] = myref.hubFraction #0.025  # (Float): hub location as fraction of radius
+    rotor['bladeLength'] = myref.bladeLength #61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
     # rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
-    rotor['precone'] = 2.5  # (Float, deg): precone angle
-    rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
+    rotor['precone'] = myref.precone #2.5  # (Float, deg): precone angle
+    rotor['tilt'] = myref.tilt #5.0  # (Float, deg): shaft tilt
     rotor['yaw'] = 0.0  # (Float, deg): yaw error
-    rotor['nBlades'] = 3  # (Int): number of blades
+    rotor['nBlades'] = myref.nBlades #3  # (Int): number of blades
     # ------------------
     
     # === blade geometry ===
@@ -620,20 +620,20 @@ if __name__ == '__main__':
     rotor['analysis.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['wind.shearExp'] = 0.25  # (Float): shear exponent
     rotor['hub_height'] = 90.0  # (Float, m): hub height
-    rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
+    rotor['turbine_class'] = myref.turbine_class #TURBINE_CLASS['I']  # (Enum): IEC turbine class
     rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
     rotor['wind.zref'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
     rotor['gust_stddev'] = 3
     # ----------------------
 
     # === control ===
-    rotor['control:Vin'] = 3.0  # (Float, m/s): cut-in wind speed
-    rotor['control:Vout'] = 25.0  # (Float, m/s): cut-out wind speed
+    rotor['control:Vin'] = myref.control_Vin #3.0  # (Float, m/s): cut-in wind speed
+    rotor['control:Vout'] = myref.control_Vout #25.0  # (Float, m/s): cut-out wind speed
+    rotor['control:minOmega'] = myref.control_minOmega #0.0  # (Float, rpm): minimum allowed rotor rotation speed
+    rotor['control:maxOmega'] = myref.control_maxOmega #12.0  # (Float, rpm): maximum allowed rotor rotation speed
+    rotor['control:tsr'] = myref.control_tsr #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    rotor['control:pitch'] = myref.control_pitch #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
     rotor['machine_rating'] = myref.rating #5e6  # (Float, W): rated power
-    rotor['control:minOmega'] = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
-    rotor['control:maxOmega'] = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
-    rotor['control:tsr'] = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-    rotor['control:pitch'] = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
     rotor['pitch_extreme'] = 0.0  # (Float, deg): worst-case pitch at survival wind condition
     rotor['azimuth_extreme'] = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
     rotor['VfactorPC'] = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
@@ -642,7 +642,7 @@ if __name__ == '__main__':
     # === aero and structural analysis options ===
     rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
     rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
-    rotor['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']  # (Enum)
+    rotor['drivetrainType'] = myref.drivetrain #DRIVETRAIN_TYPE['GEARED']  # (Enum)
     rotor['struc.nF'] = 5  # (Int): number of natural frequencies to compute
     rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
     # ----------------------
