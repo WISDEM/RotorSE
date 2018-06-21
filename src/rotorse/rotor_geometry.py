@@ -6,7 +6,7 @@ import csv
 from openmdao.api import Component, Group, IndepVarComp
 
 from akima import Akima, akima_interp_with_derivs
-from rotorse import TURBINE_CLASS
+from rotorse import TURBINE_CLASS, DRIVETRAIN_TYPE
 from ccblade.ccblade_component import CCBladeGeometry
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 
@@ -14,8 +14,18 @@ NINPUT = 5
 
 class ReferenceBlade(object):
     def __init__(self):
-        self.name      = None
-        self.rating    = None
+        self.name           = None
+        self.rating         = None
+        self.turbine_class  = None
+        self.drivetrainType = None
+        self.downwind       = None
+        self.nBlades        = None
+        
+        self.bladeLength   = None
+        self.hubFraction   = None
+        self.precone       = None
+        self.tilt          = None
+        
         self.r         = None
         self.r_in      = None
         self.npts      = None
@@ -23,6 +33,7 @@ class ReferenceBlade(object):
         self.chord_ref = None
         self.theta     = None
         self.precurve  = None
+        self.precurveT = None
         self.presweep  = None
         self.airfoils  = None
 
@@ -40,6 +51,12 @@ class ReferenceBlade(object):
         self.sector_idx_strain_spar = None
         self.sector_idx_strain_te   = None
 
+        self.control_Vin  = None
+        self.control_Vout = None
+        self.control_tsr  = None
+        self.control_minOmega = None
+        self.control_maxOmega = None
+        
     def setRin(self):
         self.r_in = np.r_[0.0, self.r_cylinder, np.linspace(self.r_max_chord, 1.0, NINPUT-2)]
         
@@ -77,9 +94,18 @@ class NREL5MW(ReferenceBlade):
         17,61.6333,0.106,2.7333,1.419,NACA64_A17.dat""")
         
         # Name to recover / lookup this info
-        self.name   = '5MW'
-        self.rating = 5e6
+        self.name     = '5MW'
+        self.rating   = 5e6
+        self.nBlades  = 3
+        self.downwind = False
+        self.turbine_class = TURBINE_CLASS['I']
+        self.drivetrain    = DRIVETRAIN_TYPE['GEARED']
 
+        self.hubFraction = 0.025 
+        self.bladeLength = 61.5
+        self.precone     = 2.5
+        self.tilt        = 5.0
+        
         # Analysis grid (old r_str)
         eps = 1e-4
         self.r = np.array([eps, 0.00492790457512, 0.00652942887106, 0.00813095316699,
@@ -120,8 +146,9 @@ class NREL5MW(ReferenceBlade):
         #print np.c_[self.chord_ref, chord]
 
 
-        self.precurve = np.zeros(self.chord.shape)
-        self.presweep = np.zeros(self.chord.shape)
+        self.precurve  = np.zeros(self.chord.shape)
+        self.precurveT = 0.0
+        self.presweep  = np.zeros(self.chord.shape)
 
         # Spar cap thickness- linear taper from end of cylinder to tip
         spar_str_orig = np.array([0.05, 0.04974449, 0.04973077, 0.04971704, 0.04970245, 0.04968871,
@@ -174,12 +201,30 @@ class NREL5MW(ReferenceBlade):
         self.web4 = np.nan * np.ones(self.web3.shape)
 
         
+        # Control
+        self.control_Vin      = 3.0
+        self.control_Vout     = 25.0
+        self.control_minOmega = 0.0
+        self.control_maxOmega = 12.0
+        self.control_tsr      = 7.55
+        self.control_pitch    = 0.0
+        
+        
 class DTU10MW(ReferenceBlade):
     def __init__(self):
         super(DTU10MW, self).__init__()
 
         self.name   = '10MW'
         self.rating = 10e6
+        self.nBlades  = 3
+        self.downwind = False
+        self.turbine_class = TURBINE_CLASS['I']
+        self.drivetrain    = DRIVETRAIN_TYPE['GEARED']
+
+        self.bladeLength = 0.5 * (198.0 - 4.6)
+        self.hubFraction = 0.5*4.6 / self.bladeLength
+        self.precone     = 4.0
+        self.tilt        = 6.0
 
         # DTU 10MW BLADE PROPS
         #Eta,Chord,Twist,Rel.Thick.,Abs.Thick.,PreBend,Sweep,PitchAx.
@@ -277,6 +322,7 @@ class DTU10MW(ReferenceBlade):
 
         myspline = Akima(raw_r, raw_pre)
         self.precurve, _, _, _ = myspline.interp(self.r_in)
+        self.precurveT = 0.0
 
         myspline = Akima(raw_r, raw_sw)
         self.presweep, _, _, _ = myspline.interp(self.r_in)
@@ -345,6 +391,15 @@ class DTU10MW(ReferenceBlade):
         self.web4 = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
                               1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
                               1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+        
+        
+        # Control
+        self.control_Vin      = 4.0
+        self.control_Vout     = 25.0
+        self.control_minOmega = 6.0
+        self.control_maxOmega = 90.0 / self.bladeLength * (60.0/(2.0*np.pi))
+        self.control_tsr      = 10.58
+        self.control_pitch    = 0.0
         
 
 class BladeGeometry(Component):
@@ -531,7 +586,9 @@ class RotorGeometry(Group):
         self.add('chord_in', IndepVarComp('chord_in', np.zeros(NINPUT),units='m'), promotes=['*'])
         self.add('theta_in', IndepVarComp('theta_in', np.zeros(NINPUT), units='deg'), promotes=['*'])
         self.add('precurve_in', IndepVarComp('precurve_in', np.zeros(NINPUT), units='m'), promotes=['*'])
+        self.add('precurve_tip', IndepVarComp('precurve_tip', 0.0, units='m'), promotes=['*'])
         self.add('presweep_in', IndepVarComp('presweep_in', np.zeros(NINPUT), units='m'), promotes=['*'])
+        self.add('presweep_tip', IndepVarComp('presweep_tip', 0.0, units='m'), promotes=['*'])
         self.add('precone', IndepVarComp('precone', 0.0, units='deg'), promotes=['*'])
         self.add('tilt', IndepVarComp('tilt', 0.0, units='deg'), promotes=['*'])
         self.add('yaw', IndepVarComp('yaw', 0.0, units='deg'), promotes=['*'])
@@ -577,4 +634,4 @@ class RotorGeometry(Group):
         # connections to geom
         self.connect('spline.Rtip', 'geom.Rtip')
         self.connect('precone', 'geom.precone')
-        self.connect('spline.precurve', 'geom.precurveTip', src_indices=[RefBlade.npts-1])
+        self.connect('precurve_tip', 'geom.precurveTip')

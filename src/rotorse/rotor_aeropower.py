@@ -22,7 +22,7 @@ from commonse.environment import PowerWind
 from akima import Akima
 from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW
 
-from rotorse import RPM2RS, RS2RPM, TURBINE_CLASS, DRIVETRAIN_TYPE
+from rotorse import RPM2RS, RS2RPM, DRIVETRAIN_TYPE
 
 
 # ---------------------
@@ -825,7 +825,7 @@ class RotorAeroPower(Group):
         self.connect('spline.chord', 'analysis.chord')
         self.connect('spline.theta', 'analysis.theta')
         self.connect('spline.precurve', 'analysis.precurve')
-        self.connect('spline.precurve', 'analysis.precurveTip', src_indices=[RefBlade.npts-1])
+        self.connect('precurve_tip', 'analysis.precurveTip')
         self.connect('spline.Rhub', 'analysis.Rhub')
         self.connect('spline.Rtip', 'analysis.Rtip')
         self.connect('hub_height', 'analysis.hubHt')
@@ -909,13 +909,13 @@ class RotorAeroPower(Group):
         self.connect('geom.diameter', 'diameter_in')
         self.connect('turbineclass.V_extreme', 'V_extreme_in')
         self.connect('spline.Rtip', 'Rtip_in')
-        self.connect('spline.precurve', 'precurveTip_in', src_indices=[RefBlade.npts-1])
-        self.connect('spline.presweep', 'presweepTip_in', src_indices=[RefBlade.npts-1])
+        self.connect('precurve_tip', 'precurveTip_in')
+        self.connect('presweep_tip', 'presweepTip_in')
 
 
 if __name__ == '__main__':
 
-    myref = NREL5MW()
+    myref = DTU10MW() #NREL5MW()
     
     rotor = Problem()
     npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
@@ -927,13 +927,13 @@ if __name__ == '__main__':
     rotor.setup()
     
     # === blade grid ===
-    rotor['hubFraction'] = 0.025  # (Float): hub location as fraction of radius
-    rotor['bladeLength'] = 61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+    rotor['hubFraction'] = myref.hubFraction #0.025  # (Float): hub location as fraction of radius
+    rotor['bladeLength'] = myref.bladeLength #61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
     # rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
-    rotor['precone'] = 2.5  # (Float, deg): precone angle
-    rotor['tilt'] = 5.0  # (Float, deg): shaft tilt
+    rotor['precone'] = myref.precone #2.5  # (Float, deg): precone angle
+    rotor['tilt'] = myref.tilt #5.0  # (Float, deg): shaft tilt
     rotor['yaw'] = 0.0  # (Float, deg): yaw error
-    rotor['nBlades'] = 3  # (Int): number of blades
+    rotor['nBlades'] = myref.nBlades #3  # (Int): number of blades
     # ------------------
     
     # === blade geometry ===
@@ -952,28 +952,25 @@ if __name__ == '__main__':
     rotor['analysis.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['hub_height'] = 90.0
     rotor['analysis.shearExp'] = 0.25  # (Float): shear exponent
-    rotor['turbine_class'] = TURBINE_CLASS['I']  # (Enum): IEC turbine class
+    rotor['turbine_class'] = myref.turbine_class #TURBINE_CLASS['I']  # (Enum): IEC turbine class
     rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
     # ----------------------
     
     # === control ===
-    rotor['control:Vin'] = 3.0  # (Float, m/s): cut-in wind speed
-    rotor['control:Vout'] = 25.0  # (Float, m/s): cut-out wind speed
-    rotor['control:ratedPower'] = 5e6  # (Float, W): rated power
-    rotor['control:minOmega'] = 0.0  # (Float, rpm): minimum allowed rotor rotation speed
-    rotor['control:maxOmega'] = 12.0  # (Float, rpm): maximum allowed rotor rotation speed
-    rotor['control:tsr'] = 7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-    rotor['control:pitch'] = 0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    rotor['control:Vin'] = myref.control_Vin #3.0  # (Float, m/s): cut-in wind speed
+    rotor['control:Vout'] = myref.control_Vout #25.0  # (Float, m/s): cut-out wind speed
+    rotor['control:ratedPower'] = myref.rating #5e6  # (Float, W): rated power
+    rotor['control:minOmega'] = myref.control_minOmega #0.0  # (Float, rpm): minimum allowed rotor rotation speed
+    rotor['control:maxOmega'] = myref.control_maxOmega #12.0  # (Float, rpm): maximum allowed rotor rotation speed
+    rotor['control:tsr'] = myref.control_tsr #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    rotor['control:pitch'] = myref.control_pitch #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
     # ----------------------
 
     # === aero and structural analysis options ===
     rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
     rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
-    rotor['drivetrainType'] = DRIVETRAIN_TYPE['GEARED']  # (Enum)
+    rotor['drivetrainType'] = myref.drivetrain #DRIVETRAIN_TYPE['GEARED']  # (Enum)
     # ----------------------
-
-    # === materials and composite layup  ===
-    basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), '5MW_PreCompFiles')
 
     # === run and outputs ===
     rotor.run()
