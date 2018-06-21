@@ -915,7 +915,7 @@ class RotorAeroPower(Group):
 
 if __name__ == '__main__':
 
-    myref = DTU10MW() #NREL5MW()
+    myref = NREL5MW() #DTU10MW()
     
     rotor = Problem()
     npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
@@ -950,10 +950,10 @@ if __name__ == '__main__':
     # === atmosphere ===
     rotor['analysis.rho'] = 1.225  # (Float, kg/m**3): density of air
     rotor['analysis.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
-    rotor['hub_height'] = 90.0
+    rotor['hub_height'] = myref.hub_height #90.0
     rotor['analysis.shearExp'] = 0.25  # (Float): shear exponent
     rotor['turbine_class'] = myref.turbine_class #TURBINE_CLASS['I']  # (Enum): IEC turbine class
-    rotor['cdf_reference_height_wind_speed'] = 90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
+    rotor['cdf_reference_height_wind_speed'] = myref.hub_height #90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)
     # ----------------------
     
     # === control ===

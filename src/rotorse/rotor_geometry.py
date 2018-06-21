@@ -101,6 +101,7 @@ class NREL5MW(ReferenceBlade):
         self.turbine_class = TURBINE_CLASS['I']
         self.drivetrain    = DRIVETRAIN_TYPE['GEARED']
 
+        self.hub_height  = 90.0
         self.hubFraction = 0.025 
         self.bladeLength = 61.5
         self.precone     = 2.5
@@ -221,9 +222,10 @@ class DTU10MW(ReferenceBlade):
         self.turbine_class = TURBINE_CLASS['I']
         self.drivetrain    = DRIVETRAIN_TYPE['GEARED']
 
+        self.hub_height  = 119.0
         self.bladeLength = 0.5 * (198.0 - 4.6)
         self.hubFraction = 0.5*4.6 / self.bladeLength
-        self.precone     = 4.0
+        self.precone     = -4.0
         self.tilt        = 6.0
 
         # DTU 10MW BLADE PROPS
