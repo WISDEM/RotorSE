@@ -2409,14 +2409,32 @@ class CreateFASTConstraints(Component):
         resultsdict = params[self.caseids[0]]
         if self.check_results:
             # bm_param = 'Spn4MLxb1'
-            bm_param = ['RootMyb1', 'OoPDefl1', 'GenTq', 'RotThrust', 'RotTorq']
-            bm_param_units = ['kN*m', 'm', 'kN*m', 'kN', 'kN*m']
+            # bm_param = ['RootMyb1', 'OoPDefl1', 'GenTq', 'RotThrust', 'RotTorq', 'Spn3MLxb1']
+            # bm_param_units = ['kN*m', 'm', 'kN*m', 'kN', 'kN*m', 'kN*m']
+            bm_param = ['RootMyb1', 'OoPDefl1', 'Spn3MLxb1']
+            bm_param_units = ['kN*m', 'm', 'kN*m']
+
+            # for i in range(0, len(bm_param)):
+                # f = open(bm_param[i]+'.txt',"w+")
+                # for j in range(len(resultsdict[bm_param[i]])):
+                #     f.write(str(resultsdict[bm_param[i]][j])+'\n')
+                # f.close()
+
             for i in range(0, len(bm_param)):
+                f = open(bm_param[i]+'.txt',"r")
+                lines = f.readlines()
+                plot_param = []
+                for j in range(len(lines)):
+                    plot_param.append(float(lines[j]))
+                f.close()
+
                 plt.figure()
                 plt.plot(resultsdict[bm_param[i]])
+                plt.plot(plot_param, '--', label = 'Nonvaried Values')
                 plt.xlabel('Simulation Step')
                 plt.ylabel(bm_param[i] + ' (' + bm_param_units[i] + ')')
                 plt.title(bm_param[i])
+                plt.legend()
                 plt.savefig(self.dir_saved_plots + '/plots/param_plots/' + bm_param[i] + '_test.png')
 
                 plt.show()
@@ -3109,9 +3127,16 @@ class Calculate_FAST_sm_training_points(Component):
         for i in range(0, len(self.NBlGages)):
             total_num_bl_gages += self.NBlGages[i]
 
-        # to nondimensionalize chord_sub
+        # to calculate solidity
         self.add_param('bladeLength', shape=1, desc='Blade length')
-        self.nondimensionalize_chord = FASTinfo['nondimensionalize_chord']
+        self.add_param('nBlades', val=3, desc='Number of Blades')
+
+        # other surrogate model inputs
+        self.add_param('turbulence_class', val=Enum('A', 'B', 'C'), desc='IEC turbulence class', pass_by_obj=True)
+        self.add_param('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True)
+        self.add_param('af_idx', val=np.zeros(naero))
+        self.add_param('airfoil_types', val=np.zeros(8))
+
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -3126,17 +3151,23 @@ class Calculate_FAST_sm_training_points(Component):
 
         # get rated torque
         rated_tq_file = self.opt_dir + '/rated_tq.txt'
-        f = open(rated_tq_file, "r")
-        lines = f.readlines()
-        rated_tq = float(lines[0])
-        f.close()
+        if os.path.isfile(rated_tq_file):
+            f = open(rated_tq_file, "r")
+            lines = f.readlines()
+            rated_tq = float(lines[0])
+            f.close()
+        else:
+            rated_tq = 1.0 # 4180.0
 
         # get rated thrust
         rated_thrust_file = self.opt_dir + '/rated_thrust.txt'
-        f = open(rated_thrust_file, "r")
-        lines = f.readlines()
-        rated_thrust = float(lines[0])
-        f.close()
+        if os.path.isfile(rated_thrust_file):
+            f = open(rated_thrust_file, "r")
+            lines = f.readlines()
+            rated_thrust = float(lines[0])
+            f.close()
+        else:
+            rated_thrust = 1.0 # 542.0
 
         def replace_line(file_name, line_num, text):
             lines = open(file_name, 'r').readlines()
@@ -3260,7 +3291,7 @@ class Calculate_FAST_sm_training_points(Component):
                         if j in self.sm_var_index[i]:
 
                             # nondimensionalize chord_sub (replace c with c/r)
-                            if self.sm_var_names[i] == 'chord_sub' and self.nondimensionalize_chord:
+                            if self.sm_var_names[i] == 'chord_sub':
                                 var_text += ' ' + str(params[self.sm_var_names[i]][j]/params['bladeLength'])
                             else:
                                 var_text += ' ' + str(params[self.sm_var_names[i]][j])
@@ -3309,9 +3340,9 @@ class Calculate_FAST_sm_training_points(Component):
                     for j in range(0, len(params[self.sm_var_names[i]])):
                         if j in self.sm_var_index[i]:
 
-                            # nondimensionalize chord_sub (replace c with c/r)
-                            if self.sm_var_names[i] == 'chord_sub' and self.nondimensionalize_chord:
-                                var_text += ' ' + str(params[self.sm_var_names[i]][j]/params['bladeLength'])
+                            # calculate solidity
+                            if self.sm_var_names[i] == 'chord_sub':
+                                var_text += ' ' + str(params['nBlades'] * params[self.sm_var_names[i]][j] / (2 * params['bladeLength']))
                             else:
                                 var_text += ' ' + str(params[self.sm_var_names[i]][j])
 
@@ -3437,6 +3468,8 @@ class calc_FAST_sm_fit(Component):
         self.add_param('DEMy', shape=18, desc='DEMy')
 
         self.add_param('bladeLength', shape=1, desc='Blade length')
+        self.add_param('nBlades', val=3, desc='Number of Blades')
+
 
         self.check_fit = FASTinfo['check_fit']
 
@@ -3453,23 +3486,29 @@ class calc_FAST_sm_fit(Component):
 
         self.theta0_val = FASTinfo['theta0_val']
 
-
         self.nstr = nstr
 
     def solve_nonlinear(self, params, unknowns, resids):
 
         # get rated torque
         rated_tq_file = self.opt_dir + '/rated_tq.txt'
-        f = open(rated_tq_file, "r")
-        lines = f.readlines()
-        rated_tq = float(lines[0])
+        if os.path.isfile(rated_tq_file):
+            f = open(rated_tq_file, "r")
+            lines = f.readlines()
+            rated_tq = float(lines[0])
+            f.close()
+        else:
+            rated_tq = 1.0 # 4180.0
 
         # get rated thrust
         rated_thrust_file = self.opt_dir + '/rated_thrust.txt'
-        f = open(rated_thrust_file, "r")
-        lines = f.readlines()
-        rated_thrust = float(lines[0])
-        f.close()
+        if os.path.isfile(rated_thrust_file):
+            f = open(rated_thrust_file, "r")
+            lines = f.readlines()
+            rated_thrust = float(lines[0])
+            f.close()
+        else:
+            rated_thrust = 1.0 # 542.0
 
         # === extract variables === #
         header_len = 1
@@ -3779,7 +3818,12 @@ class calc_FAST_sm_fit(Component):
 
                 # design variable values
                 for k in range(0,len(var_names)):
-                    xt[k, j] = var_dict[var_names[k]][j]
+
+                    # convert from solidity to chord
+                    if var_names == 'chord_sub':
+                        xt[k, j] = var_dict[var_names[k]][j]*2.0*params['bladeLength']/params['nBlades']
+                    else:
+                        xt[k, j] = var_dict[var_names[k]][j]
 
                 # output values
                 yt_x[i, j] = out_dict[DEM_names[i]][j]
@@ -4372,12 +4416,17 @@ class use_FAST_surr_model(Component):
 
         self.nstr = nstr
 
-        # to nondimensionalize chord_sub
+        # to calculate solidity
         self.add_param('bladeLength', shape=1, desc='Blade length')
-        self.nondimensionalize_chord = FASTinfo['nondimensionalize_chord']
+        self.add_param('nBlades', val=3, desc='Number of Blades')
+
+        # other surrogate model inputs
+        self.add_param('turbulence_class', val=Enum('A', 'B', 'C'), desc='IEC turbulence class', pass_by_obj=True)
+        self.add_param('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True)
+        self.add_param('af_idx', val=np.zeros(naero))
+        self.add_param('airfoil_types', val=np.zeros(8))
 
     def solve_nonlinear(self, params, unknowns, resids):
-
 
         # === load surrogate model fits === #
         sm_name_list = ['sm_x', 'sm_y', 'sm_x_load', 'sm_y_load', 'sm_def']
@@ -4410,9 +4459,9 @@ class use_FAST_surr_model(Component):
 
                     if j in self.sm_var_index[i]:
 
-                        # nondimensionalize chord_sub
-                        if self.sm_var_names[i] == 'chord_sub' and self.nondimensionalize_chord:
-                            sv.append(params[self.sm_var_names[i]][j]/params['bladeLength'])
+                        # calculate solidity
+                        if self.sm_var_names[i] == 'chord_sub':
+                            sv.append(params['nBlades'] * params[self.sm_var_names[i]][j] / (2 * params['bladeLength']))
                         else:
                             sv.append(params[self.sm_var_names[i]][j])
             # chord_sub
@@ -4712,6 +4761,7 @@ class CreateFASTConfig(Component):
 
                 # cfg['FoilNm'] = FoilNm
                 cfg['NFoil'] = (params['af_idx'] + np.ones(np.size(params['af_idx']))).astype(int)
+
                 cfg['BldNodes'] = np.size(params['af_idx'])
 
                 # Make akima splines of RNodes/AeroTwst and RNodes/Chord
@@ -5839,8 +5889,15 @@ class RotorSE(Group):
             self.connect('Edg_sm', 'struc.Edg_max')
             self.connect('Flp_sm', 'struc.Flp_max')
 
-            # nondimensionalize chord_sub
+            # calculate solidity
             self.connect('bladeLength', 'use_FAST_sm_fit.bladeLength')
+            self.connect('nBlades', 'use_FAST_sm_fit.nBlades')
+
+            # other surrogate model inputs
+            self.connect('turbine_class', 'use_FAST_sm_fit.turbine_class')
+            self.connect('turbulence_class', 'use_FAST_sm_fit.turbulence_class')
+            self.connect('af_idx', 'use_FAST_sm_fit.af_idx')
+            self.connect('airfoil_types', 'use_FAST_sm_fit.airfoil_types')
 
             # Tip deflection
             if FASTinfo['use_tip_def_cons']:
@@ -5922,12 +5979,20 @@ class RotorSE(Group):
                 self.connect('sparT', 'calc_FAST_sm_training_points.sparT')
                 self.connect('teT', 'calc_FAST_sm_training_points.teT')
 
-                # nondimensionalize chord
+                # calculate solidity
                 self.connect('bladeLength', 'calc_FAST_sm_training_points.bladeLength')
+                self.connect('nBlades', 'calc_FAST_sm_training_points.nBlades')
+
+                # other surrogate model inputs
+                self.connect('turbine_class', 'calc_FAST_sm_training_points.turbine_class')
+                self.connect('turbulence_class', 'calc_FAST_sm_training_points.turbulence_class')
+                self.connect('af_idx', 'calc_FAST_sm_training_points.af_idx')
+                self.connect('airfoil_types', 'calc_FAST_sm_training_points.airfoil_types')
 
             # create surrogate model
             if FASTinfo['Use_FAST_sm']:
                 self.connect('bladeLength', 'FAST_sm_fit.bladeLength')
+                self.connect('nBlades', 'FAST_sm_fit.nBlades')
 
 
 if __name__ == '__main__':

@@ -9,6 +9,7 @@ import os
 import random
 import re
 import shutil
+from akima import Akima
 
 # ========================================================================================================= #
 
@@ -105,6 +106,9 @@ def setupFAST(FASTinfo, description):
     # === choose .wnd file directories === #
     FASTinfo = choose_wnd_dir(FASTinfo)
 
+    # airfoil group name
+    FASTinfo['airfoil_group_name'] = 'af1'
+
     # === Surrogate Model Options === #
 
     if FASTinfo['train_sm'] or FASTinfo['Use_FAST_sm']:
@@ -130,7 +134,7 @@ def setupFAST(FASTinfo, description):
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 40.0  # 40.0
+    FASTinfo['rm_time'] = 20.0  # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -202,14 +206,11 @@ def setupFAST_other(FASTinfo):
     FASTinfo['print_sm'] = False
 
     # use this when training points for surrogate model
-    FASTinfo['remove_sm_dir'] = False
+    FASTinfo['remove_sm_dir'] = True
 
     # use this when calculating DEMs for fixed-DEMs calculation
     FASTinfo['remove_fixedcalc_dir'] = True
     FASTinfo['remove_unnecessary_files'] = True
-
-    # use this when training points for surrogate model and using surrogate model
-    FASTinfo['nondimensionalize_chord'] = True
 
     # sequential or parallel calculation of turbine response for each .wnd file
     FASTinfo['calculation_type'] = 'sequential'
@@ -261,6 +262,8 @@ def specify_DLCs(FASTinfo):
         # DLC_List = ['DLC_1_2','DLC_1_3']
         # DLC_List=['DLC_1_3']
 
+        # DLC_List = ['DLC_0_0', 'DLC_6_1', 'DLC_6_3']
+
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
 
@@ -272,8 +275,8 @@ def specify_DLCs(FASTinfo):
 
     # === turbulent wind file parameters === #
     #  random seeds (np.linspace(1,6,6) is pre-calculated)
-    # FASTinfo['rand_seeds'] = np.linspace(1, 1, 1)
-    FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
+    FASTinfo['rand_seeds'] = np.linspace(1, 1, 1)
+    # FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
     # FASTinfo['rand_seeds'] = np.linspace(1, 2, 2)
 
     #  mean wind speeds (np.linspace(5,23,10) is pre-calculated)
@@ -316,8 +319,8 @@ def specify_DLCs(FASTinfo):
 def choose_wnd_dir(FASTinfo):
 
     # === turbulence/turbine class === #
-    FASTinfo['turbulence_class'] = 'B'
-    FASTinfo['turbine_class'] = 'I'
+    # FASTinfo['turbulence_class'] = 'B'
+    # FASTinfo['turbine_class'] = 'I'
 
     # === turbulent, nonturbulent directories === #
     FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir_' \
@@ -584,7 +587,7 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 100
+    # FASTinfo['num_pts'] = 100
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
@@ -603,7 +606,12 @@ def create_surr_model_params(FASTinfo):
 
     if FASTinfo['training_point_dist'] == 'lhs':
 
-        FASTinfo['sm_var_out_dir'] = 'sm_var_dir'
+        # FASTinfo['turbulence_class'] = 'B'
+        # FASTinfo['turbine_class'] = 'I'
+        # FASTinfo['airfoil_group_name'] = 'af1'
+        # FASTinfo['sm_var_out_dir'] = 'sm_var_dir'
+        FASTinfo['sm_var_out_dir'] = 'sm_var_dir_' + FASTinfo['turbulence_class'] \
+                                     + '_' + FASTinfo['turbine_class'] + '_' + FASTinfo['airfoil_group_name']
 
         FASTinfo['sm_var_file_master'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_master_var.txt'
         FASTinfo['sm_DEM_file_master'] = FASTinfo['sm_var_out_dir'] + '/' + 'sm_master_DEM.txt'
@@ -616,7 +624,8 @@ def create_surr_model_params(FASTinfo):
     # list of variables that we are varying
     # FASTinfo['sm_var_names'] = ['r_max_chord']
     # FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub']
-    FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub', 'theta_sub']
+    # FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub', 'theta_sub']
+    FASTinfo['sm_var_names'] = ['chord_sub', 'theta_sub']
 
     # indices of which variables are used
     # FASTinfo['sm_var_index'] = [[1]] # second point in distribution
@@ -625,7 +634,8 @@ def create_surr_model_params(FASTinfo):
     # FASTinfo['sm_var_index'] = [[0], [0]] # r_max_chord & first in chord distribution
     # FASTinfo['sm_var_index'] = [[0,1,2,3]] # chord_sub distribution
     # FASTinfo['sm_var_index'] = [[0]] # r_max_chord
-    FASTinfo['sm_var_index'] = [[0], [0,1,2,3], [0,1,2,3]]
+    # FASTinfo['sm_var_index'] = [[0], [0,1,2,3], [0,1,2,3]]
+    FASTinfo['sm_var_index'] = [[0,1,2,3], [0,1,2,3]]
 
 
     # total num of variables used, variable index
@@ -937,7 +947,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         plt.ylabel('Var Domain (m)')
         plt.title('chord domain, restriction: ' + str(FASTinfo['range_frac']*100.0) + '%')
 
-
         plt.savefig(FASTinfo['dir_saved_plots'] + '/' + 'chord_sub_domain' + str(int(FASTinfo['range_frac']*100.0)) + '.png')
         plt.show()
 
@@ -1091,7 +1100,7 @@ def define_des_var_domains(FASTinfo, rotor):
             rotor.driver.add_desvar(des_var_name, lower=lower_array, upper=upper_array)
 
         else:
-            rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+            # rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
             rotor.driver.add_desvar('chord_sub', lower=1.3 * np.ones(4), upper=5.3 * np.ones(4))
             rotor.driver.add_desvar('theta_sub', lower=-10.0 * np.ones(4), upper=30.0 * np.ones(4))
 
@@ -1102,9 +1111,9 @@ def define_des_var_domains(FASTinfo, rotor):
 # initialize design variables
 def initialize_dv(FASTinfo):
 
-    FASTinfo['r_max_chord_init'] = 0.23577  # (Float): location of max chord on unit radius
     FASTinfo['chord_sub_init'] = np.array([3.2612, 4.5709, 3.3178,
                                    1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    FASTinfo['r_max_chord_init'] = 1.0 / (len(FASTinfo['chord_sub_init']) -1.0)
     FASTinfo['theta_sub_init'] = np.array([13.2783, 7.46036, 2.89317,
                                    -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
     FASTinfo['sparT_init'] = np.array(
@@ -1118,9 +1127,9 @@ def initialize_dv(FASTinfo):
 # initialize design variables
 def initialize_rotor_dv(rotor):
 
-    rotor['r_max_chord'] = 0.23577  # (Float): location of max chord on unit radius
     rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178,
                                    1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    rotor['r_max_chord'] = 1.0 / (len(rotor['chord_sub']) -1.0)
     rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,
                                    -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
     rotor['sparT'] = np.array(
@@ -1229,8 +1238,6 @@ def DLC_call(dlc, wnd_list, wnd_list_type, rand_seeds, mws, num_sgp, parked_list
 
 def Calc_max_DEMs(FASTinfo, rotor):
 
-    checkplots = FASTinfo['check_opt_DEMs']
-
     # from FASTinfo, get number of wind files
     caseids = []
     for i in range(0, len(FASTinfo['wnd_list'])):
@@ -1297,18 +1304,20 @@ def Calc_max_DEMs(FASTinfo, rotor):
         # TODO: plot check for different wnd files
 
     # create DEM plots using DEMx_master_array, DEMy_master_array
-    FASTinfo['createDEMplot'] = True
+    FASTinfo['createDEMplot'] = False
 
     if FASTinfo['createDEMplot']:
 
         plt.figure()
         plt.xlabel('strain gage position')
         plt.ylabel('DEM (kN*m)')
-        plt.title('DEMx for different .wnd files')  #: Bending Moment at Spanwise Station #1, Blade #1')
-        for i in range(120, 125): # 0, len(FASTinfo['wnd_list'])):
+        plt.title('DEMx for various input .wnd files')  #: Bending Moment at Spanwise Station #1, Blade #1')
+        for i in range(6): # 0, len(FASTinfo['wnd_list'])):
             plt.plot(DEMx_master_array[i][0:18], label=FASTinfo['wnd_list'][i])
 
         plt.legend()
+        plt.xticks(np.linspace(0,17,18))
+        plt.savefig(FASTinfo['dir_saved_plots'] + '/DEMx_dif_wnd_files.png')
         plt.show()
 
         quit()
@@ -1365,19 +1374,15 @@ def Calc_max_DEMs(FASTinfo, rotor):
     file_x = open(xDEM_file, "w")
     for j in range(0, len(Mxb_damage)):
         # write to xDEM file
-        file_x.write(str(Mxb_damage[j]) + '\n')
+        file_x.write(str(Mxb_damage[j][0]) + '\n')
     file_x.close()
 
     yDEM_file = FASTinfo['opt_dir'] + '/' + 'yDEM_max.txt'
     file_y = open(yDEM_file, "w")
     for j in range(0, len(Myb_damage)):
         # write to xDEM file
-        file_y.write(str(Myb_damage[j]) + '\n')
+        file_y.write(str(Myb_damage[j][0]) + '\n')
     file_y.close()
-
-    if checkplots:
-        plot_DEMs(rotor)
-        quit()
 
 # ========================================================================================================= #
 
@@ -1385,7 +1390,8 @@ def Use_FAST_DEMs(FASTinfo, rotor):
 
     # set rotor parameters
     rotor['rstar_damage'] = np.insert(rotor['r_aero'], 0, 0.0)
-
+    rotor['rstar_damage'] = np.array([0.000, 0.022, 0.067, 0.111, 0.167, 0.233, 0.300, 0.367, 0.433, 0.500,
+              0.567, 0.633, 0.700, 0.767, 0.833, 0.889, 0.933, 0.978])
     # set DEM parameters
     DEMx_max = np.zeros([len(rotor['rstar_damage']), 1])
     DEMy_max = np.zeros([len(rotor['rstar_damage']), 1])
@@ -1411,43 +1417,32 @@ def Use_FAST_DEMs(FASTinfo, rotor):
     rotor['Mxb_damage'] = DEMx_max
     rotor['Myb_damage'] = DEMy_max
 
+    if FASTinfo['check_opt_DEMs']:
+        plot_DEMs(rotor, FASTinfo)
+
 
     return rotor
 
 # ========================================================================================================= #
 
-def plot_DEMs(rotor):
-    rstar_damage_init = np.array([0.000, 0.022, 0.067, 0.111, 0.167, 0.233, 0.300, 0.367, 0.433, 0.500,
-                                      0.567, 0.633, 0.700, 0.767, 0.833, 0.889, 0.933,
-                                      0.978])  # (Array): nondimensional radial locations of damage equivalent moments
-    Mxb_damage_init = 1e3 * np.array([2.3743E+003, 2.0834E+003, 1.8108E+003, 1.5705E+003, 1.3104E+003,
-                                          1.0488E+003, 8.2367E+002, 6.3407E+002, 4.7727E+002, 3.4804E+002, 2.4458E+002,
-                                          1.6339E+002,
-                                          1.0252E+002, 5.7842E+001, 2.7349E+001, 1.1262E+001, 3.8549E+000,
-                                          4.4738E-001])  # (Array, N*m): damage equivalent moments about blade c.s. x-direction
-    Myb_damage_init = 1e3 * np.array([2.7732E+003, 2.8155E+003, 2.6004E+003, 2.3933E+003, 2.1371E+003,
-                                          1.8459E+003, 1.5582E+003, 1.2896E+003, 1.0427E+003, 8.2015E+002, 6.2449E+002,
-                                          4.5229E+002,
-                                          3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001,
-                                          1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
+def plot_DEMs(rotor, FASTinfo):
+
 
     plt.figure()
-    plt.plot(rstar_damage_init,Mxb_damage_init,label='Nominal Values in run.py script')
-    plt.plot(rotor['rstar_damage'],rotor['Mxb_damage'],'--x',label='FAST Calculated')
+    plt.plot(rotor['rstar_damage'], rotor['Mxb_damage']/1000.0, label='DEMx')
+    plt.plot(rotor['rstar_damage'], rotor['Myb_damage']/1000.0, label='DEMy')
+
+    plt.title('Maximum DEMs')
+    plt.ylabel('DEM (kN*m)')
     plt.xlabel('Blade Fraction')
-    plt.ylabel('Mxb (N*m)')
-    plt.title('Mxb Comparison')
+
     plt.legend()
+
+    plt.savefig(FASTinfo['dir_saved_plots'] + '/DEM_max_plot.png')
+
     plt.show()
 
-    plt.figure()
-    plt.plot(rstar_damage_init,Myb_damage_init,label='Nominal Values in run.py script')
-    plt.plot(rotor['rstar_damage'],rotor['Myb_damage'],'--x',label='FAST Calculated')
-    plt.xlabel('Blade Fraction')
-    plt.ylabel('Myb (N*m)')
-    plt.title('Myb Comparison')
-    plt.legend()
-    plt.show()
+    quit()
 
 # ========================================================================================================= #
 
@@ -1519,7 +1514,10 @@ def remove_fixcalc_unnecessary_files(FASTinfo):
 
         dir_name = FASTinfo['opt_dir'] + '/sgp' + str(i)
 
-        wnd_dir_name = dir_name + '/WNDfile' + str(FASTinfo['wnd_number']) + '_sgp' + str(i)
+        if 'wnd_number' in FASTinfo:
+            wnd_dir_name = dir_name + '/WNDfile' + str(FASTinfo['wnd_number']) + '_sgp' + str(i)
+        else:
+            wnd_dir_name = dir_name + '/WNDfile' + str(1) + '_sgp' + str(i)
 
         if os.path.isdir(wnd_dir_name):
 
@@ -1542,5 +1540,76 @@ def remove_fixcalc_unnecessary_files(FASTinfo):
             os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Linear.dat')
             os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Onshore.fst')
             os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Tower_Onshore.dat')
+
+# ========================================================================================================= #
+
+def test_dif_turbine(FASTinfo, rotor, turbine_name):
+
+    if turbine_name == 'TUM335':
+
+        # number of blades
+        FASTinfo['nBlades'] = 3
+        rotor['nBlades'] = 3
+
+        quit()
+
+    if turbine_name == 'TUM5MW':
+
+        # turbine class
+        FASTinfo['turbine_class'] = 'I'
+        rotor['turbine_class'] = 'I'
+
+        # turbulence class
+        FASTinfo['turbulence_class'] = 'B'
+        rotor['turbulence_class'] = 'B'
+
+        # number of blades
+        FASTinfo['nBlades'] = 3
+        rotor['nBlades'] = 3
+
+        # blade length
+        FASTinfo['bladeLength'] = 61.5
+        rotor['bladeLength'] = 61.5
+
+        # chord distribution
+        f = open('FAST_Files/TUM_Files/TUM_5MW_chord.txt', "r")
+        lines = f.readlines()
+        chord_dist = np.zeros([len(lines)])
+        for i in range(len(chord_dist)):
+            chord_dist[i] = float(lines[i])
+        f.close()
+
+        f = open('FAST_Files/TUM_Files/TUM_5MW_chord_pos.txt', "r")
+        lines = f.readlines()
+        chord_pos = np.zeros([len(lines)])
+        for i in range(len(chord_pos)):
+            chord_pos[i] = float(lines[i])
+        f.close()
+        chord_pos = (chord_pos-chord_pos[0])/(chord_pos[-1]-chord_pos[0])
+
+        chord_pos_plot = chord_pos
+        chord_dist_plot = chord_dist
+
+        # adjust for spline
+        chord_dist[36] = 1875.00
+        chord_dist[37] = 1750.00
+        chord_dist[38] = 1625.00
+        chord_dist[39] = 1500.00
+        chord_dist[40] = 1375.00
+
+        chord_spline = Akima(chord_pos, chord_dist)
+        rotor['chord_sub'] = chord_spline.interp(np.linspace(0,1,len(rotor['chord_sub'])))[0]/1000.0 # mm to m
+
+        print(rotor['chord_sub'])
+        quit()
+
+
+        quit()
+
+
+
+
+
+    return FASTinfo, rotor
 
 # ========================================================================================================= #

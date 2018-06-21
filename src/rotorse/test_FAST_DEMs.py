@@ -27,43 +27,40 @@ FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = True
+FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['calc_fixed_DEMs_seq'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = False
+FASTinfo['calc_surr_model'] = True
 FASTinfo['opt_with_surr_model'] = False
 
 # description
+FASTinfo['turbulence_class'] = 'A'
+FASTinfo['turbine_class'] = 'I'
+FASTinfo['num_pts'] = 100
 
-description = 'calc_fixedDEMs'
+description = 'sm_100_A'
+# description = 'sm_500_A'
+# description = 'sm_1000_A'
+# description = 'sm_2000_A'
+#
+# description = 'sm_100_B'
+# description = 'sm_500_B'
+# description = 'sm_1000_B'
+# description = 'sm_2000_B'
 
-# description = 'plot_dist_points'
-
-# description = 'check_torque'
+# description = 'calc_fixedDEMs'
 
 # description = 'test_batch_1'
 # description = 'test_ batch'
 
 # description = 'test_fixedDEMs'
 
-# description = 'test_wnd'
-
 # description = 'test_100'
 # description = 'test_500'
 # description = 'test_1000'
 # description = 'test_2000'
 
-# description = 'test_domain'
-
-# description = 'test_sgp_1'
-# description = 'test_sgp_3'
-
-# description = 'test_ranges'
-
-# description = 'sc_test_all_var'
-# description = 'sc_test_1_var'
-# description = 'cv_test_error'
 
 print('Run ' + description + ' is starting...')
 
@@ -113,7 +110,7 @@ if FASTinfo['Use_FAST_sm']:
     FASTinfo, rotor = define_des_var_domains(FASTinfo, rotor)
 
 else:
-    rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
+    # rotor.driver.add_desvar('r_max_chord', lower=0.1, upper=0.5)
     rotor.driver.add_desvar('chord_sub', lower=1.3 * np.ones(4), upper=5.3 * np.ones(4))
     rotor.driver.add_desvar('theta_sub', lower=-10.0 * np.ones(4), upper=30.0 * np.ones(4))
 
@@ -184,8 +181,8 @@ if use_input_file:
 
     # === blade geometry ===
     rotor['r_aero'] =  num_input_var10 # (Array): new aerodynamic grid on unit radius
-    rotor['r_max_chord'] = num_input_var11  # (Float): location of max chord on unit radius
     rotor['chord_sub'] = num_input_var12  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    rotor['r_max_chord'] = 1.0 / (len(rotor['chord_sub']) -1.0)
     rotor['theta_sub'] = num_input_var13  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
     rotor['precurve_sub'] = num_input_var14  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
     rotor['delta_precurve_sub'] = num_input_var15  # (Array, m): adjustment to precurve to account for curvature from loading
@@ -274,9 +271,11 @@ else:
 
             print("Creating Surrogate Model...")
 
-            rotor['r_max_chord'] = FASTinfo['r_max_chord_init']
             rotor['chord_sub'] = FASTinfo['chord_sub_init']
+            rotor['r_max_chord'] = rotor['r_max_chord'] = 1.0 / (len(rotor['chord_sub']) -1.0)
+
             rotor['theta_sub'] = FASTinfo['theta_sub_init']
+
             rotor['sparT'] = FASTinfo['sparT_init']
             rotor['teT'] = FASTinfo['teT_init']
 
@@ -474,9 +473,14 @@ rotor['N_damage'] = 365*24*3600*20/30.0  # (Float): number of cycles used in fat
 
 # ----------------
 
+# test different wind turbine
+if 0:
+    from FAST_util import test_dif_turbine
+    FASTinfo, rotor = test_dif_turbine(FASTinfo, rotor, 'TUM5MW')
+
 # from myutilities import plt
 
-# === run and outputs ===
+# === run and outputs === #
 
 rotor.run()
 
