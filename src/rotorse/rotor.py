@@ -2858,7 +2858,7 @@ class CreateFASTConstraints(Component):
                                             x = np.linspace(xmin, xmax, 100)
                                             p = norm.pdf(x, mu, std)
                                             plt.plot(x, p, 'k', linewidth=2)
-                                            plt.title(data_name + data_type + ' Turbulent Peaks, Normal Dist. Fit, data subset: ' + str(l+1))
+                                            plt.title(data_name + data_type + ' Turbulent Peaks, Gaussian Fit, data subset: ' + str(l+1))
                                             plt.ylabel('Normalized Frequency')
                                             plt.xlabel('Load Bins (kN*m)')
 
@@ -2904,7 +2904,8 @@ class CreateFASTConstraints(Component):
                                         x = np.linspace(xmin, xmax, 100)
                                         p = norm.pdf(x, mu, std)
                                         plt.plot(x, p, 'k', linewidth=2)
-                                        plt.title(data_name + data_type + ' Turbulent Peaks, Normal Dist. Fit')
+                                        # plt.title(data_name + data_type + ' Turbulent Peaks, Gaussian Fit')
+                                        plt.title('Turbulent Peaks, Gaussian Fit example')
                                         plt.ylabel('Normalized Frequency')
                                         plt.xlabel('Load Bins (kN*m)')
 
@@ -3028,29 +3029,66 @@ class CreateFASTConstraints(Component):
             plt.legend()
 
             plt.savefig(self.dir_saved_plots + "/plots/DEM_plots/DEMx_nsg" + str(total_num_bl_gages) + ".png")
-            print('saved at ')
-            print(self.dir_saved_plots + "/plots/DEM_plots/DEMx_nsg" + str(total_num_bl_gages) + ".png")
-            print(unknowns['DEMx'])
-            print(spline_pos)
+            # print('saved at ')
+            # print(self.dir_saved_plots + "/plots/DEM_plots/DEMx_nsg" + str(total_num_bl_gages) + ".png")
+            # print(unknowns['DEMx'])
+            # print(spline_pos)
+            # plt.show()
+            plt.close()
 
             # DEMy
+            # plt.figure()
+            # plt.plot(spline_pos, DEMy_max, '*', label='points')
+            # # plt.plot(spline_extr, unknowns['DEMy'], label='spline')
+            # plt.plot(spline_plot, DEMy_plot, label='spline')
+            #
+            # plt.xlabel('Unit Radius of Blade')
+            # plt.ylabel('DEMy (N*m)')
+            # plt.title('DEMy spline - ' + str(total_num_bl_gages) + ' strain gages')
+            # plt.legend()
+            #
+            # plt.savefig(self.dir_saved_plots + "/plots/DEM_plots/DEMy_nsg" + str(total_num_bl_gages) + ".png")
+            # print('saved at ')
+            # print(self.dir_saved_plots + "/plots/DEM_plots/DEMy_nsg" + str(total_num_bl_gages) + ".png")
+            # print(unknowns['DEMy'])
+            # print(spline_pos)
+            #
+            # plt.show()
+            # plt.close()
+
+
+            # DEMx spline comparison
+
+
+            spline_pos17 = [0. ,    0.022 , 0.067,  0.111 , 0.167 , 0.233 , 0.3  ,  0.367 , 0.433 , 0.5  ,  0.567,
+             0.633 , 0.7 ,   0.767 , 0.833,  0.889,  0.933 , 0.978]
+            DEMx_max17 = [1.15730078e+04  , 1.03837989e+04 ,  8.31564948e+03  , 6.59095802e+03,
+             5.20400486e+03 ,  4.11302713e+03 ,  3.26303203e+03  , 2.56273712e+03,
+             1.97383316e+03  , 1.47258899e+03  , 1.05731342e+03 ,  7.24606846e+02,
+             4.65608939e+02  , 2.69168838e+02 ,  1.31655484e+02,   5.00200946e+01,
+             1.43189321e+01 ,  9.83791912e-01]
+
+            spline_plot = np.linspace(0,1,200)
+            DEMx_spline_plot17 = Akima(spline_pos17, DEMx_max17)
+            DEMx_plot17 = DEMx_spline_plot17.interp(spline_plot)[0]
+
             plt.figure()
-            plt.plot(spline_pos, DEMy_max, '*', label='points')
-            # plt.plot(spline_extr, unknowns['DEMy'], label='spline')
-            plt.plot(spline_plot, DEMy_plot, label='spline')
+
+            plt.plot(spline_pos17, DEMx_max17, 'g*')
+            plt.plot(spline_plot, DEMx_plot17, 'g', label='Spline using 17 points')
+
+            plt.plot(spline_pos, DEMx_max, 'b*')
+            plt.plot(spline_plot, DEMx_plot, 'b--', label='Spline using 7 points')
 
             plt.xlabel('Unit Radius of Blade')
-            plt.ylabel('DEMy (N*m)')
-            plt.title('DEMy spline - ' + str(total_num_bl_gages) + ' strain gages')
+            plt.ylabel('DEMx (kN*m)')
+            plt.title('DEMx spline comparison')
             plt.legend()
 
-            plt.savefig(self.dir_saved_plots + "/plots/DEM_plots/DEMy_nsg" + str(total_num_bl_gages) + ".png")
-            print('saved at ')
-            print(self.dir_saved_plots + "/plots/DEM_plots/DEMy_nsg" + str(total_num_bl_gages) + ".png")
-            print(unknowns['DEMy'])
-            print(spline_pos)
+            plt.savefig(self.dir_saved_plots + "/plots/DEM_plots/DEMx_comparison.png")
 
             plt.show()
+            plt.close()
 
             quit()
 

@@ -70,12 +70,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -149,8 +149,8 @@ def setupFAST(FASTinfo, description):
 
 
     # === strain gage placement === #
-    FASTinfo['sgp'] = [1,2,3]
-    # FASTinfo['sgp'] = [4]
+    # FASTinfo['sgp'] = [1,2,3]
+    FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -275,9 +275,8 @@ def specify_DLCs(FASTinfo):
 
     # === turbulent wind file parameters === #
     #  random seeds (np.linspace(1,6,6) is pre-calculated)
-    FASTinfo['rand_seeds'] = np.linspace(1, 1, 1)
-    # FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
-    # FASTinfo['rand_seeds'] = np.linspace(1, 2, 2)
+    # FASTinfo['rand_seeds'] = np.linspace(1, 1, 1)
+    FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
 
     #  mean wind speeds (np.linspace(5,23,10) is pre-calculated)
     # FASTinfo['mws'] = np.linspace(11, 11, 1)
@@ -319,8 +318,8 @@ def specify_DLCs(FASTinfo):
 def choose_wnd_dir(FASTinfo):
 
     # === turbulence/turbine class === #
-    # FASTinfo['turbulence_class'] = 'B'
-    # FASTinfo['turbine_class'] = 'I'
+    FASTinfo['turbulence_class'] = 'A'
+    FASTinfo['turbine_class'] = 'I'
 
     # === turbulent, nonturbulent directories === #
     FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir_' \
@@ -376,7 +375,8 @@ def choose_wnd_file(FASTinfo):
 def kfold_params(FASTinfo):
 
     # number of folds
-    FASTinfo['num_folds'] = 5
+    FASTinfo['num_folds'] = 2
+    # FASTinfo['num_folds'] = 5
 
     # check that num_pts/num_folds doesn't have a remainder (is divisible)
     if (FASTinfo['num_pts'] % FASTinfo['num_folds']) > 0:
@@ -462,13 +462,15 @@ def plot_kfolds(FASTinfo):
 
     for i in range(FASTinfo['num_folds']):
         if i == 0:
-            plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'ro', label='1st k-fold group')
+            # plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'ro', label='1st k-fold group')
+            plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'ro', label='Cross Validation Points')
         else:
             plt.plot(kfold_dict1['kfold_' + str(i)], kfold_dict2['kfold_' + str(i)], 'bo')
 
-    plt.xlabel('Maximum Chord Position')
-    plt.ylabel('1st Chord Point (m)')
-    plt.title('K-Fold Example')
+    plt.xlabel('1st Chord Distribution Control Point (m)')
+    plt.ylabel('2nd Chord Distribution Control Point (m)')
+    # plt.title('K-Fold Example')
+    plt.title('Cross Validation Example')
     plt.legend()
 
     plt.savefig(FASTinfo['dir_saved_plots'] + '/kfold_example.png')
@@ -587,13 +589,14 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
+    FASTinfo['num_pts'] = 500
     # FASTinfo['num_pts'] = 100
 
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
     # FASTinfo['approximation_model'] = 'least_squares'
-    FASTinfo['approximation_model'] = 'second_order_poly'
-    # FASTinfo['approximation_model'] = 'kriging'
+    # FASTinfo['approximation_model'] = 'second_order_poly'
+    FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
 
@@ -606,10 +609,6 @@ def create_surr_model_params(FASTinfo):
 
     if FASTinfo['training_point_dist'] == 'lhs':
 
-        # FASTinfo['turbulence_class'] = 'B'
-        # FASTinfo['turbine_class'] = 'I'
-        # FASTinfo['airfoil_group_name'] = 'af1'
-        # FASTinfo['sm_var_out_dir'] = 'sm_var_dir'
         FASTinfo['sm_var_out_dir'] = 'sm_var_dir_' + FASTinfo['turbulence_class'] \
                                      + '_' + FASTinfo['turbine_class'] + '_' + FASTinfo['airfoil_group_name']
 
@@ -622,19 +621,9 @@ def create_surr_model_params(FASTinfo):
         FASTinfo['sm_DEM_file'] = 'sm_DEM.txt'
 
     # list of variables that we are varying
-    # FASTinfo['sm_var_names'] = ['r_max_chord']
-    # FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub']
-    # FASTinfo['sm_var_names'] = ['r_max_chord', 'chord_sub', 'theta_sub']
     FASTinfo['sm_var_names'] = ['chord_sub', 'theta_sub']
 
     # indices of which variables are used
-    # FASTinfo['sm_var_index'] = [[1]] # second point in distribution
-    # FASTinfo['sm_var_index'] = [[1, 2]] # second/third point in distribution
-    # FASTinfo['sm_var_index'] = [[0], [1, 2]] # r_max_chord & second/third point in distribution
-    # FASTinfo['sm_var_index'] = [[0], [0]] # r_max_chord & first in chord distribution
-    # FASTinfo['sm_var_index'] = [[0,1,2,3]] # chord_sub distribution
-    # FASTinfo['sm_var_index'] = [[0]] # r_max_chord
-    # FASTinfo['sm_var_index'] = [[0], [0,1,2,3], [0,1,2,3]]
     FASTinfo['sm_var_index'] = [[0,1,2,3], [0,1,2,3]]
 
 
@@ -661,13 +650,8 @@ def create_surr_model_params(FASTinfo):
 def create_surr_model_linear_options(FASTinfo, rotor):
 
     # how many different points will be used (linear)
-    # FASTinfo['sm_var_max'] = [[4], [2,2,2,2]]
-    # FASTinfo['sm_var_max'] = [[10]]
-    # FASTinfo['sm_var_max'] = [[4, 4]]
     FASTinfo['sm_var_max'] = [[10], [10]]
-    # FASTinfo['sm_var_max'] = [[3], [3, 3]]
-    # FASTinfo['sm_var_max'] = [[3], [3]]
-    # FASTinfo['sm_var_max'] = [[3,3,3,3]]
+
 
     var_index = []
     for i in range(0, len(FASTinfo['sm_var_max'])):
@@ -749,8 +733,10 @@ def create_surr_model_linear_options(FASTinfo, rotor):
         plt.figure()
 
         plt.title('Linear Sampling Example')
-        plt.xlabel(FASTinfo['sm_var_names'][0])
-        plt.ylabel(FASTinfo['sm_var_names'][1])
+        # plt.xlabel(FASTinfo['sm_var_names'][0])
+        # plt.ylabel(FASTinfo['sm_var_names'][1])
+        plt.xlabel('1st Chord Distribution Control Point (m)')
+        plt.ylabel('2nd Chord Distribution Control Point (m)')
 
 
         # plt.xlim([0.9*min(FASTinfo['var_range'][0]), 1.1*max(FASTinfo['var_range'][0])])
@@ -758,7 +744,8 @@ def create_surr_model_linear_options(FASTinfo, rotor):
 
         for i in range(0, FASTinfo['sm_var_max'][0][0]):
             for j in range(0, FASTinfo['sm_var_max'][1][0]):
-                plt.plot( FASTinfo['var_range'][0][i], FASTinfo['var_range'][1][j], 'ob', label='training points')
+                # plt.plot( FASTinfo['var_range'][0][i], FASTinfo['var_range'][1][j], 'ob', label='training points')
+                plt.plot( FASTinfo['var_range'][0][i], FASTinfo['var_range'][0][j], 'ob', label='training points')
 
         # plt.legend()
         plt.savefig(FASTinfo['dir_saved_plots'] + '/linear_' + FASTinfo['description'] + '.png')
@@ -817,6 +804,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
     from pyDOE import lhs
 
     point_file = FASTinfo['opt_dir'] + '/pointfile.txt'
+
 
     if not os.path.isfile(point_file):
 
@@ -1035,8 +1023,11 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         plt.figure()
 
         plt.title('Latin Hypercube Sampling Example')
-        plt.xlabel(FASTinfo['sm_var_names'][0])
-        plt.ylabel(FASTinfo['sm_var_names'][1])
+        # plt.xlabel(FASTinfo['sm_var_names'][0])
+        # plt.ylabel(FASTinfo['sm_var_names'][1])
+
+        plt.xlabel('1st Chord Distribution Control Point (m)')
+        plt.ylabel('2nd Chord Distribution Control Point (m)')
 
         # plt.xlim(FASTinfo['var_range'][0])
         # plt.ylim(FASTinfo['var_range'][1])
@@ -1545,15 +1536,11 @@ def remove_fixcalc_unnecessary_files(FASTinfo):
 
 def test_dif_turbine(FASTinfo, rotor, turbine_name):
 
-    if turbine_name == 'TUM335':
+    if turbine_name == 'TUM335MW':
 
         # number of blades
         FASTinfo['nBlades'] = 3
         rotor['nBlades'] = 3
-
-        quit()
-
-    if turbine_name == 'TUM5MW':
 
         # turbine class
         FASTinfo['turbine_class'] = 'I'
@@ -1563,23 +1550,19 @@ def test_dif_turbine(FASTinfo, rotor, turbine_name):
         FASTinfo['turbulence_class'] = 'B'
         rotor['turbulence_class'] = 'B'
 
-        # number of blades
-        FASTinfo['nBlades'] = 3
-        rotor['nBlades'] = 3
-
         # blade length
-        FASTinfo['bladeLength'] = 61.5
-        rotor['bladeLength'] = 61.5
+        FASTinfo['bladeLength'] = 63.5
+        rotor['bladeLength'] = 63.5
 
         # chord distribution
-        f = open('FAST_Files/TUM_Files/TUM_5MW_chord.txt', "r")
+        f = open('FAST_Files/TUM_Files/TUM_335MW_chord.txt', "r")
         lines = f.readlines()
         chord_dist = np.zeros([len(lines)])
         for i in range(len(chord_dist)):
             chord_dist[i] = float(lines[i])
         f.close()
 
-        f = open('FAST_Files/TUM_Files/TUM_5MW_chord_pos.txt', "r")
+        f = open('FAST_Files/TUM_Files/TUM_335MW_chord_pos.txt', "r")
         lines = f.readlines()
         chord_pos = np.zeros([len(lines)])
         for i in range(len(chord_pos)):
@@ -1590,24 +1573,97 @@ def test_dif_turbine(FASTinfo, rotor, turbine_name):
         chord_pos_plot = chord_pos
         chord_dist_plot = chord_dist
 
-        # adjust for spline
-        chord_dist[36] = 1875.00
-        chord_dist[37] = 1750.00
-        chord_dist[38] = 1625.00
-        chord_dist[39] = 1500.00
-        chord_dist[40] = 1375.00
+        rotor_points = np.linspace(0,1,len(rotor['chord_sub']))
+        points17 = np.linspace(0,1,17)
 
         chord_spline = Akima(chord_pos, chord_dist)
-        rotor['chord_sub'] = chord_spline.interp(np.linspace(0,1,len(rotor['chord_sub'])))[0]/1000.0 # mm to m
+        rotor['chord_sub'] = chord_spline.interp(rotor_points)[0]/1000.0 # mm to m
 
-        print(rotor['chord_sub'])
-        quit()
+        rotor_spline = Akima(rotor_points, rotor['chord_sub'])
+        rotor_chord_plot = rotor_spline.interp(points17)[0]
+
+        plot_TUM = 1
+        if plot_TUM:
+            plt.figure()
+            plt.plot(chord_pos_plot, chord_dist_plot/1000.0, label='TUM 3.35 MW Chord Distribution') # mm to m
+            plt.plot(points17, rotor_chord_plot, '--x', label='RotorSE Chord Distribution Approximation')
+
+            plt.title('TUM 3.35MW Chord Approximation')
+            plt.xlabel('Blade Fraction')
+            plt.ylabel('Chord Length (m)')
+            plt.legend()
+
+            plt.savefig(FASTinfo['dir_saved_plots'] + '/tum_chord.png')
+
+            # plt.show()
+            plt.close()
+
+        # twist distribution
+        f = open('FAST_Files/TUM_Files/TUM_335MW_twist.txt', "r")
+        lines = f.readlines()
+        twist_dist = np.zeros([len(lines)])
+        for i in range(len(twist_dist)):
+            twist_dist[i] = float(lines[i])
+        f.close()
+
+        f = open('FAST_Files/TUM_Files/TUM_335MW_twist_pos.txt', "r")
+        lines = f.readlines()
+        twist_pos = np.zeros([len(lines)])
+        for i in range(len(twist_pos)):
+            twist_pos[i] = float(lines[i])
+        f.close()
+        twist_pos = (twist_pos-twist_pos[0])/(twist_pos[-1]-twist_pos[0])
+
+        twist_pos_plot = twist_pos
+        twist_dist_plot = twist_dist
 
 
-        quit()
+        rotor_points = np.linspace(0,1,len(rotor['theta_sub']))
+        points17 = np.linspace(0,1,17)
+
+        twist_spline = Akima(twist_pos, twist_dist)
+        rotor['theta_sub'] = twist_spline.interp(rotor_points)[0]
+
+        rotor_spline = Akima(rotor_points, rotor['theta_sub'])
+        rotor_twist_plot = rotor_spline.interp(points17)[0]
+
+        if plot_TUM:
+            plt.figure()
+            plt.plot(twist_pos_plot, twist_dist_plot, label='TUM 3.35 MW Twist Distribution')
+            plt.plot(points17, rotor_twist_plot, '--x', label='RotorSE Twist Distribution Approximation')
+
+            plt.title('TUM 3.35MW Twist Approximation')
+            plt.xlabel('Blade Fraction')
+            plt.ylabel('Twist (deg)')
+            plt.legend()
+
+            plt.savefig(FASTinfo['dir_saved_plots'] + '/tum_twist.png')
+
+            # plt.show()
+            plt.close()
+            quit()
+
+        # airfoil selection
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'FAST_Files/TUM_Files/TUM335_AFFiles')
+
+        # load all airfoils
+        airfoil_types = [0] * 8
+        airfoil_types[0] = os.path.join(basepath, 'circle.dat')
+        airfoil_types[1] = os.path.join(basepath, 'circle.dat')
+        airfoil_types[2] = os.path.join(basepath, 'FX77-W-500.dat')
+        airfoil_types[3] = os.path.join(basepath, 'FX77-W-400.dat')
+        airfoil_types[4] = os.path.join(basepath, 'DU00-W2-350.dat')
+        airfoil_types[5] = os.path.join(basepath, 'DU97-W-300.dat')
+        airfoil_types[6] = os.path.join(basepath, 'DDU91-W2-250.dat')
+        airfoil_types[7] = os.path.join(basepath, 'DU08-W-210.dat')
 
 
+        rotor['airfoil_types'] = airfoil_types  # (List): names of airfoil file or initialized CCAirfoils
 
+        rotor['af_idx'] = np.array([0, 0, 1, 2, 3, 3, 4, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7])
+        rotor['af_str_idx'] = np.array(
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7,
+             7, 7])
 
 
     return FASTinfo, rotor
