@@ -4,10 +4,15 @@
 
 import os, shutil
 
-sm_name = ['test_nondim']
-num_pts = [10]
+sm_name = ['sm_10_A']
+num_pts = [5]
+
+turbine = 'I'
+turbulence = 'A'
+airfoil_name = 'af1'
 
 file_type = ['def', 'load', 'DEM', 'var']
+# file_type = ['load', 'DEM', 'var']
 
 for k in range(len(file_type)):
 
@@ -16,7 +21,7 @@ for k in range(len(file_type)):
     for j in range(len(sm_name)):
 
         # get directory name
-        dir_name = 'Opt_Files/' + sm_name[j] + '/sm_var_dir/'
+        dir_name = 'Opt_Files/' + sm_name[j] + '/sm_var_dir_' + turbulence + '_' + turbine + '_' + airfoil_name + '/'
 
         # create new master file
         file_master= dir_name + 'sm_master_' + ft + '.txt'

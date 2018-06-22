@@ -27,17 +27,19 @@ FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = True
+FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['calc_fixed_DEMs_seq'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = False
+FASTinfo['calc_surr_model'] = True
 FASTinfo['opt_with_surr_model'] = False
 
 # description
-# FASTinfo['turbulence_class'] = 'A'
-# FASTinfo['turbine_class'] = 'I'
-# FASTinfo['num_pts'] = 100
+FASTinfo['turbulence_class'] = 'A'
+FASTinfo['turbine_class'] = 'I'
+FASTinfo['num_pts'] = 10
+
+description = 'sm_10_A'
 
 # description = 'sm_100_A'
 # description = 'sm_500_A'
@@ -49,7 +51,7 @@ FASTinfo['opt_with_surr_model'] = False
 # description = 'sm_1000_B'
 # description = 'sm_2000_B'
 
-description = 'test_tum'
+# description = 'test_tum'
 
 # description = 'calc_fixedDEMs'
 
@@ -476,7 +478,7 @@ rotor['N_damage'] = 365*24*3600*20/30.0  # (Float): number of cycles used in fat
 # ----------------
 
 # test different wind turbine
-if 1:
+if 0:
     from FAST_util import test_dif_turbine
     FASTinfo, rotor = test_dif_turbine(FASTinfo, rotor, 'TUM335MW')
 

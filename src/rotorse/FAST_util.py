@@ -70,12 +70,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -129,7 +129,7 @@ def setupFAST(FASTinfo, description):
 
     # === FAST Run Time === #
     FASTinfo['Tmax_turb'] = 640.0  # 640.0
-    FASTinfo['Tmax_nonturb'] = 100.0  # 100.0
+    FASTinfo['Tmax_nonturb'] = 60.0  # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
@@ -149,8 +149,8 @@ def setupFAST(FASTinfo, description):
 
 
     # === strain gage placement === #
-    # FASTinfo['sgp'] = [1,2,3]
-    FASTinfo['sgp'] = [4]
+    FASTinfo['sgp'] = [1,2,3]
+    # FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -243,7 +243,7 @@ def specify_DLCs(FASTinfo):
     if not FASTinfo['use_DLC_list']:
 
         # === for optimization === #
-        DLC_List = ['DLC_1_2', 'DLC_1_3', 'DLC_1_4','DLC_1_5', 'DLC_6_1', 'DLC_6_3']
+        # DLC_List = ['DLC_1_2', 'DLC_1_3', 'DLC_1_4','DLC_1_5', 'DLC_6_1', 'DLC_6_3']
         # DLC_List = ['DLC_0_0', 'DLC_1_2', 'DLC_1_3', 'DLC_1_4',' DLC_1_5', 'DLC_6_1', 'DLC_6_3']
 
         # === for testing === #
@@ -255,7 +255,7 @@ def specify_DLCs(FASTinfo):
         # DLC_List = ['DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
 
         # non turbulent extreme events
-        # DLC_List = ['DLC_6_1', 'DLC_6_3']
+        DLC_List = ['DLC_6_1', 'DLC_6_3']
         # DLC_List = ['DLC_6_1']
 
         # turbulent DLCs
@@ -318,8 +318,8 @@ def specify_DLCs(FASTinfo):
 def choose_wnd_dir(FASTinfo):
 
     # === turbulence/turbine class === #
-    FASTinfo['turbulence_class'] = 'A'
-    FASTinfo['turbine_class'] = 'I'
+    # FASTinfo['turbulence_class'] = 'A'
+    # FASTinfo['turbine_class'] = 'I'
 
     # === turbulent, nonturbulent directories === #
     FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir_' \
@@ -589,7 +589,7 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
-    FASTinfo['num_pts'] = 500
+    # FASTinfo['num_pts'] = 500
     # FASTinfo['num_pts'] = 100
 
     # approximation model
