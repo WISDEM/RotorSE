@@ -33,6 +33,7 @@ def setupFAST_checks(FASTinfo):
     FASTinfo['do_cv_DEM'] = False  # cross validation of surrogate model for DEMs
     FASTinfo['do_cv_Load'] = False  # cross validation of surrogate model for extreme loads
     FASTinfo['do_cv_def'] = False  # cross validation of surrogate model for tip deflection
+    FASTinfo['check_sm_accuracy'] = False # checks accuracy of sm for initial design
 
     FASTinfo['check_point_dist'] = False  # plot distribution of points (works best in 2D)
     FASTinfo['check_cv'] = False # works best in 2D
@@ -70,12 +71,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -88,8 +89,12 @@ def setupFAST(FASTinfo, description):
     else:
         os.mkdir(FASTinfo['opt_dir'])
 
-    FASTinfo['template_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
-        'RotorSE/src/rotorse/FAST_Files/FAST_File_templates/'))
+    # === set FAST template files === #
+    # NREL5MW, WP_5.0MW, WP_3.0MW, WP_1.5MW, W_P0.75MW
+    FASTinfo['FAST_template_name'] = 'NREL5MW'
+
+    FASTinfo['template_dir'] = FASTinfo['path'] + 'RotorSE_FAST/RotorSE/src/rotorse/' \
+                            'FAST_Files/FAST_File_templates/' + FASTinfo['FAST_template_name'] + '/'
 
     # === options if previous optimizations have been performed === #
 
@@ -128,13 +133,13 @@ def setupFAST(FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 640.0  # 640.0
-    FASTinfo['Tmax_nonturb'] = 60.0  # 100.0
+    FASTinfo['Tmax_turb'] = 80.0  # 640.0
+    FASTinfo['Tmax_nonturb'] = 10.0  # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 20.0  # 40.0
+    FASTinfo['rm_time'] = 5.0  # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -149,8 +154,9 @@ def setupFAST(FASTinfo, description):
 
 
     # === strain gage placement === #
-    FASTinfo['sgp'] = [1,2,3]
+    # FASTinfo['sgp'] = [1,2,3]
     # FASTinfo['sgp'] = [4]
+    FASTinfo['sgp'] = [1]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -177,8 +183,13 @@ def setupFAST(FASTinfo, description):
 
     # FASTinfo['spec_sgp_dir'] = FASTinfo['opt_dir'] + '/' + 'sgp' + str(FASTinfo['sgp'])
 
-    # === specify which DLCs will be included === #
+    # === specify which DLCs will be included (for calc_fixed_DEMs === #
     FASTinfo = specify_DLCs(FASTinfo)
+
+    # === copy .wnd files === #
+    if FASTinfo['train_sm']:
+
+        copy_wnd_files(FASTinfo)
 
     # fatigue options
     FASTinfo['m_value'] = 10.0
@@ -205,9 +216,6 @@ def setupFAST_other(FASTinfo):
     # turns off/on print statements from smt (surrogate model toolbox)
     FASTinfo['print_sm'] = False
 
-    # use this when training points for surrogate model
-    FASTinfo['remove_sm_dir'] = True
-
     # use this when calculating DEMs for fixed-DEMs calculation
     FASTinfo['remove_fixedcalc_dir'] = True
     FASTinfo['remove_unnecessary_files'] = True
@@ -217,6 +225,12 @@ def setupFAST_other(FASTinfo):
 
     # save rated torque
     FASTinfo['save_rated_torque_&_thrust'] = False
+
+    # use this when training points for surrogate model
+    FASTinfo['remove_sm_dir'] = False
+
+    # run template files - no connection with RotorSE - used to train surrogate model using WindPact turbine designs
+    FASTinfo['run_template_files'] = True
 
     return FASTinfo
 
@@ -249,13 +263,13 @@ def specify_DLCs(FASTinfo):
         # === for testing === #
 
         # nominal wind file
-        # DLC_List = ['DLC_0_0']
+        DLC_List = ['DLC_0_0']
 
         # non turbulent DLCs
         # DLC_List = ['DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
 
         # non turbulent extreme events
-        DLC_List = ['DLC_6_1', 'DLC_6_3']
+        # DLC_List = ['DLC_6_1', 'DLC_6_3']
         # DLC_List = ['DLC_6_1']
 
         # turbulent DLCs
@@ -263,6 +277,7 @@ def specify_DLCs(FASTinfo):
         # DLC_List=['DLC_1_3']
 
         # DLC_List = ['DLC_0_0', 'DLC_6_1', 'DLC_6_3']
+        # DLC_List = ['DLC_1_2', 'DLC_6_3']
 
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
@@ -279,8 +294,8 @@ def specify_DLCs(FASTinfo):
     FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
 
     #  mean wind speeds (np.linspace(5,23,10) is pre-calculated)
-    # FASTinfo['mws'] = np.linspace(11, 11, 1)
-    FASTinfo['mws'] = np.linspace(5, 23, 10)
+    FASTinfo['mws'] = np.linspace(11, 11, 1)
+    # FASTinfo['mws'] = np.linspace(5, 23, 10)
 
     # === create list of .wnd files === #
     # .wnd files list
@@ -322,22 +337,66 @@ def choose_wnd_dir(FASTinfo):
     # FASTinfo['turbine_class'] = 'I'
 
     # === turbulent, nonturbulent directories === #
-    FASTinfo['turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir_' \
+    FASTinfo['master_turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir_' \
     + FASTinfo['turbulence_class'] + '_' + FASTinfo['turbine_class'] + '/'
 
-    FASTinfo['nonturb_wnd_dir'] = 'RotorSE_FAST/WND_Files/nonturb_wnd_dir/'
+    FASTinfo['master_nonturb_wnd_dir'] = 'RotorSE_FAST/WND_Files/nonturb_wnd_dir/'
+
+
+    if FASTinfo['train_sm']:
+
+        try:
+            training_point_num = int(sys.argv[1])
+        except:
+            training_point_num = 0
+
+        new_wnd_dir = 'RotorSE_FAST/WND_Files/training_point_' + str(training_point_num)
+        # create new wind directories if training points for surrogate model
+        if not os.path.isdir(FASTinfo['path'] + new_wnd_dir):
+            os.mkdir(FASTinfo['path'] + new_wnd_dir)
+
+        FASTinfo['new_wnd_dir_sm'] = new_wnd_dir
+
+        new_wnd_dir_turb = new_wnd_dir + '/turb_wnd_dir/'
+        if not os.path.isdir(FASTinfo['path'] + new_wnd_dir_turb):
+            os.mkdir(FASTinfo['path'] + new_wnd_dir_turb)
+
+        new_wnd_dir_nonturb = new_wnd_dir + '/nonturb_wnd_dir/'
+        if not os.path.isdir(FASTinfo['path'] + new_wnd_dir_nonturb):
+            os.mkdir(FASTinfo['path'] + new_wnd_dir_nonturb)
+
+        FASTinfo['turb_wnd_dir'] = new_wnd_dir_turb
+        FASTinfo['nonturb_wnd_dir'] = new_wnd_dir_nonturb
+
+    else:
+        FASTinfo['turb_wnd_dir'] = FASTinfo['master_turb_wnd_dir']
+        FASTinfo['nonturb_wnd_dir'] = FASTinfo['master_nonturb_wnd_dir']
 
     return FASTinfo
 
 # ========================================================================================================= #
 
-def choose_wnd_file(FASTinfo):
+def copy_wnd_files(FASTinfo):
 
-    # print('show all wnd_types')
-    # print(FASTinfo['wnd_type_list'])
-    # print(FASTinfo['parked'])
-    # print(FASTinfo['wnd_list'])
-    # print('\n')
+    for i in range(len(FASTinfo['wnd_list'])):
+
+        if FASTinfo['wnd_type_list'][i] == 'turb':
+            shutil.copyfile(FASTinfo['path'] + FASTinfo['master_turb_wnd_dir'] + FASTinfo['wnd_list'][i],
+                            FASTinfo['path'] + FASTinfo['turb_wnd_dir'] + FASTinfo['wnd_list'][i])
+        else:
+            shutil.copyfile(FASTinfo['path'] + FASTinfo['master_nonturb_wnd_dir'] + FASTinfo['wnd_list'][i],
+                            FASTinfo['path'] + FASTinfo['nonturb_wnd_dir'] + FASTinfo['wnd_list'][i])
+
+
+# ========================================================================================================= #
+
+def remove_sm_wnd_files(FASTinfo):
+
+    shutil.rmtree(FASTinfo['path'] + FASTinfo['new_wnd_dir_sm'])
+
+# ========================================================================================================= #
+
+def choose_wnd_file(FASTinfo):
 
     try:
         FASTinfo['wnd_number'] = int(sys.argv[1])
@@ -356,15 +415,6 @@ def choose_wnd_file(FASTinfo):
                                      FASTinfo['wnd_type_list'][FASTinfo['wnd_number']-1],
                                      FASTinfo['wnd_type_list'][FASTinfo['wnd_number']-1]]
 
-        # print('test choose_wnd_file')
-        # print(FASTinfo['wnd_type_list'])
-        # print(FASTinfo['parked'])
-        # print(FASTinfo['wnd_list'])
-        # quit()
-
-        # for i in range(3):
-        #     print(FASTinfo['wnd_type_list'][i*num_wnd_files:(i+1)*num_wnd_files])
-
     except:
         pass
 
@@ -375,8 +425,8 @@ def choose_wnd_file(FASTinfo):
 def kfold_params(FASTinfo):
 
     # number of folds
-    FASTinfo['num_folds'] = 2
     # FASTinfo['num_folds'] = 5
+    FASTinfo['num_folds'] = 2
 
     # check that num_pts/num_folds doesn't have a remainder (is divisible)
     if (FASTinfo['num_pts'] % FASTinfo['num_folds']) > 0:
@@ -595,8 +645,8 @@ def create_surr_model_params(FASTinfo):
     # approximation model
     # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
     # FASTinfo['approximation_model'] = 'least_squares'
-    # FASTinfo['approximation_model'] = 'second_order_poly'
-    FASTinfo['approximation_model'] = 'kriging'
+    FASTinfo['approximation_model'] = 'second_order_poly'
+    # FASTinfo['approximation_model'] = 'kriging'
     # FASTinfo['approximation_model'] = 'KPLS'
     # FASTinfo['approximation_model'] = 'KPLSK'
 
@@ -621,10 +671,10 @@ def create_surr_model_params(FASTinfo):
         FASTinfo['sm_DEM_file'] = 'sm_DEM.txt'
 
     # list of variables that we are varying
-    FASTinfo['sm_var_names'] = ['chord_sub', 'theta_sub']
+    FASTinfo['sm_var_names'] = ['chord_sub', 'theta_sub', 'turbulence']
 
     # indices of which variables are used
-    FASTinfo['sm_var_index'] = [[0,1,2,3], [0,1,2,3]]
+    FASTinfo['sm_var_index'] = [[0,1,2,3], [0,1,2,3], [0]]
 
 
     # total num of variables used, variable index
@@ -800,14 +850,12 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
     # min, max values of design variables
     FASTinfo['sm_var_range'] = [[0.1, 0.5], [1.3, 5.3], [-10.0, 30.0], [0.005, 0.2], [0.005, 0.2]]
 
-    # do linear hypercube spacing
+    # === do linear hypercube spacing === #
     from pyDOE import lhs
 
     point_file = FASTinfo['opt_dir'] + '/pointfile.txt'
 
-
     if not os.path.isfile(point_file):
-
         print('Creating training point file...')
 
         points = lhs(num_var, samples=FASTinfo['num_pts'], criterion='center')
@@ -820,7 +868,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
                 f.write(' ')
 
             f.write('\n')
-
         f.close()
 
     lines = open(point_file,"r+").readlines()
@@ -831,6 +878,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         for j in range(0, len(spec_line)):
             points[i,j] = float(spec_line[j])
 
+    # === === #
     new_var_list = []
     old_var_list = []
     FASTinfo['var_range'] = []
@@ -852,10 +900,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
             var_range = FASTinfo['sm_var_range'][4]
         else:
             Exception('A surrogate model variable was listed that is not a design variable.')
-
-        # decrease var_range
-        # doing this will increase surrogate model accuracy,
-        # since the points sampled are going to clustered closer together
 
         if FASTinfo['restrict_lhs_domain']:
 
@@ -1582,7 +1626,7 @@ def test_dif_turbine(FASTinfo, rotor, turbine_name):
         rotor_spline = Akima(rotor_points, rotor['chord_sub'])
         rotor_chord_plot = rotor_spline.interp(points17)[0]
 
-        plot_TUM = 1
+        plot_TUM = 0
         if plot_TUM:
             plt.figure()
             plt.plot(chord_pos_plot, chord_dist_plot/1000.0, label='TUM 3.35 MW Chord Distribution') # mm to m

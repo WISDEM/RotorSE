@@ -3466,6 +3466,12 @@ class calc_FAST_sm_fit(Component):
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
 
+        self.add_param('r_max_chord', val=0.0)
+        self.add_param('chord_sub', val=np.zeros(4))
+        self.add_param('theta_sub', val=np.zeros(4))
+        self.add_param('sparT', val=np.zeros(5))
+        self.add_param('teT', val=np.zeros(5))
+
         self.FASTinfo = FASTinfo
 
         self.approximation_model = FASTinfo['approximation_model']
@@ -3514,6 +3520,10 @@ class calc_FAST_sm_fit(Component):
         self.do_cv_DEM = FASTinfo['do_cv_DEM']
         self.do_cv_Load = FASTinfo['do_cv_Load']
         self.do_cv_def = FASTinfo['do_cv_def']
+
+        self.turb_class = FASTinfo['turbulence_class']
+
+        self.check_sm_accuracy = FASTinfo['check_sm_accuracy']
 
         self.print_sm = FASTinfo['print_sm']
 
@@ -3909,32 +3919,154 @@ class calc_FAST_sm_fit(Component):
 
         # === tip deflection fit creation === #
 
-        num_pts_def = len(out_dict[def_names[0]])
-
-        yt_def = np.zeros([len(def_sm), num_pts_def])
-
-        for i in range(0, len(def_sm)):
-
-            for j in range(0, num_pts_def):
-                # output values
-                yt_def[i, j] = out_dict[def_names[i]][j]
-
-        sm_def = sm_def_fit
-        sm_def.set_training_values(np.transpose(xt), np.transpose(yt_def))
-        sm_def.options['print_global'] = self.print_sm
-        sm_def.train()
+        # num_pts_def = len(out_dict[def_names[0]])
+        #
+        # yt_def = np.zeros([len(def_sm), num_pts_def])
+        #
+        # for i in range(0, len(def_sm)):
+        #
+        #     for j in range(0, num_pts_def):
+        #         # output values
+        #         yt_def[i, j] = out_dict[def_names[i]][j]
+        #
+        # sm_def = sm_def_fit
+        # sm_def.set_training_values(np.transpose(xt), np.transpose(yt_def))
+        # sm_def.options['print_global'] = self.print_sm
+        # sm_def.train()
 
         # === created surrogate models to .pkl files
 
-        sm_list = [sm_x, sm_y, sm_x_load, sm_y_load, sm_def]
-        sm_string_list = ['sm_x', 'sm_y', 'sm_x_load', 'sm_y_load', 'sm_def']
+        # sm_list = [sm_x, sm_y, sm_x_load, sm_y_load, sm_def]
+        # sm_string_list = ['sm_x', 'sm_y', 'sm_x_load', 'sm_y_load', 'sm_def']
 
-        for i in range(1):#len(sm_list)):
-            pkl_file_name = self.opt_dir + '/' + sm_string_list[i] + '_' + self.approximation_model + '.pkl'
-            file_handle = open(pkl_file_name, "w+")
-            pickle.dump(sm_list[i], file_handle)
+        # for i in range(1):#len(sm_list)):
+        #     pkl_file_name = self.opt_dir + '/' + sm_string_list[i] + '_' + self.approximation_model + '.pkl'
+        #     file_handle = open(pkl_file_name, "w+")
+        #     pickle.dump(sm_list[i], file_handle)
 
-        quit()
+        if self.check_sm_accuracy:
+
+            print('Checking SM accuracy vs. initial design')
+
+            # get design variable values
+            # current design variable values
+            sv = []
+            for i in range(0, len(self.sm_var_names)):
+
+                # chord_sub, theta_sub
+                if hasattr(params[self.sm_var_names[i]], '__len__'):
+                    for j in range(0, len(self.sm_var_names[i])):
+
+                        if j in self.sm_var_index[i]:
+
+                            # calculate solidity
+                            if self.sm_var_names[i] == 'chord_sub':
+                                sv.append(
+                                    params['nBlades'] * params[self.sm_var_names[i]][j] / (2 * params['bladeLength']))
+                            else:
+                                sv.append(params[self.sm_var_names[i]][j])
+                # chord_sub
+                else:
+                    sv.append(params[self.sm_var_names[i]])
+
+            # === predict values === #
+
+            int_sv = np.zeros([len(sv), 1])
+            for i in range(0, len(int_sv)):
+                int_sv[i] = sv[i]
+
+            # print(sv)
+            # quit()
+
+            # determine estimated values using surrogate model
+            # DEMs
+            DEMx_sm = np.transpose(sm_x.predict_values(np.transpose(int_sv)))
+            DEMy_sm = np.transpose(sm_y.predict_values(np.transpose(int_sv)))
+
+
+            # get actual values from .txt file
+            f = open(self.opt_dir + '/xDEM_max.txt' )
+            # f = open(self.opt_dir + '/xDEM_max_5MW.txt')
+            lines = f.readlines()
+            DEMx_actual = []
+            for i in range(len(lines)):
+                DEMx_actual.append(float(lines[i]))
+            f.close()
+
+            f = open(self.opt_dir + '/yDEM_max.txt')
+            # f = open(self.opt_dir + '/yDEM_max_5MW.txt')
+            lines = f.readlines()
+            DEMy_actual = []
+            for i in range(len(lines)):
+                DEMy_actual.append(float(lines[i]))
+            f.close()
+
+            DEMx_sm = DEMx_sm.transpose()[0]
+            DEMx_actual = np.array(DEMx_actual)
+
+            DEMy_sm = DEMy_sm.transpose()[0]
+            DEMy_actual = np.array(DEMy_actual)
+
+            # plot
+            turb_class = self.turb_class
+            # turb_name = '5MW'
+            # turb_name = 'TUM335'
+
+            # DEMx plot
+            plt.figure()
+            plt.title('DEMx initial design, turbulence: ' + turb_class + ' (surrogate model accuracy)')
+
+            plt.plot(DEMx_actual, '-o', label='Actual')
+            plt.plot(DEMx_sm, '--x', label='Estimated')
+            plt.xlabel('strain gage position')
+            plt.ylabel('N*m')
+            plt.xticks(np.linspace(0,17,18))
+            plt.legend()
+            plt.savefig(self.dir_saved_plots + '/DEMx_comp_' + turb_class + '_' + turb_name + '.png')
+            plt.show()
+
+            # DEMy plot
+            plt.figure()
+            plt.title('DEMy initial design, turbulence: ' + turb_class + ' (surrogate model accuracy)')
+
+            plt.plot(DEMy_actual, '-o', label='Actual')
+            plt.plot(DEMy_sm , '--x', label='Estimated')
+            plt.xlabel('strain gage position')
+            plt.ylabel('N*m')
+            plt.xticks(np.linspace(0,17,18))
+            plt.legend()
+            plt.savefig(self.dir_saved_plots + '/DEMy_comp_' + turb_class + '_' + turb_name + '.png')
+            plt.show()
+
+            DEMx_acc = abs(DEMx_actual-DEMx_sm)/DEMx_actual*100.0
+
+            # DEMx accuracy
+            plt.figure()
+            plt.title('DEMx initial design, turbulence: ' + turb_class + ' (surrogate model accuracy)')
+
+            plt.plot(DEMx_acc, 'o')
+            plt.xlabel('strain gage position')
+            plt.ylabel('Percent Error (%)')
+            plt.xticks(np.linspace(0,17,18))
+            plt.savefig(self.dir_saved_plots + '/DEMx_accur_' + turb_class + '_' + turb_name + '.png')
+            plt.show()
+
+            DEMy_acc = abs(DEMy_actual-DEMy_sm)/DEMy_actual*100.0
+
+            # DEMy accuracy
+            plt.figure()
+            plt.title('DEMy initial design, turbulence: ' + turb_class + ' (surrogate model accuracy)')
+
+            plt.plot(DEMy_acc, 'o')
+            plt.xlabel('strain gage position')
+            plt.ylabel('Percent Error (%)')
+            plt.xticks(np.linspace(0,17,18))
+            plt.savefig(self.dir_saved_plots + '/DEMy_accur_' + turb_class + '_' + turb_name + '.png')
+            plt.show()
+
+
+            quit()
+
 
         if self.check_fit:
             sm = sm_check_fit
@@ -4081,25 +4213,8 @@ class calc_FAST_sm_fit(Component):
             rms_DEM_error_y = (total_squared_total_y / len(rms_percent_DEM_error_y)) ** 0.5
 
             # root mean square error overall
-            rms_error = (((rms_DEM_error_x ** 2.0 + rms_DEM_error_y ** 2.0)) / 2.0) ** 0.5
+            rms_error = ( (rms_DEM_error_x ** 2.0 + rms_DEM_error_y ** 2.0) / 2.0) ** 0.5
 
-            # print('avg_percent_DEM_error_x')
-            # print(avg_percent_DEM_error_x)
-            # print('max_percent_DEM_error_x')
-            # print(max_percent_DEM_error_x)
-            # print('rms_percent_DEM_error_x')
-            # print(rms_percent_DEM_error_x)
-            # print('rms_DEM_error_x')
-            # print(rms_DEM_error_x)
-
-            # print('rms_percent_DEM_error_y')
-            # print(rms_percent_DEM_error_y)
-            # print('avg_percent_DEM_error_y')
-            # print(avg_percent_DEM_error_y)
-            # print('max_percent_DEM_error_y')
-            # print(max_percent_DEM_error_y)
-            # print('rms_DEM_error_y')
-            # print(rms_DEM_error_y)
 
             print('rms_error')
             print(rms_error)
@@ -4122,8 +4237,9 @@ class calc_FAST_sm_fit(Component):
             plt.plot(max_percent_DEM_error_x * 100.0, 'o', label='max error')
             plt.xlabel('strain gage position')
             plt.ylabel('model accuracy (%)')
+            plt.xticks(np.linspace(0,17,18))
             plt.legend()
-            plt.savefig(self.dir_saved_plots + '/DEMx_kfold.png')
+            plt.savefig(self.dir_saved_plots + '/DEMx_kfold_' + self.turb_class + '.png')
             plt.show()
 
             # DEMx plot
@@ -4134,8 +4250,9 @@ class calc_FAST_sm_fit(Component):
             plt.plot(max_percent_DEM_error_y * 100.0, 'o', label='max error')
             plt.xlabel('strain gage position')
             plt.ylabel('model accuracy (%)')
+            plt.xticks(np.linspace(0,17,18))
             plt.legend()
-            plt.savefig(self.dir_saved_plots + '/DEMy_kfold.png')
+            plt.savefig(self.dir_saved_plots + '/DEMy_kfold_' + self.turb_class + '.png')
             plt.show()
 
             quit()
@@ -4567,6 +4684,11 @@ class CreateFASTConfig(Component):
 
         self.output_list = FASTinfo['output_list']
 
+        # used to train surrogate model using WindPact turbine designs
+        self.run_template_files = FASTinfo['run_template_files']
+
+        self.FAST_template_name = FASTinfo['FAST_template_name']
+
 
         # add necessary parameters
         self.add_param('nBlades', val=0)
@@ -4621,45 +4743,6 @@ class CreateFASTConfig(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        # # Placeholders for unconnected parameters
-        WindSpeed = 11.4  # m/s
-
-        # exposed parameters without connections
-        BldFlDmp1 = 0.477465
-        BldFlDmp2 = 0.477465
-        BldEdDmp1 = 0.477465
-        FlStTunr1 = 1.0
-        FlStTunr2 = 1.0
-        AdjBlMs = 1.04536
-        AdjFlSt = 1.0
-        AdjEdSt = 1.0
-
-        SysUnits = 'SI'
-        StallMod = 'BEDDOES'
-        UseCm = 'NO_CM'
-        InfModel = 'EQUIL'
-        AToler = 0.005
-        TwrShad = 0.0
-        ShadHWid = 9999.9
-        T_Shad_Refpt = 9999.9
-
-        IndModel = 'WAKE'
-        TLModel = 'PRANDtl'
-        HLModel = 'PRANDtl'
-        # #
-
-        airfoil_types_FAST = ['AeroData/Cylinder1.dat',
-                              'AeroData/Cylinder2.dat',
-                              'AeroData/DU40_A17.dat',
-                              'AeroData/DU35_A17.dat',
-                              'AeroData/DU30_A17.dat',
-                              'AeroData/DU25_A17.dat',
-                              'AeroData/DU21_A17.dat',
-                              'AeroData/NACA64_A17.dat']
-
-        # TODO: change to FoilNm=params['airfoil_types']
-        # Will need work; files headers need to be different
-
         # create file directory for each surrogate model training point
         if self.train_sm:
             FAST_opt_directory = self.sm_dir
@@ -4686,17 +4769,13 @@ class CreateFASTConfig(Component):
 
             for wnd_file in range(0, len(self.WNDfile_List)):
 
+                # determine FAST_wnd_directory
                 spec_caseid = sgp*len(self.WNDfile_List) + wnd_file
-
                 FAST_sgp_directory = sgp_dir
-
                 FAST_wnd_directory = sgp_dir + '/' + caseids[spec_caseid]
 
-                # needs to be created for each DLC
-                if os.path.isdir(FAST_sgp_directory):
-                    # print('sgp specific directory already created')
-                    pass
-                else:
+                # needs to be created for each .wnd input file
+                if not os.path.isdir(FAST_sgp_directory):
                     os.mkdir(FAST_sgp_directory)
 
 
@@ -4705,14 +4784,13 @@ class CreateFASTConfig(Component):
                     print('.wnd specific directory already created')
                 else:
                     os.mkdir(FAST_wnd_directory)
-
                     copy_tree(self.template_dir, FAST_wnd_directory)
 
                 # Create dictionary for this particular index
                 cfg = {}
 
                 # === run files/directories === #
-                cfg['fst_masterfile'] = 'NRELOffshrBsline5MW_Onshore.fst'
+                cfg['fst_masterfile'] =  self.FAST_template_name + '.fst'
 
                 cfg['fst_runfile'] = 'fst_runfile.fst'
 
@@ -4731,7 +4809,6 @@ class CreateFASTConfig(Component):
                     out.close()
 
                 # exposed parameters (no corresponding RotorSE parameter)
-                # if self.wndfiletype[wnd_file] == 'turb':
                 if self.wndfiletype[spec_caseid] == 'turb':
                     cfg['TMax'] = self.Tmax_turb
                 else:
@@ -4739,94 +4816,20 @@ class CreateFASTConfig(Component):
                 cfg['DT'] = self.dT
 
                 # === Add .wnd file location to Aerodyn.ipt file === #
-                # turbulent/nonturbulent wind file locations
 
-                # if self.wndfiletype[wnd_file] == 'turb':
                 if self.wndfiletype[spec_caseid] == 'turb':
                     wnd_file_path = self.path + self.turb_dir + self.WNDfile_List[wnd_file]
                 else:
                     wnd_file_path = self.path + self.nonturb_dir + self.WNDfile_List[wnd_file]
 
-                aerodyn_file_name = cfg['fst_masterdir'] + '/' + 'NRELOffshrBsline5MW_AeroDyn.ipt'
+                aerodyn_file_name = cfg['fst_masterdir'] + '/' + self.FAST_template_name + '_AeroDyn.ipt'
                 replace_line(aerodyn_file_name, 9, wnd_file_path + '\n')
-
-                # === general parameters === #
-                cfg['NumBl'] = params['nBlades']
-
-                if hasattr(params['g'], "__len__"):
-                    cfg['Gravity'] = params['g'][0]
-                else:
-                    cfg['Gravity'] = params['g']
-
-                cfg['RotSpeed'] = params['control:tsr']
-                cfg['TipRad'] = params['FAST_Rtip']
-                cfg['HubRad'] = params['FAST_Rhub']
-                cfg['ShftTilt'] = params['tilt']
-                cfg['PreCone1'] = params['precone']
-                cfg['PreCone2'] = params['precone']
-                cfg['PreCone3'] = params['precone']
 
                 # === parked configuration === #
                 if self.parked_type[wnd_file] == 'yes':
                     cfg['TimGenOn'] = 9999.9
 
                 cfg['OutFileFmt'] = 3  # text and binary output files
-
-                # strain gage placement for bending moment
-                cfg['NBlGages'] = self.NBlGages[sgp]
-                cfg['BldGagNd'] = self.BldGagNd[sgp]
-
-                # print('in create fast config')
-                # print(cfg['BldGagNd'])
-                # print(self.BldGagNd[sgp])
-                # print('---------------------')
-
-                #  parameters we'll eventually want to connect
-
-                # #
-
-                # # Aerodyn File
-
-                # Add DLC .wnd file name to Aerodyn.ipt input file
-                cfg['HH'] = params['hubHt'][0]
-
-                if hasattr(params['rho'], "__len__"):
-                    cfg['AirDens'] = params['rho'][0]
-                    cfg['KinVisc'] = params['mu'][0] / params['rho'][0]
-                else:
-                    cfg['AirDens'] = params['rho']
-                    cfg['KinVisc'] = params['mu'] / params['rho']
-
-                # cfg['FoilNm'] = FoilNm
-                cfg['NFoil'] = (params['af_idx'] + np.ones(np.size(params['af_idx']))).astype(int)
-
-                cfg['BldNodes'] = np.size(params['af_idx'])
-
-                # Make akima splines of RNodes/AeroTwst and RNodes/Chord
-                theta_sub_spline = Akima(params['FAST_r_Aero'], params['FAST_Theta_Aero'])
-                chord_sub_spline = Akima(params['FAST_r_Aero'], params['FAST_Chord_Aero'])
-
-                # Redefine RNodes so that DRNodes can be calculated using AeroSubs
-                RNodes = params['FAST_r_Aero']
-                RNodes = np.linspace(RNodes[0], RNodes[-1], len(RNodes))
-
-                cfg['RNodes'] = RNodes
-                # Find new values of AeroTwst and Chord using redefined RNodes
-
-                FAST_Theta = theta_sub_spline.interp(RNodes)[0]
-                FAST_Chord = chord_sub_spline.interp(RNodes)[0]
-
-                cfg['Chord'] = FAST_Chord
-                cfg['AeroTwst'] = FAST_Theta
-
-                DRNodes = np.zeros(np.size(params['af_idx']))
-                for i in range(0, np.size(params['af_idx'])):
-                    if i == 0:
-                        DRNodes[i] = 2.0 * (RNodes[0] - params['FAST_Rhub'])
-                    else:
-                        DRNodes[i] = 2.0 * (RNodes[i] - RNodes[i - 1]) - DRNodes[i - 1]
-
-                cfg['DRNodes'] = DRNodes
 
                 # # exposed parameters (no corresponding RotorSE parameter)
                 cfg['SysUnits'] = 'SI'
@@ -4841,122 +4844,191 @@ class CreateFASTConfig(Component):
                 cfg['T_Shad_Refpt'] = 9999.9
                 cfg['DTAero'] = 0.02479
 
-                # #
+                if not self.run_template_files:
 
-                # # Blade File
+                    # strain gage placement for bending moment
+                    cfg['NBlGages'] = self.NBlGages[sgp]
+                    cfg['BldGagNd'] = self.BldGagNd[sgp]
 
-                cfg['NBlInpSt'] = len(params['FlpStff'])
-                cfg['BlFract'] = np.linspace(0, 1, len(params['FlpStff']))
-                cfg['AeroCent'] = params['leLoc']
-                cfg['StrcTwst'] = params['FAST_Theta_Str']
-                cfg['BMassDen'] = params['BMassDen']
+                    # === general parameters === #
+                    cfg['NumBl'] = params['nBlades']
 
-                cfg['FlpStff'] = params['FlpStff']
-                cfg['EdgStff'] = params['EdgStff']
-                cfg['GJStff'] = params['GJStff']
-                cfg['EAStff'] = params['EAStff']
+                    if hasattr(params['g'], "__len__"):
+                        cfg['Gravity'] = params['g'][0]
+                    else:
+                        cfg['Gravity'] = params['g']
 
-                # exposed parameters (no corresponding RotorSE parameter)
-                cfg['CalcBMode'] = 'False'
-                cfg['BldFlDmp1'] = 2.477465
-                cfg['BldFlDmp2'] = 2.477465
-                cfg['BldEdDmp1'] = 2.477465
-                cfg['FlStTunr1'] = 1.0
-                cfg['FlStTunr2'] = 1.0
-                cfg['AdjBlMs'] = 1.04536
-                cfg['AdjFlSt'] = 1.0
-                cfg['AdjEdSt'] = 1.0
+                    cfg['RotSpeed'] = params['control:tsr']
+                    cfg['TipRad'] = params['FAST_Rtip']
+                    cfg['HubRad'] = params['FAST_Rhub']
+                    cfg['ShftTilt'] = params['tilt']
+                    cfg['PreCone1'] = params['precone']
+                    cfg['PreCone2'] = params['precone']
+                    cfg['PreCone3'] = params['precone']
 
-                # unused parameters (not used by FAST)
-                alpha = 0.5 * np.arctan2(2 * params['EAStff'], params['FlpStff'] - params['EAStff'])
-                for i in range(0, len(alpha)):
-                    alpha[i] = min(0.99999, alpha[i])
-                cfg['Alpha'] = alpha
+                    # # Aerodyn File
 
-                cfg['PrecrvRef'] = np.zeros(len(params['FlpStff']))
-                cfg['PreswpRef'] = np.zeros(len(params['FlpStff']))
-                cfg['FlpcgOf'] = np.zeros(len(params['FlpStff']))
-                cfg['Edgcgof'] = np.zeros(len(params['FlpStff']))
-                cfg['FlpEAOf'] = np.zeros(len(params['FlpStff']))
-                cfg['EdgEAOf'] = np.zeros(len(params['FlpStff']))
+                    # Add DLC .wnd file name to Aerodyn.ipt input file
+                    cfg['HH'] = params['hubHt'][0]
 
-                # #
+                    if hasattr(params['rho'], "__len__"):
+                        cfg['AirDens'] = params['rho'][0]
+                        cfg['KinVisc'] = params['mu'][0] / params['rho'][0]
+                    else:
+                        cfg['AirDens'] = params['rho']
+                        cfg['KinVisc'] = params['mu'] / params['rho']
 
-                # set EI stiffness
-                # TODO: just get this from the blade input file
-                BladeAerodynamicProperties = np.loadtxt('FAST_Files/RotorSE_InputFiles/BladeAerodynamicProperties.txt')
-                BladeStructureProperties = np.loadtxt('FAST_Files/RotorSE_InputFiles/BladeStructureProperties.txt')
+                    # cfg['FoilNm'] = FoilNm
+                    cfg['NFoil'] = (params['af_idx'] + np.ones(np.size(params['af_idx']))).astype(int)
 
-                # Blade Structural Properties
-                #0 BlFract
-                #1 AeroCent
-                #2 StrcTwst
-                #3 BMassDen
-                #4 FlpStff
-                #5 EdgStff
-                #6 GJStff
-                #7 EAStff
-                #8 Alpha
-                #9 FlpIner
-                #10 EdgIner
-                #11 PrecrvRef
-                #12 PreswpRef
-                #13 FlpcgOf
-                #14 EdgcgOf
-                #15 FlpEAOf
-                #16 EdgEAOf
+                    cfg['BldNodes'] = np.size(params['af_idx'])
 
-                # FlpStff, EdgStff, GJStff, EAStff
-                EI_flp_spline = Akima(params['FAST_precurve_Str'], params['FlpStff'])
-                EI_flp = EI_flp_spline.interp(BladeStructureProperties[:, 0])[0]
+                    # Make akima splines of RNodes/AeroTwst and RNodes/Chord
+                    theta_sub_spline = Akima(params['FAST_r_Aero'], params['FAST_Theta_Aero'])
+                    chord_sub_spline = Akima(params['FAST_r_Aero'], params['FAST_Chord_Aero'])
 
-                EI_edge_spline = Akima(params['FAST_precurve_Str'], params['EdgStff'])
-                EI_edge = EI_edge_spline.interp(BladeStructureProperties[:, 0])[0]
+                    # Redefine RNodes so that DRNodes can be calculated using AeroSubs
+                    RNodes = params['FAST_r_Aero']
+                    RNodes = np.linspace(RNodes[0], RNodes[-1], len(RNodes))
 
-                EI_gj_spline = Akima(params['FAST_precurve_Str'], params['GJStff'])
-                EI_gj = EI_gj_spline.interp(BladeStructureProperties[:, 0])[0]
+                    cfg['RNodes'] = RNodes
+                    # Find new values of AeroTwst and Chord using redefined RNodes
 
-                EI_ea_spline = Akima(params['FAST_precurve_Str'], params['EAStff'])
-                EI_ea = EI_ea_spline.interp(BladeStructureProperties[:, 0])[0]
+                    FAST_Theta = theta_sub_spline.interp(RNodes)[0]
+                    FAST_Chord = chord_sub_spline.interp(RNodes)[0]
 
-                if self.check_stif_spline:
+                    cfg['Chord'] = FAST_Chord
+                    cfg['AeroTwst'] = FAST_Theta
 
-                    # plots
-                    BlFract = BladeStructureProperties[:, 0]
-                    FlpStff = BladeStructureProperties[:, 4]
-                    EdgStff = BladeStructureProperties[:, 5]
-                    GJStff = BladeStructureProperties[:, 6]
-                    EAStff = BladeStructureProperties[:, 7]
+                    DRNodes = np.zeros(np.size(params['af_idx']))
+                    for i in range(0, np.size(params['af_idx'])):
+                        if i == 0:
+                            DRNodes[i] = 2.0 * (RNodes[0] - params['FAST_Rhub'])
+                        else:
+                            DRNodes[i] = 2.0 * (RNodes[i] - RNodes[i - 1]) - DRNodes[i - 1]
 
-                    plt.figure()
-                    plt.plot(BlFract, EI_flp, label='RotorSE spline')
-                    plt.plot(BlFract, FlpStff, label='FAST nominal value')
-                    plt.legend()
-                    plt.title('FlpStff')
+                    cfg['DRNodes'] = DRNodes
 
-                    plt.figure()
-                    plt.plot(BlFract, EI_edge, label='RotorSE spline')
-                    plt.plot(BlFract, EdgStff, label='FAST nominal value')
-                    plt.legend()
-                    plt.title('EdgStff')
+                    # #
 
-                    plt.figure()
-                    plt.plot(BlFract, EI_gj, label='RotorSE spline')
-                    plt.plot(BlFract, GJStff, label='FAST nominal value')
-                    plt.legend()
-                    plt.title('GJStff Stiffness')
+                    # # Blade File
 
-                    plt.figure()
-                    plt.plot(BlFract, EI_ea, label='RotorSE spline')
-                    plt.plot(BlFract, EAStff, label='FAST nominal value')
-                    plt.legend()
-                    plt.title('EAStff Stiffness')
+                    cfg['NBlInpSt'] = len(params['FlpStff'])
+                    cfg['BlFract'] = np.linspace(0, 1, len(params['FlpStff']))
+                    cfg['AeroCent'] = params['leLoc']
+                    cfg['StrcTwst'] = params['FAST_Theta_Str']
+                    cfg['BMassDen'] = params['BMassDen']
 
-                    plt.show()
+                    cfg['FlpStff'] = params['FlpStff']
+                    cfg['EdgStff'] = params['EdgStff']
+                    cfg['GJStff'] = params['GJStff']
+                    cfg['EAStff'] = params['EAStff']
 
-                    quit()
+                    # exposed parameters (no corresponding RotorSE parameter)
+                    cfg['CalcBMode'] = 'False'
+                    cfg['BldFlDmp1'] = 2.477465
+                    cfg['BldFlDmp2'] = 2.477465
+                    cfg['BldEdDmp1'] = 2.477465
+                    cfg['FlStTunr1'] = 1.0
+                    cfg['FlStTunr2'] = 1.0
+                    cfg['AdjBlMs'] = 1.04536
+                    cfg['AdjFlSt'] = 1.0
+                    cfg['AdjEdSt'] = 1.0
+
+                    # unused parameters (not used by FAST)
+                    alpha = 0.5 * np.arctan2(2 * params['EAStff'], params['FlpStff'] - params['EAStff'])
+                    for i in range(0, len(alpha)):
+                        alpha[i] = min(0.99999, alpha[i])
+                    cfg['Alpha'] = alpha
+
+                    cfg['PrecrvRef'] = np.zeros(len(params['FlpStff']))
+                    cfg['PreswpRef'] = np.zeros(len(params['FlpStff']))
+                    cfg['FlpcgOf'] = np.zeros(len(params['FlpStff']))
+                    cfg['Edgcgof'] = np.zeros(len(params['FlpStff']))
+                    cfg['FlpEAOf'] = np.zeros(len(params['FlpStff']))
+                    cfg['EdgEAOf'] = np.zeros(len(params['FlpStff']))
+
+                    # #
+
+                    # set EI stiffness
+                    # TODO: just get this from the blade input file
+                    BladeAerodynamicProperties = np.loadtxt('FAST_Files/RotorSE_InputFiles/BladeAerodynamicProperties.txt')
+                    BladeStructureProperties = np.loadtxt('FAST_Files/RotorSE_InputFiles/BladeStructureProperties.txt')
+
+                    # Blade Structural Properties
+                    #0 BlFract
+                    #1 AeroCent
+                    #2 StrcTwst
+                    #3 BMassDen
+                    #4 FlpStff
+                    #5 EdgStff
+                    #6 GJStff
+                    #7 EAStff
+                    #8 Alpha
+                    #9 FlpIner
+                    #10 EdgIner
+                    #11 PrecrvRef
+                    #12 PreswpRef
+                    #13 FlpcgOf
+                    #14 EdgcgOf
+                    #15 FlpEAOf
+                    #16 EdgEAOf
+
+                    # FlpStff, EdgStff, GJStff, EAStff
+                    EI_flp_spline = Akima(params['FAST_precurve_Str'], params['FlpStff'])
+                    EI_flp = EI_flp_spline.interp(BladeStructureProperties[:, 0])[0]
+
+                    EI_edge_spline = Akima(params['FAST_precurve_Str'], params['EdgStff'])
+                    EI_edge = EI_edge_spline.interp(BladeStructureProperties[:, 0])[0]
+
+                    EI_gj_spline = Akima(params['FAST_precurve_Str'], params['GJStff'])
+                    EI_gj = EI_gj_spline.interp(BladeStructureProperties[:, 0])[0]
+
+                    EI_ea_spline = Akima(params['FAST_precurve_Str'], params['EAStff'])
+                    EI_ea = EI_ea_spline.interp(BladeStructureProperties[:, 0])[0]
+
+                    if self.check_stif_spline:
+
+                        # plots
+                        BlFract = BladeStructureProperties[:, 0]
+                        FlpStff = BladeStructureProperties[:, 4]
+                        EdgStff = BladeStructureProperties[:, 5]
+                        GJStff = BladeStructureProperties[:, 6]
+                        EAStff = BladeStructureProperties[:, 7]
+
+                        plt.figure()
+                        plt.plot(BlFract, EI_flp, label='RotorSE spline')
+                        plt.plot(BlFract, FlpStff, label='FAST nominal value')
+                        plt.legend()
+                        plt.title('FlpStff')
+
+                        plt.figure()
+                        plt.plot(BlFract, EI_edge, label='RotorSE spline')
+                        plt.plot(BlFract, EdgStff, label='FAST nominal value')
+                        plt.legend()
+                        plt.title('EdgStff')
+
+                        plt.figure()
+                        plt.plot(BlFract, EI_gj, label='RotorSE spline')
+                        plt.plot(BlFract, GJStff, label='FAST nominal value')
+                        plt.legend()
+                        plt.title('GJStff Stiffness')
+
+                        plt.figure()
+                        plt.plot(BlFract, EI_ea, label='RotorSE spline')
+                        plt.plot(BlFract, EAStff, label='FAST nominal value')
+                        plt.legend()
+                        plt.title('EAStff Stiffness')
+
+                        plt.show()
+
+                        quit()
 
                 cfg_master[self.caseids[spec_caseid]] = cfg
+
+
+        # print(cfg_master)
+        # quit()
 
         unknowns['cfg_master'] = cfg_master
 
@@ -6027,10 +6099,16 @@ class RotorSE(Group):
                 self.connect('af_idx', 'calc_FAST_sm_training_points.af_idx')
                 self.connect('airfoil_types', 'calc_FAST_sm_training_points.airfoil_types')
 
-            # create surrogate model
-            if FASTinfo['Use_FAST_sm']:
-                self.connect('bladeLength', 'FAST_sm_fit.bladeLength')
-                self.connect('nBlades', 'FAST_sm_fit.nBlades')
+        # create surrogate model
+        if FASTinfo['Use_FAST_sm']:
+            self.connect('bladeLength', 'FAST_sm_fit.bladeLength')
+            self.connect('nBlades', 'FAST_sm_fit.nBlades')
+
+            self.connect('r_max_chord', 'FAST_sm_fit.r_max_chord')
+            self.connect('chord_sub', 'FAST_sm_fit.chord_sub')
+            self.connect('theta_sub', 'FAST_sm_fit.theta_sub')
+            self.connect('sparT', 'FAST_sm_fit.sparT')
+            self.connect('teT', 'FAST_sm_fit.teT')
 
 
 if __name__ == '__main__':

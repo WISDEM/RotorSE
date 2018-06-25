@@ -35,11 +35,19 @@ FASTinfo['calc_surr_model'] = True
 FASTinfo['opt_with_surr_model'] = False
 
 # description
-FASTinfo['turbulence_class'] = 'A'
+FASTinfo['turbulence_class'] = 'B'
+FASTinfo['turbulence_intensity'] = 0.14
 FASTinfo['turbine_class'] = 'I'
-FASTinfo['num_pts'] = 10
+FASTinfo['num_pts'] = 1000
 
-description = 'sm_10_A'
+description = 'test_changes'
+
+# description = 'sm3_1000_A'
+# description = 'sm3_1000_B'
+
+# description = 'nom_1000_A'
+
+# description = 'sm_10_A'
 
 # description = 'sm_100_A'
 # description = 'sm_500_A'
@@ -85,21 +93,18 @@ if FASTinfo['use_FAST']:
         rotor.driver.opt_settings['Summary file'] = FASTinfo['opt_dir'] + '/' + 'SNOPT_summary_' + description + '.out'
 else:
     rotor.driver = pyOptSparseDriver()
-    rotor.driver.options['optimizer'] = 'NSGA2'
 
-    rotor.driver.opt_settings['maxGen'] = 100 # default is 1000
-    rotor.driver.opt_settings['PopSize'] = 100
+    rotor.driver.options['optimizer'] = 'SNOPT'
+    rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
 
-    rotor.driver.opt_settings['Print file'] = FASTinfo['opt_dir'] + '/' + 'print_' + description + '.out'
-    rotor.driver.opt_settings['Summary file'] = FASTinfo['opt_dir'] + '/' + 'summary_' + description + '.out'
+    rotor.driver.opt_settings['Print file'] = FASTinfo['opt_dir'] + '/' + 'SNOPT_print_' + description + '.out'
+    rotor.driver.opt_settings['Summary file'] = FASTinfo['opt_dir'] + '/' + 'SNOPT_summary_' + description + '.out'
 
-
-    # rotor.driver.options['optimizer'] = 'SNOPT'
-    # rotor.driver.opt_settings['Major optimality tolerance'] = 1e-6
-    # ['ALPSO', 'CONMIN', 'FSQP', 'IPOPT', 'NLPQLP', 'NSGA2', 'PSQP', 'SLSQP', 'SNOPT', 'NLPY_AUGLAG', 'NOMAD']
+    # rotor.driver.options['optimizer'] = 'NSGA2'
     #
-    # rotor.driver.opt_settings['Print file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_print_' + description +'.out'
-    # rotor.driver.opt_settings['Summary file'] = 'FAST_Files/Opt_Files/' + description + '/SNOPT_summary_' + description +'.out'
+    # rotor.driver.opt_settings['maxGen'] = 100 # default is 1000
+    # rotor.driver.opt_settings['PopSize'] = 100
+
 
 # recorder = SqliteRecorder(os.sep + 'recorder_' + description +'.sql')
 # recorder.options['record_params'] = True
@@ -487,6 +492,11 @@ if 0:
 # === run and outputs === #
 
 rotor.run()
+
+# if training points, remove copied .wnd input files
+if FASTinfo['train_sm']:
+    from FAST_util import remove_sm_wnd_files
+    remove_sm_wnd_files(FASTinfo)
 
 # save values
 if FASTinfo['use_FAST']:
