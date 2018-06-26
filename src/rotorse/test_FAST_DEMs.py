@@ -38,7 +38,7 @@ FASTinfo['opt_with_surr_model'] = False
 FASTinfo['turbulence_class'] = 'B'
 FASTinfo['turbulence_intensity'] = 0.14
 FASTinfo['turbine_class'] = 'I'
-FASTinfo['num_pts'] = 1000
+FASTinfo['num_pts'] = 10
 
 description = 'test_changes'
 
@@ -282,11 +282,10 @@ else:
 
             rotor['chord_sub'] = FASTinfo['chord_sub_init']
             rotor['r_max_chord'] = rotor['r_max_chord'] = 1.0 / (len(rotor['chord_sub']) -1.0)
-
             rotor['theta_sub'] = FASTinfo['theta_sub_init']
 
-            rotor['sparT'] = FASTinfo['sparT_init']
-            rotor['teT'] = FASTinfo['teT_init']
+            rotor['sparT'] = np.array( [0.05, 0.047754, 0.045376, 0.031085, 0.0061398])
+            rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])
 
         else:
 

@@ -3165,27 +3165,27 @@ class Calculate_FAST_sm_training_points(Component):
         for i in range(0, len(self.NBlGages)):
             total_num_bl_gages += self.NBlGages[i]
 
-        # to calculate solidity
+        # to calculate chord / blade length
         self.add_param('bladeLength', shape=1, desc='Blade length')
         self.add_param('nBlades', val=3, desc='Number of Blades')
 
         # other surrogate model inputs
         self.add_param('turbulence_class', val=Enum('A', 'B', 'C'), desc='IEC turbulence class', pass_by_obj=True)
         self.add_param('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True)
+        self.add_param('turbulence_intensity', val=0.14, desc='IEC turbine class intensity', pass_by_obj=True)
         self.add_param('af_idx', val=np.zeros(naero))
         self.add_param('airfoil_types', val=np.zeros(8))
 
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        # print('new surrogate model params:')
-        # print('Edg_max')
-        # print(params['Edg_max'])
-        # print('Flp_max')
-        # print(params['Flp_max'])
-        # print('max_tip_def')
-        # print(params['max_tip_def'])
-        # quit()
+        # get turbulence intensity value
+        if params['turbulence_class'] == 'A':
+            params['turbulence_intensity'] = 0.12
+        elif params['turbulence_class'] == 'B':
+            params['turbulence_intensity'] = 0.14
+        elif params['turbulence_class'] == 'C':
+            params['turbulence_intensity'] = 0.16
 
         # get rated torque
         rated_tq_file = self.opt_dir + '/rated_tq.txt'
@@ -3344,8 +3344,8 @@ class Calculate_FAST_sm_training_points(Component):
         elif self.training_point_dist == 'lhs':
 
             header_len = 1
+            # === initialize variable file === #
 
-            # variable file
             if not (os.path.isfile(self.var_filename)):
                 # create file
 
@@ -3368,28 +3368,30 @@ class Calculate_FAST_sm_training_points(Component):
 
                 f.close
 
-            # add for var_file
+            # === add set input variables to variable file === #
+
             var_text = 'num_pt_' + str(self.sm_var_spec)
 
             for i in range(0, len(self.sm_var_names)):
 
                 # chord_sub, theta_sub
-                if hasattr(params[self.sm_var_names[i]],'__len__'):
+                if hasattr(params[self.sm_var_names[i]], '__len__'):
                     for j in range(0, len(params[self.sm_var_names[i]])):
                         if j in self.sm_var_index[i]:
 
-                            # calculate solidity
+                            # calculate chord / blade length
                             if self.sm_var_names[i] == 'chord_sub':
-                                var_text += ' ' + str(params['nBlades'] * params[self.sm_var_names[i]][j] / (2 * params['bladeLength']))
+                                var_text += ' ' + str( params[self.sm_var_names[i]][j] / ( params['bladeLength'] ) )
                             else:
                                 var_text += ' ' + str(params[self.sm_var_names[i]][j])
 
-                # r_max_chord
+                # turbulence
                 else:
                     var_text += ' ' + str(params[self.sm_var_names[i]])
 
+            # === create output files, initialize lines === #
+
             # output, load, and def files
-            # check if output file exists (if it doesn't, create it)
             file_list = [self.DEM_filename, self.load_filename, self.def_filename]
 
             for k in range(len(file_list)):
@@ -3414,7 +3416,8 @@ class Calculate_FAST_sm_training_points(Component):
 
                     f.close()
 
-            # write first entry to line as naming convention (ex. 1_2_2_0_1 if 5 variables are being used)
+            # === create line for DEM output file === #
+
             DEM_text = 'pt_' + str(self.sm_var_spec)
 
             # put DEMx and DEMy as values on line
@@ -3426,7 +3429,8 @@ class Calculate_FAST_sm_training_points(Component):
                 # DEM_text += ' ' + str(params['DEMy'][i])
                 DEM_text += ' ' + str(params['DEMy'][i]/rated_tq)
 
-            # load file
+            # === create line for extreme load output file === #
+
             load_text = 'pt_' + str(self.sm_var_spec)
 
             # put Edg_max and Flp_max as values on line
@@ -3438,12 +3442,12 @@ class Calculate_FAST_sm_training_points(Component):
                 # load_text += ' ' + str(params['Flp_max'][i])
                 load_text += ' ' + str(params['Flp_max'][i]/rated_thrust)
 
-            # def file
+            # === create line for extreme deflection output file === #
             def_text = 'pt_' + str(self.sm_var_spec)
 
             def_text += ' ' + str(params['max_tip_def']/params['bladeLength'])
 
-            # replace lines
+            # === write to all files === #
             replace_line(self.var_filename, self.sm_var_spec + header_len, var_text + '\n')
 
             replace_line(self.DEM_filename, self.sm_var_spec + header_len, DEM_text + '\n')
@@ -3867,9 +3871,9 @@ class calc_FAST_sm_fit(Component):
                 # design variable values
                 for k in range(0,len(var_names)):
 
-                    # convert from solidity to chord
+                    # convert from chord / blade length to chord
                     if var_names == 'chord_sub':
-                        xt[k, j] = var_dict[var_names[k]][j]*2.0*params['bladeLength']/params['nBlades']
+                        xt[k, j] = var_dict[var_names[k]][j] * params['bladeLength']
                     else:
                         xt[k, j] = var_dict[var_names[k]][j]
 
@@ -3959,10 +3963,9 @@ class calc_FAST_sm_fit(Component):
 
                         if j in self.sm_var_index[i]:
 
-                            # calculate solidity
+                            # calculate chord / blade length
                             if self.sm_var_names[i] == 'chord_sub':
-                                sv.append(
-                                    params['nBlades'] * params[self.sm_var_names[i]][j] / (2 * params['bladeLength']))
+                                sv.append( params[self.sm_var_names[i]][j] / ( params['bladeLength']) )
                             else:
                                 sv.append(params[self.sm_var_names[i]][j])
                 # chord_sub
@@ -4571,7 +4574,7 @@ class use_FAST_surr_model(Component):
 
         self.nstr = nstr
 
-        # to calculate solidity
+        # to calculate chord / blade length
         self.add_param('bladeLength', shape=1, desc='Blade length')
         self.add_param('nBlades', val=3, desc='Number of Blades')
 
@@ -4614,12 +4617,12 @@ class use_FAST_surr_model(Component):
 
                     if j in self.sm_var_index[i]:
 
-                        # calculate solidity
+                        # calculate chord / blade length
                         if self.sm_var_names[i] == 'chord_sub':
-                            sv.append(params['nBlades'] * params[self.sm_var_names[i]][j] / (2 * params['bladeLength']))
+                            sv.append( params[self.sm_var_names[i]][j] / ( params['bladeLength'] ) )
                         else:
                             sv.append(params[self.sm_var_names[i]][j])
-            # chord_sub
+            # turbulence intensity
             else:
                 sv.append(params[self.sm_var_names[i]])
 
@@ -4686,9 +4689,10 @@ class CreateFASTConfig(Component):
 
         # used to train surrogate model using WindPact turbine designs
         self.run_template_files = FASTinfo['run_template_files']
+        self.set_chord_twist = FASTinfo['set_chord_twist']
+        self.set_blade_length = FASTinfo['bladeLength']
 
         self.FAST_template_name = FASTinfo['FAST_template_name']
-
 
         # add necessary parameters
         self.add_param('nBlades', val=0)
@@ -4822,7 +4826,7 @@ class CreateFASTConfig(Component):
                 else:
                     wnd_file_path = self.path + self.nonturb_dir + self.WNDfile_List[wnd_file]
 
-                aerodyn_file_name = cfg['fst_masterdir'] + '/' + self.FAST_template_name + '_AeroDyn.ipt'
+                aerodyn_file_name = cfg['fst_masterdir'] + '/' + self.FAST_template_name + '_AD.ipt'
                 replace_line(aerodyn_file_name, 9, wnd_file_path + '\n')
 
                 # === parked configuration === #
@@ -4844,7 +4848,26 @@ class CreateFASTConfig(Component):
                 cfg['T_Shad_Refpt'] = 9999.9
                 cfg['DTAero'] = 0.02479
 
-                if not self.run_template_files:
+                if self.set_chord_twist:
+
+                    f = open(aerodyn_file_name, "r")
+
+                    lines = f.readlines()
+                    lines = lines[24:39]
+
+                    DR_nodes = []
+
+                    for i in range(len(lines)):
+                        lines[i] = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", lines[i].strip('\n'))
+                        DR_nodes.append(float(lines[i][0]))
+
+                    chord_spline = Akima(np.linspace( 0, 1, len(params['chord_sub']) ), params['chord_sub'])
+                    twist_spline = Akima(np.linspace( 0, 1, len(params['theta_sub']) ), params['theta_sub'])
+
+                    cfg['Chord'] = chord_spline.interp(np.array(DR_nodes)/self.set_blade_length)[0]
+                    cfg['AeroTwst'] = twist_spline.interp(np.array(DR_nodes)/self.set_blade_length)[0]
+
+                elif not self.run_template_files:
 
                     # strain gage placement for bending moment
                     cfg['NBlGages'] = self.NBlGages[sgp]
@@ -5231,6 +5254,7 @@ class RotorSE(Group):
         self.add('hubHt', IndepVarComp('hubHt', val=np.zeros(1), units='m', desc='hub height'), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=Enum('I', 'II', 'III'), desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         self.add('turbulence_class', IndepVarComp('turbulence_class', val=Enum('B', 'A', 'C'), desc='IEC turbulence class', pass_by_obj=True), promotes=['*'])
+        self.add('turbulence_intensity', IndepVarComp('turbulence_intensity', val=0.12, desc='IEC turbulence class intensity', pass_by_obj=True), promotes=['*'])
         self.add('g', IndepVarComp('g', val=9.81, units='m/s**2', desc='acceleration of gravity', pass_by_obj=True), promotes=['*'])
         self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
         # cdf_reference_mean_wind_speed = Float(iotype='in')
@@ -5999,7 +6023,7 @@ class RotorSE(Group):
             self.connect('Edg_sm', 'struc.Edg_max')
             self.connect('Flp_sm', 'struc.Flp_max')
 
-            # calculate solidity
+            # calculate chord / blade length
             self.connect('bladeLength', 'use_FAST_sm_fit.bladeLength')
             self.connect('nBlades', 'use_FAST_sm_fit.nBlades')
 
@@ -6089,7 +6113,7 @@ class RotorSE(Group):
                 self.connect('sparT', 'calc_FAST_sm_training_points.sparT')
                 self.connect('teT', 'calc_FAST_sm_training_points.teT')
 
-                # calculate solidity
+                # calculate chord / blade length
                 self.connect('bladeLength', 'calc_FAST_sm_training_points.bladeLength')
                 self.connect('nBlades', 'calc_FAST_sm_training_points.nBlades')
 

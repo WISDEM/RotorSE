@@ -91,10 +91,14 @@ def setupFAST(FASTinfo, description):
 
     # === set FAST template files === #
     # NREL5MW, WP_5.0MW, WP_3.0MW, WP_1.5MW, W_P0.75MW
-    FASTinfo['FAST_template_name'] = 'NREL5MW'
+    # FASTinfo['FAST_template_name'] = 'NREL5MW'
+    FASTinfo['FAST_template_name'] = 'WP_5.0MW'
 
     FASTinfo['template_dir'] = FASTinfo['path'] + 'RotorSE_FAST/RotorSE/src/rotorse/' \
                             'FAST_Files/FAST_File_templates/' + FASTinfo['FAST_template_name'] + '/'
+
+    # === get blade length (necessary for nondimensionalization of chord) === #
+    FASTinfo = get_bladelength(FASTinfo)
 
     # === options if previous optimizations have been performed === #
 
@@ -155,8 +159,7 @@ def setupFAST(FASTinfo, description):
 
     # === strain gage placement === #
     # FASTinfo['sgp'] = [1,2,3]
-    # FASTinfo['sgp'] = [4]
-    FASTinfo['sgp'] = [1]
+    FASTinfo['sgp'] = [4]
 
     #for each position
     FASTinfo['NBlGages'] = []
@@ -188,7 +191,6 @@ def setupFAST(FASTinfo, description):
 
     # === copy .wnd files === #
     if FASTinfo['train_sm']:
-
         copy_wnd_files(FASTinfo)
 
     # fatigue options
@@ -229,8 +231,12 @@ def setupFAST_other(FASTinfo):
     # use this when training points for surrogate model
     FASTinfo['remove_sm_dir'] = False
 
+    # === below are two useful options when training different designs for the surrogate model === #
+
     # run template files - no connection with RotorSE - used to train surrogate model using WindPact turbine designs
-    FASTinfo['run_template_files'] = True
+    FASTinfo['run_template_files'] = False
+    # change just chord, twist distributions
+    FASTinfo['set_chord_twist'] = True
 
     return FASTinfo
 
@@ -671,7 +677,7 @@ def create_surr_model_params(FASTinfo):
         FASTinfo['sm_DEM_file'] = 'sm_DEM.txt'
 
     # list of variables that we are varying
-    FASTinfo['sm_var_names'] = ['chord_sub', 'theta_sub', 'turbulence']
+    FASTinfo['sm_var_names'] = ['chord_sub', 'theta_sub', 'turbulence_intensity']
 
     # indices of which variables are used
     FASTinfo['sm_var_index'] = [[0,1,2,3], [0,1,2,3], [0]]
@@ -825,7 +831,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         # raise Exception('Need to have system input when latin-hypercube sampling used.')
         FASTinfo['sm_var_spec'] = 0
 
-
     # add FASTinfo['sm_dir'] so simultaneous runs don't clobber each other
     FASTinfo['sm_dir'] = FASTinfo['opt_dir'] + '/sm_' + str(FASTinfo['sm_var_spec'])
 
@@ -834,7 +839,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         os.mkdir(FASTinfo['opt_dir'])
 
     # name of sm .txt files (will be in description folder)
-
     if not os.path.isdir(FASTinfo['opt_dir'] + '/' + FASTinfo['sm_var_out_dir']):
         os.mkdir(FASTinfo['opt_dir'] + '/' + FASTinfo['sm_var_out_dir'])
 
@@ -848,7 +852,8 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
 
     # ranges of said variables
     # min, max values of design variables
-    FASTinfo['sm_var_range'] = [[0.1, 0.5], [1.3, 5.3], [-10.0, 30.0], [0.005, 0.2], [0.005, 0.2]]
+    FASTinfo['sm_var_range'] = [[1.3*FASTinfo['bladeLength']/61.5, 5.3*FASTinfo['bladeLength']/61.5], [-10.0, 30.0],
+                                [FASTinfo['turbulence_intensity'], FASTinfo['turbulence_intensity']]]
 
     # === do linear hypercube spacing === #
     from pyDOE import lhs
@@ -879,6 +884,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
             points[i,j] = float(spec_line[j])
 
     # === === #
+
     new_var_list = []
     old_var_list = []
     FASTinfo['var_range'] = []
@@ -888,16 +894,12 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         spec_var_name = FASTinfo['sm_var_names'][var_index[i]]
 
         # create var_range
-        if spec_var_name == 'r_max_chord':
+        if spec_var_name == 'chord_sub':
             var_range = FASTinfo['sm_var_range'][0]
-        elif spec_var_name == 'chord_sub':
-            var_range = FASTinfo['sm_var_range'][1]
         elif spec_var_name == 'theta_sub':
+            var_range = FASTinfo['sm_var_range'][1]
+        elif spec_var_name == 'turbulence':
             var_range = FASTinfo['sm_var_range'][2]
-        elif spec_var_name == 'sparT':
-            var_range = FASTinfo['sm_var_range'][3]
-        elif spec_var_name == 'teT':
-            var_range = FASTinfo['sm_var_range'][4]
         else:
             Exception('A surrogate model variable was listed that is not a design variable.')
 
@@ -911,7 +913,7 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
                     index += 1
 
             # get specific variable initial value
-            if spec_var_name == 'r_max_chord':
+            if spec_var_name == 'turbulence_intensity':
                 spec_val = FASTinfo[spec_var_name + '_init']
             else:
                 spec_val = FASTinfo[spec_var_name + '_init'][index]
@@ -931,13 +933,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
             # append lists
             new_var_list.append(new_var_range)
             old_var_list.append(var_range)
-
-
-            # print('test')
-            # print(spec_val)
-            # print(new_var_range)
-            # print(var_range)
-            # print('--- ---')
 
             # set var_range to new_var_range
             var_range = new_var_range
@@ -1146,16 +1141,51 @@ def define_des_var_domains(FASTinfo, rotor):
 # initialize design variables
 def initialize_dv(FASTinfo):
 
-    FASTinfo['chord_sub_init'] = np.array([3.2612, 4.5709, 3.3178,
-                                   1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-    FASTinfo['r_max_chord_init'] = 1.0 / (len(FASTinfo['chord_sub_init']) -1.0)
-    FASTinfo['theta_sub_init'] = np.array([13.2783, 7.46036, 2.89317,
-                                   -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-    FASTinfo['sparT_init'] = np.array(
-        [0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-    FASTinfo['teT_init'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+
+    if FASTinfo['FAST_template_name'] == 'NREL5MW':
+        FASTinfo['chord_sub_init'] = np.array([3.2612, 4.5709, 3.3178,   1.4621])
+        FASTinfo['theta_sub_init'] = np.array([13.2783, 7.46036, 2.89317,   -0.0878099])
+
+    elif FASTinfo['FAST_template_name'] == 'WP_0.75MW':
+        FASTinfo['chord_sub_init'] = np.array([1.392, 1.723, 1.132, 0.700])
+        FASTinfo['theta_sub_init'] = np.array([11.10, 6.35, 0.95, 0.08])
+
+    elif FASTinfo['FAST_template_name'] == 'WP_1.5MW':
+        FASTinfo['chord_sub_init'] = np.array([1.949, 2.412, 1.585, 0.980])
+        FASTinfo['theta_sub_init'] = np.array([11.10, 6.35, 0.95, 0.08])
+
+    elif FASTinfo['FAST_template_name'] == 'WP_3.0MW':
+        FASTinfo['chord_sub_init'] = np.array([2.756, 3.412, 2.242, 1.386])
+        FASTinfo['theta_sub_init'] = np.array([11.10, 6.35, 0.95, 0.08])
+
+    elif FASTinfo['FAST_template_name'] == 'WP_5.0MW':
+        FASTinfo['chord_sub_init'] = np.array([3.564, 4.411, 2.898, 1.793])
+        FASTinfo['theta_sub_init'] = np.array([11.10, 6.35, 0.95, 0.08])
+
+    else:
+        raise Exception('Still need to add other wind turbine initial designs')
+
+    FASTinfo['turbulence_intensity_init'] = FASTinfo['turbulence_intensity']
 
     return FASTinfo
+
+def get_bladelength(FASTinfo):
+
+    if FASTinfo['FAST_template_name'] == 'NREL5MW':
+        FASTinfo['bladeLength'] = 61.5
+    elif FASTinfo['FAST_template_name'] == 'WP_0.75MW':
+        FASTinfo['bladeLength'] = 23.75
+    elif FASTinfo['FAST_template_name'] == 'WP_1.5MW':
+        FASTinfo['bladeLength'] = 33.25
+    elif FASTinfo['FAST_template_name'] == 'WP_3.0MW':
+        FASTinfo['bladeLength'] = 49.5-2.475
+    elif FASTinfo['FAST_template_name'] == 'WP_5.0MW':
+        FASTinfo['bladeLength'] = 64.0-3.2
+    else:
+        raise Exception('Unknown FAST template.')
+
+    return FASTinfo
+
 
 # ========================================================================================================= #
 
