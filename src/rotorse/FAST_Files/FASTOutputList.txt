@@ -17,3 +17,8 @@ Spn6MLyb1
 Spn6MLxb1
 Spn7MLyb1
 Spn7MLxb1
+GenTq
+RotThrust
+RotTorq
+RotPwr
+GenPwr

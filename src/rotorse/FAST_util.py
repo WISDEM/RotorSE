@@ -71,12 +71,12 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
@@ -92,9 +92,10 @@ def setupFAST(FASTinfo, description):
     # === set FAST template files === #
 
     # NREL5MW, WP_5.0MW, WP_3.0MW, WP_1.5MW, W_P0.75MW
+
     # FASTinfo['FAST_template_name'] = 'NREL5MW'
     # FASTinfo['FAST_template_name'] = 'WP_5.0MW'
-    FASTinfo['FAST_template_name'] = 'WP_3.0MW'
+    # FASTinfo['FAST_template_name'] = 'WP_3.0MW'
     # FASTinfo['FAST_template_name'] = 'WP_1.5MW'
     # FASTinfo['FAST_template_name'] = 'WP_0.75MW'
 
@@ -144,13 +145,13 @@ def setupFAST(FASTinfo, description):
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 80.0  # 640.0
-    FASTinfo['Tmax_nonturb'] = 60.0  # 100.0
+    FASTinfo['Tmax_turb'] = 100.0  # 640.0
+    FASTinfo['Tmax_nonturb'] = 100.0  # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 20.0   # 40.0
+    FASTinfo['rm_time'] = 40.0   # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -235,7 +236,7 @@ def setupFAST_other(FASTinfo):
     FASTinfo['save_rated_torque_&_thrust'] = False
 
     # use this when training points for surrogate model
-    FASTinfo['remove_sm_dir'] = True
+    FASTinfo['remove_sm_dir'] = False
 
     # === below are two useful options when training different designs for the surrogate model === #
 
@@ -275,7 +276,7 @@ def specify_DLCs(FASTinfo):
         # === for testing === #
 
         # nominal wind file
-        DLC_List = ['DLC_0_0']
+        # DLC_List = ['DLC_0_0']
 
         # non turbulent DLCs
         # DLC_List = ['DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
@@ -285,7 +286,7 @@ def specify_DLCs(FASTinfo):
         # DLC_List = ['DLC_6_1']
 
         # turbulent DLCs
-        # DLC_List = ['DLC_1_2','DLC_1_3']
+        DLC_List = ['DLC_1_2','DLC_1_3']
         # DLC_List=['DLC_1_3']
 
         # DLC_List = ['DLC_0_0', 'DLC_6_1', 'DLC_6_3']
@@ -1220,16 +1221,36 @@ def get_bladelength(FASTinfo):
 # ========================================================================================================= #
 
 # initialize design variables
-def initialize_rotor_dv(rotor):
+def initialize_rotor_dv(FASTinfo, rotor):
 
-    rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178,
-                                   1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+
+    if FASTinfo['FAST_template_name'] == 'NREL5MW':
+        rotor['chord_sub'] = np.array([3.2612, 4.5709, 3.3178,   1.4621])
+        rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,   -0.0878099])
+
+    elif FASTinfo['FAST_template_name'] == 'WP_0.75MW':
+        rotor['chord_sub'] = np.array([1.392, 1.723, 1.132, 0.700])
+        rotor['theta_sub'] = np.array([11.10, 6.35, 0.95, 0.08])
+
+    elif FASTinfo['FAST_template_name'] == 'WP_1.5MW':
+        rotor['chord_sub'] = np.array([1.949, 2.412, 1.585, 0.980])
+        rotor['theta_sub'] = np.array([11.10, 6.35, 0.95, 0.08])
+
+    elif FASTinfo['FAST_template_name'] == 'WP_3.0MW':
+        rotor['chord_sub'] = np.array([2.756, 3.412, 2.242, 1.386])
+        rotor['theta_sub'] = np.array([11.10, 6.35, 0.95, 0.08])
+
+    elif FASTinfo['FAST_template_name'] == 'WP_5.0MW':
+        rotor['chord_sub'] = np.array([3.564, 4.411, 2.898, 1.793])
+        rotor['theta_sub'] = np.array([11.10, 6.35, 0.95, 0.08])
+
+    else:
+        raise Exception('Still need to add other wind turbine initial designs')
+
     rotor['r_max_chord'] = 1.0 / (len(rotor['chord_sub']) -1.0)
-    rotor['theta_sub'] = np.array([13.2783, 7.46036, 2.89317,
-                                   -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-    rotor['sparT'] = np.array(
-        [0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-    rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+
+    rotor['sparT'] = np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])
+    rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])
 
     return rotor
 
@@ -1621,66 +1642,24 @@ def remove_fixcalc_unnecessary_files(FASTinfo):
                 shutil.rmtree(wnd_dir_name + '/AeroData')
             except:
                 pass
-            try:
-                os.remove(wnd_dir_name + '/fst_runfile.fsm')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/fst_runfile.fst')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/fst_runfile.opt')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/fst_runfile.out')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/fst_runfile.outb')
-            except:
-                pass
 
+            file_list = ['/fst_runfile.fsm', '/fst_runfile.fst', '/fst_runfile.opt', '/fst_runfile.out',
+                         '/fst_runfile.outb', '/fst_runfile_ADAMS.acf', '/fst_runfile_ADAMS.acf',
+                         '/fst_runfile_ADAMS.adm', '/fst_runfile_ADAMS_LIN.acf',
+                         '/' + FASTinfo['FAST_template_name'] + '_ADAMSSpecific.dat',
+                         '/' + FASTinfo['FAST_template_name'] + '_AD.ipt',
+                         '/' + FASTinfo['FAST_template_name'] + '_Blade.dat',
+                         '/' + FASTinfo['FAST_template_name'] + '_Linear.dat',
+                         '/' + FASTinfo['FAST_template_name'] + '_Tower.dat',
+                         '/' + FASTinfo['FAST_template_name'] + '.fst',
+                         '/Pitch.ipt']
 
-            try:
-                os.remove(wnd_dir_name + '/fst_runfile_ADAMS.acf')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/fst_runfile_ADAMS.adm')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/fst_runfile_ADAMS_LIN.acf')
-            except:
-                pass
+            for i in range(len(file_list)):
+                try:
+                    os.remove(wnd_dir_name + file_list[i])
+                except:
+                    pass
 
-
-            try:
-                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_ADAMSSpecific.dat')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_AeroDyn.ipt')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Blade.dat')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Linear.dat')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Onshore.fst')
-            except:
-                pass
-            try:
-                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Tower_Onshore.dat')
-            except:
-                pass
 
 # ========================================================================================================= #
 

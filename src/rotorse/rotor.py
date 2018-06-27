@@ -2408,11 +2408,13 @@ class CreateFASTConstraints(Component):
         # === Check Results === #
         resultsdict = params[self.caseids[0]]
         if self.check_results:
-            # bm_param = 'Spn4MLxb1'
-            # bm_param = ['RootMyb1', 'OoPDefl1', 'GenTq', 'RotThrust', 'RotTorq', 'Spn3MLxb1', 'RotPwr', 'GenPwr']
-            # bm_param_units = ['kN*m', 'm', 'kN*m', 'kN', 'kN*m', 'kN*m', 'kW', 'kW']
-            bm_param = ['GenPwr']
-            bm_param_units = ['kW']
+
+            bm_param = ['RootMyb1', 'OoPDefl1', 'GenTq', 'RotThrust', 'RotTorq', 'Spn3MLxb1', 'RotPwr', 'GenPwr']
+            bm_param_units = ['kN*m', 'm', 'kN*m', 'kN', 'kN*m', 'kN*m', 'kW', 'kW']
+
+            # bm_param = ['GenPwr']
+            # bm_param_units = ['kW']
+
             # bm_param = ['RootMyb1', 'OoPDefl1', 'Spn3MLxb1']
             # bm_param_units = ['kN*m', 'm', 'kN*m']
 
@@ -2446,6 +2448,9 @@ class CreateFASTConstraints(Component):
         # === save rated torque
         if self.save_tq_thrust:
             if self.DLC_List[0] == 'DLC_0_0':
+
+                print('Calculating rated torque and thrust...')
+
                 gen_tq_avg = sum(resultsdict['GenTq'])/len(resultsdict['GenTq'])
 
                 rated_tq_file = self.opt_dir + '/rated_tq.txt'
@@ -2467,8 +2472,6 @@ class CreateFASTConstraints(Component):
                     f = open(rated_thrust_file, "w+")
                     f.write(str(thrust_avg))
                     f.close()
-
-                quit()
 
             else:
                 raise Exception('Need to specify DLC_0_0 as first DLC if you want to save rated torque')
@@ -3197,6 +3200,7 @@ class Calculate_FAST_sm_training_points(Component):
             rated_tq = float(lines[0])
             f.close()
         else:
+            raise Exception('Could not find rated torque file.')
             rated_tq = 1.0 # 4180.0
 
         # get rated thrust
@@ -3207,6 +3211,7 @@ class Calculate_FAST_sm_training_points(Component):
             rated_thrust = float(lines[0])
             f.close()
         else:
+            raise Exception('Could not find rated thrust file.')
             rated_thrust = 1.0 # 542.0
 
         def replace_line(file_name, line_num, text):
