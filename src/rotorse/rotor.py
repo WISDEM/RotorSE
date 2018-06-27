@@ -70,7 +70,6 @@ class RotorSE(Group):
         self.add('usecd', IndepVarComp('usecd', True, pass_by_obj=True), promotes=['*'])
         self.add('AEP_loss_factor', IndepVarComp('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)'), promotes=['*'])
         self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
-        #self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
         self.add('shape_parameter', IndepVarComp('shape_parameter', val=0.0), promotes=['*'])
         
         # --- Rotor Aero & Power ---
@@ -405,7 +404,6 @@ class RotorSE(Group):
         self.connect('beam.beam:rhoJ', 'struc.beam:rhoJ')
         self.connect('beam.beam:x_ec', 'struc.beam:x_ec')
         self.connect('beam.beam:y_ec', 'struc.beam:y_ec')
-        #self.connect('nF', 'struc.nF')
         self.connect('loads_defl.Px_af', 'struc.Px_defl')
         self.connect('loads_defl.Py_af', 'struc.Py_defl')
         self.connect('loads_defl.Pz_af', 'struc.Pz_defl')
@@ -445,7 +443,6 @@ class RotorSE(Group):
         self.connect('spline.theta', 'curvefem.theta')
         self.connect('spline.precurve', 'curvefem.precurve')
         self.connect('spline.presweep', 'curvefem.presweep')
-        self.connect('struc.nF', 'curvefem.nF')
 
         # connections to tip
         self.connect('struc.dx_defl', 'tip.dx', src_indices=[NPTS-1])
@@ -602,6 +599,7 @@ if __name__ == '__main__':
     rotor['tilt'] = myref.tilt #5.0  # (Float, deg): shaft tilt
     rotor['yaw'] = 0.0  # (Float, deg): yaw error
     rotor['nBlades'] = myref.nBlades #3  # (Int): number of blades
+    rotor['downwind'] = myref.downwind
     # ------------------
     
     # === blade geometry ===
@@ -643,7 +641,6 @@ if __name__ == '__main__':
     rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
     rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
     rotor['drivetrainType'] = myref.drivetrain #DRIVETRAIN_TYPE['GEARED']  # (Enum)
-    rotor['struc.nF'] = 5  # (Int): number of natural frequencies to compute
     rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
     # ----------------------
 

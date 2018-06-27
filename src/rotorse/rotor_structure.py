@@ -3,18 +3,18 @@ import numpy as np
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem
 from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometry
-from commonse import gravity
+from commonse import gravity, NFREQ
 from commonse.csystem import DirectionVector
 from commonse.utilities import trapz_deriv, interp_with_deriv
 from precomp import _precomp
 from akima import Akima, akima_interp_with_derivs
-from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, NINPUT
+from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, NINPUT, TURBULENCE_CLASS
 import _pBEAM
 import _curvefem
 # import ccblade._bem as _bem  # TODO: move to rotoraero
 import _bem  # TODO: move to rotoraero
 
-from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS
+from rotorse import RPM2RS, RS2RPM
 
 
 # ---------------------
@@ -39,8 +39,6 @@ class StrucBase(Component):
     def __init__(self, NPTS):
         super(StrucBase, self).__init__()
         # all inputs/outputs in airfoil coordinate system
-        self.add_param('nF', val=5, desc='number of natural frequencies to return', pass_by_obj=True)
-
         self.add_param('Px_defl', val=np.zeros(NPTS), desc='distributed load (force per unit length) in airfoil x-direction at max deflection condition')
         self.add_param('Py_defl', val=np.zeros(NPTS), desc='distributed load (force per unit length) in airfoil y-direction at max deflection condition')
         self.add_param('Pz_defl', val=np.zeros(NPTS), desc='distributed load (force per unit length) in airfoil z-direction at max deflection condition')
@@ -84,7 +82,7 @@ class StrucBase(Component):
         # outputs
         self.add_output('blade_mass', val=0.0, units='kg', desc='mass of one blades')
         self.add_output('blade_moment_of_inertia', val=0.0, units='kg*m**2', desc='out of plane moment of inertia of a blade')
-        self.add_output('freq', val=np.zeros(5), units='Hz', desc='first nF natural frequencies of blade')
+        self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='first nF natural frequencies of blade')
         self.add_output('dx_defl', val=np.zeros(NPTS), desc='deflection of blade section in airfoil x-direction under max deflection loading')
         self.add_output('dy_defl', val=np.zeros(NPTS), desc='deflection of blade section in airfoil y-direction under max deflection loading')
         self.add_output('dz_defl', val=np.zeros(NPTS), desc='deflection of blade section in airfoil z-direction under max deflection loading')
@@ -547,9 +545,8 @@ class CurveFEM(Component):
         self.add_param('theta', val=np.zeros(NPTS), units='deg', desc='structural twist distribution')
         self.add_param('precurve', val=np.zeros(NPTS), units='m', desc='structural precuve (see FAST definition)')
         self.add_param('presweep', val=np.zeros(NPTS), units='m', desc='structural presweep (see FAST definition)')
-        self.add_param('nF', val=5, desc='number of frequencies to return', pass_by_obj=True)
 
-        self.add_output('freq', val=np.zeros(5), units='Hz', desc='first nF natural frequencies')
+        self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='first nF natural frequencies')
 
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
@@ -569,7 +566,7 @@ class CurveFEM(Component):
                                      params['beam:rhoA'], params['beam:EIxx'], params['beam:EIyy'], params['beam:GJ'], params['beam:EA'], params['beam:rhoJ'],
                                      params['precurve'], params['presweep'])
 
-        unknowns['freq'] = freq[:params['nF']]
+        unknowns['freq'] = freq[:NFREQ]
 
 
 
@@ -685,7 +682,6 @@ class RotorWithpBEAM(StrucBase):
         Py_defl = params['Py_defl']
         Pz_defl = params['Pz_defl']
 
-        nF = params['nF']
         Px_defl = params['Px_defl']
         Py_defl = params['Py_defl']
         Pz_defl = params['Pz_defl']
@@ -743,7 +739,7 @@ class RotorWithpBEAM(StrucBase):
         blade_moment_of_inertia = blade.outOfPlaneMomentOfInertia()
 
         # ----- natural frequencies ----
-        freq = blade.naturalFrequencies(nF)
+        freq = blade.naturalFrequencies(NFREQ)
 
         # ----- strain -----
         self.principalCS(params['beam:EIyy'], params['beam:EIxx'], params['beam:y_ec'], params['beam:x_ec'], params['beam:EA'], params['beam:EIxy'])
@@ -1840,8 +1836,8 @@ class ConstraintsStructures(Component):
         super(ConstraintsStructures, self).__init__()
 
         self.add_param('nBlades', val=3, desc='number of blades', pass_by_obj=True)
-        self.add_param('freq', shape=5, units='Hz', desc='1st nF natural frequencies')
-        self.add_param('freq_curvefem', shape=5, units='Hz', desc='1st nF natural frequencies')
+        self.add_param('freq', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
+        self.add_param('freq_curvefem', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_param('Omega', val=0.0, units='rpm', desc='rotation speed')
         self.add_param('strainU_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_param('strainL_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -1990,8 +1986,8 @@ class OutputsStructures(Component):
         self.add_param('mass_one_blade_in', val=0.0, units='kg', desc='mass of one blade')
         self.add_param('mass_all_blades_in', val=0.0,  units='kg', desc='mass of all blade')
         self.add_param('I_all_blades_in', shape=6, desc='out of plane moments of inertia in yaw-aligned c.s.')
-        self.add_param('freq_in', shape=5, units='Hz', desc='1st nF natural frequencies')
-        self.add_param('freq_curvefem_in', shape=5, units='Hz', desc='1st nF natural frequencies')
+        self.add_param('freq_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
+        self.add_param('freq_curvefem_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_param('tip_deflection_in', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
         self.add_param('strainU_spar_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_param('strainL_spar_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -2027,8 +2023,8 @@ class OutputsStructures(Component):
         self.add_output('mass_one_blade', val=0.0, units='kg', desc='mass of one blade')
         self.add_output('mass_all_blades', val=0.0,  units='kg', desc='mass of all blade')
         self.add_output('I_all_blades', shape=6, desc='out of plane moments of inertia in yaw-aligned c.s.')
-        self.add_output('freq', shape=5, units='Hz', desc='1st nF natural frequencies')
-        self.add_output('freq_curvefem', shape=5, units='Hz', desc='1st nF natural frequencies')
+        self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
+        self.add_output('freq_curvefem', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_output('tip_deflection', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
         self.add_output('strainU_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_output('strainL_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -2212,8 +2208,6 @@ class RotorStructure(Group):
 
         # --- options ---
         self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
-        self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
-
 
         # Geometry
         self.add('rotorGeometry', RotorGeometry(RefBlade), promotes=['*'])
@@ -2445,7 +2439,6 @@ class RotorStructure(Group):
         self.connect('beam.beam:rhoJ', 'struc.beam:rhoJ')
         self.connect('beam.beam:x_ec', 'struc.beam:x_ec')
         self.connect('beam.beam:y_ec', 'struc.beam:y_ec')
-        self.connect('nF', 'struc.nF')
         self.connect('loads_defl.Px_af', 'struc.Px_defl')
         self.connect('loads_defl.Py_af', 'struc.Py_defl')
         self.connect('loads_defl.Pz_af', 'struc.Pz_defl')
@@ -2484,7 +2477,6 @@ class RotorStructure(Group):
         self.connect('spline.theta', 'curvefem.theta')
         self.connect('spline.precurve', 'curvefem.precurve')
         self.connect('spline.presweep', 'curvefem.presweep')
-        self.connect('nF', 'curvefem.nF')
 
         # connections to tip
         self.connect('struc.dx_defl', 'tip.dx', src_indices=[NPTS-1])
@@ -2666,7 +2658,6 @@ if __name__ == '__main__':
 
     # === aero and structural analysis options ===
     rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
-    rotor['nF'] = 5  # (Int): number of natural frequencies to compute
     rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
     # ----------------------
 

@@ -20,9 +20,9 @@ from commonse.utilities import vstack, trapz_deriv, linspace_with_deriv, smooth_
 from commonse.environment import PowerWind
 #from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 from akima import Akima
-from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW
+from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, DRIVETRAIN_TYPE
 
-from rotorse import RPM2RS, RS2RPM, DRIVETRAIN_TYPE
+from rotorse import RPM2RS, RS2RPM
 
 
 # ---------------------
@@ -934,6 +934,7 @@ if __name__ == '__main__':
     rotor['tilt'] = myref.tilt #5.0  # (Float, deg): shaft tilt
     rotor['yaw'] = 0.0  # (Float, deg): yaw error
     rotor['nBlades'] = myref.nBlades #3  # (Int): number of blades
+    rotor['downwind'] = myref.downwind
     # ------------------
     
     # === blade geometry ===

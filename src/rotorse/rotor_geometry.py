@@ -2,15 +2,18 @@ import numpy as np
 import os
 from StringIO import StringIO
 import csv
+import commonse
 
 from openmdao.api import Component, Group, IndepVarComp
 
 from akima import Akima, akima_interp_with_derivs
-from rotorse import TURBINE_CLASS, DRIVETRAIN_TYPE
 from ccblade.ccblade_component import CCBladeGeometry
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 
 NINPUT = 5
+TURBULENCE_CLASS = commonse.enum.Enum('A B C')
+TURBINE_CLASS = commonse.enum.Enum('I II III')
+DRIVETRAIN_TYPE = commonse.enum.Enum('geared single_stage multi_drive pm_direct_drive')
 
 class ReferenceBlade(object):
     def __init__(self):
@@ -205,9 +208,9 @@ class NREL5MW(ReferenceBlade):
         # Control
         self.control_Vin      = 3.0
         self.control_Vout     = 25.0
-        self.control_minOmega = 0.0
-        self.control_maxOmega = 12.0
-        self.control_tsr      = 7.55
+        self.control_minOmega = 6.9
+        self.control_maxOmega = 12.1
+        self.control_tsr      = 80.0 / 11.4
         self.control_pitch    = 0.0
         
         
