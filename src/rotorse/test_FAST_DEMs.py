@@ -26,21 +26,28 @@ FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = False
+FASTinfo['calc_fixed_DEMs'] = True
 FASTinfo['calc_fixed_DEMs_seq'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = True
+FASTinfo['calc_surr_model'] = False
 FASTinfo['opt_with_surr_model'] = False
 
 # description
 FASTinfo['turbulence_class'] = 'B'
 FASTinfo['turbulence_intensity'] = 0.14
 FASTinfo['turbine_class'] = 'I'
-FASTinfo['num_pts'] = 5
+FASTinfo['num_pts'] = 1000
 
-description = 'test_3MW_1'
-# description = 'test_3MW_2'
+# description = 'test_075MW'
+# description = 'test_15MW'
+# description = 'test_3MW'
+description = 'test_5MW'
+
+FASTinfo['FAST_template_name'] = 'WP_5.0MW'
+# FASTinfo['FAST_template_name'] = 'WP_3.0MW'
+# FASTinfo['FAST_template_name'] = 'WP_1.5MW'
+# FASTinfo['FAST_template_name'] = 'WP_0.75MW'
 
 # description = 'sm3_1000_A'
 # description = 'sm3_1000_B'
@@ -289,7 +296,7 @@ else:
 
         else:
 
-            rotor = initialize_rotor_dv(rotor)
+            rotor = initialize_rotor_dv(FASTinfo, rotor)
 
     else:
         # not using FAST in the loop, so either using surrogate model or just RotorSE
