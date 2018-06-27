@@ -4,7 +4,6 @@ import os
 import sys
 import matplotlib.pyplot as plt
 from openmdao.api import Problem, pyOptSparseDriver, SqliteRecorder
-#from rotor import RotorSE  # (include this line)
 from rotor import RotorSE  # (include this line)
 import re
 
@@ -38,9 +37,10 @@ FASTinfo['opt_with_surr_model'] = False
 FASTinfo['turbulence_class'] = 'B'
 FASTinfo['turbulence_intensity'] = 0.14
 FASTinfo['turbine_class'] = 'I'
-FASTinfo['num_pts'] = 10
+FASTinfo['num_pts'] = 5
 
-description = 'test_changes'
+description = 'test_3MW_1'
+# description = 'test_3MW_2'
 
 # description = 'sm3_1000_A'
 # description = 'sm3_1000_B'

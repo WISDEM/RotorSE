@@ -2409,10 +2409,12 @@ class CreateFASTConstraints(Component):
         resultsdict = params[self.caseids[0]]
         if self.check_results:
             # bm_param = 'Spn4MLxb1'
-            # bm_param = ['RootMyb1', 'OoPDefl1', 'GenTq', 'RotThrust', 'RotTorq', 'Spn3MLxb1']
-            # bm_param_units = ['kN*m', 'm', 'kN*m', 'kN', 'kN*m', 'kN*m']
-            bm_param = ['RootMyb1', 'OoPDefl1', 'Spn3MLxb1']
-            bm_param_units = ['kN*m', 'm', 'kN*m']
+            # bm_param = ['RootMyb1', 'OoPDefl1', 'GenTq', 'RotThrust', 'RotTorq', 'Spn3MLxb1', 'RotPwr', 'GenPwr']
+            # bm_param_units = ['kN*m', 'm', 'kN*m', 'kN', 'kN*m', 'kN*m', 'kW', 'kW']
+            bm_param = ['GenPwr']
+            bm_param_units = ['kW']
+            # bm_param = ['RootMyb1', 'OoPDefl1', 'Spn3MLxb1']
+            # bm_param_units = ['kN*m', 'm', 'kN*m']
 
             # for i in range(0, len(bm_param)):
                 # f = open(bm_param[i]+'.txt',"w+")
@@ -2421,20 +2423,20 @@ class CreateFASTConstraints(Component):
                 # f.close()
 
             for i in range(0, len(bm_param)):
-                f = open(bm_param[i]+'.txt',"r")
-                lines = f.readlines()
-                plot_param = []
-                for j in range(len(lines)):
-                    plot_param.append(float(lines[j]))
-                f.close()
+            #     f = open(bm_param[i]+'.txt',"r")
+            #     lines = f.readlines()
+            #     plot_param = []
+            #     for j in range(len(lines)):
+            #         plot_param.append(float(lines[j]))
+            #     f.close()
 
                 plt.figure()
                 plt.plot(resultsdict[bm_param[i]])
-                plt.plot(plot_param, '--', label = 'Nonvaried Values')
+                # plt.plot(plot_param, '--', label = 'Nonvaried Values')
                 plt.xlabel('Simulation Step')
                 plt.ylabel(bm_param[i] + ' (' + bm_param_units[i] + ')')
                 plt.title(bm_param[i])
-                plt.legend()
+                # plt.legend()
                 plt.savefig(self.dir_saved_plots + '/plots/param_plots/' + bm_param[i] + '_test.png')
 
                 plt.show()
@@ -4675,9 +4677,11 @@ class CreateFASTConfig(Component):
 
         self.Tmax_turb = FASTinfo['Tmax_turb']
         self.Tmax_nonturb = FASTinfo['Tmax_nonturb']
+        self.rm_time = FASTinfo['rm_time']
 
         self.FAST_opt_directory = FASTinfo['opt_dir']
         self.template_dir = FASTinfo['template_dir']
+        self.fst_exe = FASTinfo['fst_exe']
 
         self.train_sm = FASTinfo['train_sm']
         if self.train_sm:
@@ -4782,7 +4786,6 @@ class CreateFASTConfig(Component):
                 if not os.path.isdir(FAST_sgp_directory):
                     os.mkdir(FAST_sgp_directory)
 
-
                 if os.path.isdir(FAST_wnd_directory):
                     # placeholder
                     print('.wnd specific directory already created')
@@ -4794,14 +4797,16 @@ class CreateFASTConfig(Component):
                 cfg = {}
 
                 # === run files/directories === #
-                cfg['fst_masterfile'] =  self.FAST_template_name + '.fst'
+                cfg['fst_masterfile'] = self.FAST_template_name + '.fst'
 
                 cfg['fst_runfile'] = 'fst_runfile.fst'
 
                 cfg['fst_masterdir'] = FAST_wnd_directory
 
                 cfg['fst_rundir'] = cfg['fst_masterdir']
-                cfg['fst_exe'] = ''.join((self.path, 'FAST_glin64'))
+
+                cfg['fst_exe'] = self.fst_exe
+
                 cfg['fst_file_type'] = 0
                 cfg['ad_file_type'] = 1
 
@@ -4818,6 +4823,7 @@ class CreateFASTConfig(Component):
                 else:
                     cfg['TMax'] = self.Tmax_nonturb
                 cfg['DT'] = self.dT
+                cfg['TStart'] = self.rm_time
 
                 # === Add .wnd file location to Aerodyn.ipt file === #
 
@@ -4848,12 +4854,16 @@ class CreateFASTConfig(Component):
                 cfg['T_Shad_Refpt'] = 9999.9
                 cfg['DTAero'] = 0.02479
 
+                # strain gage placement for bending moment
+                cfg['NBlGages'] = self.NBlGages[sgp]
+                cfg['BldGagNd'] = self.BldGagNd[sgp]
+
                 if self.set_chord_twist:
 
                     f = open(aerodyn_file_name, "r")
 
                     lines = f.readlines()
-                    lines = lines[24:39]
+                    lines = lines[24:41]
 
                     DR_nodes = []
 
@@ -4868,10 +4878,6 @@ class CreateFASTConfig(Component):
                     cfg['AeroTwst'] = twist_spline.interp(np.array(DR_nodes)/self.set_blade_length)[0]
 
                 elif not self.run_template_files:
-
-                    # strain gage placement for bending moment
-                    cfg['NBlGages'] = self.NBlGages[sgp]
-                    cfg['BldGagNd'] = self.BldGagNd[sgp]
 
                     # === general parameters === #
                     cfg['NumBl'] = params['nBlades']
@@ -5561,7 +5567,7 @@ class RotorSE(Group):
             from FST7_aeroelasticsolver import FST7Workflow, FST7AeroElasticSolver
 
             self.add('ParallelFASTCases', FST7AeroElasticSolver(caseids, FASTinfo['Tmax_turb'],
-                FASTinfo['Tmax_nonturb'],FASTinfo['wnd_type_list'], FASTinfo['dT'], FASTinfo['output_list']))
+                FASTinfo['Tmax_nonturb'], FASTinfo['rm_time'], FASTinfo['wnd_type_list'], FASTinfo['dT'], FASTinfo['output_list']))
 
             self.connect('cfg_master', 'ParallelFASTCases.cfg_master')
 

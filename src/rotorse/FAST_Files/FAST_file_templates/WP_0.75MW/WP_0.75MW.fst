@@ -167,11 +167,11 @@ False       Furling     - Read in additional model properties for furling turbin
 "unused"    LinFile    - Name of file containing FAST linearization parameters (quoted string) [unused when AnalMode=1]
 ---------------------- OUTPUT --------------------------------------------------
 False       SumPrint    - Print summary data to "<RootName>.fsm" (flag)
-1           OutFileFmt  - Format for tabular (time-marching) output file(s) (1: text file [<RootName>.out], 2: binary file [<RootName>.outb], 3: both) (switch)
+3           OutFileFmt  - Format for tabular (time-marching) output file(s) (1: text file [<RootName>.out], 2: binary file [<RootName>.outb], 3: both) (switch)
 True        TabDelim    - Use tab delimiters in text tabular output file? (flag)
 "ES10.3E2"  OutFmt      - Format used for text tabular output (except time).  Resulting field should be 10 characters. (quoted string)  [not checked for validity!]
-  10.0      TStart      - Time to begin tabular output (s)
-  10        DecFact     - Decimation factor for tabular output {1: output every time step} (-)
+  0.0      TStart      - Time to begin tabular output (s)
+  1        DecFact     - Decimation factor for tabular output {1: output every time step} (-)
    1.0      SttsTime    - Amount of time between screen status messages (sec)
    0.0      NcIMUxn     - Downwind distance from the tower-top to the nacelle IMU (meters)
    0.0      NcIMUyn     - Lateral  distance from the tower-top to the nacelle IMU (meters)
@@ -179,31 +179,32 @@ True        TabDelim    - Use tab delimiters in text tabular output file? (flag)
    0.0      ShftGagL    - Distance from rotor apex [3 blades] or teeter pin [2 blades] to shaft strain gages [positive for upwind rotors] (meters)
    0        NTwGages    - Number of tower nodes that have strain gages for output [0 to 9] (-)
    0        TwrGagNd    - List of tower nodes that have strain gages [1 to TwrNodes] (-) [unused if NTwGages=0]
-   0        NBlGages    - Number of blade nodes that have strain gages for output [0 to 9] (-)
-   0        BldGagNd    - List of blade nodes that have strain gages [1 to BldNodes] (-) [unused if NBlGages=0]
+   7        NBlGages    - Number of blade nodes that have strain gages for output [0 to 9] (-)
+   1,2,3,4,5,6,7        BldGagNd    - List of blade nodes that have strain gages [1 to BldNodes] (-) [unused if NBlGages=0]
             OutList     - The next line(s) contains a list of output parameters.  See OutList.xlsx for a listing of available output channels, (-)
-"WindVxi,WindVyi,WindVzi"          		- Wind-speed components
-"OoPDefl1,IPDefl1,TipDzb1,TwrClrnc1"	- Blade 1 tip motions
-"OoPDefl2,IPDefl2,TipDzb2,TwrClrnc2"	- Blade 2 tip motions
-"OoPDefl3,IPDefl3,TipDzb3,TwrClrnc3"	- Blade 3 tip motions
-"BldPitch1,BldPitch2,BldPitch3"         - Blade pitch motions
-"Azimuth,RotSpeed,RotAccel"		        - LSS motion
-"GenSpeed,GenAccel,TSR"				    - HSS motion
-"TTDspFA,TTDspSS,TTDspAx"				- Towertop motions
-"YawBrTAxp,YawBrTAyp,YawBrTAzp"			- Towertop accelerations
-"RootFzb1,RootMIP1,RootMOoP1,RootMzb1"	- Blade 1 root loads (1/2)
-"RootMEdg1,RootMFlp1"					- Blade 1 root loads (2/2)
-"RootFzb2,RootMIP2,RootMOoP2,RootMzb2"	- Blade 2 root loads (1/2)
-"RootMEdg2,RootMFlp2"					- Blade 2 root loads (2/2)
-"RootFzb3,RootMIP3,RootMOoP3,RootMzb3"	- Blade 3 root loads (1/2)
-"RootMEdg3,RootMFlp3"					- Blade 3 root loads (2/2)
-"RotThrust,LSSGagFya,LSSGagFza"			- Hub and rotor loads (1/3)
-"LSSGagFys,LSSGagFzs,RotTorq,CThrstArm"	- Hub and rotor loads (2/3)
-"LSShftPwr,LSShftCq,LSShftCp,LSShftCt"	- Hub and rotor loads (3/3)
-"HSShftTq,HSShftPwr,HSShftCq,HSShftCp"	- Generator and HSS loads (1/2)
-"GenTq,GenPwr,GenCq,GenCp"				- Generator and HSS loads (2/2)
-"YawBrFzp,YawBrMzp"						- Tower top yaw-bearing loads
-"TwrBsFxt,TwrBsFyt,TwrBsFzt"			- Tower base loads (1/2)
-"TwrBsMxt,TwrBsMyt,TwrBsMzt"			- Tower base loads (2/2)
+"OoPDefl1"
+"IPDefl1"
+"TwstDefl1"
+"RootMxb1"
+"RootMyb1"
+"Spn1MLyb1"
+"Spn1MLxb1"
+"Spn2MLyb1"
+"Spn2MLxb1"
+"Spn3MLyb1"
+"Spn3MLxb1"
+"Spn4MLyb1"
+"Spn4MLxb1"
+"Spn5MLyb1"
+"Spn5MLxb1"
+"Spn6MLyb1"
+"Spn6MLxb1"
+"Spn7MLyb1"
+"Spn7MLxb1"
+"GenTq"
+"RotThrust"
+"RotTorq"
+"RotPwr"
+"GenPwr"
 END of FAST input file (the word "END" must appear in the first 3 columns of this last line).
 --------------------------------------------------------------------------------

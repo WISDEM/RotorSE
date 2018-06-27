@@ -158,7 +158,7 @@ False       Furling     - Read in additional model properties for furling turbin
 "NREL5MW_Blade.dat"                  BldFile(2)  - Name of file containing properties for blade 2 (quoted string)
 "NREL5MW_Blade.dat"                  BldFile(3)  - Name of file containing properties for blade 3 (quoted string) [unused for 2 blades]
 ---------------------- AERODYN -------------------------------------------------
-"NREL5MW_AeroDyn.ipt"                ADFile      - Name of file containing AeroDyn input parameters (quoted string)
+"NREL5MW_AD.ipt"                ADFile      - Name of file containing AeroDyn input parameters (quoted string)
 ---------------------- NOISE ---------------------------------------------------
 "Dummy"     NoiseFile   - Name of file containing aerodynamic noise input parameters (quoted string) [used only when CompNoise=True]
 ---------------------- ADAMS ---------------------------------------------------
@@ -204,6 +204,8 @@ True        TabDelim    - Use tab delimiters in text tabular output file? (flag)
 "GenTq"
 "RotThrust"
 "RotTorq"
+"RotPwr"
+"GenPwr"
 END of FAST input file (the word "END" must appear in the first 3 columns of this last line).
 --------------------------------------------------------------------------------
 

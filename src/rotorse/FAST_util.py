@@ -90,12 +90,19 @@ def setupFAST(FASTinfo, description):
         os.mkdir(FASTinfo['opt_dir'])
 
     # === set FAST template files === #
+
     # NREL5MW, WP_5.0MW, WP_3.0MW, WP_1.5MW, W_P0.75MW
     # FASTinfo['FAST_template_name'] = 'NREL5MW'
-    FASTinfo['FAST_template_name'] = 'WP_5.0MW'
+    # FASTinfo['FAST_template_name'] = 'WP_5.0MW'
+    FASTinfo['FAST_template_name'] = 'WP_3.0MW'
+    # FASTinfo['FAST_template_name'] = 'WP_1.5MW'
+    # FASTinfo['FAST_template_name'] = 'WP_0.75MW'
 
     FASTinfo['template_dir'] = FASTinfo['path'] + 'RotorSE_FAST/RotorSE/src/rotorse/' \
                             'FAST_Files/FAST_File_templates/' + FASTinfo['FAST_template_name'] + '/'
+
+    # === get FAST executable === #
+    FASTinfo = get_FAST_executable(FASTinfo)
 
     # === get blade length (necessary for nondimensionalization of chord) === #
     FASTinfo = get_bladelength(FASTinfo)
@@ -138,12 +145,12 @@ def setupFAST(FASTinfo, description):
 
     # === FAST Run Time === #
     FASTinfo['Tmax_turb'] = 80.0  # 640.0
-    FASTinfo['Tmax_nonturb'] = 10.0  # 100.0
+    FASTinfo['Tmax_nonturb'] = 60.0  # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
     # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 5.0  # 40.0
+    FASTinfo['rm_time'] = 20.0   # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -153,12 +160,11 @@ def setupFAST(FASTinfo, description):
         FASTinfo = kfold_params(FASTinfo)
 
         # check kfold
-        if  FASTinfo['check_kfold']:
+        if FASTinfo['check_kfold']:
             plot_kfolds(FASTinfo)
 
-
     # === strain gage placement === #
-    # FASTinfo['sgp'] = [1,2,3]
+    # FASTinfo['sgp'] = [1, 2, 3]
     FASTinfo['sgp'] = [4]
 
     #for each position
@@ -171,18 +177,18 @@ def setupFAST(FASTinfo, description):
         FASTinfo['BldGagNd'].append([1, 2, 3, 4, 5, 6, 7])  # strain gage positions
         FASTinfo['BldGagNd_config'].append([1, 2, 3, 4, 5, 6, 7])  # strain gage positions
     if 2 in FASTinfo['sgp']:
-        FASTinfo['NBlGages'].append(7) # number of strain gages (max is 7)
-        FASTinfo['BldGagNd'].append([8,9,10,11,12,13,14]) # strain gage positions
-        FASTinfo['BldGagNd_config'].append([8,9,10,11,12,13,14]) # strain gage positions
+        FASTinfo['NBlGages'].append(7)  # number of strain gages (max is 7)
+        FASTinfo['BldGagNd'].append([8, 9, 10, 11, 12, 13, 14])  # strain gage positions
+        FASTinfo['BldGagNd_config'].append([8, 9, 10, 11, 12, 13, 14])  # strain gage positions
     if 3 in FASTinfo['sgp']:
-        FASTinfo['NBlGages'].append(3) # number of strain gages (max is 7)
-        FASTinfo['BldGagNd'].append([15,16,17]) # strain gage positions
-        FASTinfo['BldGagNd_config'].append([15,16,17]) # strain gage positions
+        FASTinfo['NBlGages'].append(3)  # number of strain gages (max is 7)
+        FASTinfo['BldGagNd'].append([15, 16, 17])  # strain gage positions
+        FASTinfo['BldGagNd_config'].append([15, 16, 17])  # strain gage positions
     if 4 in FASTinfo['sgp']:
         # over entire range
-        FASTinfo['NBlGages'].append(7) # number of strain gages (max is 7)
-        FASTinfo['BldGagNd'].append([1,3,5,7,9,12,17]) # strain gage positions
-        FASTinfo['BldGagNd_config'].append([1,3,5,7,9,12,17]) # strain gage positions
+        FASTinfo['NBlGages'].append(7)  # number of strain gages (max is 7)
+        FASTinfo['BldGagNd'].append([1, 3, 5, 7, 9, 12, 17])  # strain gage positions
+        FASTinfo['BldGagNd_config'].append([1, 3, 5, 7, 9, 12, 17])  # strain gage positions
 
     # FASTinfo['spec_sgp_dir'] = FASTinfo['opt_dir'] + '/' + 'sgp' + str(FASTinfo['sgp'])
 
@@ -229,7 +235,7 @@ def setupFAST_other(FASTinfo):
     FASTinfo['save_rated_torque_&_thrust'] = False
 
     # use this when training points for surrogate model
-    FASTinfo['remove_sm_dir'] = False
+    FASTinfo['remove_sm_dir'] = True
 
     # === below are two useful options when training different designs for the surrogate model === #
 
@@ -534,6 +540,30 @@ def plot_kfolds(FASTinfo):
     plt.show()
 
     quit()
+
+# ========================================================================================================= #
+
+
+def get_FAST_executable(FASTinfo):
+
+    if FASTinfo['FAST_template_name'] == 'NREL5MW':
+        FASTinfo['fst_exe'] = FASTinfo['path'] + 'RotorSE_FAST/FAST_exe/' + 'FAST_glin64'
+    elif FASTinfo['FAST_template_name'] == 'WP_0.75MW':
+        FASTinfo['fst_exe'] = FASTinfo['path'] + 'RotorSE_FAST/FAST_exe/' + 'FAST_WP_075MW_glin64'
+    elif FASTinfo['FAST_template_name'] == 'WP_1.5MW':
+        FASTinfo['fst_exe'] = FASTinfo['path'] + 'RotorSE_FAST/FAST_exe/' + 'FAST_WP_15MW_glin64'
+    elif FASTinfo['FAST_template_name'] == 'WP_3.0MW':
+        FASTinfo['fst_exe'] = FASTinfo['path'] + 'RotorSE_FAST/FAST_exe/' + 'FAST_WP_3MW_glin64'
+    elif FASTinfo['FAST_template_name'] == 'WP_5.0MW':
+        FASTinfo['fst_exe'] = FASTinfo['path'] + 'RotorSE_FAST/FAST_exe/' + 'FAST_WP_5MW_glin64'
+    else:
+        raise Exception('FAST executable unavailable, must be built from source.')
+
+    return FASTinfo
+
+
+# ========================================================================================================= #
+
 
 def setup_top_level_options(FASTinfo):
 
@@ -1587,24 +1617,70 @@ def remove_fixcalc_unnecessary_files(FASTinfo):
         if os.path.isdir(wnd_dir_name):
 
             # remove files
-            shutil.rmtree(wnd_dir_name + '/AeroData')
+            try:
+                shutil.rmtree(wnd_dir_name + '/AeroData')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/fst_runfile.fsm')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/fst_runfile.fst')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/fst_runfile.opt')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/fst_runfile.out')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/fst_runfile.outb')
+            except:
+                pass
 
-            os.remove(wnd_dir_name + '/fst_runfile.fsm')
-            os.remove(wnd_dir_name + '/fst_runfile.fst')
-            os.remove(wnd_dir_name + '/fst_runfile.opt')
-            os.remove(wnd_dir_name + '/fst_runfile.out')
-            os.remove(wnd_dir_name + '/fst_runfile.outb')
 
-            os.remove(wnd_dir_name + '/fst_runfile_ADAMS.acf')
-            os.remove(wnd_dir_name + '/fst_runfile_ADAMS.adm')
-            os.remove(wnd_dir_name + '/fst_runfile_ADAMS_LIN.acf')
+            try:
+                os.remove(wnd_dir_name + '/fst_runfile_ADAMS.acf')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/fst_runfile_ADAMS.adm')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/fst_runfile_ADAMS_LIN.acf')
+            except:
+                pass
 
-            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_ADAMSSpecific.dat')
-            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_AeroDyn.ipt')
-            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Blade.dat')
-            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Linear.dat')
-            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Onshore.fst')
-            os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Tower_Onshore.dat')
+
+            try:
+                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_ADAMSSpecific.dat')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_AeroDyn.ipt')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Blade.dat')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Linear.dat')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Onshore.fst')
+            except:
+                pass
+            try:
+                os.remove(wnd_dir_name + '/NRELOffshrBsline5MW_Tower_Onshore.dat')
+            except:
+                pass
 
 # ========================================================================================================= #
 
