@@ -69,6 +69,12 @@ class ReferenceBlade(object):
     def getStructPath(self):
         return os.path.join(os.path.dirname(os.path.realpath(__file__)), self.name+'_PreCompFiles')
 
+    def getAirfoilCoordinates(self):
+        data = []
+        for a in self.airfoils:
+            coord = np.loadtxt(a.replace('.dat','.pfl'), skiprows=2)
+            data.append(coord)
+        return data
         
 class NREL5MW(ReferenceBlade):
     def __init__(self):
@@ -442,7 +448,7 @@ class BladeGeometry(Component):
         self.add_output('sparT', val=np.zeros(npts), units='m', desc='dimensional spar cap thickness distribution')
         self.add_output('teT', val=np.zeros(npts), units='m', desc='dimensional trailing-edge panel thickness distribution')
 
-        self.add_output('diameter', val=0.0, units='m')
+        self.add_output('hub_diameter', val=0.0, units='m')
         
         self.add_output('airfoil_files', val=[], desc='Spanwise coordinates for aerodynamic analysis', pass_by_obj=True)
         self.add_output('le_location', val=np.zeros(npts), desc='Leading-edge positions from a reference blade axis (usually blade pitch axis). Locations are normalized by the local chord length. Positive in -x direction for airfoil-aligned coordinate system')
@@ -473,7 +479,7 @@ class BladeGeometry(Component):
         # make dimensional and evaluate splines
         unknowns['Rhub']     = Rhub
         unknowns['Rtip']     = Rtip
-        unknowns['diameter'] = 2.0*Rhub
+        unknowns['hub_diameter'] = 2.0*Rhub
         unknowns['r_pts']    = Rhub + (Rtip-Rhub)*self.refBlade.r
         unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.r_[0.0, self.refBlade.r_cylinder, np.linspace(params['r_max_chord'], 1.0, NINPUT-2)]
 
@@ -607,36 +613,36 @@ class RotorGeometry(Group):
         # --- Rotor Definition ---
         self.add('loc', Location(), promotes=['*'])
         self.add('turbineclass', TurbineClass())
-        self.add('spline0', BladeGeometry(RefBlade))
-        self.add('spline', BladeGeometry(RefBlade))
+        #self.add('spline0', BladeGeometry(RefBlade))
+        self.add('spline', BladeGeometry(RefBlade), promotes=['*'])
         self.add('geom', CCBladeGeometry())
 
         # connections to turbineclass
         self.connect('turbine_class', 'turbineclass.turbine_class')
 
         # connections to spline0
-        self.connect('r_max_chord', 'spline0.r_max_chord')
-        self.connect('chord_in', 'spline0.chord_in')
-        self.connect('theta_in', 'spline0.theta_in')
-        self.connect('precurve_in', 'spline0.precurve_in')
-        self.connect('presweep_in', 'spline0.presweep_in')
-        self.connect('bladeLength', 'spline0.bladeLength')
-        self.connect('hubFraction', 'spline0.hubFraction')
-        self.connect('sparT_in', 'spline0.sparT_in')
-        self.connect('teT_in', 'spline0.teT_in')
+        #self.connect('r_max_chord', 'spline0.r_max_chord')
+        #self.connect('chord_in', 'spline0.chord_in')
+        #self.connect('theta_in', 'spline0.theta_in')
+        #self.connect('precurve_in', 'spline0.precurve_in')
+        #self.connect('presweep_in', 'spline0.presweep_in')
+        #self.connect('bladeLength', 'spline0.bladeLength')
+        #self.connect('hubFraction', 'spline0.hubFraction')
+        #self.connect('sparT_in', 'spline0.sparT_in')
+        #self.connect('teT_in', 'spline0.teT_in')
 
         # connections to spline
-        self.connect('r_max_chord', 'spline.r_max_chord')
-        self.connect('chord_in', 'spline.chord_in')
-        self.connect('theta_in', 'spline.theta_in')
-        self.connect('precurve_in', 'spline.precurve_in')
-        self.connect('presweep_in', 'spline.presweep_in')
-        self.connect('bladeLength', 'spline.bladeLength')
-        self.connect('hubFraction', 'spline.hubFraction')
-        self.connect('sparT_in', 'spline.sparT_in')
-        self.connect('teT_in', 'spline.teT_in')
+        #self.connect('r_max_chord', 'spline.r_max_chord')
+        #self.connect('chord_in', 'spline.chord_in')
+        #self.connect('theta_in', 'spline.theta_in')
+        #self.connect('precurve_in', 'spline.precurve_in')
+        #self.connect('presweep_in', 'spline.presweep_in')
+        #self.connect('bladeLength', 'spline.bladeLength')
+        #self.connect('hubFraction', 'spline.hubFraction')
+        #self.connect('sparT_in', 'spline.sparT_in')
+        #self.connect('teT_in', 'spline.teT_in')
 
         # connections to geom
-        self.connect('spline.Rtip', 'geom.Rtip')
+        self.connect('Rtip', 'geom.Rtip')
         self.connect('precone', 'geom.precone')
         self.connect('precurve_tip', 'geom.precurveTip')

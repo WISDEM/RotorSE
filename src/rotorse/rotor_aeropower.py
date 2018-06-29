@@ -679,15 +679,12 @@ class OutputsAero(Component):
         self.add_param('ratedConditions:T_in', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
         self.add_param('ratedConditions:Q_in', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
 
-        self.add_param('hub_diameter_in', val=0.0, units='m', desc='hub diameter')
         self.add_param('diameter_in', val=0.0, units='m', desc='rotor diameter')
-        self.add_param('max_chord_in', val=0.0, units='m', desc='max chord length')
         self.add_param('V_extreme_in', val=0.0, units='m/s', desc='survival wind speed')
         self.add_param('T_extreme_in', val=0.0, units='N', desc='thrust at survival wind condition')
         self.add_param('Q_extreme_in', val=0.0, units='N*m', desc='thrust at survival wind condition')
 
         # internal use outputs
-        self.add_param('Rtip_in', val=0.0, units='m', desc='tip location in z_b')
         self.add_param('precurveTip_in', val=0.0, units='m', desc='tip location in x_b')
         self.add_param('presweepTip_in', val=0.0, units='m', desc='tip location in y_b')  # TODO: connect later
 
@@ -702,15 +699,12 @@ class OutputsAero(Component):
         self.add_output('ratedConditions:T', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
         self.add_output('ratedConditions:Q', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
 
-        self.add_output('hub_diameter', val=0.0, units='m', desc='hub diameter')
         self.add_output('diameter', val=0.0, units='m', desc='rotor diameter')
-        self.add_output('max_chord', val=0.0, units='m', desc='max chord length')
         self.add_output('V_extreme', val=0.0, units='m/s', desc='survival wind speed')
         self.add_output('T_extreme', val=0.0, units='N', desc='thrust at survival wind condition')
         self.add_output('Q_extreme', val=0.0, units='N*m', desc='thrust at survival wind condition')
 
         # internal use outputs
-        self.add_output('Rtip', val=0.0, units='m', desc='tip location in z_b')
         self.add_output('precurveTip', val=0.0, units='m', desc='tip location in x_b')
         self.add_output('presweepTip', val=0.0, units='m', desc='tip location in y_b')  # TODO: connect later
 
@@ -723,13 +717,10 @@ class OutputsAero(Component):
         unknowns['ratedConditions:pitch'] = params['ratedConditions:pitch_in']
         unknowns['ratedConditions:T'] = params['ratedConditions:T_in']
         unknowns['ratedConditions:Q'] = params['ratedConditions:Q_in']
-        unknowns['hub_diameter'] = params['hub_diameter_in']
         unknowns['diameter'] = params['diameter_in']
-        unknowns['max_chord'] = params['max_chord_in']
         unknowns['V_extreme'] = params['V_extreme_in']
         unknowns['T_extreme'] = params['T_extreme_in']
         unknowns['Q_extreme'] = params['Q_extreme_in']
-        unknowns['Rtip'] = params['Rtip_in']
         unknowns['precurveTip'] = params['precurveTip_in']
         unknowns['presweepTip'] = params['presweepTip_in']
 
@@ -743,13 +734,10 @@ class OutputsAero(Component):
         J['ratedConditions:pitch', 'ratedConditions:pitch_in'] = 1
         J['ratedConditions:T', 'ratedConditions:T_in'] = 1
         J['ratedConditions:Q', 'ratedConditions:Q_in'] = 1
-        J['hub_diameter', 'hub_diameter_in'] = 1
         J['diameter', 'diameter_in'] = 1
-        J['max_chord', 'max_chord_in'] = 1
         J['V_extreme', 'V_extreme_in'] = 1
         J['T_extreme', 'T_extreme_in'] = 1
         J['Q_extreme', 'Q_extreme_in'] = 1
-        J['Rtip', 'Rtip_in'] = 1
         J['precurveTip', 'precurveTip_in'] = 1
         J['presweepTip', 'presweepTip_in'] = 1
 
@@ -821,18 +809,18 @@ class RotorAeroPower(Group):
         self.connect('geom.R', 'setup.R')
 
         # connections to analysis
-        self.connect('spline.r_pts', 'analysis.r')
-        self.connect('spline.chord', 'analysis.chord')
-        self.connect('spline.theta', 'analysis.theta')
-        self.connect('spline.precurve', 'analysis.precurve')
+        self.connect('r_pts', 'analysis.r')
+        self.connect('chord', 'analysis.chord')
+        self.connect('theta', 'analysis.theta')
+        self.connect('precurve', 'analysis.precurve')
         self.connect('precurve_tip', 'analysis.precurveTip')
-        self.connect('spline.Rhub', 'analysis.Rhub')
-        self.connect('spline.Rtip', 'analysis.Rtip')
+        self.connect('Rhub', 'analysis.Rhub')
+        self.connect('Rtip', 'analysis.Rtip')
         self.connect('hub_height', 'analysis.hubHt')
         self.connect('precone', 'analysis.precone')
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
-        self.connect('spline.airfoil_files', 'analysis.airfoil_files')
+        self.connect('airfoil_files', 'analysis.airfoil_files')
         self.connect('nBlades', 'analysis.B')
         #self.connect('rho', 'analysis.rho')
         #self.connect('mu', 'analysis.mu')
@@ -904,11 +892,8 @@ class RotorAeroPower(Group):
 
 
         # connect to outputs
-        self.connect('spline.diameter', 'hub_diameter_in')
-        self.connect('spline.max_chord', 'max_chord_in')
         self.connect('geom.diameter', 'diameter_in')
         self.connect('turbineclass.V_extreme', 'V_extreme_in')
-        self.connect('spline.Rtip', 'Rtip_in')
         self.connect('precurve_tip', 'precurveTip_in')
         self.connect('presweep_tip', 'presweepTip_in')
 
@@ -934,7 +919,6 @@ if __name__ == '__main__':
     rotor['tilt'] = myref.tilt #5.0  # (Float, deg): shaft tilt
     rotor['yaw'] = 0.0  # (Float, deg): yaw error
     rotor['nBlades'] = myref.nBlades #3  # (Int): number of blades
-    rotor['downwind'] = myref.downwind
     # ------------------
     
     # === blade geometry ===
