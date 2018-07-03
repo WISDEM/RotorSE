@@ -20,9 +20,9 @@ from commonse.utilities import vstack, trapz_deriv, linspace_with_deriv, smooth_
 from commonse.environment import PowerWind
 #from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 from akima import Akima
-from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW
+from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, DRIVETRAIN_TYPE
 
-from rotorse import RPM2RS, RS2RPM, DRIVETRAIN_TYPE
+from rotorse import RPM2RS, RS2RPM
 
 
 # ---------------------
@@ -95,9 +95,9 @@ class Coefficients(Component):
         self.add_output('CQ', val=np.zeros(npts_coarse_power_curve), desc='rotor aerodynamic torque')
         self.add_output('CP', val=np.zeros(npts_coarse_power_curve), desc='rotor aerodynamic power')
 
-        self.deriv_options['form'] = 'central'
+	self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-        self.deriv_options['step_calc'] = 'relative'
+	self.deriv_options['step_calc'] = 'relative'
 
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -168,11 +168,11 @@ class SetupRunFixedSpeed(Component):
         self.npts = npts
         """determines approriate conditions to run AeroBase code across the power curve"""
 
-        self.add_param('control_Vin', units='m/s', desc='cut-in wind speed')
-        self.add_param('control_Vout', units='m/s', desc='cut-out wind speed')
-        self.add_param('control_ratedPower', units='W', desc='rated power')
-        self.add_param('control_Omega', units='rpm', desc='fixed rotor rotation speed')
-        self.add_param('control_pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+        self.add_param('control:Vin', units='m/s', desc='cut-in wind speed')
+        self.add_param('control:Vout', units='m/s', desc='cut-out wind speed')
+        self.add_param('control:ratedPower', units='W', desc='rated power')
+        self.add_param('control:Omega', units='rpm', desc='fixed rotor rotation speed')
+        self.add_param('control:pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
         # outputs
         self.add_output('Uhub', units='m/s', desc='freestream velocities to run')
@@ -198,11 +198,11 @@ class SetupRunVarSpeed(Component):
         self.npts = npts_coarse_power_curve
         """determines approriate conditions to run AeroBase code across the power curve"""
 
-        self.add_param('control_Vin', val=0.0, units='m/s', desc='cut-in wind speed')
-        self.add_param('control_Vout', val=0.0, units='m/s', desc='cut-out wind speed')
-        self.add_param('control_maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed')
-        self.add_param('control_tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)')
-        self.add_param('control_pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+        self.add_param('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed')
+        self.add_param('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed')
+        self.add_param('control:maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed')
+        self.add_param('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)')
+        self.add_param('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
         self.add_param('R', val=0.0, units='m', desc='rotor radius')
 
@@ -226,40 +226,40 @@ class SetupRunVarSpeed(Component):
         # V = np.concatenate([V1, V2[1:]])
 
         # velocity sweep
-        V, dV_dVin, dV_dVout = linspace_with_deriv(params['control_Vin'], params['control_Vout'], self.npts)
+        V, dV_dVin, dV_dVout = linspace_with_deriv(params['control:Vin'], params['control:Vout'], self.npts)
         
         # corresponding rotation speed
-        Omega_d = params['control_tsr']*V/R*RS2RPM
-        Omega, dOmega_dOmegad, dOmega_dmaxOmega = smooth_min(Omega_d, params['control_maxOmega'], pct_offset=0.01)
+        Omega_d = params['control:tsr']*V/R*RS2RPM
+        Omega, dOmega_dOmegad, dOmega_dmaxOmega = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
 
         # store values
         unknowns['Uhub'] = V
         unknowns['Omega'] = Omega
-        unknowns['pitch'] = params['control_pitch']*np.ones_like(V)
+        unknowns['pitch'] = params['control:pitch']*np.ones_like(V)
 
         # gradients
         J = {}
-        J['Omega', 'control_tsr'] = dOmega_dOmegad * V/R*RS2RPM
-        J['Omega', 'R'] = dOmega_dOmegad * -params['control_tsr']*V/R**2*RS2RPM
-        J['Omega', 'control_maxOmega'] = dOmega_dmaxOmega
-        J['Omega', 'control_Vin'] = dOmega_dOmegad * params['control_tsr']/R*RS2RPM * dV_dVin
-        J['Omega', 'control_Vout'] = dOmega_dOmegad * params['control_tsr']/R*RS2RPM * dV_dVout
-        J['Uhub', 'control_tsr'] = np.zeros(len(V))
-        J['Uhub', 'R'] = np.zeros(len(V))
-        J['Uhub', 'control_pitch'] = np.zeros(len(V))
-        J['Uhub', 'control_Vin']   = dV_dVin
-        J['Uhub', 'control_Vout']   = dV_dVout
-        J['pitch', 'control_tsr'] = np.zeros(len(V))
-        J['pitch', 'R'] = np.zeros(len(V))
-        J['pitch', 'control_pitch'] = np.ones(len(V))
-        J['pitch', 'control_Vin'] = np.zeros(len(V))
-        J['pitch', 'control_Vout'] = np.zeros(len(V))
+        J['Omega', 'control:tsr'] = dOmega_dOmegad * V/R*RS2RPM
+        J['Omega', 'R'] = dOmega_dOmegad * -params['control:tsr']*V/R**2*RS2RPM
+        J['Omega', 'control:maxOmega'] = dOmega_dmaxOmega
+	J['Omega', 'control:Vin'] = dOmega_dOmegad * params['control:tsr']/R*RS2RPM * dV_dVin
+	J['Omega', 'control:Vout'] = dOmega_dOmegad * params['control:tsr']/R*RS2RPM * dV_dVout
+	J['Uhub', 'control:tsr'] = np.zeros(len(V))
+	J['Uhub', 'R'] = np.zeros(len(V))
+	J['Uhub', 'control:pitch'] = np.zeros(len(V))
+	J['Uhub', 'control:Vin']   = dV_dVin
+	J['Uhub', 'control:Vout']   = dV_dVout
+	J['pitch', 'control:tsr'] = np.zeros(len(V))
+	J['pitch', 'R'] = np.zeros(len(V))
+	J['pitch', 'control:pitch'] = np.ones(len(V))
+	J['pitch', 'control:Vin'] = np.zeros(len(V))
+	J['pitch', 'control:Vout'] = np.zeros(len(V))
 
         self.J = J
 
     def list_deriv_vars(self):
 
-        inputs = ('control_tsr', 'R', 'control_maxOmega', 'control_Vin', 'control_Vout', 'control_pitch')
+        inputs = ('control:tsr', 'R', 'control:maxOmega', 'control:Vin', 'control:Vout', 'control:pitch')
         outputs = ('Uhub', 'Omega', 'pitch', )
 
         return inputs, outputs
@@ -278,10 +278,10 @@ class UnregulatedPowerCurve(Component):
         self.npts = npts_spline_power_curve
         
         # inputs
-        self.add_param('control_Vin', units='m/s', desc='cut-in wind speed')
-        self.add_param('control_Vout', units='m/s', desc='cut-out wind speed')
-        self.add_param('control_Omega', units='rpm', desc='fixed rotor rotation speed')
-        self.add_param('control_pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+        self.add_param('control:Vin', units='m/s', desc='cut-in wind speed')
+        self.add_param('control:Vout', units='m/s', desc='cut-out wind speed')
+        self.add_param('control:Omega', units='rpm', desc='fixed rotor rotation speed')
+        self.add_param('control:pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
         self.add_param('Vcoarse', val=np.zeros(npts_coarse_power_curve), units='m/s', desc='wind speeds')
         self.add_param('Pcoarse', val=np.zeros(npts_coarse_power_curve), units='W', desc='unregulated power curve (but after drivetrain losses)')
@@ -326,13 +326,13 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         then compute the regulated power curve and rated conditions"""
 
         # inputs
-        self.add_param('control_Vin', val=0.0, units='m/s', desc='cut-in wind speed')
-        self.add_param('control_Vout', val=0.0, units='m/s', desc='cut-out wind speed')
-        self.add_param('control_ratedPower', val=0.0, units='W', desc='rated power')
-        self.add_param('control_minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed')
-        self.add_param('control_maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed')
-        self.add_param('control_tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)')
-        self.add_param('control_pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+        self.add_param('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed')
+        self.add_param('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed')
+        self.add_param('control:ratedPower', val=0.0, units='W', desc='rated power')
+        self.add_param('control:minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed')
+        self.add_param('control:maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed')
+        self.add_param('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)')
+        self.add_param('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
 
         self.add_param('Vcoarse', val=np.zeros(npts_coarse_power_curve), units='m/s', desc='wind speeds')
         self.add_param('Pcoarse', val=np.zeros(npts_coarse_power_curve), units='W', desc='unregulated power curve (but after drivetrain losses)')
@@ -350,20 +350,20 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('V', val=np.zeros(npts_spline_power_curve), units='m/s', desc='wind speeds')
         self.add_output('P', val=np.zeros(npts_spline_power_curve), units='W', desc='power')
 
-        self.add_output('rated_V', val=0.0, units='m/s', desc='rated wind speed')
-        self.add_output('rated_Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
-        self.add_output('rated_pitch', val=0.0, units='deg', desc='pitch setting at rated')
-        self.add_output('rated_T', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
-        self.add_output('rated_Q', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
+        self.add_output('ratedConditions:V', val=0.0, units='m/s', desc='rated wind speed')
+        self.add_output('ratedConditions:Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
+        self.add_output('ratedConditions:pitch', val=0.0, units='deg', desc='pitch setting at rated')
+        self.add_output('ratedConditions:T', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
+        self.add_output('ratedConditions:Q', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
 
         self.add_output('azimuth', val=0.0, units='deg', desc='azimuth load')
 
 
-        self.deriv_options['step_calc'] = 'relative'
-        self.deriv_options['form'] = 'central'
-        self.deriv_options['type'] = 'fd'
-        self.deriv_options['check_step_calc'] = 'relative'
-        self.deriv_options['check_form'] = 'central'
+	self.deriv_options['step_calc'] = 'relative'
+	self.deriv_options['form'] = 'central'
+	self.deriv_options['type'] = 'fd'
+	self.deriv_options['check_step_calc'] = 'relative'
+	self.deriv_options['check_form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
         #Vrated = unknowns['Vrated']
@@ -372,11 +372,11 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         spline = Akima(params['Vcoarse'], params['Pcoarse'])
         def myfun(myv):
             P, _, _, _ = spline.interp(myv)
-            return (P - params['control_ratedPower'])
-        if (myfun(params['control_Vout']) > params['control_ratedPower']):
-            Vrated = brentq(lambda x: myfun(x), params['control_Vin'], params['control_Vout'])
+            return (P - params['control:ratedPower'])
+        if (myfun(params['control:Vout']) > params['control:ratedPower']):
+            Vrated = brentq(lambda x: myfun(x), params['control:Vin'], params['control:Vout'])
         else:
-            Vrated = params['control_Vout']
+            Vrated = params['control:Vout']
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
         unknowns['Vrated'] = Vrated
         # functional
@@ -387,14 +387,14 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # speed distribution
 
         # region 2
-        V2, _, dV2_dVrated = linspace_with_deriv(params['control_Vin'], Vrated, self.npts/2)
+        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, self.npts/2)
         P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
 
         # region 3
-        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control_Vout'], self.npts/2+1)
+        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], self.npts/2+1)
         V3 = V3[1:]  # remove duplicate point
         dV3_dVrated = dV3_dVrated[1:]
-        P3 = params['control_ratedPower']*np.ones_like(V3)
+        P3 = params['control:ratedPower']*np.ones_like(V3)
 
         # concatenate
         unknowns['V'] = np.concatenate([V2, V3])
@@ -402,18 +402,18 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         R = params['R']
         # rated speed conditions
-        Omega_d = params['control_tsr']*Vrated/R*RS2RPM
+        Omega_d = params['control:tsr']*Vrated/R*RS2RPM
         OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
-            = smooth_min(Omega_d, params['control_maxOmega'], pct_offset=0.01)
+            = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
 
         splineT = Akima(params['Vcoarse'], params['Tcoarse'])
         Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
 
-        unknowns['rated_V'] = Vrated
-        unknowns['rated_Omega'] = OmegaRated
-        unknowns['rated_pitch'] = params['control_pitch']
-        unknowns['rated_T'] = Trated
-        unknowns['rated_Q'] = params['control_ratedPower'] / (OmegaRated * RPM2RS)
+        unknowns['ratedConditions:V'] = Vrated
+        unknowns['ratedConditions:Omega'] = OmegaRated
+        unknowns['ratedConditions:pitch'] = params['control:pitch']
+        unknowns['ratedConditions:T'] = Trated
+        unknowns['ratedConditions:Q'] = params['control:ratedPower'] / (OmegaRated * RPM2RS)
         unknowns['azimuth'] = 180.0
 
 
@@ -427,36 +427,36 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         dP_dVrated = np.concatenate([dP2_dV2*dV2_dVrated, np.zeros(self.npts/2)])
 
         drOmega = np.concatenate([[dOmegaRated_dOmegad*Vrated/R*RS2RPM], np.zeros(3*ncoarse),
-            [dOmegaRated_dOmegad*params['control_tsr']/R*RS2RPM, -dOmegaRated_dOmegad*params['control_tsr']*Vrated/R**2*RS2RPM,
+            [dOmegaRated_dOmegad*params['control:tsr']/R*RS2RPM, -dOmegaRated_dOmegad*params['control:tsr']*Vrated/R**2*RS2RPM,
             dOmegaRated_dmaxOmega]])
-        drQ = -params['control_ratedPower'] / (OmegaRated**2 * RPM2RS) * drOmega
+        drQ = -params['control:ratedPower'] / (OmegaRated**2 * RPM2RS) * drOmega
 
         J = {}
 
-        #J['Vrated', 'Vcoarse'] = np.reshape(dres_dVcoarse, (1, len(dres_dVcoarse)))
+	#J['Vrated', 'Vcoarse'] = np.reshape(dres_dVcoarse, (1, len(dres_dVcoarse)))
         #J['Vrated', 'Pcoarse'] = np.reshape(dres_dPcoarse, (1, len(dres_dPcoarse)))
         #J['Vrated', 'Vrated'] = dres_dVrated
-        #J['Vrated', 'control_ratedPower'] = -1
-        #J['Vrated', 'control_tsr'] = 0
-        
+	#J['Vrated', 'control:ratedPower'] = -1
+	#J['Vrated', 'control:tsr'] = 0
+	
 
 
         J['V', 'Vrated'] = dV_dVrated
         J['P', 'Vrated'] = dP_dVrated
         J['P', 'Vcoarse'] = dP_dVcoarse
         J['P', 'Pcoarse'] = dP_dPcoarse
-        J['rated_V', 'Vrated'] = 1.0
-        J['rated_Omega', 'control_tsr'] = dOmegaRated_dOmegad*Vrated/R*RS2RPM
-        J['rated_Omega', 'Vrated'] = dOmegaRated_dOmegad*params['control_tsr']/R*RS2RPM
-        J['rated_Omega', 'R'] = -dOmegaRated_dOmegad*params['control_tsr']*Vrated/R**2*RS2RPM
-        J['rated_Omega', 'control_maxOmega'] = dOmegaRated_dmaxOmega
-        J['rated_T', 'Vcoarse'] = np.reshape(dT_dVcoarse, (1, len(dT_dVcoarse)))
-        J['rated_T', 'Tcoarse'] = np.reshape(dT_dTcoarse, (1, len(dT_dTcoarse)))
-        J['rated_T', 'Vrated'] = dT_dVrated
-        J['rated_Q', 'control_tsr'] = drQ[0]
-        J['rated_Q', 'Vrated'] = drQ[-3]
-        J['rated_Q', 'R'] = drQ[-2]
-        J['rated_Q', 'control_maxOmega'] = drQ[-1]
+        J['ratedConditions:V', 'Vrated'] = 1.0
+        J['ratedConditions:Omega', 'control:tsr'] = dOmegaRated_dOmegad*Vrated/R*RS2RPM
+        J['ratedConditions:Omega', 'Vrated'] = dOmegaRated_dOmegad*params['control:tsr']/R*RS2RPM
+        J['ratedConditions:Omega', 'R'] = -dOmegaRated_dOmegad*params['control:tsr']*Vrated/R**2*RS2RPM
+        J['ratedConditions:Omega', 'control:maxOmega'] = dOmegaRated_dmaxOmega
+        J['ratedConditions:T', 'Vcoarse'] = np.reshape(dT_dVcoarse, (1, len(dT_dVcoarse)))
+        J['ratedConditions:T', 'Tcoarse'] = np.reshape(dT_dTcoarse, (1, len(dT_dTcoarse)))
+        J['ratedConditions:T', 'Vrated'] = dT_dVrated
+        J['ratedConditions:Q', 'control:tsr'] = drQ[0]
+        J['ratedConditions:Q', 'Vrated'] = drQ[-3]
+        J['ratedConditions:Q', 'R'] = drQ[-2]
+        J['ratedConditions:Q', 'control:maxOmega'] = drQ[-1]
 
         self.J = J
 
@@ -472,7 +472,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         spline = Akima(params['Vcoarse'], params['Pcoarse'])
         P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)
         # resids['residual'] = P - ctrl.ratedPower
-        resids['Vrated'] = P - params['control_ratedPower']
+        resids['Vrated'] = P - params['control:ratedPower']
         # functional
 
         # place half of points in region 2, half in region 3
@@ -481,14 +481,14 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # speed distribution
 
         # region 2
-        V2, _, dV2_dVrated = linspace_with_deriv(params['control_Vin'], Vrated, self.npts/2)
+        V2, _, dV2_dVrated = linspace_with_deriv(params['control:Vin'], Vrated, self.npts/2)
         P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)
 
         # region 3
-        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control_Vout'], self.npts/2+1)
+        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params['control:Vout'], self.npts/2+1)
         V3 = V3[1:]  # remove duplicate point
         dV3_dVrated = dV3_dVrated[1:]
-        P3 = params['control_ratedPower']*np.ones_like(V3)
+        P3 = params['control:ratedPower']*np.ones_like(V3)
 
         # concatenate
         unknowns['V'] = np.concatenate([V2, V3])
@@ -496,18 +496,18 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         R = params['R']
         # rated speed conditions
-        Omega_d = params['control_tsr']*Vrated/R*RS2RPM
+        Omega_d = params['control:tsr']*Vrated/R*RS2RPM
         OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \
-            = smooth_min(Omega_d, params['control_maxOmega'], pct_offset=0.01)
+            = smooth_min(Omega_d, params['control:maxOmega'], pct_offset=0.01)
 
         splineT = Akima(params['Vcoarse'], params['Tcoarse'])
         Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)
 
-        unknowns['rated_V'] = Vrated
-        unknowns['rated_Omega'] = OmegaRated
-        unknowns['rated_pitch'] = params['control_pitch']
-        unknowns['rated_T'] = Trated
-        unknowns['rated_Q'] = params['control_ratedPower'] / (OmegaRated * RPM2RS)
+        unknowns['ratedConditions:V'] = Vrated
+        unknowns['ratedConditions:Omega'] = OmegaRated
+        unknowns['ratedConditions:pitch'] = params['control:pitch']
+        unknowns['ratedConditions:T'] = Trated
+        unknowns['ratedConditions:Q'] = params['control:ratedPower'] / (OmegaRated * RPM2RS)
         unknowns['azimuth'] = 180.0
     '''
 
@@ -529,9 +529,9 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
 #     def list_deriv_vars(self):
 
-#         inputs = ('control_tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R', 'control_maxOmega')
-#         outputs = ('Vrated', 'V', 'P', 'rated_V', 'rated_Omega',
-#             'rated_pitch', 'rated_T', 'rated_Q')
+#         inputs = ('control:tsr', 'Vcoarse', 'Pcoarse', 'Tcoarse', 'Vrated', 'R', 'control:maxOmega')
+#         outputs = ('Vrated', 'V', 'P', 'ratedConditions:V', 'ratedConditions:Omega',
+#             'ratedConditions:pitch', 'ratedConditions:T', 'ratedConditions:Q')
 
 #         return inputs, outputs
 
@@ -549,10 +549,10 @@ class AEP(Component):
         # outputs
         self.add_output('AEP', val=0.0, units='kW*h', desc='annual energy production')
 
-        #self.deriv_options['step_size'] = 1.0
-        self.deriv_options['form'] = 'central'
+	#self.deriv_options['step_size'] = 1.0
+	self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-        self.deriv_options['step_calc'] = 'relative'        
+	self.deriv_options['step_calc'] = 'relative'	
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -592,9 +592,9 @@ class CSMDrivetrain(DrivetrainLossesBase):
         """drivetrain losses from NREL cost and scaling model"""
 
         self.add_param('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True)
-        self.deriv_options['form'] = 'central'
+	self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-        self.deriv_options['step_calc'] = 'relative'
+	self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
         drivetrainType = params['drivetrainType']
@@ -673,21 +673,18 @@ class OutputsAero(Component):
         self.add_param('V_in', val=np.zeros(npts_spline_power_curve), units='m/s', desc='wind speeds (power curve)')
         self.add_param('P_in', val=np.zeros(npts_spline_power_curve), units='W', desc='power (power curve)')
 
-        self.add_param('rated_V_in', val=0.0, units='m/s', desc='rated wind speed')
-        self.add_param('rated_Omega_in', val=0.0, units='rpm', desc='rotor rotation speed at rated')
-        self.add_param('rated_pitch_in', val=0.0, units='deg', desc='pitch setting at rated')
-        self.add_param('rated_T_in', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
-        self.add_param('rated_Q_in', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
+        self.add_param('ratedConditions:V_in', val=0.0, units='m/s', desc='rated wind speed')
+        self.add_param('ratedConditions:Omega_in', val=0.0, units='rpm', desc='rotor rotation speed at rated')
+        self.add_param('ratedConditions:pitch_in', val=0.0, units='deg', desc='pitch setting at rated')
+        self.add_param('ratedConditions:T_in', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
+        self.add_param('ratedConditions:Q_in', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
 
-        self.add_param('hub_diameter_in', val=0.0, units='m', desc='hub diameter')
         self.add_param('diameter_in', val=0.0, units='m', desc='rotor diameter')
-        self.add_param('max_chord_in', val=0.0, units='m', desc='max chord length')
         self.add_param('V_extreme_in', val=0.0, units='m/s', desc='survival wind speed')
         self.add_param('T_extreme_in', val=0.0, units='N', desc='thrust at survival wind condition')
         self.add_param('Q_extreme_in', val=0.0, units='N*m', desc='thrust at survival wind condition')
 
         # internal use outputs
-        self.add_param('Rtip_in', val=0.0, units='m', desc='tip location in z_b')
         self.add_param('precurveTip_in', val=0.0, units='m', desc='tip location in x_b')
         self.add_param('presweepTip_in', val=0.0, units='m', desc='tip location in y_b')  # TODO: connect later
 
@@ -696,21 +693,18 @@ class OutputsAero(Component):
         self.add_output('V', val=np.zeros(npts_spline_power_curve), units='m/s', desc='wind speeds (power curve)')
         self.add_output('P', val=np.zeros(npts_spline_power_curve), units='W', desc='power (power curve)')
 
-        self.add_output('rated_V', val=0.0, units='m/s', desc='rated wind speed')
-        self.add_output('rated_Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
-        self.add_output('rated_pitch', val=0.0, units='deg', desc='pitch setting at rated')
-        self.add_output('rated_T', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
-        self.add_output('rated_Q', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
+        self.add_output('ratedConditions:V', val=0.0, units='m/s', desc='rated wind speed')
+        self.add_output('ratedConditions:Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
+        self.add_output('ratedConditions:pitch', val=0.0, units='deg', desc='pitch setting at rated')
+        self.add_output('ratedConditions:T', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
+        self.add_output('ratedConditions:Q', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
 
-        self.add_output('hub_diameter', val=0.0, units='m', desc='hub diameter')
         self.add_output('diameter', val=0.0, units='m', desc='rotor diameter')
-        self.add_output('max_chord', val=0.0, units='m', desc='max chord length')
         self.add_output('V_extreme', val=0.0, units='m/s', desc='survival wind speed')
         self.add_output('T_extreme', val=0.0, units='N', desc='thrust at survival wind condition')
         self.add_output('Q_extreme', val=0.0, units='N*m', desc='thrust at survival wind condition')
 
         # internal use outputs
-        self.add_output('Rtip', val=0.0, units='m', desc='tip location in z_b')
         self.add_output('precurveTip', val=0.0, units='m', desc='tip location in x_b')
         self.add_output('presweepTip', val=0.0, units='m', desc='tip location in y_b')  # TODO: connect later
 
@@ -718,18 +712,15 @@ class OutputsAero(Component):
         unknowns['AEP'] = params['AEP_in']
         unknowns['V'] = params['V_in']
         unknowns['P'] = params['P_in']
-        unknowns['rated_V'] = params['rated_V_in']
-        unknowns['rated_Omega'] = params['rated_Omega_in']
-        unknowns['rated_pitch'] = params['rated_pitch_in']
-        unknowns['rated_T'] = params['rated_T_in']
-        unknowns['rated_Q'] = params['rated_Q_in']
-        unknowns['hub_diameter'] = params['hub_diameter_in']
+        unknowns['ratedConditions:V'] = params['ratedConditions:V_in']
+        unknowns['ratedConditions:Omega'] = params['ratedConditions:Omega_in']
+        unknowns['ratedConditions:pitch'] = params['ratedConditions:pitch_in']
+        unknowns['ratedConditions:T'] = params['ratedConditions:T_in']
+        unknowns['ratedConditions:Q'] = params['ratedConditions:Q_in']
         unknowns['diameter'] = params['diameter_in']
-        unknowns['max_chord'] = params['max_chord_in']
         unknowns['V_extreme'] = params['V_extreme_in']
         unknowns['T_extreme'] = params['T_extreme_in']
         unknowns['Q_extreme'] = params['Q_extreme_in']
-        unknowns['Rtip'] = params['Rtip_in']
         unknowns['precurveTip'] = params['precurveTip_in']
         unknowns['presweepTip'] = params['presweepTip_in']
 
@@ -738,18 +729,15 @@ class OutputsAero(Component):
         J['AEP', 'AEP_in'] = 1
         J['V', 'V_in'] = np.diag(np.ones(len(params['V_in'])))
         J['P', 'P_in'] = np.diag(np.ones(len(params['P_in'])))
-        J['rated_V', 'rated_V_in'] = 1
-        J['rated_Omega', 'rated_Omega_in'] = 1
-        J['rated_pitch', 'rated_pitch_in'] = 1
-        J['rated_T', 'rated_T_in'] = 1
-        J['rated_Q', 'rated_Q_in'] = 1
-        J['hub_diameter', 'hub_diameter_in'] = 1
+        J['ratedConditions:V', 'ratedConditions:V_in'] = 1
+        J['ratedConditions:Omega', 'ratedConditions:Omega_in'] = 1
+        J['ratedConditions:pitch', 'ratedConditions:pitch_in'] = 1
+        J['ratedConditions:T', 'ratedConditions:T_in'] = 1
+        J['ratedConditions:Q', 'ratedConditions:Q_in'] = 1
         J['diameter', 'diameter_in'] = 1
-        J['max_chord', 'max_chord_in'] = 1
         J['V_extreme', 'V_extreme_in'] = 1
         J['T_extreme', 'T_extreme_in'] = 1
         J['Q_extreme', 'Q_extreme_in'] = 1
-        J['Rtip', 'Rtip_in'] = 1
         J['precurveTip', 'precurveTip_in'] = 1
         J['presweepTip', 'presweepTip_in'] = 1
 
@@ -772,13 +760,13 @@ class RotorAeroPower(Group):
         #self.add('airfoil_files', IndepVarComp('airfoil_files', AirfoilProperties.airfoil_files, pass_by_obj=True), promotes=['*'])
         
         # --- control ---
-        self.add('c_Vin', IndepVarComp('control_Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
-        self.add('c_Vout', IndepVarComp('control_Vout', val=0.0, units='m/s', desc='cut-out wind speed'), promotes=['*'])
-        self.add('c_ratedPower', IndepVarComp('control_ratedPower', val=0.0,  units='W', desc='rated power'), promotes=['*'])
-        self.add('c_minOmega', IndepVarComp('control_minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed'), promotes=['*'])
-        self.add('c_maxOmega', IndepVarComp('control_maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed'), promotes=['*'])
-        self.add('c_tsr', IndepVarComp('control_tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
-        self.add('c_pitch', IndepVarComp('control_pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
+        self.add('c_Vin', IndepVarComp('control:Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
+        self.add('c_Vout', IndepVarComp('control:Vout', val=0.0, units='m/s', desc='cut-out wind speed'), promotes=['*'])
+        self.add('c_ratedPower', IndepVarComp('control:ratedPower', val=0.0,  units='W', desc='rated power'), promotes=['*'])
+        self.add('c_minOmega', IndepVarComp('control:minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed'), promotes=['*'])
+        self.add('c_maxOmega', IndepVarComp('control:maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed'), promotes=['*'])
+        self.add('c_tsr', IndepVarComp('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
+        self.add('c_pitch', IndepVarComp('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
 
         # --- drivetrain efficiency ---
         self.add('drivetrainType', IndepVarComp('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True), promotes=['*'])
@@ -809,30 +797,30 @@ class RotorAeroPower(Group):
         # # connectiosn to tipspeed
         # self.connect('geom.R', 'tipspeed.R')
         # self.connect('max_tip_speed', 'tipspeed.Vtip_max')
-        # self.connect('tipspeed.Omega_max', 'control_maxOmega')
+        # self.connect('tipspeed.Omega_max', 'control:maxOmega')
 
         # connections to setup
         # self.connect('control', 'setup.control')
-        self.connect('control_Vin', 'setup.control_Vin')
-        self.connect('control_Vout', 'setup.control_Vout')
-        self.connect('control_maxOmega', 'setup.control_maxOmega')
-        self.connect('control_pitch', 'setup.control_pitch')
-        self.connect('control_tsr', 'setup.control_tsr')
+        self.connect('control:Vin', 'setup.control:Vin')
+        self.connect('control:Vout', 'setup.control:Vout')
+        self.connect('control:maxOmega', 'setup.control:maxOmega')
+        self.connect('control:pitch', 'setup.control:pitch')
+        self.connect('control:tsr', 'setup.control:tsr')
         self.connect('geom.R', 'setup.R')
 
         # connections to analysis
-        self.connect('spline.r_pts', 'analysis.r')
-        self.connect('spline.chord', 'analysis.chord')
-        self.connect('spline.theta', 'analysis.theta')
-        self.connect('spline.precurve', 'analysis.precurve')
+        self.connect('r_pts', 'analysis.r')
+        self.connect('chord', 'analysis.chord')
+        self.connect('theta', 'analysis.theta')
+        self.connect('precurve', 'analysis.precurve')
         self.connect('precurve_tip', 'analysis.precurveTip')
-        self.connect('spline.Rhub', 'analysis.Rhub')
-        self.connect('spline.Rtip', 'analysis.Rtip')
+        self.connect('Rhub', 'analysis.Rhub')
+        self.connect('Rtip', 'analysis.Rtip')
         self.connect('hub_height', 'analysis.hubHt')
         self.connect('precone', 'analysis.precone')
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
-        self.connect('spline.airfoil_files', 'analysis.airfoil_files')
+        self.connect('airfoil_files', 'analysis.airfoil_files')
         self.connect('nBlades', 'analysis.B')
         #self.connect('rho', 'analysis.rho')
         #self.connect('mu', 'analysis.mu')
@@ -850,25 +838,25 @@ class RotorAeroPower(Group):
         self.connect('analysis.P', 'dt.aeroPower')
         self.connect('analysis.Q', 'dt.aeroTorque')
         self.connect('analysis.T', 'dt.aeroThrust')
-        self.connect('control_ratedPower', 'dt.ratedPower')
+        self.connect('control:ratedPower', 'dt.ratedPower')
         self.connect('drivetrainType', 'dt.drivetrainType')
 
         # connections to powercurve
-        self.connect('control_Vin', 'powercurve.control_Vin')
-        self.connect('control_Vout', 'powercurve.control_Vout')
-        self.connect('control_maxOmega', 'powercurve.control_maxOmega')
-        self.connect('control_minOmega', 'powercurve.control_minOmega')
-        self.connect('control_pitch', 'powercurve.control_pitch')
-        self.connect('control_ratedPower', 'powercurve.control_ratedPower')
-        self.connect('control_tsr', 'powercurve.control_tsr')
+        self.connect('control:Vin', 'powercurve.control:Vin')
+        self.connect('control:Vout', 'powercurve.control:Vout')
+        self.connect('control:maxOmega', 'powercurve.control:maxOmega')
+        self.connect('control:minOmega', 'powercurve.control:minOmega')
+        self.connect('control:pitch', 'powercurve.control:pitch')
+        self.connect('control:ratedPower', 'powercurve.control:ratedPower')
+        self.connect('control:tsr', 'powercurve.control:tsr')
         self.connect('setup.Uhub', 'powercurve.Vcoarse')
         self.connect('dt.power', 'powercurve.Pcoarse')
         self.connect('analysis.T', 'powercurve.Tcoarse')
         self.connect('geom.R', 'powercurve.R')
 
         # # setup Brent method to find rated speed
-        # self.connect('control_Vin', 'brent.lower_bound')
-        # self.connect('control_Vout', 'brent.upper_bound')
+        # self.connect('control:Vin', 'brent.lower_bound')
+        # self.connect('control:Vout', 'brent.upper_bound')
         # self.brent.add_param('powercurve.Vrated', low=-1e-15, high=1e15)
         # self.brent.add_constraint('powercurve.residual = 0')
         # self.brent.invalid_bracket_return = 1.0
@@ -896,19 +884,16 @@ class RotorAeroPower(Group):
         self.connect('powercurve.V', 'V_in')
         self.connect('powercurve.P', 'P_in')
         self.connect('aep.AEP', 'AEP_in')
-        self.connect('powercurve.rated_V', 'rated_V_in')
-        self.connect('powercurve.rated_Omega', 'rated_Omega_in')
-        self.connect('powercurve.rated_pitch', 'rated_pitch_in')
-        self.connect('powercurve.rated_T', 'rated_T_in')
-        self.connect('powercurve.rated_Q', 'rated_Q_in')
+        self.connect('powercurve.ratedConditions:V', 'ratedConditions:V_in')
+        self.connect('powercurve.ratedConditions:Omega', 'ratedConditions:Omega_in')
+        self.connect('powercurve.ratedConditions:pitch', 'ratedConditions:pitch_in')
+        self.connect('powercurve.ratedConditions:T', 'ratedConditions:T_in')
+        self.connect('powercurve.ratedConditions:Q', 'ratedConditions:Q_in')
 
 
         # connect to outputs
-        self.connect('spline.diameter', 'hub_diameter_in')
-        self.connect('spline.max_chord', 'max_chord_in')
         self.connect('geom.diameter', 'diameter_in')
         self.connect('turbineclass.V_extreme', 'V_extreme_in')
-        self.connect('spline.Rtip', 'Rtip_in')
         self.connect('precurve_tip', 'precurveTip_in')
         self.connect('presweep_tip', 'presweepTip_in')
 
@@ -957,13 +942,13 @@ if __name__ == '__main__':
     # ----------------------
     
     # === control ===
-    rotor['control_Vin'] = myref.control_Vin #3.0  # (Float, m/s): cut-in wind speed
-    rotor['control_Vout'] = myref.control_Vout #25.0  # (Float, m/s): cut-out wind speed
-    rotor['control_ratedPower'] = myref.rating #5e6  # (Float, W): rated power
-    rotor['control_minOmega'] = myref.control_minOmega #0.0  # (Float, rpm): minimum allowed rotor rotation speed
-    rotor['control_maxOmega'] = myref.control_maxOmega #12.0  # (Float, rpm): maximum allowed rotor rotation speed
-    rotor['control_tsr'] = myref.control_tsr #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-    rotor['control_pitch'] = myref.control_pitch #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    rotor['control:Vin'] = myref.control_Vin #3.0  # (Float, m/s): cut-in wind speed
+    rotor['control:Vout'] = myref.control_Vout #25.0  # (Float, m/s): cut-out wind speed
+    rotor['control:ratedPower'] = myref.rating #5e6  # (Float, W): rated power
+    rotor['control:minOmega'] = myref.control_minOmega #0.0  # (Float, rpm): minimum allowed rotor rotation speed
+    rotor['control:maxOmega'] = myref.control_maxOmega #12.0  # (Float, rpm): maximum allowed rotor rotation speed
+    rotor['control:tsr'] = myref.control_tsr #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    rotor['control:pitch'] = myref.control_pitch #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
     # ----------------------
 
     # === aero and structural analysis options ===
@@ -977,11 +962,11 @@ if __name__ == '__main__':
 
     print 'AEP =', rotor['AEP']
     print 'diameter =', rotor['diameter']
-    print 'ratedConditions.V =', rotor['rated_V']
-    print 'ratedConditions.Omega =', rotor['rated_Omega']
-    print 'ratedConditions.pitch =', rotor['rated_pitch']
-    print 'ratedConditions.T =', rotor['rated_T']
-    print 'ratedConditions.Q =', rotor['rated_Q']
+    print 'ratedConditions.V =', rotor['ratedConditions:V']
+    print 'ratedConditions.Omega =', rotor['ratedConditions:Omega']
+    print 'ratedConditions.pitch =', rotor['ratedConditions:pitch']
+    print 'ratedConditions.T =', rotor['ratedConditions:T']
+    print 'ratedConditions.Q =', rotor['ratedConditions:Q']
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
 

@@ -3,18 +3,18 @@ import numpy as np
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem
 from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometry
-from commonse import gravity
+from commonse import gravity, NFREQ
 from commonse.csystem import DirectionVector
 from commonse.utilities import trapz_deriv, interp_with_deriv
 from precomp import _precomp
 from akima import Akima, akima_interp_with_derivs
-from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, NINPUT
+from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, NINPUT, TURBULENCE_CLASS
 import _pBEAM
 import _curvefem
 # import ccblade._bem as _bem  # TODO: move to rotoraero
 import _bem  # TODO: move to rotoraero
 
-from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS
+from rotorse import RPM2RS, RS2RPM
 
 
 # ---------------------
@@ -39,8 +39,6 @@ class StrucBase(Component):
     def __init__(self, NPTS):
         super(StrucBase, self).__init__()
         # all inputs/outputs in airfoil coordinate system
-        self.add_param('nF', val=5, desc='number of natural frequencies to return', pass_by_obj=True)
-
         self.add_param('Px_defl', val=np.zeros(NPTS), desc='distributed load (force per unit length) in airfoil x-direction at max deflection condition')
         self.add_param('Py_defl', val=np.zeros(NPTS), desc='distributed load (force per unit length) in airfoil y-direction at max deflection condition')
         self.add_param('Pz_defl', val=np.zeros(NPTS), desc='distributed load (force per unit length) in airfoil z-direction at max deflection condition')
@@ -84,7 +82,7 @@ class StrucBase(Component):
         # outputs
         self.add_output('blade_mass', val=0.0, units='kg', desc='mass of one blades')
         self.add_output('blade_moment_of_inertia', val=0.0, units='kg*m**2', desc='out of plane moment of inertia of a blade')
-        self.add_output('freq', val=np.zeros(5), units='Hz', desc='first nF natural frequencies of blade')
+        self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='first nF natural frequencies of blade')
         self.add_output('dx_defl', val=np.zeros(NPTS), desc='deflection of blade section in airfoil x-direction under max deflection loading')
         self.add_output('dy_defl', val=np.zeros(NPTS), desc='deflection of blade section in airfoil y-direction under max deflection loading')
         self.add_output('dz_defl', val=np.zeros(NPTS), desc='deflection of blade section in airfoil z-direction under max deflection loading')
@@ -547,9 +545,8 @@ class CurveFEM(Component):
         self.add_param('theta', val=np.zeros(NPTS), units='deg', desc='structural twist distribution')
         self.add_param('precurve', val=np.zeros(NPTS), units='m', desc='structural precuve (see FAST definition)')
         self.add_param('presweep', val=np.zeros(NPTS), units='m', desc='structural presweep (see FAST definition)')
-        self.add_param('nF', val=5, desc='number of frequencies to return', pass_by_obj=True)
 
-        self.add_output('freq', val=np.zeros(5), units='Hz', desc='first nF natural frequencies')
+        self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='first nF natural frequencies')
 
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
@@ -569,7 +566,7 @@ class CurveFEM(Component):
                                      params['beam:rhoA'], params['beam:EIxx'], params['beam:EIyy'], params['beam:GJ'], params['beam:EA'], params['beam:rhoJ'],
                                      params['precurve'], params['presweep'])
 
-        unknowns['freq'] = freq[:params['nF']]
+        unknowns['freq'] = freq[:NFREQ]
 
 
 
@@ -685,7 +682,6 @@ class RotorWithpBEAM(StrucBase):
         Py_defl = params['Py_defl']
         Pz_defl = params['Pz_defl']
 
-        nF = params['nF']
         Px_defl = params['Px_defl']
         Py_defl = params['Py_defl']
         Pz_defl = params['Pz_defl']
@@ -743,7 +739,7 @@ class RotorWithpBEAM(StrucBase):
         blade_moment_of_inertia = blade.outOfPlaneMomentOfInertia()
 
         # ----- natural frequencies ----
-        freq = blade.naturalFrequencies(nF)
+        freq = blade.naturalFrequencies(NFREQ)
 
         # ----- strain -----
         self.principalCS(params['beam:EIyy'], params['beam:EIxx'], params['beam:y_ec'], params['beam:x_ec'], params['beam:EA'], params['beam:EIxy'])
@@ -877,13 +873,13 @@ class TotalLoads(Component):
     def __init__(self, NPTS):
         super(TotalLoads, self).__init__()
         # variables
-        self.add_param('aeroLoads_r', units='m', desc='radial positions along blade going toward tip')
-        self.add_param('aeroLoads_Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_param('aeroLoads_Py', units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_param('aeroLoads_Pz', units='N/m', desc='distributed loads in blade-aligned z-direction')
-        self.add_param('aeroLoads_Omega', units='rpm', desc='rotor rotation speed')
-        self.add_param('aeroLoads_pitch', units='deg', desc='pitch angle')
-        self.add_param('aeroLoads_azimuth', units='deg', desc='azimuthal angle')
+        self.add_param('aeroLoads:r', units='m', desc='radial positions along blade going toward tip')
+        self.add_param('aeroLoads:Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('aeroLoads:Py', units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('aeroLoads:Pz', units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_param('aeroLoads:Omega', units='rpm', desc='rotor rotation speed')
+        self.add_param('aeroLoads:pitch', units='deg', desc='pitch angle')
+        self.add_param('aeroLoads:azimuth', units='deg', desc='azimuthal angle')
 
         self.add_param('r', val=np.zeros(NPTS), units='m', desc='structural radial locations')
         self.add_param('theta', val=np.zeros(NPTS), units='deg', desc='structural twist')
@@ -926,9 +922,9 @@ class TotalLoads(Component):
 
         # interpolate aerodynamic loads onto structural grid
         P_a = DirectionVector(0, 0, 0)
-        P_a.x, self.dPax_dr, self.dPax_daeror, self.dPax_daeroPx = akima_interp_with_derivs(params['aeroLoads_r'], params['aeroLoads_Px'], self.r)
-        P_a.y, self.dPay_dr, self.dPay_daeror, self.dPay_daeroPy = akima_interp_with_derivs(params['aeroLoads_r'], params['aeroLoads_Py'], self.r)
-        P_a.z, self.dPaz_dr, self.dPaz_daeror, self.dPaz_daeroPz = akima_interp_with_derivs(params['aeroLoads_r'], params['aeroLoads_Pz'], self.r)
+        P_a.x, self.dPax_dr, self.dPax_daeror, self.dPax_daeroPx = akima_interp_with_derivs(params['aeroLoads:r'], params['aeroLoads:Px'], self.r)
+        P_a.y, self.dPay_dr, self.dPay_daeror, self.dPay_daeroPy = akima_interp_with_derivs(params['aeroLoads:r'], params['aeroLoads:Py'], self.r)
+        P_a.z, self.dPaz_dr, self.dPaz_daeror, self.dPaz_daeroPz = akima_interp_with_derivs(params['aeroLoads:r'], params['aeroLoads:Pz'], self.r)
 
 
         # --- weight loads ---
@@ -936,14 +932,14 @@ class TotalLoads(Component):
         # yaw c.s.
         weight = DirectionVector(0.0, 0.0, -self.rhoA*gravity)
 
-        self.P_w = weight.yawToHub(self.tilt).hubToAzimuth(params['aeroLoads_azimuth'])\
+        self.P_w = weight.yawToHub(self.tilt).hubToAzimuth(params['aeroLoads:azimuth'])\
             .azimuthToBlade(totalCone)
 
 
         # --- centrifugal loads ---
 
         # azimuthal c.s.
-        Omega = params['aeroLoads_Omega']*RPM2RS
+        Omega = params['aeroLoads:Omega']*RPM2RS
         load = DirectionVector(0.0, 0.0, self.rhoA*Omega**2*z_az)
 
         self.P_c = load.azimuthToBlade(totalCone)
@@ -953,7 +949,7 @@ class TotalLoads(Component):
         P = P_a + self.P_w + self.P_c
 
         # rotate to airfoil c.s.
-        theta = np.array(self.theta) + params['aeroLoads_pitch']
+        theta = np.array(self.theta) + params['aeroLoads:pitch']
         self.P = P.bladeToAirfoil(theta)
 
         self.Px_af = self.P.x
@@ -966,8 +962,8 @@ class TotalLoads(Component):
 
     def list_deriv_vars(self):
 
-        inputs = ('aeroLoads_r', 'aeroLoads_Px', 'aeroLoads_Py', 'aeroLoads_Pz', 'aeroLoads_Omega',
-            'aeroLoads_pitch', 'aeroLoads_azimuth', 'r', 'theta', 'tilt', 'totalCone', 'rhoA', 'z_az')
+        inputs = ('aeroLoads:r', 'aeroLoads:Px', 'aeroLoads:Py', 'aeroLoads:Pz', 'aeroLoads:Omega',
+            'aeroLoads:pitch', 'aeroLoads:azimuth', 'r', 'theta', 'tilt', 'totalCone', 'rhoA', 'z_az')
         outputs = ('Px_af', 'Py_af', 'Pz_af')
 
         return inputs, outputs
@@ -978,7 +974,7 @@ class TotalLoads(Component):
         dPwx, dPwy, dPwz = self.P_w.dx, self.P_w.dy, self.P_w.dz
         dPcx, dPcy, dPcz = self.P_c.dx, self.P_c.dy, self.P_c.dz
         dPx, dPy, dPz = self.P.dx, self.P.dy, self.P.dz
-        Omega = params['aeroLoads_Omega']*RPM2RS
+        Omega = params['aeroLoads:Omega']*RPM2RS
         z_az = self.z_az
 
 
@@ -1055,13 +1051,13 @@ class TotalLoads(Component):
         dPzaf_dzaz = dPz['dx']*dPx_dzaz + dPz['dy']*dPy_dzaz + dPz['dz']*dPz_dzaz
 
         J = {}
-        J['Px_af', 'aeroLoads_r'] = dPxaf_daeror
-        J['Px_af', 'aeroLoads_Px'] = dPxaf_dPxaero
-        J['Px_af', 'aeroLoads_Py'] = dPxaf_dPyaero
-        J['Px_af', 'aeroLoads_Pz'] = dPxaf_dPzaero
-        J['Px_af', 'aeroLoads_Omega'] = dPxaf_dOmega
-        J['Px_af', 'aeroLoads_pitch'] = dPxaf_dpitch
-        J['Px_af', 'aeroLoads_azimuth'] = dPxaf_dazimuth
+        J['Px_af', 'aeroLoads:r'] = dPxaf_daeror
+        J['Px_af', 'aeroLoads:Px'] = dPxaf_dPxaero
+        J['Px_af', 'aeroLoads:Py'] = dPxaf_dPyaero
+        J['Px_af', 'aeroLoads:Pz'] = dPxaf_dPzaero
+        J['Px_af', 'aeroLoads:Omega'] = dPxaf_dOmega
+        J['Px_af', 'aeroLoads:pitch'] = dPxaf_dpitch
+        J['Px_af', 'aeroLoads:azimuth'] = dPxaf_dazimuth
         J['Px_af', 'r'] = dPxaf_dr
         J['Px_af', 'theta'] = dPxaf_dtheta
         J['Px_af', 'tilt'] = dPxaf_dtilt
@@ -1069,13 +1065,13 @@ class TotalLoads(Component):
         J['Px_af', 'rhoA'] = dPxaf_drhoA
         J['Px_af', 'z_az'] = dPxaf_dzaz
 
-        J['Py_af', 'aeroLoads_r'] = dPyaf_daeror
-        J['Py_af', 'aeroLoads_Px'] = dPyaf_dPxaero
-        J['Py_af', 'aeroLoads_Py'] = dPyaf_dPyaero
-        J['Py_af', 'aeroLoads_Pz'] = dPyaf_dPzaero
-        J['Py_af', 'aeroLoads_Omega'] = dPyaf_dOmega
-        J['Py_af', 'aeroLoads_pitch'] = dPyaf_dpitch
-        J['Py_af', 'aeroLoads_azimuth'] = dPyaf_dazimuth
+        J['Py_af', 'aeroLoads:r'] = dPyaf_daeror
+        J['Py_af', 'aeroLoads:Px'] = dPyaf_dPxaero
+        J['Py_af', 'aeroLoads:Py'] = dPyaf_dPyaero
+        J['Py_af', 'aeroLoads:Pz'] = dPyaf_dPzaero
+        J['Py_af', 'aeroLoads:Omega'] = dPyaf_dOmega
+        J['Py_af', 'aeroLoads:pitch'] = dPyaf_dpitch
+        J['Py_af', 'aeroLoads:azimuth'] = dPyaf_dazimuth
         J['Py_af', 'r'] = dPyaf_dr
         J['Py_af', 'theta'] = dPyaf_dtheta
         J['Py_af', 'tilt'] = dPyaf_dtilt
@@ -1083,13 +1079,13 @@ class TotalLoads(Component):
         J['Py_af', 'rhoA'] = dPyaf_drhoA
         J['Py_af', 'z_az'] = dPyaf_dzaz
 
-        J['Pz_af', 'aeroLoads_r'] = dPzaf_daeror
-        J['Pz_af', 'aeroLoads_Px'] = dPzaf_dPxaero
-        J['Pz_af', 'aeroLoads_Py'] = dPzaf_dPyaero
-        J['Pz_af', 'aeroLoads_Pz'] = dPzaf_dPzaero
-        J['Pz_af', 'aeroLoads_Omega'] = dPzaf_dOmega
-        J['Pz_af', 'aeroLoads_pitch'] = dPzaf_dpitch
-        J['Pz_af', 'aeroLoads_azimuth'] = dPzaf_dazimuth
+        J['Pz_af', 'aeroLoads:r'] = dPzaf_daeror
+        J['Pz_af', 'aeroLoads:Px'] = dPzaf_dPxaero
+        J['Pz_af', 'aeroLoads:Py'] = dPzaf_dPyaero
+        J['Pz_af', 'aeroLoads:Pz'] = dPzaf_dPzaero
+        J['Pz_af', 'aeroLoads:Omega'] = dPzaf_dOmega
+        J['Pz_af', 'aeroLoads:pitch'] = dPzaf_dpitch
+        J['Pz_af', 'aeroLoads:azimuth'] = dPzaf_dazimuth
         J['Pz_af', 'r'] = dPzaf_dr
         J['Pz_af', 'theta'] = dPzaf_dtheta
         J['Pz_af', 'tilt'] = dPzaf_dtilt
@@ -1382,10 +1378,10 @@ class RootMoment(Component):
     """blade root bending moment"""
     def __init__(self, NPTS):
         super(RootMoment, self).__init__()
-        self.add_param('aeroLoads_r', units='m', desc='radial positions along blade going toward tip')
-        self.add_param('aeroLoads_Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_param('aeroLoads_Py', units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_param('aeroLoads_Pz', units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_param('aeroLoads:r', units='m', desc='radial positions along blade going toward tip')
+        self.add_param('aeroLoads:Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('aeroLoads:Py', units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('aeroLoads:Pz', units='N/m', desc='distributed loads in blade-aligned z-direction')
         self.add_param('r_pts', val=np.zeros(NPTS), units='m')
         self.add_param('totalCone', val=np.zeros(NPTS), units='deg', desc='total cone angle from precone and curvature')
         self.add_param('x_az', val=np.zeros(NPTS), units='m', desc='location of blade in azimuth x-coordinate system')
@@ -1420,9 +1416,9 @@ class RootMoment(Component):
 
         # aL = self.aeroLoads
         # TODO: linearly interpolation is not C1 continuous.  it should work OK for now, but is not ideal
-        Px, self.dPx_dr, self.dPx_dalr, self.dPx_dalPx = interp_with_deriv(r, params['aeroLoads_r'], params['aeroLoads_Px'])
-        Py, self.dPy_dr, self.dPy_dalr, self.dPy_dalPy = interp_with_deriv(r, params['aeroLoads_r'], params['aeroLoads_Py'])
-        Pz, self.dPz_dr, self.dPz_dalr, self.dPz_dalPz = interp_with_deriv(r, params['aeroLoads_r'], params['aeroLoads_Pz'])
+        Px, self.dPx_dr, self.dPx_dalr, self.dPx_dalPx = interp_with_deriv(r, params['aeroLoads:r'], params['aeroLoads:Px'])
+        Py, self.dPy_dr, self.dPy_dalr, self.dPy_dalPy = interp_with_deriv(r, params['aeroLoads:r'], params['aeroLoads:Py'])
+        Pz, self.dPz_dr, self.dPz_dalr, self.dPz_dalPz = interp_with_deriv(r, params['aeroLoads:r'], params['aeroLoads:Pz'])
 
         # print 'al.Pz: ', aL.Pz #check=0
 
@@ -1461,7 +1457,7 @@ class RootMoment(Component):
 
     def list_deriv_vars(self):
 
-        inputs = ('r_pts', 'aeroLoads_r', 'aeroLoads_Px', 'aeroLoads_Py', 'aeroLoads_Pz', 'totalCone',
+        inputs = ('r_pts', 'aeroLoads:r', 'aeroLoads:Px', 'aeroLoads:Py', 'aeroLoads:Pz', 'totalCone',
                   'x_az', 'y_az', 'z_az', 's')
         outputs = ('root_bending_moment',)
 
@@ -1585,10 +1581,10 @@ class RootMoment(Component):
 
         J = {}
         J['root_bending_moment', 'r_pts'] = np.reshape(drbm_dr, (1, len(drbm_dr)))
-        J['root_bending_moment', 'aeroLoads_r'] = np.reshape(drbm_dalr, (1, len(drbm_dalr)))
-        J['root_bending_moment', 'aeroLoads_Px'] = np.reshape(drbm_dalPx, (1, len(drbm_dalPx)))
-        J['root_bending_moment', 'aeroLoads_Py'] = np.reshape(drbm_dalPy, (1, len(drbm_dalPy)))
-        J['root_bending_moment', 'aeroLoads_Pz'] = np.reshape(drbm_dalPz, (1, len(drbm_dalPz)))
+        J['root_bending_moment', 'aeroLoads:r'] = np.reshape(drbm_dalr, (1, len(drbm_dalr)))
+        J['root_bending_moment', 'aeroLoads:Px'] = np.reshape(drbm_dalPx, (1, len(drbm_dalPx)))
+        J['root_bending_moment', 'aeroLoads:Py'] = np.reshape(drbm_dalPy, (1, len(drbm_dalPy)))
+        J['root_bending_moment', 'aeroLoads:Pz'] = np.reshape(drbm_dalPz, (1, len(drbm_dalPz)))
         J['root_bending_moment', 'totalCone'] = np.reshape(drbm_dtotalcone, (1, len(drbm_dtotalcone)))
         J['root_bending_moment', 'x_az'] = np.reshape(drbm_dazx, (1, len(drbm_dazx)))
         J['root_bending_moment', 'y_az'] = np.reshape(drbm_dazy, (1, len(drbm_dazy)))
@@ -1779,8 +1775,8 @@ class GustETM(Component):
 class SetupPCModVarSpeed(Component):
     def __init__(self):
         super(SetupPCModVarSpeed, self).__init__()
-        self.add_param('control_tsr', desc='tip-speed ratio in Region 2 (should be optimized externally)')
-        self.add_param('control_pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
+        self.add_param('control:tsr', desc='tip-speed ratio in Region 2 (should be optimized externally)')
+        self.add_param('control:pitch', units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
         self.add_param('Vrated', val=0.0, units='m/s', desc='rated wind speed')
         self.add_param('R', val=0.0, units='m', desc='rotor radius')
         self.add_param('Vfactor', val=0.0, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation')
@@ -1801,8 +1797,8 @@ class SetupPCModVarSpeed(Component):
         self.Vfactor = params['Vfactor']
 
         self.Uhub = self.Vfactor * self.Vrated
-        self.Omega = params['control_tsr']*self.Uhub/self.R*RS2RPM
-        self.pitch = params['control_pitch']
+        self.Omega = params['control:tsr']*self.Uhub/self.R*RS2RPM
+        self.pitch = params['control:pitch']
 
         unknowns['Uhub'] = self.Uhub
         unknowns['Omega'] = self.Omega
@@ -1811,7 +1807,7 @@ class SetupPCModVarSpeed(Component):
 
     def list_deriv_vars(self):
 
-        inputs = ('control_tsr', 'control_pitch', 'Vrated', 'R')
+        inputs = ('control:tsr', 'control:pitch', 'Vrated', 'R')
         outputs = ('Uhub', 'Omega', 'pitch')
 
         return inputs, outputs
@@ -1819,18 +1815,18 @@ class SetupPCModVarSpeed(Component):
     def linearize(self, params, unknowns, resids):
 
         J = {}
-        J['Uhub', 'control_tsr'] = 0.0
+        J['Uhub', 'control:tsr'] = 0.0
         J['Uhub', 'Vrated'] = self.Vfactor
         J['Uhub', 'R'] = 0.0
-        J['Uhub', 'control_pitch'] = 0.0
-        J['Omega', 'control_tsr'] = self.Uhub/self.R*RS2RPM
-        J['Omega', 'Vrated'] = params['control_tsr']*self.Vfactor/self.R*RS2RPM
-        J['Omega', 'R'] = -params['control_tsr']*self.Uhub/self.R**2*RS2RPM
-        J['Omega', 'control_pitch'] = 0.0
-        J['pitch', 'control_tsr'] = 0.0
+        J['Uhub', 'control:pitch'] = 0.0
+        J['Omega', 'control:tsr'] = self.Uhub/self.R*RS2RPM
+        J['Omega', 'Vrated'] = params['control:tsr']*self.Vfactor/self.R*RS2RPM
+        J['Omega', 'R'] = -params['control:tsr']*self.Uhub/self.R**2*RS2RPM
+        J['Omega', 'control:pitch'] = 0.0
+        J['pitch', 'control:tsr'] = 0.0
         J['pitch', 'Vrated'] = 0.0
         J['pitch', 'R'] = 0.0
-        J['pitch', 'control_pitch'] = 1.0
+        J['pitch', 'control:pitch'] = 1.0
 
         return J
 
@@ -1840,8 +1836,8 @@ class ConstraintsStructures(Component):
         super(ConstraintsStructures, self).__init__()
 
         self.add_param('nBlades', val=3, desc='number of blades', pass_by_obj=True)
-        self.add_param('freq', shape=5, units='Hz', desc='1st nF natural frequencies')
-        self.add_param('freq_curvefem', shape=5, units='Hz', desc='1st nF natural frequencies')
+        self.add_param('freq', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
+        self.add_param('freq_curvefem', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_param('Omega', val=0.0, units='rpm', desc='rotation speed')
         self.add_param('strainU_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_param('strainL_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -1990,8 +1986,8 @@ class OutputsStructures(Component):
         self.add_param('mass_one_blade_in', val=0.0, units='kg', desc='mass of one blade')
         self.add_param('mass_all_blades_in', val=0.0,  units='kg', desc='mass of all blade')
         self.add_param('I_all_blades_in', shape=6, desc='out of plane moments of inertia in yaw-aligned c.s.')
-        self.add_param('freq_in', shape=5, units='Hz', desc='1st nF natural frequencies')
-        self.add_param('freq_curvefem_in', shape=5, units='Hz', desc='1st nF natural frequencies')
+        self.add_param('freq_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
+        self.add_param('freq_curvefem_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_param('tip_deflection_in', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
         self.add_param('strainU_spar_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_param('strainL_spar_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -2027,8 +2023,8 @@ class OutputsStructures(Component):
         self.add_output('mass_one_blade', val=0.0, units='kg', desc='mass of one blade')
         self.add_output('mass_all_blades', val=0.0,  units='kg', desc='mass of all blade')
         self.add_output('I_all_blades', shape=6, desc='out of plane moments of inertia in yaw-aligned c.s.')
-        self.add_output('freq', shape=5, units='Hz', desc='1st nF natural frequencies')
-        self.add_output('freq_curvefem', shape=5, units='Hz', desc='1st nF natural frequencies')
+        self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
+        self.add_output('freq_curvefem', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_output('tip_deflection', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
         self.add_output('strainU_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_output('strainL_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -2187,8 +2183,8 @@ class RotorStructure(Group):
         self.add('nSector', IndepVarComp('nSector', val=4, iotype='in', desc='number of sectors to divide rotor face into in computing thrust and power', pass_by_obj=True), promotes=['*'])
         
         # --- control ---
-        self.add('c_tsr', IndepVarComp('control_tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
-        self.add('c_pitch', IndepVarComp('control_pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
+        self.add('c_tsr', IndepVarComp('control:tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
+        self.add('c_pitch', IndepVarComp('control:pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
         self.add('pitch_extreme', IndepVarComp('pitch_extreme', val=0.0, units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
         self.add('azimuth_extreme', IndepVarComp('azimuth_extreme', val=0.0, units='deg', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
         
@@ -2212,8 +2208,6 @@ class RotorStructure(Group):
 
         # --- options ---
         self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
-        self.add('nF', IndepVarComp('nF', val=5, desc='number of natural frequencies to compute', pass_by_obj=True), promotes=['*'])
-
 
         # Geometry
         self.add('rotorGeometry', RotorGeometry(RefBlade), promotes=['*'])
@@ -2254,21 +2248,21 @@ class RotorStructure(Group):
         self.add('constraints', ConstraintsStructures(NPTS), promotes=['*'])
 
         # connections to curvature
-        self.connect('spline.r_pts', 'curvature.r')
-        self.connect('spline.precurve', 'curvature.precurve')
-        self.connect('spline.presweep', 'curvature.presweep')
+        self.connect('r_pts', 'curvature.r')
+        self.connect('precurve', 'curvature.precurve')
+        self.connect('presweep', 'curvature.presweep')
         self.connect('precone', 'curvature.precone')
 
         # connections to resize
-        self.connect('spline.chord', 'resize.chord')
-        self.connect('spline.sparT', 'resize.sparT')
-        self.connect('spline.teT', 'resize.teT')
-        self.connect('spline.upperCS', 'resize.upperCS_in')
-        self.connect('spline.lowerCS', 'resize.lowerCS_in')
-        self.connect('spline.websCS', 'resize.websCS_in')
-        self.connect('spline.chord_ref', 'resize.chord_ref')
-        self.connect('spline.sector_idx_strain_spar', ['resize.sector_idx_strain_spar','beam.sector_idx_strain_spar'])
-        self.connect('spline.sector_idx_strain_te', ['resize.sector_idx_strain_te','beam.sector_idx_strain_te'])
+        self.connect('chord', 'resize.chord')
+        self.connect('sparT', 'resize.sparT')
+        self.connect('teT', 'resize.teT')
+        self.connect('upperCS', 'resize.upperCS_in')
+        self.connect('lowerCS', 'resize.lowerCS_in')
+        self.connect('websCS', 'resize.websCS_in')
+        self.connect('chord_ref', 'resize.chord_ref')
+        self.connect('sector_idx_strain_spar', ['resize.sector_idx_strain_spar','beam.sector_idx_strain_spar'])
+        self.connect('sector_idx_strain_te', ['resize.sector_idx_strain_te','beam.sector_idx_strain_te'])
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')
@@ -2277,24 +2271,24 @@ class RotorStructure(Group):
         self.connect('gust_stddev', 'gust.std')
         
         # connections to setuppc
-        self.connect('control_pitch', 'setuppc.control_pitch')
-        self.connect('control_tsr', 'setuppc.control_tsr')
+        self.connect('control:pitch', 'setuppc.control:pitch')
+        self.connect('control:tsr', 'setuppc.control:tsr')
         self.connect('geom.R', 'setuppc.R')
         self.connect('VfactorPC', 'setuppc.Vfactor')
 
         # connections to aero_rated (for max deflection)
-        self.connect('spline.r_pts', 'aero_rated.r')
-        self.connect('spline.chord', 'aero_rated.chord')
-        self.connect('spline.theta', 'aero_rated.theta')
-        self.connect('spline.precurve', 'aero_rated.precurve')
+        self.connect('r_pts', 'aero_rated.r')
+        self.connect('chord', 'aero_rated.chord')
+        self.connect('theta', 'aero_rated.theta')
+        self.connect('precurve', 'aero_rated.precurve')
         self.connect('precurve_tip', 'aero_rated.precurveTip')
-        self.connect('spline.Rhub', 'aero_rated.Rhub')
-        self.connect('spline.Rtip', 'aero_rated.Rtip')
+        self.connect('Rhub', 'aero_rated.Rhub')
+        self.connect('Rtip', 'aero_rated.Rtip')
         self.connect('hub_height', 'aero_rated.hubHt')
         self.connect('precone', 'aero_rated.precone')
         self.connect('tilt', 'aero_rated.tilt')
         self.connect('yaw', 'aero_rated.yaw')
-        self.connect('spline.airfoil_files', 'aero_rated.airfoil_files')
+        self.connect('airfoil_files', 'aero_rated.airfoil_files')
         self.connect('nBlades', 'aero_rated.B')
         self.connect('nSector', 'aero_rated.nSector')
         self.connect('gust.V_gust', 'aero_rated.V_load')
@@ -2303,18 +2297,18 @@ class RotorStructure(Group):
         self.connect('aero_rated.Omega_load', ['curvefem.Omega','aero_0.Omega_load','aero_120.Omega_load','aero_240.Omega_load'])
         
         # connections to aero_extrm (for max strain)
-        self.connect('spline.r_pts', 'aero_extrm.r')
-        self.connect('spline.chord', 'aero_extrm.chord')
-        self.connect('spline.theta', 'aero_extrm.theta')
-        self.connect('spline.precurve', 'aero_extrm.precurve')
+        self.connect('r_pts', 'aero_extrm.r')
+        self.connect('chord', 'aero_extrm.chord')
+        self.connect('theta', 'aero_extrm.theta')
+        self.connect('precurve', 'aero_extrm.precurve')
         self.connect('precurve_tip', 'aero_extrm.precurveTip')
-        self.connect('spline.Rhub', 'aero_extrm.Rhub')
-        self.connect('spline.Rtip', 'aero_extrm.Rtip')
+        self.connect('Rhub', 'aero_extrm.Rhub')
+        self.connect('Rtip', 'aero_extrm.Rtip')
         self.connect('hub_height', 'aero_extrm.hubHt')
         self.connect('precone', 'aero_extrm.precone')
         self.connect('tilt', 'aero_extrm.tilt')
         self.connect('yaw', 'aero_extrm.yaw')
-        self.connect('spline.airfoil_files', 'aero_extrm.airfoil_files')
+        self.connect('airfoil_files', 'aero_extrm.airfoil_files')
         self.connect('nBlades', 'aero_extrm.B')
         self.connect('nSector', 'aero_extrm.nSector')
         self.connect('turbineclass.V_extreme', 'aero_extrm.V_load')
@@ -2323,18 +2317,18 @@ class RotorStructure(Group):
         self.aero_extrm.Omega_load = 0.0  # parked case
 
         # connections to aero_extrm_forces (for tower thrust)
-        self.connect('spline.r_pts', 'aero_extrm_forces.r')
-        self.connect('spline.chord', 'aero_extrm_forces.chord')
-        self.connect('spline.theta', 'aero_extrm_forces.theta')
-        self.connect('spline.precurve', 'aero_extrm_forces.precurve')
+        self.connect('r_pts', 'aero_extrm_forces.r')
+        self.connect('chord', 'aero_extrm_forces.chord')
+        self.connect('theta', 'aero_extrm_forces.theta')
+        self.connect('precurve', 'aero_extrm_forces.precurve')
         self.connect('precurve_tip', 'aero_extrm_forces.precurveTip')
-        self.connect('spline.Rhub', 'aero_extrm_forces.Rhub')
-        self.connect('spline.Rtip', 'aero_extrm_forces.Rtip')
+        self.connect('Rhub', 'aero_extrm_forces.Rhub')
+        self.connect('Rtip', 'aero_extrm_forces.Rtip')
         self.connect('hub_height', 'aero_extrm_forces.hubHt')
         self.connect('precone', 'aero_extrm_forces.precone')
         self.connect('tilt', 'aero_extrm_forces.tilt')
         self.connect('yaw', 'aero_extrm_forces.yaw')
-        self.connect('spline.airfoil_files', 'aero_extrm_forces.airfoil_files')
+        self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
         self.connect('nBlades', 'aero_extrm_forces.B')
         self.connect('nSector', 'aero_extrm_forces.nSector')
         self.aero_extrm_forces.Uhub = np.zeros(2)
@@ -2346,18 +2340,18 @@ class RotorStructure(Group):
         self.aero_extrm_forces.Q = np.zeros(2)
 
         # connections to aero_defl_powercurve (for gust reversal)
-        self.connect('spline.r_pts', 'aero_defl_powercurve.r')
-        self.connect('spline.chord', 'aero_defl_powercurve.chord')
-        self.connect('spline.theta', 'aero_defl_powercurve.theta')
-        self.connect('spline.precurve', 'aero_defl_powercurve.precurve')
+        self.connect('r_pts', 'aero_defl_powercurve.r')
+        self.connect('chord', 'aero_defl_powercurve.chord')
+        self.connect('theta', 'aero_defl_powercurve.theta')
+        self.connect('precurve', 'aero_defl_powercurve.precurve')
         self.connect('precurve_tip', 'aero_defl_powercurve.precurveTip')
-        self.connect('spline.Rhub', 'aero_defl_powercurve.Rhub')
-        self.connect('spline.Rtip', 'aero_defl_powercurve.Rtip')
+        self.connect('Rhub', 'aero_defl_powercurve.Rhub')
+        self.connect('Rtip', 'aero_defl_powercurve.Rtip')
         self.connect('hub_height', 'aero_defl_powercurve.hubHt')
         self.connect('precone', 'aero_defl_powercurve.precone')
         self.connect('tilt', 'aero_defl_powercurve.tilt')
         self.connect('yaw', 'aero_defl_powercurve.yaw')
-        self.connect('spline.airfoil_files', 'aero_defl_powercurve.airfoil_files')
+        self.connect('airfoil_files', 'aero_defl_powercurve.airfoil_files')
         self.connect('nBlades', 'aero_defl_powercurve.B')
         self.connect('nSector', 'aero_defl_powercurve.nSector')
         self.connect('setuppc.Uhub', 'aero_defl_powercurve.V_load')
@@ -2367,61 +2361,61 @@ class RotorStructure(Group):
         self.aero_defl_powercurve.azimuth_load = 0.0
 
         # connections to beam
-        self.connect('spline.r_pts', 'beam.r')
-        self.connect('spline.chord', 'beam.chord')
-        self.connect('spline.theta', 'beam.theta')
+        self.connect('r_pts', 'beam.r')
+        self.connect('chord', 'beam.chord')
+        self.connect('theta', 'beam.theta')
         self.connect('resize.upperCS', 'beam.upperCS')
         self.connect('resize.lowerCS', 'beam.lowerCS')
         self.connect('resize.websCS', 'beam.websCS')
-        self.connect('spline.profile', 'beam.profile')
-        self.connect('spline.le_location', 'beam.le_location')
-        self.connect('spline.materials', 'beam.materials')
+        self.connect('profile', 'beam.profile')
+        self.connect('le_location', 'beam.le_location')
+        self.connect('materials', 'beam.materials')
 
         self.connect('aero_0.rho', ['aero_120.rho','aero_240.rho','aero_defl_powercurve.rho','aero_extrm_forces.rho','aero_extrm.rho','aero_rated.rho'])
         self.connect('aero_0.mu', ['aero_120.mu','aero_240.mu','aero_defl_powercurve.mu','aero_extrm_forces.mu','aero_extrm.mu','aero_rated.mu'])
         self.connect('aero_0.shearExp', ['aero_120.shearExp','aero_240.shearExp','aero_defl_powercurve.shearExp','aero_extrm_forces.shearExp','aero_extrm.shearExp','aero_rated.shearExp'])
         
         # connections to loads_defl
-        self.connect('aero_rated.loads:Omega', 'loads_defl.aeroLoads_Omega')
-        self.connect('aero_rated.loads:Px', 'loads_defl.aeroLoads_Px')
-        self.connect('aero_rated.loads:Py', 'loads_defl.aeroLoads_Py')
-        self.connect('aero_rated.loads:Pz', 'loads_defl.aeroLoads_Pz')
-        self.connect('aero_rated.loads:azimuth', 'loads_defl.aeroLoads_azimuth')
-        self.connect('aero_rated.loads:pitch', 'loads_defl.aeroLoads_pitch')
-        self.connect('aero_rated.loads:r', 'loads_defl.aeroLoads_r')
+        self.connect('aero_rated.loads:Omega', 'loads_defl.aeroLoads:Omega')
+        self.connect('aero_rated.loads:Px', 'loads_defl.aeroLoads:Px')
+        self.connect('aero_rated.loads:Py', 'loads_defl.aeroLoads:Py')
+        self.connect('aero_rated.loads:Pz', 'loads_defl.aeroLoads:Pz')
+        self.connect('aero_rated.loads:azimuth', 'loads_defl.aeroLoads:azimuth')
+        self.connect('aero_rated.loads:pitch', 'loads_defl.aeroLoads:pitch')
+        self.connect('aero_rated.loads:r', 'loads_defl.aeroLoads:r')
 
         self.connect('beam.beam:z', 'loads_defl.r')
-        self.connect('spline.theta', 'loads_defl.theta')
+        self.connect('theta', 'loads_defl.theta')
         self.connect('tilt', 'loads_defl.tilt')
         self.connect('curvature.totalCone', 'loads_defl.totalCone')
         self.connect('curvature.z_az', 'loads_defl.z_az')
         self.connect('beam.beam:rhoA', 'loads_defl.rhoA')
 
         # connections to loads_pc_defl
-        self.connect('aero_defl_powercurve.loads:Omega', 'loads_pc_defl.aeroLoads_Omega')
-        self.connect('aero_defl_powercurve.loads:Px', 'loads_pc_defl.aeroLoads_Px')
-        self.connect('aero_defl_powercurve.loads:Py', 'loads_pc_defl.aeroLoads_Py')
-        self.connect('aero_defl_powercurve.loads:Pz', 'loads_pc_defl.aeroLoads_Pz')
-        self.connect('aero_defl_powercurve.loads:azimuth', 'loads_pc_defl.aeroLoads_azimuth')
-        self.connect('aero_defl_powercurve.loads:pitch', 'loads_pc_defl.aeroLoads_pitch')
-        self.connect('aero_defl_powercurve.loads:r', 'loads_pc_defl.aeroLoads_r')
+        self.connect('aero_defl_powercurve.loads:Omega', 'loads_pc_defl.aeroLoads:Omega')
+        self.connect('aero_defl_powercurve.loads:Px', 'loads_pc_defl.aeroLoads:Px')
+        self.connect('aero_defl_powercurve.loads:Py', 'loads_pc_defl.aeroLoads:Py')
+        self.connect('aero_defl_powercurve.loads:Pz', 'loads_pc_defl.aeroLoads:Pz')
+        self.connect('aero_defl_powercurve.loads:azimuth', 'loads_pc_defl.aeroLoads:azimuth')
+        self.connect('aero_defl_powercurve.loads:pitch', 'loads_pc_defl.aeroLoads:pitch')
+        self.connect('aero_defl_powercurve.loads:r', 'loads_pc_defl.aeroLoads:r')
         self.connect('beam.beam:z', 'loads_pc_defl.r')
-        self.connect('spline.theta', 'loads_pc_defl.theta')
+        self.connect('theta', 'loads_pc_defl.theta')
         self.connect('tilt', 'loads_pc_defl.tilt')
         self.connect('curvature.totalCone', 'loads_pc_defl.totalCone')
         self.connect('curvature.z_az', 'loads_pc_defl.z_az')
         self.connect('beam.beam:rhoA', 'loads_pc_defl.rhoA')
 
         # connections to loads_strain
-        self.connect('aero_extrm.loads:Omega', 'loads_strain.aeroLoads_Omega')
-        self.connect('aero_extrm.loads:Px', 'loads_strain.aeroLoads_Px')
-        self.connect('aero_extrm.loads:Py', 'loads_strain.aeroLoads_Py')
-        self.connect('aero_extrm.loads:Pz', 'loads_strain.aeroLoads_Pz')
-        self.connect('aero_extrm.loads:azimuth', 'loads_strain.aeroLoads_azimuth')
-        self.connect('aero_extrm.loads:pitch', 'loads_strain.aeroLoads_pitch')
-        self.connect('aero_extrm.loads:r', 'loads_strain.aeroLoads_r')
+        self.connect('aero_extrm.loads:Omega', 'loads_strain.aeroLoads:Omega')
+        self.connect('aero_extrm.loads:Px', 'loads_strain.aeroLoads:Px')
+        self.connect('aero_extrm.loads:Py', 'loads_strain.aeroLoads:Py')
+        self.connect('aero_extrm.loads:Pz', 'loads_strain.aeroLoads:Pz')
+        self.connect('aero_extrm.loads:azimuth', 'loads_strain.aeroLoads:azimuth')
+        self.connect('aero_extrm.loads:pitch', 'loads_strain.aeroLoads:pitch')
+        self.connect('aero_extrm.loads:r', 'loads_strain.aeroLoads:r')
         self.connect('beam.beam:z', 'loads_strain.r')
-        self.connect('spline.theta', 'loads_strain.theta')
+        self.connect('theta', 'loads_strain.theta')
         self.connect('tilt', 'loads_strain.tilt')
         self.connect('curvature.totalCone', 'loads_strain.totalCone')
         self.connect('curvature.z_az', 'loads_strain.z_az')
@@ -2431,7 +2425,7 @@ class RotorStructure(Group):
         self.connect('rstar_damage', 'damage.rstar')
         self.connect('Mxb_damage', 'damage.Mxb')
         self.connect('Myb_damage', 'damage.Myb')
-        self.connect('spline.theta', 'damage.theta')
+        self.connect('theta', 'damage.theta')
         self.connect('beam.beam:z', 'damage.r')
 
         # connections to struc
@@ -2445,7 +2439,6 @@ class RotorStructure(Group):
         self.connect('beam.beam:rhoJ', 'struc.beam:rhoJ')
         self.connect('beam.beam:x_ec', 'struc.beam:x_ec')
         self.connect('beam.beam:y_ec', 'struc.beam:y_ec')
-        self.connect('nF', 'struc.nF')
         self.connect('loads_defl.Px_af', 'struc.Px_defl')
         self.connect('loads_defl.Py_af', 'struc.Py_defl')
         self.connect('loads_defl.Pz_af', 'struc.Pz_defl')
@@ -2481,16 +2474,15 @@ class RotorStructure(Group):
         self.connect('beam.beam:rhoJ', 'curvefem.beam:rhoJ')
         self.connect('beam.beam:x_ec', 'curvefem.beam:x_ec')
         self.connect('beam.beam:y_ec', 'curvefem.beam:y_ec')
-        self.connect('spline.theta', 'curvefem.theta')
-        self.connect('spline.precurve', 'curvefem.precurve')
-        self.connect('spline.presweep', 'curvefem.presweep')
-        self.connect('nF', 'curvefem.nF')
+        self.connect('theta', 'curvefem.theta')
+        self.connect('precurve', 'curvefem.precurve')
+        self.connect('presweep', 'curvefem.presweep')
 
         # connections to tip
         self.connect('struc.dx_defl', 'tip.dx', src_indices=[NPTS-1])
         self.connect('struc.dy_defl', 'tip.dy', src_indices=[NPTS-1])
         self.connect('struc.dz_defl', 'tip.dz', src_indices=[NPTS-1])
-        self.connect('spline.theta', 'tip.theta', src_indices=[NPTS-1])
+        self.connect('theta', 'tip.theta', src_indices=[NPTS-1])
         self.connect('aero_rated.loads:pitch', 'tip.pitch')
         self.connect('aero_rated.loads:azimuth', 'tip.azimuth')
         self.connect('tilt', 'tip.tilt')
@@ -2499,11 +2491,11 @@ class RotorStructure(Group):
 
 
         # connections to root moment
-        self.connect('spline.r_pts', 'root_moment.r_pts')
-        self.connect('aero_rated.loads:Px', 'root_moment.aeroLoads_Px')
-        self.connect('aero_rated.loads:Py', 'root_moment.aeroLoads_Py')
-        self.connect('aero_rated.loads:Pz', 'root_moment.aeroLoads_Pz')
-        self.connect('aero_rated.loads:r', 'root_moment.aeroLoads_r')
+        self.connect('r_pts', 'root_moment.r_pts')
+        self.connect('aero_rated.loads:Px', 'root_moment.aeroLoads:Px')
+        self.connect('aero_rated.loads:Py', 'root_moment.aeroLoads:Py')
+        self.connect('aero_rated.loads:Pz', 'root_moment.aeroLoads:Pz')
+        self.connect('aero_rated.loads:r', 'root_moment.aeroLoads:r')
         self.connect('curvature.totalCone', 'root_moment.totalCone')
         self.connect('curvature.x_az', 'root_moment.x_az')
         self.connect('curvature.y_az', 'root_moment.y_az')
@@ -2527,12 +2519,12 @@ class RotorStructure(Group):
         self.connect('struc.dy_pc_defl', 'blade_defl.dy')
         self.connect('struc.dz_pc_defl', 'blade_defl.dz')
         self.connect('aero_defl_powercurve.loads:pitch', 'blade_defl.pitch')
-        self.connect('spline0.theta', 'blade_defl.theta')
-        self.connect('spline0.Rhub', 'blade_defl.Rhub0')
-        self.connect('spline0.r_pts', 'blade_defl.r_pts0')
-        self.connect('spline0.precurve', 'blade_defl.precurve0')
+        self.connect('theta', 'blade_defl.theta')
+        self.connect('Rhub', 'blade_defl.Rhub0')
+        self.connect('r_pts', 'blade_defl.r_pts0')
+        self.connect('precurve', 'blade_defl.precurve0')
         self.connect('bladeLength', 'blade_defl.bladeLength0')
-        self.connect('spline0.r_in', 'blade_defl.r_in0')
+        self.connect('r_in', 'blade_defl.r_in0')
 
         # connect to outputs
         self.connect('struc.blade_mass', 'mass_one_blade_in')
@@ -2559,17 +2551,17 @@ class RotorStructure(Group):
         ### adding for the drivetrain root moment calculations:
         # TODO - number and value of azimuth angles should be arbitrary user inputs
         # connections to aero_0 (for rated loads at 0 azimuth angle)
-        self.connect('spline.r_pts', ['aero_0.r','aero_120.r','aero_240.r'])
-        self.connect('spline.chord', ['aero_0.chord', 'aero_120.chord', 'aero_240.chord'])
-        self.connect('spline.theta', ['aero_0.theta', 'aero_120.theta', 'aero_240.theta'])
-        self.connect('spline.precurve', ['aero_0.precurve', 'aero_120.precurve', 'aero_240.precurve'])
+        self.connect('r_pts', ['aero_0.r','aero_120.r','aero_240.r'])
+        self.connect('chord', ['aero_0.chord', 'aero_120.chord', 'aero_240.chord'])
+        self.connect('theta', ['aero_0.theta', 'aero_120.theta', 'aero_240.theta'])
+        self.connect('precurve', ['aero_0.precurve', 'aero_120.precurve', 'aero_240.precurve'])
         self.connect('precurve_tip', ['aero_0.precurveTip', 'aero_120.precurveTip', 'aero_240.precurveTip'])
-        self.connect('spline.Rhub', ['aero_0.Rhub', 'aero_120.Rhub', 'aero_240.Rhub'])
-        self.connect('spline.Rtip', ['aero_0.Rtip', 'aero_120.Rtip', 'aero_240.Rtip'])
+        self.connect('Rhub', ['aero_0.Rhub', 'aero_120.Rhub', 'aero_240.Rhub'])
+        self.connect('Rtip', ['aero_0.Rtip', 'aero_120.Rtip', 'aero_240.Rtip'])
         self.connect('hub_height', ['aero_0.hubHt', 'aero_120.hubHt', 'aero_240.hubHt'])
         self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
         self.connect('tilt', ['aero_0.tilt', 'aero_120.tilt', 'aero_240.tilt'])
-	self.connect('spline.airfoil_files', ['aero_0.airfoil_files', 'aero_120.airfoil_files', 'aero_240.airfoil_files'])
+	self.connect('airfoil_files', ['aero_0.airfoil_files', 'aero_120.airfoil_files', 'aero_240.airfoil_files'])
         self.connect('yaw', ['aero_0.yaw', 'aero_120.yaw', 'aero_240.yaw'])
         self.connect('nBlades', ['aero_0.B','aero_120.B', 'aero_240.B'])
         self.connect('nSector', ['aero_0.nSector','aero_120.nSector','aero_240.nSector'])
@@ -2590,11 +2582,11 @@ class RotorStructure(Group):
         self.connect('usecd', ['aero_0.usecd','aero_120.usecd','aero_240.usecd','aero_defl_powercurve.usecd','aero_extrm_forces.usecd','aero_extrm.usecd','aero_rated.usecd'])
         
         # connections to root moment for drivetrain
-        self.connect('spline.r_pts', ['root_moment_0.r_pts', 'root_moment_120.r_pts', 'root_moment_240.r_pts'])
-        self.connect('aero_rated.loads:Px', ['root_moment_0.aeroLoads_Px', 'root_moment_120.aeroLoads_Px', 'root_moment_240.aeroLoads_Px'])
-        self.connect('aero_rated.loads:Py', ['root_moment_0.aeroLoads_Py', 'root_moment_120.aeroLoads_Py', 'root_moment_240.aeroLoads_Py'])
-        self.connect('aero_rated.loads:Pz', ['root_moment_0.aeroLoads_Pz', 'root_moment_120.aeroLoads_Pz', 'root_moment_240.aeroLoads_Pz'])
-        self.connect('aero_rated.loads:r', ['root_moment_0.aeroLoads_r', 'root_moment_120.aeroLoads_r', 'root_moment_240.aeroLoads_r'])
+        self.connect('r_pts', ['root_moment_0.r_pts', 'root_moment_120.r_pts', 'root_moment_240.r_pts'])
+        self.connect('aero_rated.loads:Px', ['root_moment_0.aeroLoads:Px', 'root_moment_120.aeroLoads:Px', 'root_moment_240.aeroLoads:Px'])
+        self.connect('aero_rated.loads:Py', ['root_moment_0.aeroLoads:Py', 'root_moment_120.aeroLoads:Py', 'root_moment_240.aeroLoads:Py'])
+        self.connect('aero_rated.loads:Pz', ['root_moment_0.aeroLoads:Pz', 'root_moment_120.aeroLoads:Pz', 'root_moment_240.aeroLoads:Pz'])
+        self.connect('aero_rated.loads:r', ['root_moment_0.aeroLoads:r', 'root_moment_120.aeroLoads:r', 'root_moment_240.aeroLoads:r'])
         self.connect('curvature.totalCone', ['root_moment_0.totalCone', 'root_moment_120.totalCone', 'root_moment_240.totalCone'])
         self.connect('curvature.x_az', ['root_moment_0.x_az','root_moment_120.x_az','root_moment_240.x_az'])
         self.connect('curvature.y_az', ['root_moment_0.y_az','root_moment_120.y_az','root_moment_240.y_az'])
@@ -2617,7 +2609,7 @@ class RotorStructure(Group):
         
 if __name__ == '__main__':
     # myref = NREL5MW() #DTU10MW()
-    myref = DTU10MW()
+    myref = NREL5MW() #DTU10MW()
 
     rotor = Problem()
     rotor.root = RotorStructure(myref)
@@ -2657,8 +2649,8 @@ if __name__ == '__main__':
     # ----------------------
 
     # === control ===
-    rotor['control_tsr'] = myref.control_tsr #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-    rotor['control_pitch'] = myref.control_pitch #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    rotor['control:tsr'] = myref.control_tsr #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    rotor['control:pitch'] = myref.control_pitch #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
     rotor['pitch_extreme'] = 0.0  # (Float, deg): worst-case pitch at survival wind condition
     rotor['azimuth_extreme'] = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
     rotor['VfactorPC'] = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
@@ -2666,7 +2658,6 @@ if __name__ == '__main__':
 
     # === aero and structural analysis options ===
     rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
-    rotor['nF'] = 5  # (Int): number of natural frequencies to compute
     rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
     # ----------------------
 
@@ -2702,7 +2693,7 @@ if __name__ == '__main__':
     # Adding in only in rotor_structure- otherwise would have been connected in larger assembly
     rotor['gust.V_hub'] = 11.7386065326
     rotor['aero_rated.Omega_load'] = 12.0
-    rotor['aero_rated.pitch_load'] = rotor['control_pitch']
+    rotor['aero_rated.pitch_load'] = rotor['control:pitch']
 
 
     # from myutilities import plt
@@ -2725,9 +2716,9 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
     plt.figure()
-    plt.plot(rotor['spline.r_pts'], rotor['strainU_spar'], label='suction')
-    plt.plot(rotor['spline.r_pts'], rotor['strainL_spar'], label='pressure')
-    plt.plot(rotor['spline.r_pts'], rotor['eps_crit_spar'], label='critical')
+    plt.plot(rotor['r_pts'], rotor['strainU_spar'], label='suction')
+    plt.plot(rotor['r_pts'], rotor['strainL_spar'], label='pressure')
+    plt.plot(rotor['r_pts'], rotor['eps_crit_spar'], label='critical')
     plt.ylim([-5e-3, 5e-3])
     plt.xlabel('r')
     plt.ylabel('strain')
@@ -2736,64 +2727,15 @@ if __name__ == '__main__':
     # plt.save('/Users/sning/Desktop/strain_spar.png')
 
     plt.figure()
-    plt.plot(rotor['spline.r_pts'], rotor['strainU_te'], label='suction')
-    plt.plot(rotor['spline.r_pts'], rotor['strainL_te'], label='pressure')
-    plt.plot(rotor['spline.r_pts'], rotor['eps_crit_te'], label='critical')
+    plt.plot(rotor['r_pts'], rotor['strainU_te'], label='suction')
+    plt.plot(rotor['r_pts'], rotor['strainL_te'], label='pressure')
+    plt.plot(rotor['r_pts'], rotor['eps_crit_te'], label='critical')
     plt.ylim([-5e-3, 5e-3])
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()
     # plt.save('/Users/sning/Desktop/strain_te.pdf')
     # plt.save('/Users/sning/Desktop/strain_te.png')
-
-
-    af_path = [rotor['aero_rated.airfoil_files'][0]] + rotor['aero_rated.airfoil_files'] + [rotor['aero_rated.airfoil_files'][-1]]
-    af_dict = {}
-    af_idx = []
-    af_list = []
-    idx = 0
-    for afi in af_path:
-        afi = os.path.split(afi)[1].split('.')[0]
-        if afi not in af_dict.keys():
-            af_dict[afi] = idx
-            af_list.append(afi)
-            idx += 1
-        af_idx.append(af_dict[afi])
-
-    import matplotlib.pyplot as plt
-    import matplotlib as mpl
-
-    cmap = plt.cm.jet
-    bounds = np.asarray(range(0,max(af_idx)+2))-0.5
-    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-
-
-    # cmap = plt.cm.jet
-    # cmaplist = [cmap(i) for i in range(cmap.N)]
-    # cmap = cmap.from_list('Custom cmap', cmaplist, cmap.N)
-
-    plt.close(10)
-    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, num=10)
-    # ax1.scatter(rotor['root_moment.aeroLoads_r'], rotor['root_moment.aeroLoads_Px'], s=15, c=af_idx, cmap=cmap, norm=norm)
-    ax1.plot(rotor['root_moment.aeroLoads_r'], rotor['root_moment.aeroLoads_Px'], '.-')
-    ax1.set_xlim([0, 65])
-    ax1.set_ylim([0, 1.1e4])
-    ax1.set(ylabel='$P_x$, N/m')
-    
-    # ax2.scatter(rotor['root_moment.aeroLoads_r'], rotor['root_moment.aeroLoads_Py'], s=15, c=af_idx, cmap=cmap, norm=norm)
-    ax2.plot(rotor['root_moment.aeroLoads_r'], rotor['root_moment.aeroLoads_Py'], '.-')
-    ax2.set_xlim([0, 65])
-    ax2.set_ylim([-2500, 500])
-    ax2.set(ylabel='$P_y$, N/m', xlabel='Blade Span, $r$, m')
-
-    fig.subplots_adjust(right=0.7)
-    # cb_ax = fig.add_axes([0.75, 0.15, 0.05, 0.7])
-    # cb = mpl.colorbar.ColorbarBase(cb_ax, cmap=cmap, norm=norm, spacing='proportional', ticks=range(0,max(af_idx)+1), boundaries=bounds)
-    # cb.ax.set_yticklabels(af_list)  # horizontal colorbar
-
-    # fig.subplots_adjust(hspace=0.3)
-    # plt.tight_layout()
-    # plt.savefig('AeroLoads_continuous.png')
 
     plt.show()
     # ----------------
