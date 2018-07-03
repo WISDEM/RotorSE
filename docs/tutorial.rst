@@ -5,11 +5,11 @@
 Tutorial
 --------
 
-The module :mod:`rotorse.rotoraero` contains methods for generating power curves and computing annual energy production (AEP) with any aerodynamic tool (implementing :class:`AeroBase` and :class:`GeomtrySetupBase`), any wind speed distribution (implementing :class:`PDFBase` and :class:`CDFBase`), any drivetrain efficiency function (implementing :class:`DrivetrainLossesBase`), and any machine type amongst the four combinations of variable/fixed speed and variable/fixed pitch.
+The module :mod:`rotorse.rotor_aeropower` contains methods for generating power curves and computing annual energy production (AEP) with any aerodynamic tool, any wind speed distribution (implementing :mod:`PDFBase` and :mod:`PDFBase`), any drivetrain efficiency function (implementing :mod:`DrivetrainLossesBase`), and any machine type amongst the four combinations of variable/fixed speed and variable/fixed pitch.
 
-The module :mod:`rotorse.rotoraerodefaults` provides specific implementations for use with :mod:`rotorse.rotoraero`.  It uses `CCBlade <https://github.com/WISDEM/CCBlade>`_ for the aerodynamic analysis, provides Weibull and Rayleigh wind speed distribution, and a drivetrain efficiency function from `NREL's Cost and Scaling Model <http://www.nrel.gov/docs/fy07osti/40566.pdf>`_.
+The module :mod:`rotorse.rotor_geometry` provides specific implementations of reference rotor designs (implementing :mod:`ReferenceBlade`).  `CCBlade <https://github.com/WISDEM/CCBlade>`_ is used for the aerodynamic analysis and `CommonSE <https://github.com/WISDEM/CommonSE>`_ provides Weibull and Rayleigh wind speed distribution.
 
-The module :mod:`rotorse.rotor` builds upon rotoraero and provides structural analyses.  These include methods for coupling the aerodynamic and structural grids, managing the composite section analyses, transferring loads, computing deflections, computing mass properties, etc.
+The module :mod:`rotorse.rotor_structure` provides structural analyses including methods for managing the composite secion analysis, computing deflections, computing mass properties, etc.  The module :mod:`rotorse.rotor` provides the coupling between rotor_aeropower and rotor_sturucture for combined analysis.  
 
 Two examples are included in this tutorial section: aerodynamic simulation and optimization of a rotor and aero/structural analysis of a rotor.
 
@@ -18,25 +18,39 @@ Two examples are included in this tutorial section: aerodynamic simulation and o
 Rotor Aerodynamics
 ==================
 
-.. currentmodule:: rotorse.rotoraerodefaults
+.. currentmodule:: rotorse.rotor_aeropower
 
-We instantiate a variable-speed variable-pitch rotor preconfigured to use CCBlade (:class:`RotorAeroVSVPWithCCBlade`).  Similar methods exist for the other types of fixed/variable speed, fixed/variable pitch machines.  At instantiation, the cumulative distribution function can be selected (``cdf_type``).  Valid options are 'rayleigh' and 'weibull'.
+This example is available _____ or can be viewed as an interactive Jupyter notebook _____.  The first step is to import the relevant files.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example1.py
     :language: python
-    :start-after: # --- instantiate rotor
+    :start-after: # --- Import Modules
     :end-before: # ---
 
-Next, the geometry is defined.  These parameters are specific to CCBlade and a spline component :class:`GeometrySpline` which uses Akima splines for the chord and twist distribution according to :num:`Figures #chord-param-fig` and :num:`#twist-param-fig`.  The power-curve is essentially the same as the previous example.
+When setting up our Problem, a rotor design that is an implimentation of :mod:`ReferenceBlade`, is used to initialize the Group.  Two reference turbine designs are included as examples in :mod:`rotorse.rotor_geometry`, the :mod:`NREL5MW` and the :mod:`DTU10MW`.  For this tutorial, we will be working with the DTU 10 MW.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example1.py
     :language: python
-    :start-after: # --- rotor geometry
+    :start-after: # --- Init Problem
+    :end-before: # ---
+
+A number of input variablers covering the blade geometry, atmospheric conditions, and controls system must be set by the use.  While the reference blade design provides this information, it must be again set at the Problem level.  This provides flexibility for modifications by the user or by an optimizer (discussed more in _______).  The user can choose to use the default values
+
+.. literalinclude:: /examples/rotorse_example1.py
+    :language: python
+    :start-after: # --- default inputs
+    :end-before: # ---
+
+Or set their own values.  First, the geometry is defined.  Spanwise blade variables such as chord and twist are definied using control points, which :class:`BladeGeometry` uses to generate the spanwise distribution using Akima splines according to :num:`Figures #chord-param-fig` and :num:`#twist-param-fig`.
+
+.. literalinclude:: /examples/rotorse_example1_b.py
+    :language: python
+    :start-after: # === blade grid ===
     :end-before: # ---
 
 .. _chord-param-fig:
 
-.. figure:: /images/chord-param2.*
+.. figure:: /images/chord_dtu10mw.*
     :height: 4in
     :align: left
 
@@ -44,64 +58,50 @@ Next, the geometry is defined.  These parameters are specific to CCBlade and a s
 
 .. _twist-param-fig:
 
-.. figure:: /images/theta-param2.*
+.. figure:: /images/theta_dtu10mw.*
     :height: 4in
     :align: center
 
     Twist parameterization
 
+Atmospheric properties are defined.  The wind speed distribution parameters are determined based on the wind turbine class.
 
-
-Next, the airfoils are loaded, again using CCBlade parameters.  The locations of the airfoil on a nondimensional blade are defined, as well as the location where the cylinder section ends.  This defines where the twist distribution begins.
-
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example1_b.py
     :language: python
-    :start-after: # --- airfoils
+    :start-after: # === atmosphere ===
     :end-before: # ---
 
-Atmospheric properties and wind speed distribution are defined.  The parameter ``weibull_shape_factor`` is only relevant if the ``weibull`` type CDF is selected.
+The relevant control parameters are set
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example1_b.py
     :language: python
-    :start-after: # --- site characteristics
+    :start-after: # === control ===
     :end-before: # ---
 
-.. currentmodule:: rotorse.rotoraero
+Finally, a few configuation parameters are set.  The the following drivetrain types are supported: 'geared', 'single_stage', 'multi_drive', or 'pm_direct_drive'.
 
-The relevant control parameters will vary depending on whether a variable speed or fixed speed machine is chosen (see :class:`VarSpeedMachine` and :class:`FixedSpeedMachine`).
-
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example1_b.py
     :language: python
-    :start-after: # --- control settings
+    :start-after: # === aero and structural analysis options ===
     :end-before: # ---
 
-The Cost and Scaling model defines drivetrain efficiency functions for the following drivetrain types: 'geared', 'single_stage', 'multi_drive', or 'pm_direct_drive'.
+We can now run the analysis, print the outputs, and plot the power curve.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example1.py
     :language: python
-    :start-after: # --- drivetrain model for efficiency
-    :end-before: # ---
-
-Finally, various optional configuration parameters are set, many of which are specific to CCBlade.
-
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
-    :language: python
-    :start-after: # --- analysis options
+    :start-after: # === run and outputs ===
     :end-before: # ---
 
 
-We can now run the analysis, print the AEP, and plot the power curve.
+>>> AEP = 46811339.16312428
+>>> diameter = 197.51768195144518
+>>> ratedConditions.V = 11.674033110109226
+>>> ratedConditions.Omega = 8.887659696962098
+>>> ratedConditions.pitch = 0.0
+>>> ratedConditions.T = 1514792.8710181064
+>>> ratedConditions.Q = 10744444.444444444
 
-
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
-    :language: python
-    :start-after: # --- run
-    :end-before: # ---
-
-
->>> AEP0 = 9716744.29201
-
-.. figure:: /images/powercurve.*
+.. figure:: /images/power_curve_dtu10mw.*
     :height: 4in
     :align: center
 
@@ -111,53 +111,53 @@ We can now run the analysis, print the AEP, and plot the power curve.
 Rotor Aerodynamics Optimization
 ===============================
 
-This section describes a simple optimization continuing off of the same setup as the previous section.
+This section describes a simple optimization continuing off of the same setup as the previous section.  First, we import relevant modules and initialize the problem.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example2.py
     :language: python
-    :start-after: # --- optimizer imports
+    :start-after: # --- Import Modules
     :end-before: # ---
 
-The optimizer must first be selected and configured, in this example I choose SNOPT.
+The optimizer must be selected and configured, in this example I choose SLSQP.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example2.py
     :language: python
-    :start-after: # --- Setup Pptimizer
+    :start-after: # --- Optimizer
     :end-before: # ---
 
 We now set the objective, and in this example it is normalized by the starting AEP for better convergence behavior.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example2.py
     :language: python
     :start-after: # --- Objective
     :end-before: # ---
 
 The rotor chord, twist, and tip-speed ratio in Region 2 are added as design variables.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example2.py
     :language: python
     :start-after: # --- Design Variables
     :end-before: # ---
 
 A recorder is added to display each iteration to the screen.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example2.py
     :language: python
-    :start-after: # --- recorder
+    :start-after: # --- Recorder
     :end-before: # ---
 
-There are no constraints for this problem, but because of a bug in OpenMDAO we need to add a dummy one.
+Input variables must be set, see previous example.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example2.py
     :language: python
-    :start-after: # --- Constraints
+    :start-after: # --- Setup
     :end-before: # ---
 
-Running the optimization (takes a little less than a minute) yields a new design with a 1.35% percent increase in AEP.
+Running the optimization (may take several minutes) yields a new design with a 1.35% percent increase in AEP.
 
-.. literalinclude:: ../src/rotorse/rotoraerodefaults.py
+.. literalinclude:: /examples/rotorse_example2.py
     :language: python
-    :start-after: # --- run opt
+    :start-after: # --- run and outputs
     :end-before: # ---
 
 >>> rotor.chord_sub = [0.4, 5.3, 3.77661242, 2.64450736]

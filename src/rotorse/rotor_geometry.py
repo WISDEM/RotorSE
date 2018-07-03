@@ -180,9 +180,10 @@ class NREL5MW(ReferenceBlade):
         self.airfoils = ['']*self.npts
         for k in range(self.npts):
             idx = np.argmin( np.abs(raw_r - self.r[k]) )
-            self.airfoils[k] = os.path.join(afpath, raw_af[idx])
-            if (self.r[k] <= self.r_cylinder) and raw_af[idx].find('Cylinder') < 0:
-                self.airfoils[k] = os.path.join(afpath, 'Cylinder2.dat')
+            self.airfoils[k] = os.path.join(afpath, raw_af[7])
+            # self.airfoils[k] = os.path.join(afpath, raw_af[idx])
+            # if (self.r[k] <= self.r_cylinder) and raw_af[idx].find('Cylinder') < 0:
+            #     self.airfoils[k] = os.path.join(afpath, 'Cylinder2.dat')
          
         # Layup info
         self.sector_idx_strain_spar = np.array([2]*self.npts)
@@ -225,7 +226,7 @@ class DTU10MW(ReferenceBlade):
         self.hub_height  = 119.0
         self.bladeLength = 0.5 * (198.0 - 4.6)
         self.hubFraction = 0.5*4.6 / self.bladeLength
-        self.precone     = -4.0
+        self.precone     = 4.0
         self.tilt        = 6.0
 
         # DTU 10MW BLADE PROPS
@@ -329,9 +330,31 @@ class DTU10MW(ReferenceBlade):
         myspline = Akima(raw_r, raw_sw)
         self.presweep, _, _, _ = myspline.interp(self.r_in)
 
-        # Spar cap thickness- linear taper from end of cylinder to tip
-        self.spar_thickness = np.linspace(1.44, 0.53, NINPUT)
-        self.te_thickness   = np.linspace(0.8, 0.2, NINPUT)
+        # # Spar cap thickness- linear taper from end of cylinder to tip
+        # self.spar_thickness = np.linspace(1.44, 0.53, NINPUT)
+        # self.te_thickness   = np.linspace(0.8, 0.2, NINPUT)
+        t_spar = [0.0320004189281497, 0.032413233514380135, 0.0347998074739571, 0.039211725978893365, 0.04448607137027535, 0.05004958035967985, 
+                  0.055773198307797055, 0.060808909220920346, 0.06489796815102368, 0.06729338026826848, 0.07038507637861223, 0.07320149826122159, 
+                  0.07505402214311759, 0.07709642418372635, 0.07918050884914904, 0.08103357158490876, 0.08270252680667647, 0.08403234987866959, 
+                  0.08515644449040799, 0.08607979218517818, 0.08658210941996525, 0.08659983499339703, 0.08646447909743751, 0.08581626920407662, 
+                  0.0848164285567969, 0.08377910964381965, 0.0822367983198804, 0.08070965621865138, 0.07903672500724102, 0.07736379667849971, 
+                  0.07580112855098903, 0.07416991429397488, 0.07206050597089943, 0.06946315980483178, 0.0662730627859155, 0.06268615362703936, 
+                  0.058682210134965856, 0.054168752160222426, 0.049167791007208306, 0.044039704321394174, 0.0385981511713949, 0.03302340214440563, 
+                  0.027470859650715124, 0.02200899556289725, 0.016845764341483292, 0.012236276175915984, 0.008142142767238786, 0.0047736891784759755, 
+                  0.0035326892184044827, 0.011810323720413905] # basely spar cap and TE thickness for DTU10MW, from rotor_structure.ResizeCompositeSection - UPDATE when new composite layups are available
+        t_te = [0.04200054984319648, 0.04225117651974834, 0.0449028267651131, 0.05115482875366182, 0.05773200373093057, 0.0646076843283427, 
+                0.07157444156721758, 0.07838332015647545, 0.08236702099771726, 0.08636183420245723, 0.08807738710796026, 0.08841695885692735, 
+                0.08435661818895519, 0.08227717500375323, 0.07523246366708176, 0.0718785818529033, 0.06482470192539755, 0.061452305196879796, 
+                0.054373783400364466, 0.049840546332820826, 0.043967287094035856, 0.04027996631594854, 0.034731762503613456, 0.03165893729347588, 
+                0.028640564155395527, 0.026206171585164948, 0.022504329520350853, 0.01841167062556291, 0.01663921489751576, 0.01573381774722061, 
+                0.010781562015476103, 0.010435507532911352, 0.009993455758864546, 0.009677378170431624, 0.009324302005793973, 0.008808234511422684,
+                0.008254745457758155, 0.007815979771853115, 0.007225157857060406, 0.006580363735558421, 0.005937478092511996, 0.005299415990797145, 
+                0.004743698234230719, 0.003942519682115882, 0.003288264073460905, 0.0026828299819035804, 0.0021288202493691083, 0.0016345630556029948, 
+                0.001159406221958171, 0.0034522484721209875]
+        myspline = Akima(raw_r, t_spar)
+        self.spar_thickness, _, _, _ = myspline.interp(self.r_in)
+        myspline = Akima(raw_r, t_te)
+        self.te_thickness, _, _, _ = myspline.interp(self.r_in)
         
         afpath = self.getAeroPath()
         myspline = Akima(raw_r, raw_th)
@@ -350,6 +373,15 @@ class DTU10MW(ReferenceBlade):
                 thickStr = ''
             self.airfoils[k] = os.path.join(afpath, prefix + thickStr + '.dat')
 
+        from ccblade import CCAirfoil, CCBlade as CCBlade
+        afinit = CCAirfoil.initFromAerodynFile
+        # for i in range(n):
+        af = afinit(self.airfoils[8])
+        print af.alpha
+        print af.Re
+        print af.cl
+        print af.cd
+
         # Structural analysis inputs
         self.le_location = np.array([0.5, 0.499998945239, 0.499990630963, 0.499384561429, 0.497733369567, 0.489487054775,
                                      0.476975219349, 0.458484322766, 0.440125810719, 0.422714559863, 0.407975209714,
@@ -360,8 +392,8 @@ class DTU10MW(ReferenceBlade):
                                      0.350000006591, 0.349999999186, 0.349999998202, 0.350000000551, 0.350000000029, 0.349999999931,
                                      0.35000000004, 0.350000000001, 0.35, 0.350000000001, 0.349999999999, 0.35, 0.35, 0.35, 0.35, 0.35])
 
-        # TODO: These are just guesses for now
-        self.sector_idx_strain_spar = np.array([4]*self.npts)
+        # UPDATE when new composite layup is available
+        self.sector_idx_strain_spar = np.array([2]*self.npts)
         self.sector_idx_strain_te = np.array([6]*self.npts)
 
         self.web1 = np.array([0.446529203227, 0.446642686219, 0.447230977047, 0.449423527671, 0.451384667298, 0.45166085909,
