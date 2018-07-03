@@ -201,21 +201,11 @@ class RotorSE(Group):
         self.connect('powercurve.V', 'V_in')
         self.connect('powercurve.P', 'P_in')
         self.connect('aep.AEP', 'AEP_in')
-<<<<<<< HEAD
         self.connect('powercurve.rated_V', 'rated_V_in')
         self.connect('powercurve.rated_Omega', 'rated_Omega_in')
         self.connect('powercurve.rated_pitch', 'rated_pitch_in')
         self.connect('powercurve.rated_T', 'rated_T_in')
         self.connect('powercurve.rated_Q', 'rated_Q_in')
-        self.connect('spline.diameter', 'hub_diameter_in')
-        self.connect('spline.max_chord', 'max_chord_in')
-=======
-        self.connect('powercurve.ratedConditions:V', 'ratedConditions:V_in')
-        self.connect('powercurve.ratedConditions:Omega', 'ratedConditions:Omega_in')
-        self.connect('powercurve.ratedConditions:pitch', 'ratedConditions:pitch_in')
-        self.connect('powercurve.ratedConditions:T', 'ratedConditions:T_in')
-        self.connect('powercurve.ratedConditions:Q', 'ratedConditions:Q_in')
->>>>>>> 3f45b629aa8cf870ed217f2578b3a9d2693e61f9
         self.connect('geom.diameter', 'diameter_in')
         self.connect('presweep_tip', 'presweepTip_in')
 
@@ -346,13 +336,13 @@ class RotorSE(Group):
         self.connect('materials', 'beam.materials')
 
         # connections to loads_defl
-        self.connect('aero_rated.loads:Omega', 'loads_defl.aeroLoads_Omega')
-        self.connect('aero_rated.loads:Px', 'loads_defl.aeroLoads_Px')
-        self.connect('aero_rated.loads:Py', 'loads_defl.aeroLoads_Py')
-        self.connect('aero_rated.loads:Pz', 'loads_defl.aeroLoads_Pz')
-        self.connect('aero_rated.loads:azimuth', 'loads_defl.aeroLoads_azimuth')
-        self.connect('aero_rated.loads:pitch', 'loads_defl.aeroLoads_pitch')
-        self.connect('aero_rated.loads:r', 'loads_defl.aeroLoads_r')
+        self.connect('aero_rated.loads_Omega', 'loads_defl.aeroloads_Omega')
+        self.connect('aero_rated.loads_Px', 'loads_defl.aeroloads_Px')
+        self.connect('aero_rated.loads_Py', 'loads_defl.aeroloads_Py')
+        self.connect('aero_rated.loads_Pz', 'loads_defl.aeroloads_Pz')
+        self.connect('aero_rated.loads_azimuth', 'loads_defl.aeroloads_azimuth')
+        self.connect('aero_rated.loads_pitch', 'loads_defl.aeroloads_pitch')
+        self.connect('aero_rated.loads_r', 'loads_defl.aeroloads_r')
 
         self.connect('beam.beam:z', 'loads_defl.r')
         self.connect('theta', 'loads_defl.theta')
@@ -362,13 +352,13 @@ class RotorSE(Group):
         self.connect('beam.beam:rhoA', 'loads_defl.rhoA')
 
         # connections to loads_pc_defl
-        self.connect('aero_defl_powercurve.loads:Omega', 'loads_pc_defl.aeroLoads_Omega')
-        self.connect('aero_defl_powercurve.loads:Px', 'loads_pc_defl.aeroLoads_Px')
-        self.connect('aero_defl_powercurve.loads:Py', 'loads_pc_defl.aeroLoads_Py')
-        self.connect('aero_defl_powercurve.loads:Pz', 'loads_pc_defl.aeroLoads_Pz')
-        self.connect('aero_defl_powercurve.loads:azimuth', 'loads_pc_defl.aeroLoads_azimuth')
-        self.connect('aero_defl_powercurve.loads:pitch', 'loads_pc_defl.aeroLoads_pitch')
-        self.connect('aero_defl_powercurve.loads:r', 'loads_pc_defl.aeroLoads_r')
+        self.connect('aero_defl_powercurve.loads_Omega', 'loads_pc_defl.aeroloads_Omega')
+        self.connect('aero_defl_powercurve.loads_Px', 'loads_pc_defl.aeroloads_Px')
+        self.connect('aero_defl_powercurve.loads_Py', 'loads_pc_defl.aeroloads_Py')
+        self.connect('aero_defl_powercurve.loads_Pz', 'loads_pc_defl.aeroloads_Pz')
+        self.connect('aero_defl_powercurve.loads_azimuth', 'loads_pc_defl.aeroloads_azimuth')
+        self.connect('aero_defl_powercurve.loads_pitch', 'loads_pc_defl.aeroloads_pitch')
+        self.connect('aero_defl_powercurve.loads_r', 'loads_pc_defl.aeroloads_r')
         self.connect('beam.beam:z', 'loads_pc_defl.r')
         self.connect('theta', 'loads_pc_defl.theta')
         self.connect('tilt', 'loads_pc_defl.tilt')
@@ -378,13 +368,13 @@ class RotorSE(Group):
 
 
         # connections to loads_strain
-        self.connect('aero_extrm.loads:Omega', 'loads_strain.aeroLoads_Omega')
-        self.connect('aero_extrm.loads:Px', 'loads_strain.aeroLoads_Px')
-        self.connect('aero_extrm.loads:Py', 'loads_strain.aeroLoads_Py')
-        self.connect('aero_extrm.loads:Pz', 'loads_strain.aeroLoads_Pz')
-        self.connect('aero_extrm.loads:azimuth', 'loads_strain.aeroLoads_azimuth')
-        self.connect('aero_extrm.loads:pitch', 'loads_strain.aeroLoads_pitch')
-        self.connect('aero_extrm.loads:r', 'loads_strain.aeroLoads_r')
+        self.connect('aero_extrm.loads_Omega', 'loads_strain.aeroloads_Omega')
+        self.connect('aero_extrm.loads_Px', 'loads_strain.aeroloads_Px')
+        self.connect('aero_extrm.loads_Py', 'loads_strain.aeroloads_Py')
+        self.connect('aero_extrm.loads_Pz', 'loads_strain.aeroloads_Pz')
+        self.connect('aero_extrm.loads_azimuth', 'loads_strain.aeroloads_azimuth')
+        self.connect('aero_extrm.loads_pitch', 'loads_strain.aeroloads_pitch')
+        self.connect('aero_extrm.loads_r', 'loads_strain.aeroloads_r')
         self.connect('beam.beam:z', 'loads_strain.r')
         self.connect('theta', 'loads_strain.theta')
         self.connect('tilt', 'loads_strain.tilt')
@@ -457,26 +447,19 @@ class RotorSE(Group):
         self.connect('struc.dy_defl', 'tip.dy', src_indices=[NPTS-1])
         self.connect('struc.dz_defl', 'tip.dz', src_indices=[NPTS-1])
         self.connect('theta', 'tip.theta', src_indices=[NPTS-1])
-        self.connect('aero_rated.loads:pitch', 'tip.pitch')
-        self.connect('aero_rated.loads:azimuth', 'tip.azimuth')
+        self.connect('aero_rated.loads_pitch', 'tip.pitch')
+        self.connect('aero_rated.loads_azimuth', 'tip.azimuth')
         self.connect('tilt', 'tip.tilt')
         self.connect('curvature.totalCone', 'tip.totalConeTip', src_indices=[NPTS-1])
         self.connect('dynamic_amplication_tip_deflection', 'tip.dynamicFactor')
 
         # connections to root moment
-<<<<<<< HEAD
-        self.connect('spline.r_pts', 'root_moment.r_pts')
-        self.connect('aero_rated.loads:Px', 'root_moment.aeroLoads_Px')
-        self.connect('aero_rated.loads:Py', 'root_moment.aeroLoads_Py')
-        self.connect('aero_rated.loads:Pz', 'root_moment.aeroLoads_Pz')
-        self.connect('aero_rated.loads:r', 'root_moment.aeroLoads_r')
-=======
+
         self.connect('r_pts', 'root_moment.r_pts')
-        self.connect('aero_rated.loads:Px', 'root_moment.aeroLoads:Px')
-        self.connect('aero_rated.loads:Py', 'root_moment.aeroLoads:Py')
-        self.connect('aero_rated.loads:Pz', 'root_moment.aeroLoads:Pz')
-        self.connect('aero_rated.loads:r', 'root_moment.aeroLoads:r')
->>>>>>> 3f45b629aa8cf870ed217f2578b3a9d2693e61f9
+        self.connect('aero_rated.loads_Px', 'root_moment.aeroloads_Px')
+        self.connect('aero_rated.loads_Py', 'root_moment.aeroloads_Py')
+        self.connect('aero_rated.loads_Pz', 'root_moment.aeroloads_Pz')
+        self.connect('aero_rated.loads_r', 'root_moment.aeroloads_r')
         self.connect('curvature.totalCone', 'root_moment.totalCone')
         self.connect('curvature.x_az', 'root_moment.x_az')
         self.connect('curvature.y_az', 'root_moment.y_az')
@@ -498,7 +481,7 @@ class RotorSE(Group):
         self.connect('struc.dx_pc_defl', 'blade_defl.dx')
         self.connect('struc.dy_pc_defl', 'blade_defl.dy')
         self.connect('struc.dz_pc_defl', 'blade_defl.dz')
-        self.connect('aero_defl_powercurve.loads:pitch', 'blade_defl.pitch')
+        self.connect('aero_defl_powercurve.loads_pitch', 'blade_defl.pitch')
         self.connect('theta', 'blade_defl.theta')
         self.connect('r_in', 'blade_defl.r_in0')
         self.connect('Rhub', 'blade_defl.Rhub0')
@@ -566,19 +549,12 @@ class RotorSE(Group):
         self.connect('usecd', ['analysis.usecd', 'aero_0.usecd','aero_120.usecd','aero_240.usecd','aero_defl_powercurve.usecd','aero_extrm_forces.usecd','aero_extrm.usecd','aero_rated.usecd'])
 
         # connections to root moment for drivetrain
-<<<<<<< HEAD
-        self.connect('spline.r_pts', ['root_moment_0.r_pts', 'root_moment_120.r_pts', 'root_moment_240.r_pts'])
-        self.connect('aero_rated.loads:Px', ['root_moment_0.aeroLoads_Px', 'root_moment_120.aeroLoads_Px', 'root_moment_240.aeroLoads_Px'])
-        self.connect('aero_rated.loads:Py', ['root_moment_0.aeroLoads_Py', 'root_moment_120.aeroLoads_Py', 'root_moment_240.aeroLoads_Py'])
-        self.connect('aero_rated.loads:Pz', ['root_moment_0.aeroLoads_Pz', 'root_moment_120.aeroLoads_Pz', 'root_moment_240.aeroLoads_Pz'])
-        self.connect('aero_rated.loads:r', ['root_moment_0.aeroLoads_r', 'root_moment_120.aeroLoads_r', 'root_moment_240.aeroLoads_r'])
-=======
+
         self.connect('r_pts', ['root_moment_0.r_pts', 'root_moment_120.r_pts', 'root_moment_240.r_pts'])
-        self.connect('aero_rated.loads:Px', ['root_moment_0.aeroLoads:Px', 'root_moment_120.aeroLoads:Px', 'root_moment_240.aeroLoads:Px'])
-        self.connect('aero_rated.loads:Py', ['root_moment_0.aeroLoads:Py', 'root_moment_120.aeroLoads:Py', 'root_moment_240.aeroLoads:Py'])
-        self.connect('aero_rated.loads:Pz', ['root_moment_0.aeroLoads:Pz', 'root_moment_120.aeroLoads:Pz', 'root_moment_240.aeroLoads:Pz'])
-        self.connect('aero_rated.loads:r', ['root_moment_0.aeroLoads:r', 'root_moment_120.aeroLoads:r', 'root_moment_240.aeroLoads:r'])
->>>>>>> 3f45b629aa8cf870ed217f2578b3a9d2693e61f9
+        self.connect('aero_rated.loads_Px', ['root_moment_0.aeroloads_Px', 'root_moment_120.aeroloads_Px', 'root_moment_240.aeroloads_Px'])
+        self.connect('aero_rated.loads_Py', ['root_moment_0.aeroloads_Py', 'root_moment_120.aeroloads_Py', 'root_moment_240.aeroloads_Py'])
+        self.connect('aero_rated.loads_Pz', ['root_moment_0.aeroloads_Pz', 'root_moment_120.aeroloads_Pz', 'root_moment_240.aeroloads_Pz'])
+        self.connect('aero_rated.loads_r', ['root_moment_0.aeroloads_r', 'root_moment_120.aeroloads_r', 'root_moment_240.aeroloads_r'])
         self.connect('curvature.totalCone', ['root_moment_0.totalCone', 'root_moment_120.totalCone', 'root_moment_240.totalCone'])
         self.connect('curvature.x_az', ['root_moment_0.x_az','root_moment_120.x_az','root_moment_240.x_az'])
         self.connect('curvature.y_az', ['root_moment_0.y_az','root_moment_120.y_az','root_moment_240.y_az'])
@@ -744,17 +720,11 @@ if __name__ == '__main__':
     plt.xlabel('power (W)')
 
     plt.figure()
-<<<<<<< HEAD
-    plt.plot(rotor['spline.r_pts'], rotor['strainU_spar'], label='suction')
-    plt.plot(rotor['spline.r_pts'], rotor['strainL_spar'], label='pressure')
-    plt.plot(rotor['spline.r_pts'], rotor['eps_crit_spar'], label='critical')
-    # plt.ylim([-5e-3, 5e-3])
-=======
+
     plt.plot(rotor['r_pts'], rotor['strainU_spar'], label='suction')
     plt.plot(rotor['r_pts'], rotor['strainL_spar'], label='pressure')
     plt.plot(rotor['r_pts'], rotor['eps_crit_spar'], label='critical')
     plt.ylim([-5e-3, 5e-3])
->>>>>>> 3f45b629aa8cf870ed217f2578b3a9d2693e61f9
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()
@@ -762,17 +732,11 @@ if __name__ == '__main__':
     # plt.savefig('/Users/sning/Desktop/strain_spar.png')
 
     plt.figure()
-<<<<<<< HEAD
-    plt.plot(rotor['spline.r_pts'], rotor['strainU_te'], label='suction')
-    plt.plot(rotor['spline.r_pts'], rotor['strainL_te'], label='pressure')
-    plt.plot(rotor['spline.r_pts'], rotor['eps_crit_te'], label='critical')
-    # plt.ylim([-5e-3, 5e-3])
-=======
+
     plt.plot(rotor['r_pts'], rotor['strainU_te'], label='suction')
     plt.plot(rotor['r_pts'], rotor['strainL_te'], label='pressure')
     plt.plot(rotor['r_pts'], rotor['eps_crit_te'], label='critical')
     plt.ylim([-5e-3, 5e-3])
->>>>>>> 3f45b629aa8cf870ed217f2578b3a9d2693e61f9
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()

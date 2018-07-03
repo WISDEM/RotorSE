@@ -54,11 +54,11 @@ class ReferenceBlade(object):
         self.sector_idx_strain_spar = None
         self.sector_idx_strain_te   = None
 
-        self.control.Vin  = None
-        self.control.Vout = None
-        self.control.tsr  = None
-        self.control.minOmega = None
-        self.control.maxOmega = None
+        self.control_Vin  = None
+        self.control_Vout = None
+        self.control_tsr  = None
+        self.control_minOmega = None
+        self.control_maxOmega = None
         
     def setRin(self):
         self.r_in = np.r_[0.0, self.r_cylinder, np.linspace(self.r_max_chord, 1.0, NINPUT-2)]
@@ -213,12 +213,12 @@ class NREL5MW(ReferenceBlade):
 
         
         # Control
-        self.control.Vin      = 3.0
-        self.control.Vout     = 25.0
-        self.control.minOmega = 6.9
-        self.control.maxOmega = 12.1
-        self.control.tsr      = 80.0 / 11.4
-        self.control.pitch    = 0.0
+        self.control_Vin      = 3.0
+        self.control_Vout     = 25.0
+        self.control_minOmega = 6.9
+        self.control_maxOmega = 12.1
+        self.control_tsr      = 80.0 / 11.4
+        self.control_pitch    = 0.0
         
         
 class DTU10MW(ReferenceBlade):
@@ -386,10 +386,6 @@ class DTU10MW(ReferenceBlade):
         afinit = CCAirfoil.initFromAerodynFile
         # for i in range(n):
         af = afinit(self.airfoils[8])
-        print af.alpha
-        print af.Re
-        print af.cl
-        print af.cd
 
         # Structural analysis inputs
         self.le_location = np.array([0.5, 0.499998945239, 0.499990630963, 0.499384561429, 0.497733369567, 0.489487054775,
@@ -437,12 +433,12 @@ class DTU10MW(ReferenceBlade):
         
         
         # Control
-        self.control.Vin      = 4.0
-        self.control.Vout     = 25.0
-        self.control.minOmega = 6.0
-        self.control.maxOmega = 90.0 / self.bladeLength * (60.0/(2.0*np.pi))
-        self.control.tsr      = 10.58
-        self.control.pitch    = 0.0
+        self.control_Vin      = 4.0
+        self.control_Vout     = 25.0
+        self.control_minOmega = 6.0
+        self.control_maxOmega = 90.0 / self.bladeLength * (60.0/(2.0*np.pi))
+        self.control_tsr      = 10.58
+        self.control_pitch    = 0.0
         
 
 class BladeGeometry(Component):
