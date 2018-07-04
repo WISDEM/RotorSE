@@ -41,7 +41,8 @@ class ReferenceBlade(object):
         self.precurveT = None
         self.presweep  = None
         self.airfoils  = None
-
+        
+        self.airfoil_files  = None
         self.r_cylinder     = None
         self.r_max_chord    = None
         self.spar_thickness = None
@@ -73,14 +74,25 @@ class ReferenceBlade(object):
 
     def getAirfoilCoordinates(self):
         data = []
-        for a in self.airfoils:
+        for a in self.airfoil_files:
             coord = np.loadtxt(a.replace('.dat','.pfl'), skiprows=2)
             data.append(coord)
         return data
 
+    def set_polars(self, thickness, af_thicknesses, af_files):
+        af_ref = ['']*len(af_thicknesses)
+        afinit = CCAirfoil.initFromAerodynFile
+        for k, af_file in enumerate(af_files):
+            af_ref[k] = afinit(af_file)
+        # Get common alpha
+        af_alpha = Airfoil.initFromAerodynFile(af_files[0])
+        alpha, Re, _, _, _ = af_alpha.createDataGrid()
+        # Blend airfoil polars
+        self.BlendAirfoils(af_ref, af_thicknesses, alpha, Re, thickness)
+            
     def BlendAirfoils(self, af_ref, af_thicknesses, alpha, Re, thickness):
 
-        airfoils = ['']*self.npts
+        self.airfoils = ['']*self.npts
         for k, thk in enumerate(thickness):
             # Blend airfoils with exception handling
             if thk in af_thicknesses:
@@ -118,9 +130,7 @@ class ReferenceBlade(object):
                 # plt.legend()
                 # plt.show()
 
-            airfoils[k] = af_out
-
-        return airfoils
+            self.airfoils[k] = af_out
 
         
 class NREL5MW(ReferenceBlade):
@@ -240,32 +250,19 @@ class NREL5MW(ReferenceBlade):
 
         myspline = Akima(raw_r_thick, raw_thick)
         thickness, _, _, _ = myspline.interp(self.r)
-
-        # afpath = self.getAeroPath()
-        # airfoil_files = ['']*self.npts
-        # self.airfoils = ['']*self.npts
-        # afinit = CCAirfoil.initFromAerodynFile
-        # for k in range(self.npts):
-        #     idx = np.argmin( np.abs(raw_r - self.r[k]) )
-        #     airfoil_files[k] = os.path.join(afpath, raw_af[7])
-        #     self.airfoils[k] = afinit(airfoil_files[k])
          
         # Load airfoil polar files
         afpath = self.getAeroPath()
         af_thicknesses  = np.array([18., 21., 25., 30., 35., 40., 100.])
         airfoil_files = ['NACA64_A17.dat', 'DU21_A17.dat', 'DU25_A17.dat', 'DU30_A17.dat', 'DU35_A17.dat', 'DU40_A17.dat', 'Cylinder1.dat']
         airfoil_files = [os.path.join(afpath, af_file) for af_file in airfoil_files]
+        self.set_polars(thickness, af_thicknesses, airfoil_files)
 
-        af_ref = ['']*len(af_thicknesses)
-        afinit = CCAirfoil.initFromAerodynFile
-        for k, af_file in enumerate(airfoil_files):
-            af_ref[k] = afinit(af_file)
-        # Get common alpha
-        af_alpha = Airfoil.initFromAerodynFile(airfoil_files[0])
-        alpha, Re, _, _, _ = af_alpha.createDataGrid()
-        # Blend airfoil polars
-        self.airfoils = self.BlendAirfoils(af_ref, af_thicknesses, alpha, Re, thickness)
-
+        # Now set best guess at airfoil cordinates along span without interpolating like the polar (this is just for plotting)
+        self.airfoil_files = ['']*self.npts
+        for k in range(self.npts):
+            idx = np.argmin( np.abs(raw_r - self.r[k]) )
+            self.airfoil_files[k] = os.path.join(afpath, raw_af[idx])
 
         # Layup info
         self.sector_idx_strain_spar = np.array([2]*self.npts)
@@ -448,39 +445,19 @@ class DTU10MW(ReferenceBlade):
         af_thicknesses  = np.array([24.1, 30.1, 36.0, 48.0, 60.0, 100.0])
         airfoil_files = ['FFA_W3_241.dat', 'FFA_W3_301.dat', 'FFA_W3_360.dat', 'FFA_W3_480.dat', 'FFA_W3_600.dat', 'Cylinder.dat']
         airfoil_files = [os.path.join(afpath, af_file) for af_file in airfoil_files]
-        af_ref = ['']*len(af_thicknesses)
-        afinit = CCAirfoil.initFromAerodynFile
-        for k, af_file in enumerate(airfoil_files):
-            af_ref[k] = afinit(af_file)
-        # Get common alpha
-        af_alpha = Airfoil.initFromAerodynFile(airfoil_files[0])
-        alpha, Re, _, _, _ = af_alpha.createDataGrid()
-        # Blend airfoil polars
-        self.airfoils = self.BlendAirfoils(af_ref, af_thicknesses, alpha, Re, thickness)
+        self.set_polars(thickness, af_thicknesses, airfoil_files)
 
-        ## Nonblended airfoils
-        # afpath = self.getAeroPath()
-        # myspline = Akima(raw_r, raw_th)
-        # thickness, _, _, _ = myspline.interp(self.r)
-        # thickness = np.minimum(100.0, thickness)
-        # #af_thicknesses  = np.array([21.1, 24.1, 27.0, 30.1, 33.0, 36.0, 48.0, 60.0, 72.0, 100.0])
-        # af_thicknesses  = np.array([24.1, 30.1, 36.0, 48.0, 60.0, 100.0])
-        # airfoil_files = ['']*self.npts
-        # for k in range(self.npts):
-        #     idx_thick       = np.where(thickness[k] <= af_thicknesses)[0]
-        #     if idx_thick.size > 0 and idx_thick[0] < af_thicknesses.size-1:
-        #         prefix   = 'FFA_W3_'
-        #         thickStr = str(np.int(10*af_thicknesses[idx_thick[0]]))
-        #     else:
-        #         prefix   = 'Cylinder'
-        #         thickStr = ''
-        #     airfoil_files[k] = os.path.join(afpath, prefix + thickStr + '.dat')
-
-        # from ccblade import CCAirfoil, CCBlade as CCBlade
-        # afinit = CCAirfoil.initFromAerodynFile
-        # self.airfoils = ['']*self.npts
-        # for k in range(self.npts):
-        #     self.airfoils[k] = afinit(airfoil_files[k])
+        # Now set best guess at airfoil cordinates along span without interpolating like the polar (this is just for plotting)
+        self.airfoil_files = ['']*self.npts
+        for k in range(self.npts):
+            idx_thick       = np.where(thickness[k] <= af_thicknesses)[0]
+            if idx_thick.size > 0 and idx_thick[0] < af_thicknesses.size-1:
+                prefix   = 'FFA_W3_'
+                thickStr = str(np.int(10*af_thicknesses[idx_thick[0]]))
+            else:
+                prefix   = 'Cylinder'
+                thickStr = ''
+            self.airfoil_files[k] = os.path.join(afpath, prefix + thickStr + '.dat')
 
 
 
