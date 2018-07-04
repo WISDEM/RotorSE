@@ -820,7 +820,7 @@ class RotorAeroPower(Group):
         self.connect('precone', 'analysis.precone')
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
-        self.connect('airfoil_files', 'analysis.airfoil_files')
+        self.connect('airfoils', 'analysis.airfoils')
         self.connect('nBlades', 'analysis.B')
         #self.connect('rho', 'analysis.rho')
         #self.connect('mu', 'analysis.mu')
@@ -899,8 +899,8 @@ class RotorAeroPower(Group):
 
 
 if __name__ == '__main__':
-
-    myref = NREL5MW() #DTU10MW()
+    # myref = NREL5MW()
+    myref = DTU10MW()
     
     rotor = Problem()
     npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
@@ -959,6 +959,7 @@ if __name__ == '__main__':
 
     # === run and outputs ===
     rotor.run()
+    print rotor['r_pts']
 
     print 'AEP =', rotor['AEP']
     print 'diameter =', rotor['diameter']

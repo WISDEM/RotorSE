@@ -10,7 +10,8 @@ from openmdao.api import IndepVarComp, Component, Problem, Group, SqliteRecorder
 def init_IndepVar_add(prob, data):
     """ Add component independent vars from a dictionary of inputs """
     for var in data.keys():
-        if type(data[var]) is np.ndarray:
+        if type(data[var]) is np.ndarray or type(data[var]) is np.array:
+            print var
             prob.root.add(var, IndepVarComp(var, np.zeros_like(data[var])), promotes=['*'])
         else:
             prob.root.add(var, IndepVarComp(var, data[var]), promotes=['*'])

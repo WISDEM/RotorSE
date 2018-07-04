@@ -1378,10 +1378,10 @@ class RootMoment(Component):
     """blade root bending moment"""
     def __init__(self, NPTS):
         super(RootMoment, self).__init__()
-        self.add_param('aeroloads_r', units='m', desc='radial positions along blade going toward tip')
-        self.add_param('aeroloads_Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_param('aeroloads_Py', units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_param('aeroloads_Pz', units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_param('aeroloads_r', val=np.zeros(NPTS+2), units='m', desc='radial positions along blade going toward tip')
+        self.add_param('aeroloads_Px', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('aeroloads_Py', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('aeroloads_Pz', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned z-direction')
         self.add_param('r_pts', val=np.zeros(NPTS), units='m')
         self.add_param('totalCone', val=np.zeros(NPTS), units='deg', desc='total cone angle from precone and curvature')
         self.add_param('x_az', val=np.zeros(NPTS), units='m', desc='location of blade in azimuth x-coordinate system')
@@ -2288,7 +2288,7 @@ class RotorStructure(Group):
         self.connect('precone', 'aero_rated.precone')
         self.connect('tilt', 'aero_rated.tilt')
         self.connect('yaw', 'aero_rated.yaw')
-        self.connect('airfoil_files', 'aero_rated.airfoil_files')
+        self.connect('airfoils', 'aero_rated.airfoils')
         self.connect('nBlades', 'aero_rated.B')
         self.connect('nSector', 'aero_rated.nSector')
         self.connect('gust.V_gust', 'aero_rated.V_load')
@@ -2308,7 +2308,7 @@ class RotorStructure(Group):
         self.connect('precone', 'aero_extrm.precone')
         self.connect('tilt', 'aero_extrm.tilt')
         self.connect('yaw', 'aero_extrm.yaw')
-        self.connect('airfoil_files', 'aero_extrm.airfoil_files')
+        self.connect('airfoils', 'aero_extrm.airfoils')
         self.connect('nBlades', 'aero_extrm.B')
         self.connect('nSector', 'aero_extrm.nSector')
         self.connect('turbineclass.V_extreme', 'aero_extrm.V_load')
@@ -2328,7 +2328,7 @@ class RotorStructure(Group):
         self.connect('precone', 'aero_extrm_forces.precone')
         self.connect('tilt', 'aero_extrm_forces.tilt')
         self.connect('yaw', 'aero_extrm_forces.yaw')
-        self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
+        self.connect('airfoils', 'aero_extrm_forces.airfoils')
         self.connect('nBlades', 'aero_extrm_forces.B')
         self.connect('nSector', 'aero_extrm_forces.nSector')
         self.aero_extrm_forces.Uhub = np.zeros(2)
@@ -2351,7 +2351,7 @@ class RotorStructure(Group):
         self.connect('precone', 'aero_defl_powercurve.precone')
         self.connect('tilt', 'aero_defl_powercurve.tilt')
         self.connect('yaw', 'aero_defl_powercurve.yaw')
-        self.connect('airfoil_files', 'aero_defl_powercurve.airfoil_files')
+        self.connect('airfoils', 'aero_defl_powercurve.airfoils')
         self.connect('nBlades', 'aero_defl_powercurve.B')
         self.connect('nSector', 'aero_defl_powercurve.nSector')
         self.connect('setuppc.Uhub', 'aero_defl_powercurve.V_load')
@@ -2561,7 +2561,7 @@ class RotorStructure(Group):
         self.connect('hub_height', ['aero_0.hubHt', 'aero_120.hubHt', 'aero_240.hubHt'])
         self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
         self.connect('tilt', ['aero_0.tilt', 'aero_120.tilt', 'aero_240.tilt'])
-	self.connect('airfoil_files', ['aero_0.airfoil_files', 'aero_120.airfoil_files', 'aero_240.airfoil_files'])
+	self.connect('airfoils', ['aero_0.airfoils', 'aero_120.airfoils', 'aero_240.airfoils'])
         self.connect('yaw', ['aero_0.yaw', 'aero_120.yaw', 'aero_240.yaw'])
         self.connect('nBlades', ['aero_0.B','aero_120.B', 'aero_240.B'])
         self.connect('nSector', ['aero_0.nSector','aero_120.nSector','aero_240.nSector'])
@@ -2608,15 +2608,15 @@ class RotorStructure(Group):
         self.connect('aero_rated.Omega_load', 'Omega')
         
 if __name__ == '__main__':
-    # myref = NREL5MW() #DTU10MW()
-    myref = NREL5MW() #DTU10MW()
+    myref = NREL5MW()
+    # myref = DTU10MW()
 
     rotor = Problem()
     rotor.root = RotorStructure(myref)
     
     #rotor.setup(check=False)
     rotor.setup()
-    
+
     # === blade grid ===
     rotor['hubFraction'] = myref.hubFraction #0.025  # (Float): hub location as fraction of radius
     rotor['bladeLength'] = myref.bladeLength #61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
@@ -2712,7 +2712,22 @@ if __name__ == '__main__':
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
 
+    # print rotor['aero_rated.loads_Px']
+    # print rotor['aero_rated.loads_Py']
+    # print rotor['aero_rated.loads_Pz']
+    # print rotor['aero_rated.loads_r']
 
+    # print rotor['aero_extrm.loads_Px']
+    # print rotor['aero_extrm.loads_Py']
+    # print rotor['aero_extrm.loads_Pz']
+    # print rotor['aero_extrm.loads_r']
+
+    print rotor['r_pts']
+    print rotor['curvature.totalCone']
+    print rotor['curvature.z_az']
+    print rotor['curvature.s']
+
+    
 
     import matplotlib.pyplot as plt
     plt.figure()

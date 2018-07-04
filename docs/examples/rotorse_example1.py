@@ -74,61 +74,61 @@ import matplotlib.pyplot as plt
 plt.plot(rotor['V'], rotor['P']/1e6)
 plt.xlabel('Wind Speed (m/s)')
 plt.ylabel('Power (MW)')
-plt.show()
-# ---
-
-
-# outpath = '..\images'
-# # Power Curve
-# f, ax = plt.subplots(1,1,figsize=(5.3, 4))
-# ax.plot(rotor['V'], rotor['P']/1e6)
-# ax.set(xlabel='Wind Speed (m/s)' , ylabel='Power (MW)')
-# ax.set_ylim([0, 10.3])
-# ax.set_xlim([0, 25])
-# f.tight_layout()
-# ax.spines['right'].set_visible(False)
-# ax.spines['top'].set_visible(False)
-# f.savefig(os.path.abspath(os.path.join(outpath,'power_curve_dtu10mw.png')))
-# f.savefig(os.path.abspath(os.path.join(outpath,'power_curve_dtu10mw.pdf')))
-
-# # Chord
-# fc, axc = plt.subplots(1,1,figsize=(5.3, 4))
-# rc_c = np.r_[0.0, myref.r_cylinder, np.linspace(rotor['r_max_chord'], 1.0, NINPUT-2)]
-# r = (rotor['spline.r_pts'] - rotor['spline.Rhub'])/rotor['bladeLength']
-# axc.plot(r, rotor['spline.chord'], c='k')
-# axc.plot(rc_c, rotor['chord_in'], '.', c='k')
-# for i, (x, y) in enumerate(zip(rc_c, rotor['chord_in'])):
-#     txt = '$c_%d$' % i
-#     if i<=1:
-#         axc.annotate(txt, (x,y), xytext=(x+0.01,y-0.4), textcoords='data')
-#     else:
-#         axc.annotate(txt, (x,y), xytext=(x+0.01,y+0.2), textcoords='data')
-# axc.set(xlabel='Blade Fraction, $r/R$' , ylabel='Chord (m)')
-# axc.set_ylim([0, 7])
-# axc.set_xlim([0, 1.1])
-# fc.tight_layout()
-# axc.spines['right'].set_visible(False)
-# axc.spines['top'].set_visible(False)
-# fc.savefig(os.path.abspath(os.path.join(outpath,'chord_dtu10mw.png')))
-# fc.savefig(os.path.abspath(os.path.join(outpath,'chord_dtu10mw.pdf')))
-
-# # Twist
-# ft, axt = plt.subplots(1,1,figsize=(5.3, 4))
-# rc_t = rc_c#np.linspace(myref.r_cylinder, 1.0, NINPUT)
-# r = (rotor['spline.r_pts'] - rotor['spline.Rhub'])/rotor['bladeLength']
-# axt.plot(r, rotor['spline.theta'], c='k')
-# axt.plot(rc_t, rotor['theta_in'], '.', c='k')
-# for i, (x, y) in enumerate(zip(rc_t, rotor['theta_in'])):
-#     txt = '$\Theta_%d$' % i
-#     axt.annotate(txt, (x,y), xytext=(x+0.01,y+0.1), textcoords='data')
-# axt.set(xlabel='Blade Fraction, $r/R$' , ylabel='Twist ($\deg$)')
-# axt.set_ylim([-1, 15])
-# axt.set_xlim([0, 1.1])
-# ft.tight_layout()
-# axt.spines['right'].set_visible(False)
-# axt.spines['top'].set_visible(False)
-# ft.savefig(os.path.abspath(os.path.join(outpath,'theta_dtu10mw.png')))
-# ft.savefig(os.path.abspath(os.path.join(outpath,'theta_dtu10mw.pdf')))
-
-
 # plt.show()
+---
+
+outpath = '..\images'
+# Power Curve
+f, ax = plt.subplots(1,1,figsize=(5.3, 4))
+ax.plot(rotor['V'], rotor['P']/1e6)
+ax.set(xlabel='Wind Speed (m/s)' , ylabel='Power (MW)')
+ax.set_ylim([0, 10.3])
+ax.set_xlim([0, 25])
+f.tight_layout()
+ax.spines['right'].set_visible(False)
+ax.spines['top'].set_visible(False)
+f.savefig(os.path.abspath(os.path.join(outpath,'power_curve_dtu10mw.png')))
+f.savefig(os.path.abspath(os.path.join(outpath,'power_curve_dtu10mw.pdf')))
+
+# Chord
+
+fc, axc = plt.subplots(1,1,figsize=(5.3, 4))
+rc_c = np.r_[0.0, myref.r_cylinder, np.linspace(rotor['r_max_chord'], 1.0, NINPUT-2)]
+r = (rotor['r_pts'] - rotor['Rhub'])/rotor['bladeLength']
+axc.plot(r, rotor['chord'], c='k')
+axc.plot(rc_c, rotor['chord_in'], '.', c='k')
+for i, (x, y) in enumerate(zip(rc_c, rotor['chord_in'])):
+    txt = '$c_%d$' % i
+    if i<=1:
+        axc.annotate(txt, (x,y), xytext=(x+0.01,y-0.4), textcoords='data')
+    else:
+        axc.annotate(txt, (x,y), xytext=(x+0.01,y+0.2), textcoords='data')
+axc.set(xlabel='Blade Fraction, $r/R$' , ylabel='Chord (m)')
+axc.set_ylim([0, 7.5])
+axc.set_xlim([0, 1.1])
+fc.tight_layout()
+axc.spines['right'].set_visible(False)
+axc.spines['top'].set_visible(False)
+fc.savefig(os.path.abspath(os.path.join(outpath,'chord_dtu10mw.png')))
+fc.savefig(os.path.abspath(os.path.join(outpath,'chord_dtu10mw.pdf')))
+
+# Twist
+ft, axt = plt.subplots(1,1,figsize=(5.3, 4))
+rc_t = rc_c#np.linspace(myref.r_cylinder, 1.0, NINPUT)
+r = (rotor['r_pts'] - rotor['Rhub'])/rotor['bladeLength']
+axt.plot(r, rotor['theta'], c='k')
+axt.plot(rc_t, rotor['theta_in'], '.', c='k')
+for i, (x, y) in enumerate(zip(rc_t, rotor['theta_in'])):
+    txt = '$\Theta_%d$' % i
+    axt.annotate(txt, (x,y), xytext=(x+0.01,y+0.1), textcoords='data')
+axt.set(xlabel='Blade Fraction, $r/R$' , ylabel='Twist ($\deg$)')
+axt.set_ylim([-1, 15])
+axt.set_xlim([0, 1.1])
+ft.tight_layout()
+axt.spines['right'].set_visible(False)
+axt.spines['top'].set_visible(False)
+ft.savefig(os.path.abspath(os.path.join(outpath,'theta_dtu10mw.png')))
+ft.savefig(os.path.abspath(os.path.join(outpath,'theta_dtu10mw.pdf')))
+
+
+plt.show()

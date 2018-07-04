@@ -21,13 +21,17 @@ rotor.driver.options['optimizer'] = 'SLSQP'
 rotor.driver.options['tol'] = 1.0e-8
 # ---
 # --- Objective
-AEP0 = 47147596.2911617
+# AEP0 = 47147596.2911617
+AEP0 = 48113504.25433461
 rotor.driver.add_objective('AEP', scaler=-1./AEP0)
 # --- Design Variables
 rotor.driver.add_desvar('r_max_chord', lower=0.15, upper=0.4) # 0.2366
 rotor.driver.add_desvar('chord_in', low=0.4, high=7.)
 rotor.driver.add_desvar('theta_in', low=-10.0, high=30.0)
 rotor.driver.add_desvar('control_tsr', low=3.0, high=14.0)
+
+T0 = 1448767.9705024462
+rotor.driver.add_constraint('rated_T',upper=T0*1.02)
 # ---
 # --- Recorder
 rec = DumpRecorder()
@@ -94,6 +98,8 @@ print 'TSR = ', rotor['control_tsr']
 print'----------------'
 print 'Objective = ', -1*rotor['AEP']/AEP0
 print 'AEP = ', rotor['AEP']
+print 'Rated Thrust =', rotor['rated_T']
+print 'Percent change in thrust =', (rotor['rated_T']-T0)/T0 *100
 
 
 
@@ -123,8 +129,8 @@ ax.spines['top'].set_visible(False)
 # Chord
 fc, axc = plt.subplots(1,1,figsize=(5.3, 4))
 rc_c = np.r_[0.0, myref.r_cylinder, np.linspace(rotor['r_max_chord'], 1.0, NINPUT-2)]
-r = (rotor['spline.r_pts'] - rotor['spline.Rhub'])/rotor['bladeLength']
-axc.plot(r, rotor['spline.chord'], c='k')
+r = (rotor['r_pts'] - rotor['Rhub'])/rotor['bladeLength']
+axc.plot(r, rotor['chord'], c='k')
 axc.plot(rc_c, rotor['chord_in'], '.', c='k')
 for i, (x, y) in enumerate(zip(rc_c, rotor['chord_in'])):
     txt = '$c_%d$' % i
@@ -133,7 +139,7 @@ for i, (x, y) in enumerate(zip(rc_c, rotor['chord_in'])):
     else:
         axc.annotate(txt, (x,y), xytext=(x+0.01,y+0.2), textcoords='data')
 axc.set(xlabel='Blade Fraction, $r/R$' , ylabel='Chord (m)')
-# axc.set_ylim([0, 7])
+axc.set_ylim([0, 7.5])
 axc.set_xlim([0, 1.1])
 fc.tight_layout()
 axc.spines['right'].set_visible(False)
@@ -144,20 +150,19 @@ axc.spines['top'].set_visible(False)
 # Twist
 ft, axt = plt.subplots(1,1,figsize=(5.3, 4))
 rc_t = rc_c#np.linspace(myref.r_cylinder, 1.0, NINPUT)
-r = (rotor['spline.r_pts'] - rotor['spline.Rhub'])/rotor['bladeLength']
-axt.plot(r, rotor['spline.theta'], c='k')
+r = (rotor['r_pts'] - rotor['Rhub'])/rotor['bladeLength']
+axt.plot(r, rotor['theta'], c='k')
 axt.plot(rc_t, rotor['theta_in'], '.', c='k')
 for i, (x, y) in enumerate(zip(rc_t, rotor['theta_in'])):
     txt = '$\Theta_%d$' % i
     axt.annotate(txt, (x,y), xytext=(x+0.01,y+0.1), textcoords='data')
 axt.set(xlabel='Blade Fraction, $r/R$' , ylabel='Twist ($\deg$)')
-# axt.set_ylim([-1, 15])
+axt.set_ylim([-1, 15])
 axt.set_xlim([0, 1.1])
 ft.tight_layout()
 axt.spines['right'].set_visible(False)
 axt.spines['top'].set_visible(False)
 # ft.savefig(os.path.abspath(os.path.join(outpath,'theta_dtu10mw.png')))
 # ft.savefig(os.path.abspath(os.path.join(outpath,'theta_dtu10mw.pdf')))
-
 
 plt.show()

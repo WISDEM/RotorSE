@@ -8,6 +8,8 @@ from openmdao.api import Component, Group, IndepVarComp
 
 from akima import Akima, akima_interp_with_derivs
 from ccblade.ccblade_component import CCBladeGeometry
+from ccblade import CCAirfoil
+from airfoilprep import Airfoil
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 
 NINPUT = 5
@@ -75,6 +77,51 @@ class ReferenceBlade(object):
             coord = np.loadtxt(a.replace('.dat','.pfl'), skiprows=2)
             data.append(coord)
         return data
+
+    def BlendAirfoils(self, af_ref, af_thicknesses, alpha, Re, thickness):
+
+        airfoils = ['']*self.npts
+        for k, thk in enumerate(thickness):
+            # Blend airfoils with exception handling
+            if thk in af_thicknesses:
+                af_out = af_ref[np.where(af_thicknesses==thk)[0][0]]
+                # print thk, thk
+            elif thk > max(af_thicknesses):
+                af_out = af_ref[np.argmax(af_thicknesses)]
+                # print thk, af_thicknesses[np.argmax(af_thicknesses)]
+            elif thk < min(af_thicknesses):
+                af_out = af_ref[np.argmin(af_thicknesses)]
+                # print thk, af_thicknesses[np.argmin(af_thicknesses)]
+            else:
+                # Blend airfoils
+                af1 = max(np.where(af_thicknesses < thk)[0])
+                af2 = min(np.where(af_thicknesses > thk)[0])
+                thk1 = af_thicknesses[af1]
+                thk2 = af_thicknesses[af2]
+                blend2 = (thk-thk1)/(thk2-thk1)
+                blend1 = 1-blend2
+
+                cl1, cd1 = af_ref[af1].evaluate(alpha*np.pi/180., Re)
+                cl2, cd2 = af_ref[af2].evaluate(alpha*np.pi/180., Re)
+
+                cl = cl1*blend1 + cl2*blend2
+                cd = cd1*blend1 + cd2*blend2
+
+                af_out = CCAirfoil(alpha, Re, cl, cd)
+
+                # print '%0.3f\t%d*%0.3f\t%d*%0.3f'%(thk, thk1,blend1, thk2,blend2)
+                # import matplotlib.pyplot as plt
+                # plt.figure()
+                # plt.plot(alpha, cl1, label=str(thk1))
+                # plt.plot(alpha, cl2, label=str(thk2))
+                # plt.plot(alpha, cl, label=str(thk))
+                # plt.legend()
+                # plt.show()
+
+            airfoils[k] = af_out
+
+        return airfoils
+
         
 class NREL5MW(ReferenceBlade):
     def __init__(self):
@@ -101,6 +148,11 @@ class NREL5MW(ReferenceBlade):
         15,56.1667,0.863,2.7333,2.313,NACA64_A17.dat
         16,58.9000,0.370,2.7333,2.086,NACA64_A17.dat
         17,61.6333,0.106,2.7333,1.419,NACA64_A17.dat""")
+
+        # from Sandia 61.5m blade, Numad
+        raw_r_thick = np.array([0.0000000E+00, 3.0000000E-01, 4.0000000E-01, 5.0000000E-01, 6.0000000E-01, 7.0000000E-01, 8.0000000E-01, 1.3667000E+00, 1.5000000E+00, 1.6000000E+00, 4.1000000E+00, 5.5000000E+00, 6.8333000E+00, 9.0000000E+00, 1.0250000E+01, 1.2000000E+01, 1.4350000E+01, 1.7000000E+01, 1.8450000E+01, 2.0500000E+01, 2.2550000E+01, 2.4600000E+01, 2.6650000E+01, 3.0750000E+01, 3.2000000E+01, 3.4850000E+01, 3.7000000E+01, 3.8950000E+01, 4.1000000E+01, 4.2000000E+01, 4.3050000E+01, 4.5000000E+01, 4.7150000E+01, 5.1250000E+01, 5.4666700E+01, 5.7400000E+01, 6.0133300E+01, 6.1500000E+01])
+        raw_r_thick = raw_r_thick/raw_r_thick[-1]
+        raw_thick = np.array([1.0000000E+00, 1.0000000E+00, 1.0000000E+00, 1.0000000E+00, 1.0000000E+00, 1.0000000E+00, 1.0000000E+00, 1.0000000E+00, 9.8751500E-01, 9.7816802E-01, 7.5439880E-01, 6.4303911E-01, 5.5121360E-01, 4.4117964E-01, 4.0500000E-01, 3.7480511E-01, 3.5000000E-01, 3.3433084E-01, 3.2616543E-01, 3.1401675E-01, 3.0000000E-01, 2.8244827E-01, 2.6403824E-01, 2.3997369E-01, 2.3391742E-01, 2.2014585E-01, 2.0967308E-01, 2.0011990E-01, 1.9007578E-01, 1.8516665E-01, 1.8000000E-01, 1.8000000E-01, 1.8000000E-01, 1.8000000E-01, 1.8000000E-01, 1.8000000E-01, 1.8000000E-01, 1.8000000E-01])
         
         # Name to recover / lookup this info
         self.name     = '5MW'
@@ -185,15 +237,36 @@ class NREL5MW(ReferenceBlade):
                                      0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4,
                                      0.4, 0.4, 0.4, 0.4])
 
-        afpath = self.getAeroPath()
-        self.airfoils = ['']*self.npts
-        for k in range(self.npts):
-            idx = np.argmin( np.abs(raw_r - self.r[k]) )
-            self.airfoils[k] = os.path.join(afpath, raw_af[7])
-            # self.airfoils[k] = os.path.join(afpath, raw_af[idx])
-            # if (self.r[k] <= self.r_cylinder) and raw_af[idx].find('Cylinder') < 0:
-            #     self.airfoils[k] = os.path.join(afpath, 'Cylinder2.dat')
+
+        myspline = Akima(raw_r_thick, raw_thick)
+        thickness, _, _, _ = myspline.interp(self.r)
+
+        # afpath = self.getAeroPath()
+        # airfoil_files = ['']*self.npts
+        # self.airfoils = ['']*self.npts
+        # afinit = CCAirfoil.initFromAerodynFile
+        # for k in range(self.npts):
+        #     idx = np.argmin( np.abs(raw_r - self.r[k]) )
+        #     airfoil_files[k] = os.path.join(afpath, raw_af[7])
+        #     self.airfoils[k] = afinit(airfoil_files[k])
          
+        # Load airfoil polar files
+        afpath = self.getAeroPath()
+        af_thicknesses  = np.array([18., 21., 25., 30., 35., 40., 100.])
+        airfoil_files = ['NACA64_A17.dat', 'DU21_A17.dat', 'DU25_A17.dat', 'DU30_A17.dat', 'DU35_A17.dat', 'DU40_A17.dat', 'Cylinder1.dat']
+        airfoil_files = [os.path.join(afpath, af_file) for af_file in airfoil_files]
+
+        af_ref = ['']*len(af_thicknesses)
+        afinit = CCAirfoil.initFromAerodynFile
+        for k, af_file in enumerate(airfoil_files):
+            af_ref[k] = afinit(af_file)
+        # Get common alpha
+        af_alpha = Airfoil.initFromAerodynFile(airfoil_files[0])
+        alpha, Re, _, _, _ = af_alpha.createDataGrid()
+        # Blend airfoil polars
+        self.airfoils = self.BlendAirfoils(af_ref, af_thicknesses, alpha, Re, thickness)
+
+
         # Layup info
         self.sector_idx_strain_spar = np.array([2]*self.npts)
         self.sector_idx_strain_te = np.array([3]*self.npts)
@@ -350,7 +423,7 @@ class DTU10MW(ReferenceBlade):
                   0.07580112855098903, 0.07416991429397488, 0.07206050597089943, 0.06946315980483178, 0.0662730627859155, 0.06268615362703936, 
                   0.058682210134965856, 0.054168752160222426, 0.049167791007208306, 0.044039704321394174, 0.0385981511713949, 0.03302340214440563, 
                   0.027470859650715124, 0.02200899556289725, 0.016845764341483292, 0.012236276175915984, 0.008142142767238786, 0.0047736891784759755, 
-                  0.0035326892184044827, 0.011810323720413905] # basely spar cap and TE thickness for DTU10MW, from rotor_structure.ResizeCompositeSection - UPDATE when new composite layups are available
+                  0.0035326892184044827, 0.011810323720413905] # baseline spar cap and TE thickness for DTU10MW, from rotor_structure.ResizeCompositeSection - UPDATE when new composite layups are available
         t_te = [0.04200054984319648, 0.04225117651974834, 0.0449028267651131, 0.05115482875366182, 0.05773200373093057, 0.0646076843283427, 
                 0.07157444156721758, 0.07838332015647545, 0.08236702099771726, 0.08636183420245723, 0.08807738710796026, 0.08841695885692735, 
                 0.08435661818895519, 0.08227717500375323, 0.07523246366708176, 0.0718785818529033, 0.06482470192539755, 0.061452305196879796, 
@@ -365,27 +438,51 @@ class DTU10MW(ReferenceBlade):
         myspline = Akima(raw_r, t_te)
         self.te_thickness, _, _, _ = myspline.interp(self.r_in)
         
-        afpath = self.getAeroPath()
         myspline = Akima(raw_r, raw_th)
         thickness, _, _, _ = myspline.interp(self.r)
         thickness = np.minimum(100.0, thickness)
-        #af_thicknesses  = np.array([21.1, 24.1, 27.0, 30.1, 33.0, 36.0, 48.0, 60.0, 72.0, 100.0])
-        af_thicknesses  = np.array([24.1, 30.1, 36.0, 48.0, 60.0, 100.0])
-        self.airfoils = ['']*self.npts
-        for k in range(self.npts):
-            idx_thick       = np.where(thickness[k] <= af_thicknesses)[0]
-            if idx_thick.size > 0 and idx_thick[0] < af_thicknesses.size-1:
-                prefix   = 'FFA_W3_'
-                thickStr = str(np.int(10*af_thicknesses[idx_thick[0]]))
-            else:
-                prefix   = 'Cylinder'
-                thickStr = ''
-            self.airfoils[k] = os.path.join(afpath, prefix + thickStr + '.dat')
 
-        from ccblade import CCAirfoil, CCBlade as CCBlade
+        # Load airfoil polar files
+        afpath = self.getAeroPath()
+        # af_thicknesses  = np.array([21.1, 24.1, 27.0, 30.1, 33.0, 36.0, 48.0, 60.0, 72.0, 100.0])
+        af_thicknesses  = np.array([24.1, 30.1, 36.0, 48.0, 60.0, 100.0])
+        airfoil_files = ['FFA_W3_241.dat', 'FFA_W3_301.dat', 'FFA_W3_360.dat', 'FFA_W3_480.dat', 'FFA_W3_600.dat', 'Cylinder.dat']
+        airfoil_files = [os.path.join(afpath, af_file) for af_file in airfoil_files]
+        af_ref = ['']*len(af_thicknesses)
         afinit = CCAirfoil.initFromAerodynFile
-        # for i in range(n):
-        af = afinit(self.airfoils[8])
+        for k, af_file in enumerate(airfoil_files):
+            af_ref[k] = afinit(af_file)
+        # Get common alpha
+        af_alpha = Airfoil.initFromAerodynFile(airfoil_files[0])
+        alpha, Re, _, _, _ = af_alpha.createDataGrid()
+        # Blend airfoil polars
+        self.airfoils = self.BlendAirfoils(af_ref, af_thicknesses, alpha, Re, thickness)
+
+        ## Nonblended airfoils
+        # afpath = self.getAeroPath()
+        # myspline = Akima(raw_r, raw_th)
+        # thickness, _, _, _ = myspline.interp(self.r)
+        # thickness = np.minimum(100.0, thickness)
+        # #af_thicknesses  = np.array([21.1, 24.1, 27.0, 30.1, 33.0, 36.0, 48.0, 60.0, 72.0, 100.0])
+        # af_thicknesses  = np.array([24.1, 30.1, 36.0, 48.0, 60.0, 100.0])
+        # airfoil_files = ['']*self.npts
+        # for k in range(self.npts):
+        #     idx_thick       = np.where(thickness[k] <= af_thicknesses)[0]
+        #     if idx_thick.size > 0 and idx_thick[0] < af_thicknesses.size-1:
+        #         prefix   = 'FFA_W3_'
+        #         thickStr = str(np.int(10*af_thicknesses[idx_thick[0]]))
+        #     else:
+        #         prefix   = 'Cylinder'
+        #         thickStr = ''
+        #     airfoil_files[k] = os.path.join(afpath, prefix + thickStr + '.dat')
+
+        # from ccblade import CCAirfoil, CCBlade as CCBlade
+        # afinit = CCAirfoil.initFromAerodynFile
+        # self.airfoils = ['']*self.npts
+        # for k in range(self.npts):
+        #     self.airfoils[k] = afinit(airfoil_files[k])
+
+
 
         # Structural analysis inputs
         self.le_location = np.array([0.5, 0.499998945239, 0.499990630963, 0.499384561429, 0.497733369567, 0.489487054775,
@@ -478,7 +575,7 @@ class BladeGeometry(Component):
 
         self.add_output('hub_diameter', val=0.0, units='m')
         
-        self.add_output('airfoil_files', val=[], desc='Spanwise coordinates for aerodynamic analysis', pass_by_obj=True)
+        self.add_output('airfoils', val=[], desc='Spanwise coordinates for aerodynamic analysis', pass_by_obj=True)
         self.add_output('le_location', val=np.zeros(npts), desc='Leading-edge positions from a reference blade axis (usually blade pitch axis). Locations are normalized by the local chord length. Positive in -x direction for airfoil-aligned coordinate system')
         self.add_output('chord_ref', val=np.zeros(npts), desc='Chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c)')
 
@@ -554,7 +651,7 @@ class BladeGeometry(Component):
             profile[i] = Profile.initFromPreCompFile(os.path.join(strucpath, 'shape_' + istr + '.inp'))
 
         # Assign outputs
-        unknowns['airfoil_files']          = self.refBlade.airfoils
+        unknowns['airfoils']          = self.refBlade.airfoils
         unknowns['le_location']            = self.refBlade.le_location
         unknowns['upperCS']                = upperCS
         unknowns['lowerCS']                = lowerCS
@@ -590,7 +687,7 @@ class TurbineClass(Component):
         self.add_output('V_extreme', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
         self.add_output('V_extreme_full', shape=2, units='m/s', desc='IEC extreme wind speed at hub height')
         
-	self.deriv_options['type'] = 'fd'
+        self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -611,7 +708,7 @@ class TurbineClass(Component):
         unknowns['V_extreme_full'][0] = 1.4*Vref # for extreme cases TODO: check if other way to do
         unknowns['V_extreme_full'][1] = 1.4*Vref
 
-        
+
 
 class RotorGeometry(Group):
     def __init__(self, RefBlade):
@@ -674,3 +771,10 @@ class RotorGeometry(Group):
         self.connect('Rtip', 'geom.Rtip')
         self.connect('precone', 'geom.precone')
         self.connect('precurve_tip', 'geom.precurveTip')
+
+
+if __name__ == "__main__":
+
+    refBlade = DTU10MW()
+    refBlade = NREL5MW()
+    rotor = RotorGeometry(refBlade)

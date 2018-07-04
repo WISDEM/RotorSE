@@ -147,7 +147,7 @@ class RotorSE(Group):
         self.connect('precone', 'analysis.precone')
         self.connect('tilt', 'analysis.tilt')
         self.connect('yaw', 'analysis.yaw')
-        self.connect('airfoil_files', 'analysis.airfoil_files')
+        self.connect('airfoils', 'analysis.airfoils')
         self.connect('nBlades', 'analysis.B')
         self.connect('nSector', 'analysis.nSector')
         self.connect('setup.Uhub', 'analysis.Uhub')
@@ -254,7 +254,7 @@ class RotorSE(Group):
         self.connect('precone', 'aero_rated.precone')
         self.connect('tilt', 'aero_rated.tilt')
         self.connect('yaw', 'aero_rated.yaw')
-        self.connect('airfoil_files', 'aero_rated.airfoil_files')
+        self.connect('airfoils', 'aero_rated.airfoils')
         self.connect('nBlades', 'aero_rated.B')
         self.connect('nSector', 'aero_rated.nSector')
         self.connect('gust.V_gust', 'aero_rated.V_load')
@@ -274,7 +274,7 @@ class RotorSE(Group):
         self.connect('precone', 'aero_extrm.precone')
         self.connect('tilt', 'aero_extrm.tilt')
         self.connect('yaw', 'aero_extrm.yaw')
-        self.connect('airfoil_files', 'aero_extrm.airfoil_files')
+        self.connect('airfoils', 'aero_extrm.airfoils')
         self.connect('nBlades', 'aero_extrm.B')
         self.connect('nSector', 'aero_extrm.nSector')
         self.connect('turbineclass.V_extreme', 'aero_extrm.V_load')
@@ -293,7 +293,7 @@ class RotorSE(Group):
         self.connect('precone', 'aero_extrm_forces.precone')
         self.connect('tilt', 'aero_extrm_forces.tilt')
         self.connect('yaw', 'aero_extrm_forces.yaw')
-        self.connect('airfoil_files', 'aero_extrm_forces.airfoil_files')
+        self.connect('airfoils', 'aero_extrm_forces.airfoils')
         self.connect('nBlades', 'aero_extrm_forces.B')
         self.connect('nSector', 'aero_extrm_forces.nSector')
         self.aero_extrm_forces.Uhub = np.zeros(2)
@@ -315,7 +315,7 @@ class RotorSE(Group):
         self.connect('precone', 'aero_defl_powercurve.precone')
         self.connect('tilt', 'aero_defl_powercurve.tilt')
         self.connect('yaw', 'aero_defl_powercurve.yaw')
-        self.connect('airfoil_files', 'aero_defl_powercurve.airfoil_files')
+        self.connect('airfoils', 'aero_defl_powercurve.airfoils')
         self.connect('nBlades', 'aero_defl_powercurve.B')
         self.connect('nSector', 'aero_defl_powercurve.nSector')
         self.connect('setuppc.Uhub', 'aero_defl_powercurve.V_load')
@@ -532,7 +532,7 @@ class RotorSE(Group):
         self.connect('Rtip', ['aero_0.Rtip', 'aero_120.Rtip', 'aero_240.Rtip'])
         self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
         self.connect('tilt', ['aero_0.tilt', 'aero_120.tilt', 'aero_240.tilt'])
-	self.connect('airfoil_files', ['aero_0.airfoil_files', 'aero_120.airfoil_files', 'aero_240.airfoil_files'])
+	self.connect('airfoils', ['aero_0.airfoils', 'aero_120.airfoils', 'aero_240.airfoils'])
         self.connect('yaw', ['aero_0.yaw', 'aero_120.yaw', 'aero_240.yaw'])
         self.connect('nBlades', ['aero_0.B','aero_120.B', 'aero_240.B'])
         self.connect('nSector', ['aero_0.nSector','aero_120.nSector','aero_240.nSector'])
@@ -581,7 +581,8 @@ class RotorSE(Group):
 
         
 if __name__ == '__main__':
-    myref = DTU10MW() #NREL5MW() 
+    # myref = NREL5MW() 
+    myref = DTU10MW()
 
     rotor = Problem()
     npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
