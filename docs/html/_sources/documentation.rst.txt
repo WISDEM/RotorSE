@@ -7,54 +7,71 @@ The following inputs and outputs are defined for RotorSE:
 
 .. literalinclude:: ../src/rotorse/rotor.py
     :language: python
-    :start-after: RotorSE(Assembly)
-    :end-before: def configure(self)
-    :prepend: class RotorSE(Assembly):
+    :start-after: """rotor model"""
+    :end-before: # --- Rotor Aero & Power ---
 
 
-Referenced RotorAero Modules
-============================
+Referenced Rotor Geometry Modules
+=================================
 
-.. module:: rotorse.rotoraero
-.. class:: VarSpeedMachine
-.. class:: FixedSpeedMachine
-.. class:: RatedConditions
-.. class:: AeroLoads
-.. class:: GeomtrySetupBase
-.. class:: AeroBase
+.. module:: rotorse.rotor_geometry
+.. class:: ReferenceBlade
+.. class:: NREL5MW
+.. class:: DTU10MW
+.. class:: BladeGeometry
+.. class:: Location
+.. class:: TurbineClass
+.. class:: RotorGeometry
+
+Referenced Rotor Aero-Power Modules
+===================================
+
+.. module:: rotorse.rotor_aeropower
 .. class:: DrivetrainLossesBase
-.. class:: PDFBase
-.. class:: CDFBase
-
-Referenced RotorAeroDefaults Modules
-====================================
-
-
-.. module:: rotorse.rotoraerodefaults
-.. class:: GeometrySpline
-.. class:: CCBladeGeometry
-.. class:: CCBlade
+.. class:: SetupRunVarSpeed
+.. class:: RegulatedPowerCurve
+.. class:: AEP
 .. class:: CSMDrivetrain
-.. class:: WeibullCDF
-.. class:: WeibullWithMeanCDF
-.. class:: RayleighCDF
-.. class:: RotorAeroVSVPWithCCBlade
-.. class:: RotorAeroVSFPWithCCBlade
-.. class:: RotorAeroFSVPWithCCBlade
-.. class:: RotorAeroFSFPWithCCBlade
+.. class:: OutputsAero
+.. class:: RotorAeroPower
 
-Referenced Rotor Modules
-====================================
+Referenced Rotor Structure Modules
+==================================
 
-.. module:: rotorse.rotor
+.. module:: rotorse.rotor_structure
 .. class:: BeamPropertiesBase
 .. class:: StrucBase
+.. class:: ResizeCompositeSection
 .. class:: PreCompSections
-.. class:: RotorTS
+.. class:: BladeCurvature
+.. class:: CurveFEM
+.. class:: RotorWithpBEAM
+.. class:: DamageLoads
+.. class:: TotalLoads
+.. class:: TipDeflection
+.. class:: BladeDeflection
+.. class:: RootMoment
+.. class:: MassPropertiesExtremeLoads
+.. class:: GustETM
+.. class:: SetupPCModVarSpeed
+.. class:: ConstraintsStructures
+.. class:: OutputsStructures
+.. class:: RotorStructure
 
+Referenced Rotor Modules
+========================
 
+.. module:: rotorse.rotor
+.. class:: RotorSE
 
+Referenced Examples
+===================
 
-
+.. module:: rotorse.examples.rotorse_example1
+.. class:: RotorSE_Example1
+.. module:: rotorse.examples.rotorse_example2
+.. class:: RotorSE_Example2
+.. module:: rotorse.examples.rotorse_example3
+.. class:: RotorSE_Example3
 
 

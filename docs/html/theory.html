@@ -47,7 +47,7 @@
 <p>Next, the rated speed must be determined.  This is done using an internal 1D root-solver (Brent’s method).  Because we can evaluate the power from a spline, rather than repeatedly running the aerodynamics code, this process is very efficient.  Once the rated speed is determined, the power curve is truncated at its rated power for higher wind speeds.  (Physically this is accomplished through pitch control, generally pitch toward feather, but the actual mechanism is irrelevant for the purposes of this process).  This process also automatically allows for a Region 2.5 through the application of a maximum rotation speed.</p>
 <p>A typical power curve for a variable-speed, variable-pitch turbine is shown below. Region 1 has no power generation as it occurs below the cut-in speed. In Region 2, variable-speed turbines operate at the specified tip-speed ratio until either rated power or the maximum rotation speed is reached. If the maximum rotor speed is reached, a Region 2.5 handles the transition intro Region 3.  Blade pitch is varied in Region 3 so that rated power is maintained in Region 3.</p>
 <div class="figure align-center">
-<a class="reference internal image-reference" href="_images/pc.png"><img alt="_images/pc.png" src="_images/pc.png" style="width: 3.5in;" /></a>
+<a class="reference internal image-reference" href="images/pc.*"><img alt="images/pc.*" src="images/pc.*" style="width: 3.5in;" /></a>
 </div>
 <p>Annual energy production (AEP) can be computed with any arbitrary wind speed distribution, though convenience methods are provided for Rayleigh and Weibull distribution.  Losses caused by wake interference from other turbines in the wind farm and losses caused by electrical grid unavailability are estimated simply through a total loss factor.  The annual energy production (in kWh) is calculated as</p>
 <div class="math notranslate nohighlight">
@@ -187,7 +187,7 @@ k \end{matrix}\right]\end{split}\]</div>
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright 2014, NREL.
-      Last updated on Jun 27, 2018.
+      Last updated on Jul 05, 2018.
       Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.7.5.
     </div>
   </body>

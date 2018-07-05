@@ -12,7 +12,7 @@ RotorSE
 
 .. toctree::
     :numbered:
-    :maxdepth: 2
+    :maxdepth: 4
 
     intro
     installation
