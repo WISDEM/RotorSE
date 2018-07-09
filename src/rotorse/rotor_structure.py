@@ -873,13 +873,13 @@ class TotalLoads(Component):
     def __init__(self, NPTS):
         super(TotalLoads, self).__init__()
         # variables
-        self.add_param('aeroloads_r', units='m', desc='radial positions along blade going toward tip')
-        self.add_param('aeroloads_Px', units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_param('aeroloads_Py', units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_param('aeroloads_Pz', units='N/m', desc='distributed loads in blade-aligned z-direction')
-        self.add_param('aeroloads_Omega', units='rpm', desc='rotor rotation speed')
-        self.add_param('aeroloads_pitch', units='deg', desc='pitch angle')
-        self.add_param('aeroloads_azimuth', units='deg', desc='azimuthal angle')
+        self.add_param('aeroloads_r', val=np.zeros(NPTS+2), units='m', desc='radial positions along blade going toward tip')
+        self.add_param('aeroloads_Px', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('aeroloads_Py', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('aeroloads_Pz', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_param('aeroloads_Omega', val=0.0, units='rpm', desc='rotor rotation speed')
+        self.add_param('aeroloads_pitch', val=0.0, units='deg', desc='pitch angle')
+        self.add_param('aeroloads_azimuth', val=0.0, units='deg', desc='azimuthal angle')
 
         self.add_param('r', val=np.zeros(NPTS), units='m', desc='structural radial locations')
         self.add_param('theta', val=np.zeros(NPTS), units='deg', desc='structural twist')
@@ -2711,22 +2711,6 @@ if __name__ == '__main__':
 
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
-
-    # print rotor['aero_rated.loads_Px']
-    # print rotor['aero_rated.loads_Py']
-    # print rotor['aero_rated.loads_Pz']
-    # print rotor['aero_rated.loads_r']
-
-    # print rotor['aero_extrm.loads_Px']
-    # print rotor['aero_extrm.loads_Py']
-    # print rotor['aero_extrm.loads_Pz']
-    # print rotor['aero_extrm.loads_r']
-
-    print rotor['r_pts']
-    print rotor['curvature.totalCone']
-    print rotor['curvature.z_az']
-    print rotor['curvature.s']
-
     
 
     import matplotlib.pyplot as plt
