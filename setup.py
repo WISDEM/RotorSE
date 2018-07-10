@@ -30,9 +30,20 @@ setup(
     ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2'])],
 )
 
-setup(
-name='curvefem',
-package_dir={'': 'src/rotorse'},
-ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], extra_compile_args=['-O2'],
+if platform.system() == 'Windows':
+		setup( 
+		    name='curvefem', 
+		    package_dir={'': 'src/rotorse'}, 
+		    ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], 
+		        extra_compile_args=['-O2'], 
+		        library_dirs=['C:/lapack'], 
+		        libraries=['lapack'] 
+		        )], 
+		) 
+else:
+    setup(
+        name='curvefem',
+        package_dir={'': 'src/rotorse'},
+        ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], extra_compile_args=['-O2'],
                                libraries=['lapack'])])
 
