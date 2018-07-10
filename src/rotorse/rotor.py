@@ -20,7 +20,7 @@ from ccblade.ccblade_component import CCBladeGeometry, CCBladePower, CCBladeLoad
 from commonse.distribution import RayleighCDF, WeibullWithMeanCDF
 from commonse.environment import PowerWind
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection
-from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, NINPUT
+from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, TUM3_35MW, NINPUT
 
 from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, DRIVETRAIN_TYPE
 
@@ -582,7 +582,8 @@ class RotorSE(Group):
         
 if __name__ == '__main__':
     # myref = NREL5MW() 
-    myref = DTU10MW()
+    # myref = DTU10MW()
+    myref = TUM3_35MW()
 
     rotor = Problem()
     npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at

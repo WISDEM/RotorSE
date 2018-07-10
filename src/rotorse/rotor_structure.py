@@ -8,7 +8,7 @@ from commonse.csystem import DirectionVector
 from commonse.utilities import trapz_deriv, interp_with_deriv
 from precomp import _precomp
 from akima import Akima, akima_interp_with_derivs
-from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, NINPUT, TURBULENCE_CLASS
+from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, TUM3_35MW, NINPUT, TURBULENCE_CLASS
 import _pBEAM
 import _curvefem
 # import ccblade._bem as _bem  # TODO: move to rotoraero
@@ -2608,8 +2608,9 @@ class RotorStructure(Group):
         self.connect('aero_rated.Omega_load', 'Omega')
         
 if __name__ == '__main__':
-    myref = NREL5MW()
+    # myref = NREL5MW()
     # myref = DTU10MW()
+    myref = TUM3_35MW()
 
     rotor = Problem()
     rotor.root = RotorStructure(myref)
