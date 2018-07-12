@@ -10,7 +10,6 @@ from precomp import _precomp
 from akima import Akima, akima_interp_with_derivs
 from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, TUM3_35MW, NINPUT, TURBULENCE_CLASS
 import _pBEAM
-import _curvefem
 # import ccblade._bem as _bem  # TODO: move to rotoraero
 import _bem  # TODO: move to rotoraero
 
@@ -556,16 +555,8 @@ class CurveFEM(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        r = params['beam:z']
-
-        rhub = r[0]
-        bladeLength = r[-1] - r[0]
-        bladeFrac = (r - rhub) / bladeLength
-
-        freq = _curvefem.frequencies(params['Omega'], bladeLength, rhub, bladeFrac, params['theta'],
-                                     params['beam:rhoA'], params['beam:EIxx'], params['beam:EIyy'], params['beam:GJ'], params['beam:EA'], params['beam:rhoJ'],
-                                     params['precurve'], params['presweep'])
-
+        mycurve = _pBEAM.CurveFEM(params['Omega'], params['theta'], params['beam:z'], params['precurve'], params['presweep'], params['beam:rhoA'], True)
+        freq = mycurve.frequencies(params['beam:EA'], params['beam:EIxx'], params['beam:EIyy'], params['beam:GJ'], params['beam:rhoJ'])
         unknowns['freq'] = freq[:NFREQ]
 
 
@@ -2608,9 +2599,9 @@ class RotorStructure(Group):
         self.connect('aero_rated.Omega_load', 'Omega')
         
 if __name__ == '__main__':
-    # myref = NREL5MW()
+    myref = NREL5MW()
     # myref = DTU10MW()
-    myref = TUM3_35MW()
+    #myref = TUM3_35MW()
 
     rotor = Problem()
     rotor.root = RotorStructure(myref)
