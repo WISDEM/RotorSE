@@ -4,7 +4,7 @@ Composite laminae lay-up inside the blade section
 5                N_scts(1):  no of sectors on top surface
 
 normalized chord location of  nodes defining airfoil sectors boundaries (xsec_node)
-0.000000 0.019778 0.209460 0.629388 0.940270 1.000000
+0.000000 0.019565 0.209460 0.629388 0.940508 1.000000
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
 1 2
@@ -58,7 +58,7 @@ lam_num  N_plies    Tply         Tht_lam            Mat_id
 5                N_scts(1):  no of sectors on top surface
 
 normalized chord location of  nodes defining airfoil sectors boundaries (xsec_node)
-0.000000 0.019778 0.209460 0.629388 0.940270 1.000000
+0.000000 0.019565 0.209460 0.629388 0.940508 1.000000
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
 1 2

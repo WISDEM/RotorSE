@@ -4,16 +4,18 @@ Composite laminae lay-up inside the blade section
 5                N_scts(1):  no of sectors on top surface
 
 normalized chord location of  nodes defining airfoil sectors boundaries (xsec_node)
-0.000000 0.001688 0.205163 0.629981 0.994772 1.000000
+0.000000 0.019512 0.205163 0.629981 0.940565 1.000000
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
-1 2
+1 4
 
 lamina    num of  thickness   fibers_direction  composite_material ID
 number    plies   of ply (m)       (deg)               (-)
 lam_num  N_plies    Tply         Tht_lam            Mat_id
-1 1 1.078519e-03 0.0 3
+1 1 5.889103e-04 0.0 3
 2 1 1.595604e-04 0.0 5
+3 1 6.013821e-03 0.0 4
+4 1 4.895709e-04 0.0 3
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
 2 3
@@ -45,29 +47,33 @@ lam_num  N_plies    Tply         Tht_lam            Mat_id
 3 1 5.392595e-04 0.0 3
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
-5 2
+5 4
 
 lamina    num of  thickness   fibers_direction  composite_material ID
 number    plies   of ply (m)       (deg)               (-)
 lam_num  N_plies    Tply         Tht_lam            Mat_id
-1 1 1.078519e-03 0.0 3
+1 1 5.889103e-04 0.0 3
 2 1 1.540381e-04 0.0 5
+3 1 1.211480e-02 0.0 4
+4 1 4.895709e-04 0.0 3
 
 
 *************************** BOTTOM SURFACE ****************************
 5                N_scts(1):  no of sectors on top surface
 
 normalized chord location of  nodes defining airfoil sectors boundaries (xsec_node)
-0.000000 0.001688 0.205163 0.629981 0.994772 1.000000
+0.000000 0.019512 0.205163 0.629981 0.940565 1.000000
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
-1 2
+1 4
 
 lamina    num of  thickness   fibers_direction  composite_material ID
 number    plies   of ply (m)       (deg)               (-)
 lam_num  N_plies    Tply         Tht_lam            Mat_id
-1 1 1.078519e-03 0.0 3
+1 1 5.889103e-04 0.0 3
 2 1 1.595604e-04 0.0 5
+3 1 6.013821e-03 0.0 4
+4 1 4.895709e-04 0.0 3
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
 2 3
@@ -99,13 +105,15 @@ lam_num  N_plies    Tply         Tht_lam            Mat_id
 3 1 5.392595e-04 0.0 3
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
-5 2
+5 4
 
 lamina    num of  thickness   fibers_direction  composite_material ID
 number    plies   of ply (m)       (deg)               (-)
 lam_num  N_plies    Tply         Tht_lam            Mat_id
-1 1 1.078519e-03 0.0 3
+1 1 5.889103e-04 0.0 3
 2 1 1.540381e-04 0.0 5
+3 1 6.649872e-03 0.0 4
+4 1 4.895709e-04 0.0 3
 
 
 **********************************************************************
@@ -132,10 +140,12 @@ wlam_num N_Plies   w_tply       Tht_Wlam            Wmat_Id
 3 1 1.232403e-03 0.0 2
 
 web_num    no of laminae (N_weblams)    Name of stack:
-3 2
+3 4
 
 lamina    num of  thickness   fibers_direction  composite_material ID
 number    plies   of ply (m)       (deg)               (-)
 wlam_num N_Plies   w_tply       Tht_Wlam            Wmat_Id
-1 1 1.078519e-03 0.0 3
+1 1 5.889103e-04 0.0 3
 2 1 1.540381e-04 0.0 5
+3 1 1.211480e-02 0.0 4
+4 1 4.895709e-04 0.0 3

@@ -1,10 +1,10 @@
 Composite laminae lay-up inside the blade section
 
 *************************** TOP SURFACE ****************************
-2                N_scts(1):  no of sectors on top surface
+5                N_scts(1):  no of sectors on top surface
 
 normalized chord location of  nodes defining airfoil sectors boundaries (xsec_node)
-0.000000 0.492841 1.000000
+0.000000 0.026377 0.250559 0.485853 0.860493 1.000000
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
 1 2
@@ -17,6 +17,33 @@ lam_num  N_plies    Tply         Tht_lam            Mat_id
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
 2 2
+
+lamina    num of  thickness   fibers_direction  composite_material ID
+number    plies   of ply (m)       (deg)               (-)
+lam_num  N_plies    Tply         Tht_lam            Mat_id
+1 1 2.739765e-02 0.0 3
+2 1 2.739765e-02 0.0 3
+...........................................................................
+Sect_num    no of laminae (N_laminas)          STACK:
+3 2
+
+lamina    num of  thickness   fibers_direction  composite_material ID
+number    plies   of ply (m)       (deg)               (-)
+lam_num  N_plies    Tply         Tht_lam            Mat_id
+1 1 2.739765e-02 0.0 3
+2 1 2.739765e-02 0.0 3
+...........................................................................
+Sect_num    no of laminae (N_laminas)          STACK:
+4 2
+
+lamina    num of  thickness   fibers_direction  composite_material ID
+number    plies   of ply (m)       (deg)               (-)
+lam_num  N_plies    Tply         Tht_lam            Mat_id
+1 1 2.739765e-02 0.0 3
+2 1 2.739765e-02 0.0 3
+...........................................................................
+Sect_num    no of laminae (N_laminas)          STACK:
+5 2
 
 lamina    num of  thickness   fibers_direction  composite_material ID
 number    plies   of ply (m)       (deg)               (-)
@@ -26,10 +53,10 @@ lam_num  N_plies    Tply         Tht_lam            Mat_id
 
 
 *************************** BOTTOM SURFACE ****************************
-2                N_scts(1):  no of sectors on top surface
+5                N_scts(1):  no of sectors on top surface
 
 normalized chord location of  nodes defining airfoil sectors boundaries (xsec_node)
--0.000000 0.492841 1.000000
+0.000000 0.026377 0.250559 0.485853 0.860493 1.000000
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
 1 2
@@ -42,6 +69,33 @@ lam_num  N_plies    Tply         Tht_lam            Mat_id
 ...........................................................................
 Sect_num    no of laminae (N_laminas)          STACK:
 2 2
+
+lamina    num of  thickness   fibers_direction  composite_material ID
+number    plies   of ply (m)       (deg)               (-)
+lam_num  N_plies    Tply         Tht_lam            Mat_id
+1 1 2.739765e-02 0.0 3
+2 1 2.739765e-02 0.0 3
+...........................................................................
+Sect_num    no of laminae (N_laminas)          STACK:
+3 2
+
+lamina    num of  thickness   fibers_direction  composite_material ID
+number    plies   of ply (m)       (deg)               (-)
+lam_num  N_plies    Tply         Tht_lam            Mat_id
+1 1 2.739765e-02 0.0 3
+2 1 2.739765e-02 0.0 3
+...........................................................................
+Sect_num    no of laminae (N_laminas)          STACK:
+4 2
+
+lamina    num of  thickness   fibers_direction  composite_material ID
+number    plies   of ply (m)       (deg)               (-)
+lam_num  N_plies    Tply         Tht_lam            Mat_id
+1 1 2.739765e-02 0.0 3
+2 1 2.739765e-02 0.0 3
+...........................................................................
+Sect_num    no of laminae (N_laminas)          STACK:
+5 2
 
 lamina    num of  thickness   fibers_direction  composite_material ID
 number    plies   of ply (m)       (deg)               (-)
@@ -54,9 +108,10 @@ lam_num  N_plies    Tply         Tht_lam            Mat_id
 Laminae schedule for webs (input required only if webs exist at this section):
 
 web_num    no of laminae (N_weblams)    Name of stack:
-1 1
+1 2
 
 lamina    num of  thickness   fibers_direction  composite_material ID
 number    plies   of ply (m)       (deg)               (-)
 wlam_num N_Plies   w_tply       Tht_Wlam            Wmat_Id
-1 1 5.479530e-02 0.0 3
+1 1 2.739765e-02 0.0 3
+2 1 2.739765e-02 0.0 3
