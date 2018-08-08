@@ -25,6 +25,11 @@ def gen_files(nom_wnd_file, rand_seeds, mws, DLC_cases,
                 # create name of input file
                 inp_file_name = r'\dlc_{0}_seed{1}_mws{2}.inp'.format(DLC_name[k],i,int(mws[j]))
 
+                if os.path.isdir(turbsim_dir+inp_dir):
+                    pass
+                else:
+                    os.mkdir(turbsim_dir+inp_dir)
+
                 if os.path.isfile(turbsim_dir+inp_dir+inp_file_name):
                     print('file already exists')
                 else:
@@ -107,18 +112,19 @@ if __name__ == "__main__":
 
     turbsim_exe = turbsim_dir + r'\TurbSim.exe'
 
-    # input file and .wnd file directories
-    inp_dir = r'\input_dir'
-    wnd_dir = r'\wnd_dir'
-
     # turb_char
     turb_char = 'B'
 
     # turb_class
     turb_class = '1-ED3' # I correlates to 1-EDx, where x could be 1,2,3
+    turb_class_num = '1'
 
     # ref_ht
     ref_ht = 90.0 # m
 
+    # input file and .wnd file directories
+    inp_dir = r'\input_dir' + '_' + turb_char + turb_class_num
+    wnd_dir = r'\wnd_dir' + '_' + turb_char + turb_class_num
+
     gen_files(nom_wnd_file, rand_seeds, mws, DLC_cases,
-              DLC_name, turbsim_dir, turbsim_exe, inp_dir, wnd_dir, turb_char, turb_classj, ref_ht)
+              DLC_name, turbsim_dir, turbsim_exe, inp_dir, wnd_dir, turb_char, turb_class, ref_ht)

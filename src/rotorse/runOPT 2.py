@@ -26,9 +26,9 @@ FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = True
+FASTinfo['calc_fixed_DEMs'] = False
 FASTinfo['calc_fixed_DEMs_seq'] = False
-FASTinfo['opt_with_fixed_DEMs'] = False
+FASTinfo['opt_with_fixed_DEMs'] = True
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
 FASTinfo['calc_surr_model'] = False
 FASTinfo['opt_with_surr_model'] = False
@@ -37,49 +37,38 @@ FASTinfo['opt_with_surr_model'] = False
 FASTinfo['turbulence_class'] = 'B'
 FASTinfo['turbulence_intensity'] = 0.14
 FASTinfo['turbine_class'] = 'I'
+
+# FASTinfo['num_pts'] = 800
+# FASTinfo['num_pts'] = 200
 FASTinfo['num_pts'] = 1000
+# FASTinfo['num_pts'] = 997
+# FASTinfo['num_pts'] = 1997
+# FASTinfo['num_pts'] = 2997
+
+# description = 'turb_outputs'
+
+description = 'make_DEMx_plot'
+
+# description = 'make_plots'
+
+# description = 'val_NREL_5MW'
+
+# description = 'val_075MW_1'
+# description = 'val_075MW_2'
+# description = 'val_075MW_3'
+
+# description = 'test_50'
+# description = 'test_200'
 
 # description = 'test_075MW'
 # description = 'test_15MW'
 # description = 'test_3MW'
-description = 'test_5MW'
+# description = 'test_5MW'
 
-FASTinfo['FAST_template_name'] = 'WP_5.0MW'
+# FASTinfo['FAST_template_name'] = 'WP_5.0MW'
 # FASTinfo['FAST_template_name'] = 'WP_3.0MW'
 # FASTinfo['FAST_template_name'] = 'WP_1.5MW'
 # FASTinfo['FAST_template_name'] = 'WP_0.75MW'
-
-# description = 'sm3_1000_A'
-# description = 'sm3_1000_B'
-
-# description = 'nom_1000_A'
-
-# description = 'sm_10_A'
-
-# description = 'sm_100_A'
-# description = 'sm_500_A'
-# description = 'sm_1000_A'
-# description = 'sm_2000_A'
-#
-# description = 'sm_100_B'
-# description = 'sm_500_B'
-# description = 'sm_1000_B'
-# description = 'sm_2000_B'
-
-# description = 'test_tum'
-
-# description = 'calc_fixedDEMs'
-
-# description = 'test_batch_1'
-# description = 'test_ batch'
-
-# description = 'test_fixedDEMs'
-
-# description = 'test_100'
-# description = 'test_500'
-# description = 'test_1000'
-# description = 'test_2000'
-
 
 print('Run ' + description + ' is starting...')
 
@@ -121,6 +110,8 @@ else:
 # === Setup design variables and objective === #
 rotor.driver.add_objective('obj')
 
+
+
 if FASTinfo['Use_FAST_sm']:
 
     FASTinfo, rotor = define_des_var_domains(FASTinfo, rotor)
@@ -145,10 +136,10 @@ rotor.driver.add_constraint('obj', lower=5)  # To insure that COE does not go ne
 rotor.driver.add_constraint('con_power', lower=0.0)  #, scaler=1e-6)
 rotor.driver.add_constraint('con_thrust', upper=0.73)  # Constrain to scaled initial thrust so that other components of turbine remain constant
 
-rotor.driver.add_constraint('con_damageU_spar', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
-rotor.driver.add_constraint('con_damageL_spar', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
-rotor.driver.add_constraint('con_damageU_te', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
-rotor.driver.add_constraint('con_damageL_te', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
+# rotor.driver.add_constraint('con_damageU_spar', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
+# rotor.driver.add_constraint('con_damageL_spar', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
+# rotor.driver.add_constraint('con_damageU_te', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
+# rotor.driver.add_constraint('con_damageL_te', lower=-1.0, upper=1.0)  # damage (fatigue) constraint
 
 if FASTinfo['use_tip_def_cons']:
     rotor.driver.add_constraint('con_max_tip_def', lower=-10.5, upper=10.5)  # tip deflection constraint
@@ -300,7 +291,7 @@ else:
 
     else:
         # not using FAST in the loop, so either using surrogate model or just RotorSE
-        rotor = initialize_rotor_dv(rotor)
+        rotor = initialize_rotor_dv(FASTinfo, rotor)
 
     # === blade grid ===
     rotor['initial_aero_grid'] = np.array([0.02222276, 0.06666667, 0.11111057, 0.16666667, 0.23333333, 0.3, 0.36666667,

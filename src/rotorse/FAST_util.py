@@ -16,8 +16,8 @@ from akima import Akima
 def setupFAST_checks(FASTinfo):
 
     # === check splines / results === #
-    # if any are set as true, optimization will stop
-    FASTinfo['check_results'] = False  # Opt. stops if set as True
+    # if any are set as true, False will stop
+    FASTinfo['check_results'] = True  # Opt. stops if set as True
     FASTinfo['check_sgp_spline'] = False  # Opt. stops if set as True
     FASTinfo['check_stif_spline'] = False  # Opt. stops if set as True
     FASTinfo['check_peaks'] = False  # Opt. stops if set as True
@@ -33,13 +33,15 @@ def setupFAST_checks(FASTinfo):
     FASTinfo['do_cv_DEM'] = False  # cross validation of surrogate model for DEMs
     FASTinfo['do_cv_Load'] = False  # cross validation of surrogate model for extreme loads
     FASTinfo['do_cv_def'] = False  # cross validation of surrogate model for tip deflection
-    FASTinfo['check_sm_accuracy'] = False # checks accuracy of sm for initial design
+    FASTinfo['check_sm_accuracy'] = True # checks accuracy of sm for initial design
 
     FASTinfo['check_point_dist'] = False  # plot distribution of points (works best in 2D)
     FASTinfo['check_cv'] = False # works best in 2D
     FASTinfo['check_kfold'] = False # plot how folds are distributed among training points
 
     FASTinfo['check_var_domains'] = False # plots
+
+    FASTinfo['make_max_DEM_files'] = False # makes .txt files
 
     return FASTinfo
 
@@ -61,7 +63,7 @@ def setupFAST(FASTinfo, description):
 
     # === constraint groups === #
     FASTinfo['use_fatigue_cons'] = True
-    FASTinfo['use_struc_cons'] = False
+    FASTinfo['use_ext_cons'] = True
     FASTinfo['use_tip_def_cons'] = False
 
     #=== ===#
@@ -71,20 +73,18 @@ def setupFAST(FASTinfo, description):
     # === Platform (Local or SC) - unique to each user === #
 
     # path to RotorSE_FAST directory
-    FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
-    # FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
+    # FASTinfo['path'] = '/fslhome/ingerbry/GradPrograms/'
+    FASTinfo['path'] = '/Users/bingersoll/Dropbox/GradPrograms/'
 
     # === dir_saved_plots === #
-    FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
-    # FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
+    # FASTinfo['dir_saved_plots'] = '/fslhome/ingerbry/GradPrograms/opt_plots'
+    FASTinfo['dir_saved_plots'] = '/Users/bingersoll/Desktop'
 
     # === Optimization and Template Directories === #
     FASTinfo['opt_dir'] = ''.join((FASTinfo['path'], 'RotorSE_FAST/' \
         'RotorSE/src/rotorse/FAST_Files/Opt_Files/', FASTinfo['description']))
 
     if os.path.isdir(FASTinfo['opt_dir']):
-        # placeholder
-        # print('optimization directory already created')
         pass
     else:
         os.mkdir(FASTinfo['opt_dir'])
@@ -92,12 +92,7 @@ def setupFAST(FASTinfo, description):
     # === set FAST template files === #
 
     # NREL5MW, WP_5.0MW, WP_3.0MW, WP_1.5MW, W_P0.75MW
-
-    # FASTinfo['FAST_template_name'] = 'NREL5MW'
-    # FASTinfo['FAST_template_name'] = 'WP_5.0MW'
-    # FASTinfo['FAST_template_name'] = 'WP_3.0MW'
-    # FASTinfo['FAST_template_name'] = 'WP_1.5MW'
-    # FASTinfo['FAST_template_name'] = 'WP_0.75MW'
+    FASTinfo['FAST_template_name'] = 'WP_5.0MW'
 
     FASTinfo['template_dir'] = FASTinfo['path'] + 'RotorSE_FAST/RotorSE/src/rotorse/' \
                             'FAST_Files/FAST_File_templates/' + FASTinfo['FAST_template_name'] + '/'
@@ -105,7 +100,7 @@ def setupFAST(FASTinfo, description):
     # === get FAST executable === #
     FASTinfo = get_FAST_executable(FASTinfo)
 
-    # === get blade length (necessary for nondimensionalization of chord) === #
+    # === get blade length === #
     FASTinfo = get_bladelength(FASTinfo)
 
     # === options if previous optimizations have been performed === #
@@ -133,25 +128,24 @@ def setupFAST(FASTinfo, description):
 
     if FASTinfo['train_sm']:
 
-        if FASTinfo['training_point_dist'] == 'linear':
-            FASTinfo, rotor = create_surr_model_linear_options(FASTinfo, rotor)
-        elif FASTinfo['training_point_dist'] == 'lhs':
+        if FASTinfo['training_point_dist'] == 'lhs':
             FASTinfo, rotor = create_surr_model_lhs_options(FASTinfo, rotor)
         else:
             raise Exception('Training point distribution not specified correctly.')
+
     # === ===#
 
     # === Add FAST outputs === #
     FASTinfo = add_outputs(FASTinfo)
 
     # === FAST Run Time === #
-    FASTinfo['Tmax_turb'] = 100.0  # 640.0
+    FASTinfo['Tmax_turb'] = 615.0  # 640.0
     FASTinfo['Tmax_nonturb'] = 100.0  # 100.0
     FASTinfo['dT'] = 0.0125
 
     # remove artificially noisy data
-    # obviously, must be greater than Tmax_turb, Tmax_nonturb
-    FASTinfo['rm_time'] = 40.0   # 40.0
+    # must be greater than Tmax_turb, Tmax_nonturb
+    FASTinfo['rm_time'] = 15.0 # 40.0
 
     FASTinfo['turb_sf'] = 1.0
 
@@ -191,8 +185,6 @@ def setupFAST(FASTinfo, description):
         FASTinfo['BldGagNd'].append([1, 3, 5, 7, 9, 12, 17])  # strain gage positions
         FASTinfo['BldGagNd_config'].append([1, 3, 5, 7, 9, 12, 17])  # strain gage positions
 
-    # FASTinfo['spec_sgp_dir'] = FASTinfo['opt_dir'] + '/' + 'sgp' + str(FASTinfo['sgp'])
-
     # === specify which DLCs will be included (for calc_fixed_DEMs === #
     FASTinfo = specify_DLCs(FASTinfo)
 
@@ -215,6 +207,10 @@ def setupFAST(FASTinfo, description):
 
             FASTinfo['caseids'].append("WNDfile{0}".format(cur_wnd_num) + '_sgp' + str(FASTinfo['sgp'][j]))
 
+
+    # === distribution type used for extreme moment extrapolation === #
+    FASTinfo['eme_fit'] = 'gaussian'
+
     return FASTinfo, rotor
 
 # ========================================================================================================= #
@@ -233,7 +229,7 @@ def setupFAST_other(FASTinfo):
     FASTinfo['calculation_type'] = 'sequential'
 
     # save rated torque
-    FASTinfo['save_rated_torque_&_thrust'] = False
+    FASTinfo['save_rated_torque_&_thrust'] = True
 
     # use this when training points for surrogate model
     FASTinfo['remove_sm_dir'] = False
@@ -243,7 +239,7 @@ def setupFAST_other(FASTinfo):
     # run template files - no connection with RotorSE - used to train surrogate model using WindPact turbine designs
     FASTinfo['run_template_files'] = False
     # change just chord, twist distributions
-    FASTinfo['set_chord_twist'] = True
+    FASTinfo['set_chord_twist'] = False
 
     return FASTinfo
 
@@ -270,27 +266,19 @@ def specify_DLCs(FASTinfo):
     if not FASTinfo['use_DLC_list']:
 
         # === for optimization === #
-        # DLC_List = ['DLC_1_2', 'DLC_1_3', 'DLC_1_4','DLC_1_5', 'DLC_6_1', 'DLC_6_3']
+        DLC_List = ['DLC_1_2', 'DLC_1_3', 'DLC_1_4','DLC_1_5', 'DLC_6_1', 'DLC_6_3']
         # DLC_List = ['DLC_0_0', 'DLC_1_2', 'DLC_1_3', 'DLC_1_4',' DLC_1_5', 'DLC_6_1', 'DLC_6_3']
 
         # === for testing === #
 
-        # nominal wind file
+        # rated speed wind file
         # DLC_List = ['DLC_0_0']
 
         # non turbulent DLCs
         # DLC_List = ['DLC_1_4','DLC_1_5','DLC_6_1','DLC_6_3']
 
-        # non turbulent extreme events
-        # DLC_List = ['DLC_6_1', 'DLC_6_3']
-        # DLC_List = ['DLC_6_1']
-
         # turbulent DLCs
-        DLC_List = ['DLC_1_2','DLC_1_3']
-        # DLC_List=['DLC_1_3']
-
-        # DLC_List = ['DLC_0_0', 'DLC_6_1', 'DLC_6_3']
-        # DLC_List = ['DLC_1_2', 'DLC_6_3']
+        # DLC_List = ['DLC_1_2','DLC_1_3']
 
     else:
         DLC_List_File = open(FASTinfo['DLC_list_loc'], 'r')
@@ -303,12 +291,10 @@ def specify_DLCs(FASTinfo):
 
     # === turbulent wind file parameters === #
     #  random seeds (np.linspace(1,6,6) is pre-calculated)
-    # FASTinfo['rand_seeds'] = np.linspace(1, 1, 1)
     FASTinfo['rand_seeds'] = np.linspace(1, 6, 6)
 
     #  mean wind speeds (np.linspace(5,23,10) is pre-calculated)
-    FASTinfo['mws'] = np.linspace(11, 11, 1)
-    # FASTinfo['mws'] = np.linspace(5, 23, 10)
+    FASTinfo['mws'] = np.linspace(5, 23, 10)
 
     # === create list of .wnd files === #
     # .wnd files list
@@ -346,8 +332,15 @@ def specify_DLCs(FASTinfo):
 def choose_wnd_dir(FASTinfo):
 
     # === turbulence/turbine class === #
-    # FASTinfo['turbulence_class'] = 'A'
-    # FASTinfo['turbine_class'] = 'I'
+    FASTinfo['turbulence_class'] = 'B'
+    FASTinfo['turbine_class'] = 'I'
+
+    if FASTinfo['turbulence_class'] == 'A':
+        FASTinfo['turbulence_intensity'] = 0.12
+    if FASTinfo['turbulence_class'] == 'B':
+        FASTinfo['turbulence_intensity'] = 0.14
+    if FASTinfo['turbulence_class'] == 'C':
+        FASTinfo['turbulence_intensity'] = 0.16
 
     # === turbulent, nonturbulent directories === #
     FASTinfo['master_turb_wnd_dir'] = 'RotorSE_FAST/WND_Files/turb_wnd_dir_' \
@@ -364,6 +357,7 @@ def choose_wnd_dir(FASTinfo):
             training_point_num = 0
 
         new_wnd_dir = 'RotorSE_FAST/WND_Files/training_point_' + str(training_point_num)
+
         # create new wind directories if training points for surrogate model
         if not os.path.isdir(FASTinfo['path'] + new_wnd_dir):
             os.mkdir(FASTinfo['path'] + new_wnd_dir)
@@ -438,8 +432,7 @@ def choose_wnd_file(FASTinfo):
 def kfold_params(FASTinfo):
 
     # number of folds
-    # FASTinfo['num_folds'] = 5
-    FASTinfo['num_folds'] = 2
+    FASTinfo['num_folds'] = 5
 
     # check that num_pts/num_folds doesn't have a remainder (is divisible)
     if (FASTinfo['num_pts'] % FASTinfo['num_folds']) > 0:
@@ -484,9 +477,6 @@ def kfold_params(FASTinfo):
     for i in range(FASTinfo['num_folds']):
         FASTinfo['kfolds'].append(shuffled_list[i*num_pts_in_grp:(i+1)*num_pts_in_grp])
 
-    # check
-    # print(num_pts_list)
-    # print(random.sample(num_pts_list, len(num_pts_list)))
 
     return FASTinfo
 
@@ -532,7 +522,6 @@ def plot_kfolds(FASTinfo):
 
     plt.xlabel('1st Chord Distribution Control Point (m)')
     plt.ylabel('2nd Chord Distribution Control Point (m)')
-    # plt.title('K-Fold Example')
     plt.title('Cross Validation Example')
     plt.legend()
 
@@ -646,18 +635,15 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
         rotor_test['rotor_desvar'+str(i)] = []
         rotor_test['rotor_desvar_strings'+str(i)] = []
 
-    # rotor_desvar0, rotor_desvar1, rotor_desvar2, rotor_desvar3, rotor_desvar4 = [], [], [], [], []
-
     file_name = FASTinfo['prev_opt_dir'] + '/' + 'opt_results.txt'
 
     fp = open(file_name)
     line = fp.readlines()
 
     for i in range(0, 5):
-        # globals()['desvar%s' % i] = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[i])
+
         rotor_test['rotor_desvar_strings' + str(i)] = re.findall("[-+]?\d+[\.]?\d*[eE]?[-+]?\d*", line[i])
 
-        # globals()['rotor_desvar%s' % i] = np.zeros(len(globals()['desvar%s' % i]))
         rotor_test['rotor_desvar' + str(i)] = np.zeros(len(rotor_test['rotor_desvar_strings'+str(i)]))
         for j in range(0, len(rotor_test['rotor_desvar' + str(i)])):
             rotor_test['rotor_desvar' + str(i)][j] = float(rotor_test['rotor_desvar_strings'+str(i)][j])
@@ -676,23 +662,17 @@ def setup_FAST_seq_run_des_var(rotor, FASTinfo):
 def create_surr_model_params(FASTinfo):
 
     # total number of points (lhs)
-    # FASTinfo['num_pts'] = 500
-    # FASTinfo['num_pts'] = 100
+    FASTinfo['num_pts'] = 1000
 
     # approximation model
-    # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK
-    # FASTinfo['approximation_model'] = 'least_squares'
-    FASTinfo['approximation_model'] = 'second_order_poly'
-    # FASTinfo['approximation_model'] = 'kriging'
-    # FASTinfo['approximation_model'] = 'KPLS'
-    # FASTinfo['approximation_model'] = 'KPLSK'
+    # implemented options - second_order_poly, least_squares, kriging, KPLS, KPLSK, RBF (radial basis functions)
+    FASTinfo['approximation_model'] = 'RBF'
 
-    # initial hyperparameter value (kriging, KPLS, KPLSK only use)
+    # initial hyper-parameter value (kriging, KPLS, KPLSK only use)
     FASTinfo['theta0_val'] = [1e-2]
 
     # training point distribution
     FASTinfo['training_point_dist'] = 'lhs'
-    # FASTinfo['training_point_dist'] = 'linear'
 
     if FASTinfo['training_point_dist'] == 'lhs':
 
@@ -734,113 +714,113 @@ def create_surr_model_params(FASTinfo):
 # ========================================================================================================= #
 
 # full factorial data choice
-def create_surr_model_linear_options(FASTinfo, rotor):
-
-    # how many different points will be used (linear)
-    FASTinfo['sm_var_max'] = [[10], [10]]
-
-
-    var_index = []
-    for i in range(0, len(FASTinfo['sm_var_max'])):
-        for j in range(0, len(FASTinfo['sm_var_max'][i])):
-            var_index.append(i)
-
-    FASTinfo['var_index'] = var_index
-
-    # which specific points will be used for this run
-    # probably argv variables from command line
-    # FASTinfo['sm_var_spec'] = [[4], [2,2,2,2]]
-    # FASTinfo['sm_var_spec'] = [[2], [1,1,1,1]]
-    # FASTinfo['sm_var_spec'] = [[2]]
-
-    # create options for which points are being used for dist. variables
-    # how many total for each set of design variables
-
-    # try:
-    #     FASTinfo['sm_var_spec'] = []
-    #     for i in range(0, len(FASTinfo['sm_var_names'])):
-    #         FASTinfo['sm_var_spec'].append([])
-    #
-    #     for i in range(1, int(len(sys.argv))):
-    #         FASTinfo['sm_var_spec'][var_index[i-1]].append(int(sys.argv[i]))
-    # except:
-        # raise Exception('A system argument is needed to calculate training points for the surrogate model.')
-    FASTinfo['sm_var_spec'] = [[0], [0]]
-
-    # print(FASTinfo['sm_var_spec'])
-    # quit()
-
-    # min, max values of design variables
-    FASTinfo['sm_var_range'] = [[0.1, 0.5], [1.3, 5.3], [-10.0, 30.0], [0.005, 0.2], [0.005, 0.2]]
-
-    # === initialize design variable values === #
-    FASTinfo = initialize_dv(FASTinfo)
-
-    FASTinfo['var_range'] = []
-    # initialize rotor design variables
-    for i in range(0, len(FASTinfo['sm_var_names'])):
-
-        # create var_range
-        if FASTinfo['sm_var_names'][i] == 'r_max_chord':
-            var_range = FASTinfo['sm_var_range'][0]
-        elif FASTinfo['sm_var_names'][i] == 'chord_sub':
-            var_range = FASTinfo['sm_var_range'][1]
-        elif FASTinfo['sm_var_names'][i] == 'theta_sub':
-            var_range = FASTinfo['sm_var_range'][2]
-        elif FASTinfo['sm_var_names'][i] == 'sparT':
-            var_range = FASTinfo['sm_var_range'][3]
-        elif FASTinfo['sm_var_names'][i] == 'teT':
-            var_range = FASTinfo['sm_var_range'][4]
-        else:
-            Exception('A surrogate model variable was listed that is not a design variable.')
-
-
-        for j in range(0, len(FASTinfo['sm_var_max'][i])):
-
-            index = FASTinfo['sm_var_index'][i][j]
-
-            sm_range = np.linspace(var_range[0], var_range[1], FASTinfo['sm_var_max'][i][j])
-
-            FASTinfo['var_range'].append(sm_range)
-
-            if hasattr(FASTinfo[FASTinfo['sm_var_names'][i]+'_init'], '__len__'):
-
-                print(i, j, index)
-
-                FASTinfo[FASTinfo['sm_var_names'][i]+'_init'][index] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
-
-            else:
-
-                FASTinfo[FASTinfo['sm_var_names'][i] + '_init'] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
-
-    # set design variables in rotor dictionary
-
-    if FASTinfo['check_point_dist']:
-
-        plt.figure()
-
-        plt.title('Linear Sampling Example')
-        # plt.xlabel(FASTinfo['sm_var_names'][0])
-        # plt.ylabel(FASTinfo['sm_var_names'][1])
-        plt.xlabel('1st Chord Distribution Control Point (m)')
-        plt.ylabel('2nd Chord Distribution Control Point (m)')
-
-
-        # plt.xlim([0.9*min(FASTinfo['var_range'][0]), 1.1*max(FASTinfo['var_range'][0])])
-        # plt.ylim([0.9*min(FASTinfo['var_range'][1]), 1.1*max(FASTinfo['var_range'][1])])
-
-        for i in range(0, FASTinfo['sm_var_max'][0][0]):
-            for j in range(0, FASTinfo['sm_var_max'][1][0]):
-                # plt.plot( FASTinfo['var_range'][0][i], FASTinfo['var_range'][1][j], 'ob', label='training points')
-                plt.plot( FASTinfo['var_range'][0][i], FASTinfo['var_range'][0][j], 'ob', label='training points')
-
-        # plt.legend()
-        plt.savefig(FASTinfo['dir_saved_plots'] + '/linear_' + FASTinfo['description'] + '.png')
-        plt.show()
-
-        quit()
-
-    return FASTinfo, rotor
+# def create_surr_model_linear_options(FASTinfo, rotor):
+#
+#     # how many different points will be used (linear)
+#     FASTinfo['sm_var_max'] = [[10], [10]]
+#
+#
+#     var_index = []
+#     for i in range(0, len(FASTinfo['sm_var_max'])):
+#         for j in range(0, len(FASTinfo['sm_var_max'][i])):
+#             var_index.append(i)
+#
+#     FASTinfo['var_index'] = var_index
+#
+#     # which specific points will be used for this run
+#     # probably argv variables from command line
+#     # FASTinfo['sm_var_spec'] = [[4], [2,2,2,2]]
+#     # FASTinfo['sm_var_spec'] = [[2], [1,1,1,1]]
+#     # FASTinfo['sm_var_spec'] = [[2]]
+#
+#     # create options for which points are being used for dist. variables
+#     # how many total for each set of design variables
+#
+#     # try:
+#     #     FASTinfo['sm_var_spec'] = []
+#     #     for i in range(0, len(FASTinfo['sm_var_names'])):
+#     #         FASTinfo['sm_var_spec'].append([])
+#     #
+#     #     for i in range(1, int(len(sys.argv))):
+#     #         FASTinfo['sm_var_spec'][var_index[i-1]].append(int(sys.argv[i]))
+#     # except:
+#         # raise Exception('A system argument is needed to calculate training points for the surrogate model.')
+#     FASTinfo['sm_var_spec'] = [[0], [0]]
+#
+#     # print(FASTinfo['sm_var_spec'])
+#     # quit()
+#
+#     # min, max values of design variables
+#     FASTinfo['sm_var_range'] = [[0.1, 0.5], [1.3, 5.3], [-10.0, 30.0], [0.005, 0.2], [0.005, 0.2]]
+#
+#     # === initialize design variable values === #
+#     FASTinfo = initialize_dv(FASTinfo)
+#
+#     FASTinfo['var_range'] = []
+#     # initialize rotor design variables
+#     for i in range(0, len(FASTinfo['sm_var_names'])):
+#
+#         # create var_range
+#         if FASTinfo['sm_var_names'][i] == 'r_max_chord':
+#             var_range = FASTinfo['sm_var_range'][0]
+#         elif FASTinfo['sm_var_names'][i] == 'chord_sub':
+#             var_range = FASTinfo['sm_var_range'][1]
+#         elif FASTinfo['sm_var_names'][i] == 'theta_sub':
+#             var_range = FASTinfo['sm_var_range'][2]
+#         elif FASTinfo['sm_var_names'][i] == 'sparT':
+#             var_range = FASTinfo['sm_var_range'][3]
+#         elif FASTinfo['sm_var_names'][i] == 'teT':
+#             var_range = FASTinfo['sm_var_range'][4]
+#         else:
+#             Exception('A surrogate model variable was listed that is not a design variable.')
+#
+#
+#         for j in range(0, len(FASTinfo['sm_var_max'][i])):
+#
+#             index = FASTinfo['sm_var_index'][i][j]
+#
+#             sm_range = np.linspace(var_range[0], var_range[1], FASTinfo['sm_var_max'][i][j])
+#
+#             FASTinfo['var_range'].append(sm_range)
+#
+#             if hasattr(FASTinfo[FASTinfo['sm_var_names'][i]+'_init'], '__len__'):
+#
+#                 print(i, j, index)
+#
+#                 FASTinfo[FASTinfo['sm_var_names'][i]+'_init'][index] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
+#
+#             else:
+#
+#                 FASTinfo[FASTinfo['sm_var_names'][i] + '_init'] = sm_range[FASTinfo['sm_var_spec'][i][j]-1]
+#
+#     # set design variables in rotor dictionary
+#
+#     if FASTinfo['check_point_dist']:
+#
+#         plt.figure()
+#
+#         plt.title('Linear Sampling Example')
+#         # plt.xlabel(FASTinfo['sm_var_names'][0])
+#         # plt.ylabel(FASTinfo['sm_var_names'][1])
+#         plt.xlabel('1st Chord Distribution Control Point (m)')
+#         plt.ylabel('2nd Chord Distribution Control Point (m)')
+#
+#
+#         # plt.xlim([0.9*min(FASTinfo['var_range'][0]), 1.1*max(FASTinfo['var_range'][0])])
+#         # plt.ylim([0.9*min(FASTinfo['var_range'][1]), 1.1*max(FASTinfo['var_range'][1])])
+#
+#         for i in range(0, FASTinfo['sm_var_max'][0][0]):
+#             for j in range(0, FASTinfo['sm_var_max'][1][0]):
+#                 # plt.plot( FASTinfo['var_range'][0][i], FASTinfo['var_range'][1][j], 'ob', label='training points')
+#                 plt.plot( FASTinfo['var_range'][0][i], FASTinfo['var_range'][0][j], 'ob', label='training points')
+#
+#         # plt.legend()
+#         plt.savefig(FASTinfo['dir_saved_plots'] + '/linear_' + FASTinfo['description'] + '.png')
+#         plt.show()
+#
+#         quit()
+#
+#     return FASTinfo, rotor
 
 # ========================================================================================================= #
 
@@ -993,6 +973,10 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
         plt.figure()
         j = 1
 
+        print(old_var_list)
+        print(new_var_list)
+        quit()
+
         for i in range(len(FASTinfo['var_index'])):
 
             if FASTinfo['var_index'][i] == 1: # chord_sub
@@ -1034,7 +1018,6 @@ def create_surr_model_lhs_options(FASTinfo, rotor):
 
         quit()
 
-    # quit()
     # === plot checks === #
 
     if FASTinfo['check_cv']:
@@ -1154,10 +1137,6 @@ def define_des_var_domains(FASTinfo, rotor):
                 lower_array[j-1] = float(des_var[2*j-1].strip('\n'))
                 upper_array[j-1] = float(des_var[2*j].strip('\n'))
 
-            # print(des_var_name)
-            # print(lower_array)
-            # print(upper_array)
-
             rotor.driver.add_desvar(des_var_name, lower=lower_array, upper=upper_array)
 
         else:
@@ -1171,7 +1150,6 @@ def define_des_var_domains(FASTinfo, rotor):
 
 # initialize design variables
 def initialize_dv(FASTinfo):
-
 
     if FASTinfo['FAST_template_name'] == 'NREL5MW':
         FASTinfo['chord_sub_init'] = np.array([3.2612, 4.5709, 3.3178,   1.4621])
@@ -1255,7 +1233,6 @@ def initialize_rotor_dv(FASTinfo, rotor):
     return rotor
 
 # ========================================================================================================= #
-
 
 def DLC_call(dlc, wnd_list, wnd_list_type, rand_seeds, mws, num_sgp, parked_list):
 
@@ -1347,7 +1324,6 @@ def DLC_call(dlc, wnd_list, wnd_list_type, rand_seeds, mws, num_sgp, parked_list
             wnd_list_type.append('nonturb')
             parked_list.append('yes')
 
-
     return wnd_list, wnd_list_type
 
 # ========================================================================================================= #
@@ -1417,8 +1393,6 @@ def Calc_max_DEMs(FASTinfo, rotor):
         DEMx_master_array[i][0:18] = xDEM
         DEMy_master_array[i][0:18] = yDEM
 
-        # TODO: plot check for different wnd files
-
     # create DEM plots using DEMx_master_array, DEMy_master_array
     FASTinfo['createDEMplot'] = False
 
@@ -1430,6 +1404,8 @@ def Calc_max_DEMs(FASTinfo, rotor):
         plt.title('DEMx for various input .wnd files')  #: Bending Moment at Spanwise Station #1, Blade #1')
         for i in range(6): # 0, len(FASTinfo['wnd_list'])):
             plt.plot(DEMx_master_array[i][0:18], label=FASTinfo['wnd_list'][i])
+
+            print(DEMx_master_array[i][0:18])
 
         plt.legend()
         plt.xticks(np.linspace(0,17,18))
@@ -1500,6 +1476,9 @@ def Calc_max_DEMs(FASTinfo, rotor):
         file_y.write(str(Myb_damage[j][0]) + '\n')
     file_y.close()
 
+    if FASTinfo['make_max_DEM_files']:
+        quit()
+
 # ========================================================================================================= #
 
 def Use_FAST_DEMs(FASTinfo, rotor):
@@ -1543,6 +1522,10 @@ def Use_FAST_DEMs(FASTinfo, rotor):
 
 def plot_DEMs(rotor, FASTinfo):
 
+    print(rotor['Mxb_damage']/1000.0)
+    print(rotor['Myb_damage']/1000.0)
+    print(rotor['rstar_damage'])
+    quit()
 
     plt.figure()
     plt.plot(rotor['rstar_damage'], rotor['Mxb_damage']/1000.0, label='DEMx')
@@ -1594,8 +1577,6 @@ def extract_results(rotor,FASTinfo):
     resultsfile.write(str(rotor['sparT']) + '\n' )
     resultsfile.write(str(rotor['teT']) + '\n' )
 
-    # TODO : add additional parameters to record
-
     resultsfile.close()
 
 # ========================================================================================================= #
@@ -1607,7 +1588,6 @@ def remove_sm_dir(FASTinfo):
     dir_name = FASTinfo['opt_dir'] + '/sm_' + str(spec_point)
 
     shutil.rmtree(dir_name)
-
 
 # ========================================================================================================= #
 
@@ -1624,7 +1604,6 @@ def removed_fixcalc_dir(FASTinfo):
 # ========================================================================================================= #
 
 def remove_fixcalc_unnecessary_files(FASTinfo):
-
 
     for i in range(1,5):
 
