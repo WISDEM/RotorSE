@@ -410,7 +410,7 @@ class PreCompSections(BeamPropertiesBase):
         unknowns['beam:rhoA'] = beam_rhoA
         unknowns['beam:rhoJ'] = beam_rhoJ
         unknowns['beam:Tw_iner'] = beam_Tw_iner
-        unknowns['eps_crit_spar'] = self.panelBucklingStrain(sparams, strain_idx_spar)
+        unknowns['eps_crit_spar'] = self.panelBucklingStrain(params, strain_idx_spar)
         unknowns['eps_crit_te'] = self.panelBucklingStrain(params, strain_idx_te)
 
         xu_strain_spar, xl_strain_spar, yu_strain_spar, yl_strain_spar = self.criticalStrainLocations(params, strain_idx_spar, x_ec_nose, y_ec_nose)
