@@ -31,6 +31,7 @@ class BeamPropertiesBase(Component):
         self.add_output('beam:GJ', val=np.zeros(NPTS), units='N*m**2', desc='torsional stiffness (about axial z-direction of airfoil aligned coordinate system)')
         self.add_output('beam:rhoA', val=np.zeros(NPTS), units='kg/m', desc='mass per unit length')
         self.add_output('beam:rhoJ', val=np.zeros(NPTS), units='kg*m', desc='polar mass moment of inertia per unit length')
+        self.add_output('beam:Tw_iner', val=np.zeros(NPTS), units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
         self.add_output('beam:x_ec', val=np.zeros(NPTS), units='m', desc='x-distance to elastic center from point about which above structural properties are computed (airfoil aligned coordinate system)')
         self.add_output('beam:y_ec', val=np.zeros(NPTS), units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
 
@@ -322,6 +323,7 @@ class PreCompSections(BeamPropertiesBase):
         beam_GJ = np.zeros(nsec)
         beam_rhoA = np.zeros(nsec)
         beam_rhoJ = np.zeros(nsec)
+        beam_Tw_iner = np.zeros(nsec)
 
         # distance to elastic center from point about which structural properties are computed
         # using airfoil coordinate system
@@ -392,6 +394,7 @@ class PreCompSections(BeamPropertiesBase):
             beam_y_ec[i] = results[13] - results[11]
             beam_rhoA[i] = results[14]
             beam_rhoJ[i] = results[15] + results[16]  # perpindicular axis theorem
+            beam_Tw_iner[i] = results[17]
 
             x_ec_nose[i] = results[13] + leLoc[i]*chord[i]
             y_ec_nose[i] = results[12]  # switch b.c of coordinate system used
@@ -406,7 +409,8 @@ class PreCompSections(BeamPropertiesBase):
         unknowns['beam:y_ec'] = beam_y_ec
         unknowns['beam:rhoA'] = beam_rhoA
         unknowns['beam:rhoJ'] = beam_rhoJ
-        unknowns['eps_crit_spar'] = self.panelBucklingStrain(params, strain_idx_spar)
+        unknowns['beam:Tw_iner'] = beam_Tw_iner
+        unknowns['eps_crit_spar'] = self.panelBucklingStrain(sparams, strain_idx_spar)
         unknowns['eps_crit_te'] = self.panelBucklingStrain(params, strain_idx_te)
 
         xu_strain_spar, xl_strain_spar, yu_strain_spar, yl_strain_spar = self.criticalStrainLocations(params, strain_idx_spar, x_ec_nose, y_ec_nose)
