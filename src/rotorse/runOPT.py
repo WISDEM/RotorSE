@@ -9,6 +9,9 @@ import re
 
 import numpy as np
 
+# blade_damage
+sys.path.insert(0, '../../../../blade-damage/')
+
 from FAST_util import setupFAST, Calc_max_DEMs, Use_FAST_DEMs, \
     extract_results, define_des_var_domains, remove_sm_dir, \
     initialize_rotor_dv, removed_fixcalc_dir, remove_fixcalc_unnecessary_files
@@ -26,15 +29,15 @@ FASTinfo['opt_without_FAST'] = False
 
 # incorporate dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = False
+FASTinfo['calc_fixed_DEMs'] = True
 FASTinfo['calc_fixed_DEMs_seq'] = False
-FASTinfo['opt_with_fixed_DEMs'] = True
+FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
 FASTinfo['calc_surr_model'] = False
 FASTinfo['opt_with_surr_model'] = False
 
 # description
-description = 'run_OPT'
+description = 'test_new'
 
 print('Run ' + description + ' is starting...')
 
@@ -240,10 +243,10 @@ else:
             print("Creating Surrogate Model...")
 
             rotor['chord_sub'] = FASTinfo['chord_sub_init']
-            rotor['r_max_chord'] = rotor['r_max_chord'] = 1.0 / (len(rotor['chord_sub']) -1.0)
+            rotor['r_max_chord'] = 1.0 / (len(rotor['chord_sub']) -1.0)
             rotor['theta_sub'] = FASTinfo['theta_sub_init']
 
-            rotor['sparT'] = np.array( [0.05, 0.047754, 0.045376, 0.031085, 0.0061398])
+            rotor['sparT'] = np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])
             rotor['teT'] = np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])
 
         else:
