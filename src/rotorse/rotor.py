@@ -45,7 +45,7 @@ sys.path.insert(0, '../../../AeroelasticSE/src/AeroelasticSE/FAST_mdao')
 sys.path.insert(0, '../../../AeroelasticSE/src/AeroelasticSE/rainflow')
 
 # blade_damage
-sys.path.insert(0, '../../../../blade-damage/')
+# sys.path.insert(0, '../../../../blade-damage/')
 
 
 # for creating FAST run directories
@@ -2789,7 +2789,8 @@ class RotorSE(Group):
 
         if FASTinfo['use_FAST']:
 
-            from blade_damage import CreateFASTConfig, CreateFASTConstraints, Calculate_FAST_sm_training_points
+            from blade_damage.damage_components \
+                import CreateFASTConfig, CreateFASTConstraints, Calculate_FAST_sm_training_points
 
             WND_File_List = FASTinfo['wnd_list']
 

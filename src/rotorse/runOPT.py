@@ -10,9 +10,9 @@ import re
 import numpy as np
 
 # blade_damage
-sys.path.insert(0, '../../../../blade-damage/')
+# sys.path.insert(0, '../../../../blade-damage/')
 
-from FAST_util import setupFAST, Calc_max_DEMs, Use_FAST_DEMs, \
+from blade_damage.FAST_util import setupFAST, Calc_max_DEMs, Use_FAST_DEMs, \
     extract_results, define_des_var_domains, remove_sm_dir, \
     initialize_rotor_dv, removed_fixcalc_dir, remove_fixcalc_unnecessary_files
 
@@ -25,16 +25,22 @@ FASTinfo = dict()
 # === Top Level Options for FAST use === #
 # can only do one at a time
 
-FASTinfo['opt_without_FAST'] = False
-
-# incorporate dynamic response
+# optimize blade design while incorporating dynamic response
 FASTinfo['opt_with_FAST_in_loop'] = False
-FASTinfo['calc_fixed_DEMs'] = True
-FASTinfo['calc_fixed_DEMs_seq'] = False
 FASTinfo['opt_with_fixed_DEMs'] = False
 FASTinfo['opt_with_fixed_DEMs_seq'] = False
-FASTinfo['calc_surr_model'] = False
 FASTinfo['opt_with_surr_model'] = False
+
+# other options - not dependent on RotorSE - can be done in blade-damage
+FASTinfo['calc_fixed_DEMs'] = True
+FASTinfo['calc_fixed_DEMs_seq'] = False
+FASTinfo['calc_surr_model'] = False
+
+# if any of the above are True, set following option to True
+FASTinfo['opt_with_fatigue'] = True
+
+FASTinfo['opt_without_FAST'] = False
+
 
 # description
 description = 'test_new'
