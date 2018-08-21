@@ -2703,6 +2703,20 @@ if __name__ == '__main__':
 
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
+
+    ## Write precomp files out
+    # from rotorse.precomp import PreCompWriter
+    # dir_out     = 'temp'
+    # materials   = rotor['materials']
+    # upper       = rotor['upperCS']
+    # lower       = rotor['lowerCS']
+    # webs        = rotor['websCS']
+    # profile     = rotor['profile']
+    # chord       = rotor['chord']
+    # twist       = rotor['theta']
+    # p_le        = rotor['le_location']
+    # precomp_out = PreCompWriter(dir_out, materials, upper, lower, webs, profile, chord, twist, p_le)
+    # precomp_out.execute()
     
 
     import matplotlib.pyplot as plt
