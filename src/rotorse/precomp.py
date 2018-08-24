@@ -317,10 +317,8 @@ class CompositeSection:
 
 
     @classmethod
-    def initFromPreCompLayupFile(cls, fname, locW, materials):
+    def initFromPreCompLayupFile(cls, fname, locW, materials, readLocW=False):
         """Construct CompositeSection object from a PreComp input file
-
-        .. TODO:: can't remember why I did this.  why can't I just get webLoc from the main input file.
 
         Parameters
         ----------
@@ -333,6 +331,8 @@ class CompositeSection:
         materials : list(:class:`Orthotropic2DMaterial`)
             material objects defined in same order as used in the input file
             can use :meth:`Orthotropic2DMaterial.initFromPreCompFile`
+        readLocW : optionally read web location from main input file rather than
+            have the user provide it
 
         Returns
         -------
@@ -370,6 +370,8 @@ class CompositeSection:
 
         skipLines(f, 4)
 
+        if readLocW:
+            locW = CompositeSection.__readWebLocFromFile(fname)
         n_sector = len(locW)
 
         n_pliesW, tW, thetaW, mat_idxW = CompositeSection.__readSectorsFromFile(f, n_sector)
@@ -419,8 +421,27 @@ class CompositeSection:
 
         return n_plies, t, theta, mat_idx
 
+    @staticmethod
+    def __readWebLocFromFile(fname):
+        # Get web locations from main input file
+        f_main = os.path.join(os.path.split(fname)[0], os.path.split(fname)[1].replace('layup', 'input'))
+        fid = open(f_main)
 
+        var = fid.readline().split()[0]
+        while var != 'Web_num':
+            text = fid.readline().split()
+            if len(text)>0:
+                var = text[0]
+            else:
+                var = None
 
+        web_loc = []
+        line = fid.readline().split()
+        while line:
+            web_loc.append(float(line[1]))
+            line = fid.readline().split()
+
+        return web_loc
 
 
     def compositeMatrices(self, sector):
