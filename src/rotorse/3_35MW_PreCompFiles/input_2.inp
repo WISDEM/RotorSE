@@ -24,6 +24,6 @@ Webs (spars) data  --------------------------------------------------
 2                Ob_sp_stn   : blade station number where outer-most end of webs is located (-)
 
 Web_num   Inb_end_ch_loc   Oub_end_ch_loc (fraction of chord length)
-1 0.470183 0.470183
-2 0.470183 0.470183
+1 0.250559 0.250559
+2 0.485853 0.485853
 3 1.000000 1.000000
