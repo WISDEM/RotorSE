@@ -4,13 +4,13 @@ Installation
 .. admonition:: Prerequisites
    :class: warning
 
-	General: C compiler, Fortran compiler, NumPy, SciPy, Swig, pyWin32, MatlPlotLib, Lxml, OpenMDAO
+	General: C compiler, Fortran compiler, NumPy, SciPy, MatlPlotLib, OpenMDAO
 
 	Wind Plant Framework: FUSED-Wind (Framework for Unified Systems Engineering and Design of Wind Plants)
 
-	Sub-Models: CommonSE, CCBlade, Akima
+	Sub-Models: CommonSE, CCBlade, Akima, pBeam
 
-	Supporting python packages: Pandas, Algopy, Zope.interface, Sphinx, Xlrd, PyOpt, py2exe, Pyzmq, Sphinxcontrib-bibtex, Sphinxcontrib-zopeext, Numpydoc, Ipython
+	Supporting python packages: Algopy, Sphinx, Xlrd, PyOpt, py2exe, Pyzmq, Sphinxcontrib-bibtex, Numpydoc, Ipython
 
 Clone the repository at `<https://github.com/WISDEM/RotorSE>`_
 or download the releases and uncompress/unpack (RotorSE.py-|release|.tar.gz or RotorSE.py-|release|.zip) from the website link at the bottom the `RotorSE site<http://nwtc.nrel.gov/RotorSE>`_.
