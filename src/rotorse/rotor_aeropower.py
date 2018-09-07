@@ -7,7 +7,7 @@ Created by Andrew Ning on 2012-02-28.
 Copyright (c)  NREL. All rights reserved.
 """
 
-# from __future__ import print_function
+from __future__ import print_function
 import numpy as np
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem, Brent, ScipyGMRES
@@ -242,18 +242,18 @@ class SetupRunVarSpeed(Component):
         J['Omega', 'control_tsr'] = dOmega_dOmegad * V/R*RS2RPM
         J['Omega', 'R'] = dOmega_dOmegad * -params['control_tsr']*V/R**2*RS2RPM
         J['Omega', 'control_maxOmega'] = dOmega_dmaxOmega
-	J['Omega', 'control_Vin'] = dOmega_dOmegad * params['control_tsr']/R*RS2RPM * dV_dVin
-	J['Omega', 'control_Vout'] = dOmega_dOmegad * params['control_tsr']/R*RS2RPM * dV_dVout
-	J['Uhub', 'control_tsr'] = np.zeros(len(V))
-	J['Uhub', 'R'] = np.zeros(len(V))
-	J['Uhub', 'control_pitch'] = np.zeros(len(V))
-	J['Uhub', 'control_Vin']   = dV_dVin
-	J['Uhub', 'control_Vout']   = dV_dVout
-	J['pitch', 'control_tsr'] = np.zeros(len(V))
-	J['pitch', 'R'] = np.zeros(len(V))
-	J['pitch', 'control_pitch'] = np.ones(len(V))
-	J['pitch', 'control_Vin'] = np.zeros(len(V))
-	J['pitch', 'control_Vout'] = np.zeros(len(V))
+        J['Omega', 'control_Vin'] = dOmega_dOmegad * params['control_tsr']/R*RS2RPM * dV_dVin
+        J['Omega', 'control_Vout'] = dOmega_dOmegad * params['control_tsr']/R*RS2RPM * dV_dVout
+        J['Uhub', 'control_tsr'] = np.zeros(len(V))
+        J['Uhub', 'R'] = np.zeros(len(V))
+        J['Uhub', 'control_pitch'] = np.zeros(len(V))
+        J['Uhub', 'control_Vin']   = dV_dVin
+        J['Uhub', 'control_Vout']   = dV_dVout
+        J['pitch', 'control_tsr'] = np.zeros(len(V))
+        J['pitch', 'R'] = np.zeros(len(V))
+        J['pitch', 'control_pitch'] = np.ones(len(V))
+        J['pitch', 'control_Vin'] = np.zeros(len(V))
+        J['pitch', 'control_Vout'] = np.zeros(len(V))
 
         self.J = J
 
@@ -319,7 +319,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
     def __init__(self, npts_coarse_power_curve, npts_spline_power_curve):
         super(RegulatedPowerCurve, self).__init__()
 
-        self.npts = npts_spline_power_curve
+        self.npts = int(npts_spline_power_curve)
         self.eval_only = True  # allows an external solver to converge this, otherwise it will converge itself to mimic an explicit comp
         """Fit a spline to the coarse sampled power curve (and thrust curve),
         find rated speed through a residual convergence strategy,
@@ -359,11 +359,11 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('azimuth', val=0.0, units='deg', desc='azimuth load')
 
 
-	self.deriv_options['step_calc'] = 'relative'
-	self.deriv_options['form'] = 'central'
-	self.deriv_options['type'] = 'fd'
-	self.deriv_options['check_step_calc'] = 'relative'
-	self.deriv_options['check_form'] = 'central'
+        self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['form'] = 'central'
+        self.deriv_options['type'] = 'fd'
+        self.deriv_options['check_step_calc'] = 'relative'
+        self.deriv_options['check_form'] = 'central'
 
     def solve_nonlinear(self, params, unknowns, resids):
         #Vrated = unknowns['Vrated']
@@ -422,9 +422,9 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         dV_dVrated = np.concatenate([dV2_dVrated, dV3_dVrated])
 
-        dP_dVcoarse = vstack([dP2_dVcoarse, np.zeros((self.npts/2, ncoarse))])
-        dP_dPcoarse = vstack([dP2_dPcoarse, np.zeros((self.npts/2, ncoarse))])
-        dP_dVrated = np.concatenate([dP2_dV2*dV2_dVrated, np.zeros(self.npts/2)])
+        dP_dVcoarse = vstack([dP2_dVcoarse, np.zeros((int(self.npts/2), ncoarse))])
+        dP_dPcoarse = vstack([dP2_dPcoarse, np.zeros((int(self.npts/2), ncoarse))])
+        dP_dVrated = np.concatenate([dP2_dV2*dV2_dVrated, np.zeros(int(self.npts/2))])
 
         drOmega = np.concatenate([[dOmegaRated_dOmegad*Vrated/R*RS2RPM], np.zeros(3*ncoarse),
             [dOmegaRated_dOmegad*params['control_tsr']/R*RS2RPM, -dOmegaRated_dOmegad*params['control_tsr']*Vrated/R**2*RS2RPM,
@@ -549,10 +549,10 @@ class AEP(Component):
         # outputs
         self.add_output('AEP', val=0.0, units='kW*h', desc='annual energy production')
 
-	#self.deriv_options['step_size'] = 1.0
-	self.deriv_options['form'] = 'central'
+        #self.deriv_options['step_size'] = 1.0
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'	
+        self.deriv_options['step_calc'] = 'relative'	
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -592,9 +592,9 @@ class CSMDrivetrain(DrivetrainLossesBase):
         """drivetrain losses from NREL cost and scaling model"""
 
         self.add_param('drivetrainType', val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True)
-	self.deriv_options['form'] = 'central'
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
         drivetrainType = params['drivetrainType']
@@ -959,15 +959,15 @@ if __name__ == '__main__':
 
     # === run and outputs ===
     rotor.run()
-    print rotor['r_pts']
+    print(rotor['r_pts'])
 
-    print 'AEP =', rotor['AEP']
-    print 'diameter =', rotor['diameter']
-    print 'ratedConditions.V =', rotor['rated_V']
-    print 'ratedConditions.Omega =', rotor['rated_Omega']
-    print 'ratedConditions.pitch =', rotor['rated_pitch']
-    print 'ratedConditions.T =', rotor['rated_T']
-    print 'ratedConditions.Q =', rotor['rated_Q']
+    print('AEP =', rotor['AEP'])
+    print('diameter =', rotor['diameter'])
+    print('ratedConditions.V =', rotor['rated_V'])
+    print('ratedConditions.Omega =', rotor['rated_Omega'])
+    print('ratedConditions.pitch =', rotor['rated_pitch'])
+    print('ratedConditions.T =', rotor['rated_T'])
+    print('ratedConditions.Q =', rotor['rated_Q'])
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
 

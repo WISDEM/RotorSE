@@ -1,4 +1,5 @@
-#from __future__ import print_function
+from __future__ import print_function
+
 import numpy as np
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem
@@ -440,9 +441,9 @@ class BladeCurvature(Component):
         self.add_output('z_az', val=np.zeros(NPTS), units='m', desc='location of blade in azimuth z-coordinate system')
         self.add_output('s', val=np.zeros(NPTS), units='m', desc='cumulative path length along blade')
 
-	self.deriv_options['form'] = 'central'
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -784,9 +785,9 @@ class DamageLoads(Component):
         self.add_output('Mxa', val=np.zeros(NPTS), units='N*m', desc='damage equivalent moments about airfoil c.s. x-direction')
         self.add_output('Mya', val=np.zeros(NPTS), units='N*m', desc='damage equivalent moments about airfoil c.s. y-direction')
 
-	self.deriv_options['form'] = 'central'
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
         self.rstar = params['rstar']
@@ -1211,9 +1212,9 @@ class BladeDeflection(Component):
         self.add_output('delta_bladeLength', val=0.0, units='m', desc='adjustment to blade length to account for curvature from loading')
         self.add_output('delta_precurve_sub', val=np.zeros(NINPUT), units='m', desc='adjustment to precurve to account for curvature from loading')
 
-	self.deriv_options['form'] = 'central'
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -1389,9 +1390,9 @@ class RootMoment(Component):
         self.add_output('Fxyz', val=np.array([0.0, 0.0, 0.0]), units='N', desc='individual forces [x,y,z] at the blade root in blade c.s.')
 
         #self.deriv_options['type'] = 'fd'
-	self.deriv_options['form'] = 'central'
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_calc'] = 'relative'
         #self.deriv_options['step_size'] = 1e-5
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1605,9 +1606,9 @@ class MassProperties(Component):
         self.add_output('mass_all_blades', val=0.0, units='kg', desc='mass of all blades')
         self.add_output('I_all_blades', shape=6, desc='mass moments of inertia of all blades in yaw c.s. order:Ixx, Iyy, Izz, Ixy, Ixz, Iyz')
 
-	self.deriv_options['form'] = 'central'
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_calc'] = 'relative'
 
 
     def solve_nonlinear(self, params, unknowns, resids):
@@ -1720,9 +1721,9 @@ class GustETM(Component):
         # out
         self.add_output('V_gust', val=0.0, units='m/s', desc='gust wind speed')
 
-	self.deriv_options['form'] = 'central'
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
         self.V_mean = params['V_mean']
@@ -1781,9 +1782,9 @@ class SetupPCModVarSpeed(Component):
         self.add_output('pitch', val=0.0, units='deg', desc='pitch angles to run')
         self.add_output('azimuth', val=0.0, units='deg')
 
-	self.deriv_options['form'] = 'central'
+        self.deriv_options['form'] = 'central'
         self.deriv_options['check_form'] = 'central'
-	self.deriv_options['step_calc'] = 'relative'
+        self.deriv_options['step_calc'] = 'relative'
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -2099,7 +2100,7 @@ class OutputsStructures(Component):
         dMy_dM    = np.zeros(M_hub.shape)
         dMz_dM    = np.zeros(M_hub.shape)
         # Convert from blade to hub c.s.
-        for row in xrange(nBlades):
+        for row in range(nBlades):
             myF = DirectionVector.fromArray(F_hub[row,:]).azimuthToHub(angles[row])
             myM = DirectionVector.fromArray(M_hub[row,:]).azimuthToHub(angles[row])
             
@@ -2556,7 +2557,7 @@ class RotorStructure(Group):
         self.connect('hub_height', ['aero_0.hubHt', 'aero_120.hubHt', 'aero_240.hubHt'])
         self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
         self.connect('tilt', ['aero_0.tilt', 'aero_120.tilt', 'aero_240.tilt'])
-	self.connect('airfoils', ['aero_0.airfoils', 'aero_120.airfoils', 'aero_240.airfoils'])
+        self.connect('airfoils', ['aero_0.airfoils', 'aero_120.airfoils', 'aero_240.airfoils'])
         self.connect('yaw', ['aero_0.yaw', 'aero_120.yaw', 'aero_240.yaw'])
         self.connect('nBlades', ['aero_0.B','aero_120.B', 'aero_240.B'])
         self.connect('nSector', ['aero_0.nSector','aero_120.nSector','aero_240.nSector'])
@@ -2698,12 +2699,12 @@ if __name__ == '__main__':
     rotor.run()
     
 
-    print 'mass_one_blade =', rotor['mass_one_blade']
-    print 'mass_all_blades =', rotor['mass_all_blades']
-    print 'I_all_blades =', rotor['I_all_blades']
-    print 'freq =', rotor['freq']
-    print 'tip_deflection =', rotor['tip_deflection']
-    print 'root_bending_moment =', rotor['root_bending_moment']
+    print('mass_one_blade =', rotor['mass_one_blade'])
+    print('mass_all_blades =', rotor['mass_all_blades'])
+    print('I_all_blades =', rotor['I_all_blades'])
+    print('freq =', rotor['freq'])
+    print('tip_deflection =', rotor['tip_deflection'])
+    print('root_bending_moment =', rotor['root_bending_moment'])
 
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
@@ -2756,6 +2757,6 @@ if __name__ == '__main__':
     for comp in out.keys():
         for k in out[comp].keys():
             if ( (out[comp][k]['rel error'][0] > tol) and (out[comp][k]['abs error'][0] > tol) ):
-                print k, out[comp][k]['rel error'][0], out[comp][k]['abs error'][0]
+                print(k, out[comp][k]['rel error'][0], out[comp][k]['abs error'][0])
     '''
 
