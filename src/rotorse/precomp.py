@@ -426,6 +426,15 @@ class CompositeSection:
     def __readWebLocFromFile(fname):
         # Get web locations from main input file
         f_main = os.path.join(os.path.split(fname)[0], os.path.split(fname)[1].replace('layup', 'input'))
+
+        # Error handling for different file extensions
+        if not os.path.isfile(f_main):
+            extensions = ['dat', 'inp', 'pci']
+            for ext in extensions:
+                f_main = f_main[:-3] + ext
+                if os.path.isfile(f_main):
+                    break
+
         fid = open(f_main)
 
         var = fid.readline().split()[0]
