@@ -7,7 +7,8 @@ Created by Andrew Ning on 2012-02-28.
 Copyright (c)  NREL. All rights reserved.
 """
 
-# from zope.interface import implements
+from __future__ import print_function
+
 import numpy as np
 import math
 import copy
@@ -1135,7 +1136,7 @@ class PreCompWriter:
             y_all = np.concatenate((profile_i.yu, np.flip(profile_i.yl, 0)))
 
             if max(y_all)>1.:
-                print idx
+                print(idx)
             
             # import matplotlib.pyplot as plt
             # plt.figure()

@@ -1,6 +1,10 @@
 import numpy as np
 import os
-from StringIO import StringIO
+# Python 2/3 compatibility:
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 import csv
 import commonse
 

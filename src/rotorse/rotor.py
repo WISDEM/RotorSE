@@ -532,7 +532,7 @@ class RotorSE(Group):
         self.connect('Rtip', ['aero_0.Rtip', 'aero_120.Rtip', 'aero_240.Rtip'])
         self.connect('precone', ['aero_0.precone', 'aero_120.precone', 'aero_240.precone'])
         self.connect('tilt', ['aero_0.tilt', 'aero_120.tilt', 'aero_240.tilt'])
-	self.connect('airfoils', ['aero_0.airfoils', 'aero_120.airfoils', 'aero_240.airfoils'])
+        self.connect('airfoils', ['aero_0.airfoils', 'aero_120.airfoils', 'aero_240.airfoils'])
         self.connect('yaw', ['aero_0.yaw', 'aero_120.yaw', 'aero_240.yaw'])
         self.connect('nBlades', ['aero_0.B','aero_120.B', 'aero_240.B'])
         self.connect('nSector', ['aero_0.nSector','aero_120.nSector','aero_240.nSector'])
@@ -677,42 +677,42 @@ if __name__ == '__main__':
     # === run and outputs ===
     rotor.run()
 
-    print 'AEP =', rotor['AEP']
-    print 'diameter =', rotor['diameter']
-    print 'ratedConditions.V =', rotor['rated_V']
-    print 'ratedConditions.Omega =', rotor['rated_Omega']
-    print 'ratedConditions.pitch =', rotor['rated_pitch']
-    print 'ratedConditions.T =', rotor['rated_T']
-    print 'ratedConditions.Q =', rotor['rated_Q']
-    print 'mass_one_blade =', rotor['mass_one_blade']
-    print 'mass_all_blades =', rotor['mass_all_blades']
-    print 'I_all_blades =', rotor['I_all_blades']
-    print 'freq =', rotor['freq']
-    print 'tip_deflection =', rotor['tip_deflection']
-    print 'root_bending_moment =', rotor['root_bending_moment']
+    print('AEP =', rotor['AEP'])
+    print('diameter =', rotor['diameter'])
+    print('ratedConditions.V =', rotor['rated_V'])
+    print('ratedConditions.Omega =', rotor['rated_Omega'])
+    print('ratedConditions.pitch =', rotor['rated_pitch'])
+    print('ratedConditions.T =', rotor['rated_T'])
+    print('ratedConditions.Q =', rotor['rated_Q'])
+    print('mass_one_blade =', rotor['mass_one_blade'])
+    print('mass_all_blades =', rotor['mass_all_blades'])
+    print('I_all_blades =', rotor['I_all_blades'])
+    print('freq =', rotor['freq'])
+    print('tip_deflection =', rotor['tip_deflection'])
+    print('root_bending_moment =', rotor['root_bending_moment'])
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
     '''
-    print 'Pn_margin', rotor[ 'Pn_margin']
-    print 'P1_margin', rotor[ 'P1_margin']
-    print 'Pn_margin_cfem', rotor[ 'Pn_margin_cfem']
-    print 'P1_margin_cfem', rotor[ 'P1_margin_cfem']
-    print 'rotor_strain_sparU', rotor[ 'rotor_strain_sparU']
-    print 'rotor_strain_sparL', rotor[ 'rotor_strain_sparL']
-    print 'rotor_strain_teU', rotor[ 'rotor_strain_teU']
-    print 'rotor_strain_teL', rotor[ 'rotor_strain_teL']
-    print 'eps_crit_spar', rotor['eps_crit_spar']
-    print 'strain_ult_spar', rotor['strain_ult_spar']
-    print 'eps_crit_te', rotor['eps_crit_te']
-    print 'strain_ult_te', rotor['strain_ult_te']
-    print 'rotor_buckling_sparU', rotor[ 'rotor_buckling_sparU']
-    print 'rotor_buckling_sparL', rotor[ 'rotor_buckling_sparL']
-    print 'rotor_buckling_teU', rotor[ 'rotor_buckling_teU']
-    print 'rotor_buckling_teL', rotor[ 'rotor_buckling_teL']
-    print 'rotor_damage_sparU', rotor[ 'rotor_damage_sparU']
-    print 'rotor_damage_sparL', rotor[ 'rotor_damage_sparL']
-    print 'rotor_damage_teU', rotor[ 'rotor_damage_teU']
-    print 'rotor_damage_teL', rotor[ 'rotor_damage_teL']
+    print('Pn_margin', rotor[ 'Pn_margin'])
+    print('P1_margin', rotor[ 'P1_margin'])
+    print('Pn_margin_cfem', rotor[ 'Pn_margin_cfem'])
+    print('P1_margin_cfem', rotor[ 'P1_margin_cfem'])
+    print('rotor_strain_sparU', rotor[ 'rotor_strain_sparU'])
+    print('rotor_strain_sparL', rotor[ 'rotor_strain_sparL'])
+    print('rotor_strain_teU', rotor[ 'rotor_strain_teU'])
+    print('rotor_strain_teL', rotor[ 'rotor_strain_teL'])
+    print('eps_crit_spar', rotor['eps_crit_spar'])
+    print('strain_ult_spar', rotor['strain_ult_spar'])
+    print('eps_crit_te', rotor['eps_crit_te'])
+    print('strain_ult_te', rotor['strain_ult_te'])
+    print('rotor_buckling_sparU', rotor[ 'rotor_buckling_sparU'])
+    print('rotor_buckling_sparL', rotor[ 'rotor_buckling_sparL'])
+    print('rotor_buckling_teU', rotor[ 'rotor_buckling_teU'])
+    print('rotor_buckling_teL', rotor[ 'rotor_buckling_teL'])
+    print('rotor_damage_sparU', rotor[ 'rotor_damage_sparU'])
+    print('rotor_damage_sparL', rotor[ 'rotor_damage_sparL'])
+    print('rotor_damage_teU', rotor[ 'rotor_damage_teU'])
+    print('rotor_damage_teL', rotor[ 'rotor_damage_teL'])
     '''
 
     import matplotlib.pyplot as plt
