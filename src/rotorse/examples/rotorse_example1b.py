@@ -35,8 +35,8 @@ class RotorSE_Example1b():
 		rotor['theta_in'] = np.array([14.5, 12.874, 6.724, -0.03388039, -0.037])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
 		rotor['precurve_in'] = np.array([-0., -0.054497, -0.175303, -0.84976143, -6.206217])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
 		rotor['presweep_in'] = np.array([0., 0., 0., 0., 0.])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-		rotor['sparT_in'] = np.array([0.03200042 0.07038508 0.08515644 0.07777004 0.01181032])  # (Array, m): spar cap thickness parameters
-		rotor['teT_in'] = np.array([0.04200055 0.08807739 0.05437378 0.01610219 0.00345225])  # (Array, m): trailing-edge thickness parameters
+		rotor['sparT_in'] = np.array([0.03200042, 0.07038508, 0.08515644, 0.07777004, 0.01181032])  # (Array, m): spar cap thickness parameters
+		rotor['teT_in'] = np.array([0.04200055, 0.08807739, 0.05437378, 0.01610219, 0.00345225])  # (Array, m): trailing-edge thickness parameters
 		# ------------------
 
 		# === atmosphere ===
