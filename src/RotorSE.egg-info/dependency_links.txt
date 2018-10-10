@@ -1,3 +1,0 @@
-https://github.com/byuflowlab/CCBlade-1/tarball/master#egg=ccblade
-https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam
-https://github.com/WISDEM/CommonSE/tarball/openmdao1#egg=commonse
