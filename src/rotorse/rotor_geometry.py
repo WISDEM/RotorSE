@@ -898,6 +898,7 @@ class RotorGeometry(Group):
         self.add('tilt', IndepVarComp('tilt', 0.0, units='deg'), promotes=['*'])
         self.add('yaw', IndepVarComp('yaw', 0.0, units='deg'), promotes=['*'])
         self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
+        self.add('downwind', IndepVarComp('downwind', False, pass_by_obj=True), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         
         # --- composite sections ---

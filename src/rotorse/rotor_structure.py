@@ -1106,11 +1106,21 @@ class TipDeflection(Component):
         self.add_param('tilt', val=0.0, units='deg', desc='tilt angle')
         self.add_param('totalConeTip', val=0.0, units='deg', desc='total coning angle including precone and curvature')
 
+        self.add_param('hub_height', val=0.0, units='m', desc='Tower top hub height')
+        self.add_param('downwind', val=False, pass_by_obj=True)
+        self.add_param('Rtip', val=0.0, units='m', desc='tip location in z_b')
+        self.add_param('precurveTip', val=0.0, units='m', desc='tip location in x_b')
+        self.add_param('presweepTip', val=0.0, units='m', desc='tip location in y_b')
+        self.add_param('precone', val=0.0, units='deg', desc='precone angle')
+        self.add_param('gamma_m', 0.0, desc='safety factor on materials')
+
         # parameters
         self.add_param('dynamicFactor', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation') #, pass_by_obj=True)
 
         # outputs
         self.add_output('tip_deflection', val=0.0, units='m', desc='deflection at tip in yaw x-direction')
+        self.add_output('tip_position', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
+        self.add_output('ground_clearance', val=0.0, units='m', desc='distance between blade tip and ground')
 
 	#self.deriv_options['form'] = 'central'
         #self.deriv_options['check_form'] = 'central'
@@ -1118,15 +1128,20 @@ class TipDeflection(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        self.dx = params['dx']
-        self.dy = params['dy']
-        self.dz = params['dz']
-        self.theta = params['theta']
-        self.pitch = params['pitch']
-        self.azimuth = params['azimuth']
-        self.tilt = params['tilt']
-        self.totalConeTip = params['totalConeTip']
+        self.dx            = params['dx']
+        self.dy            = params['dy']
+        self.dz            = params['dz']
+        self.theta         = params['theta']
+        self.pitch         = params['pitch']
+        self.azimuth       = 180.0 #params['azimuth']
+        self.precone       = params['precone']
+        self.tilt          = params['tilt']
+        self.totalConeTip  = params['totalConeTip']
         self.dynamicFactor = params['dynamicFactor']
+        self.precurve      = params['precurveTip']
+        self.presweep      = params['presweepTip']
+        self.rtip          = params['Rtip']
+        upwind             = not params['downwind']
 
         theta = self.theta + self.pitch
 
@@ -1137,10 +1152,22 @@ class TipDeflection(Component):
 
         unknowns['tip_deflection'] = self.tip_deflection
 
+        # coordinates of blade tip in yaw c.s.
+        # TODO: Combine intelligently with other Direction Vector
+        dR = DirectionVector(self.precurve, self.presweep, self.rtip)
+        blade_yaw = dR.bladeToAzimuth(self.totalConeTip).azimuthToHub(self.azimuth).hubToYaw(self.tilt)
+
+        # find corresponding radius of tower
+        coeff = 1.0 if upwind else -1.0
+        z_pos = params['hub_height'] + blade_yaw.z
+        x_pos = coeff*blade_yaw.x + params['gamma_m'] * self.tip_deflection
+        unknowns['tip_position'] = np.array([x_pos, 0.0, z_pos])
+        unknowns['ground_clearance'] = z_pos
+        
 
     def list_deriv_vars(self):
 
-        inputs = ('dx', 'dy', 'dz', 'theta', 'pitch', 'azimuth', 'tilt', 'totalConeTip')
+        inputs = ('dx', 'dy', 'dz', 'theta', 'pitch', 'azimuth', 'tilt', 'totalConeTip','precurveTip','presweepTip','Rtip')
         outputs = ('tip_deflection',)
 
         return inputs, outputs
@@ -1985,6 +2012,8 @@ class OutputsStructures(Component):
         self.add_param('freq_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_param('freq_curvefem_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_param('tip_deflection_in', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
+        self.add_param('tip_position_in', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
+        self.add_param('ground_clearance_in', val=0.0, units='m', desc='distance between blade tip and ground')
         self.add_param('strainU_spar_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_param('strainL_spar_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_param('strainU_te_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -2022,6 +2051,8 @@ class OutputsStructures(Component):
         self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_output('freq_curvefem', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_output('tip_deflection', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
+        self.add_output('tip_position', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
+        self.add_output('ground_clearance', val=0.0, units='m', desc='distance between blade tip and ground')
         self.add_output('strainU_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_output('strainL_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_output('strainU_te', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -2061,6 +2092,8 @@ class OutputsStructures(Component):
         unknowns['freq'] = params['freq_in']
         unknowns['freq_curvefem'] = params['freq_curvefem_in']
         unknowns['tip_deflection'] = params['tip_deflection_in']
+        unknowns['tip_position'] = params['tip_position_in']
+        unknowns['ground_clearance'] = params['ground_clearance_in']
         unknowns['strainU_spar'] = params['strainU_spar_in']
         unknowns['strainL_spar'] = params['strainL_spar_in']
         unknowns['strainU_te'] = params['strainU_te_in']
@@ -2132,6 +2165,8 @@ class OutputsStructures(Component):
         J['freq', 'freq_in'] = np.diag(np.ones(len(params['freq_in'])))
         J['freq_curvefem', 'freq_curvefem_in'] = np.diag(np.ones(len(params['freq_curvefem_in'])))
         J['tip_deflection', 'tip_deflection_in'] = 1
+        J['tip_position', 'tip_position_in']  = np.diag(np.ones(len(params['tip_position_in'])))
+        J['ground_clearance', 'ground_clearance_in'] = 1
         J['strainU_spar', 'strainU_spar_in'] = np.diag(np.ones(len(params['strainU_spar_in'])))
         J['strainL_spar', 'strainL_spar_in'] = np.diag(np.ones(len(params['strainL_spar_in'])))
         J['strainU_te', 'strainU_te_in'] = np.diag(np.ones(len(params['strainU_te_in'])))
@@ -2227,7 +2262,7 @@ class RotorStructure(Group):
         self.add('damage', DamageLoads(NPTS))
         self.add('struc', RotorWithpBEAM(NPTS), promotes=['gamma_fatigue'])
         self.add('curvefem', CurveFEM(NPTS))
-        self.add('tip', TipDeflection())
+        self.add('tip', TipDeflection(), promotes=['gamma_m'])
         self.add('root_moment', RootMoment(NPTS))
         self.add('mass', MassProperties())
         self.add('extreme', ExtremeLoads())
@@ -2482,6 +2517,12 @@ class RotorStructure(Group):
         self.connect('aero_rated.loads_pitch', 'tip.pitch')
         self.connect('aero_rated.loads_azimuth', 'tip.azimuth')
         self.connect('tilt', 'tip.tilt')
+        self.connect('precone', 'tip.precone')
+        self.connect('precurve_tip', 'tip.precurveTip')
+        self.connect('presweep_tip', 'tip.presweepTip')
+        self.connect('Rtip', 'tip.Rtip')
+        self.connect('downwind', 'tip.downwind')
+        self.connect('hub_height', 'tip.hub_height')
         self.connect('curvature.totalCone', 'tip.totalConeTip', src_indices=[NPTS-1])
         self.connect('dynamic_amplication_tip_deflection', 'tip.dynamicFactor')
 
@@ -2529,6 +2570,8 @@ class RotorStructure(Group):
         self.connect('struc.freq', 'freq_in')
         self.connect('curvefem.freq', 'freq_curvefem_in')
         self.connect('tip.tip_deflection', 'tip_deflection_in')
+        self.connect('tip.tip_position', 'tip_position_in')
+        self.connect('tip.ground_clearance', 'ground_clearance_in')
         self.connect('struc.strainU_spar', 'strainU_spar_in')
         self.connect('struc.strainL_spar', 'strainL_spar_in')
         self.connect('struc.strainU_te', 'strainU_te_in')
@@ -2605,7 +2648,7 @@ class RotorStructure(Group):
         
 if __name__ == '__main__':
     myref = NREL5MW()
-    # myref = DTU10MW()
+    #myref = DTU10MW()
     #myref = TUM3_35MW()
 
     rotor = Problem()
@@ -2639,7 +2682,7 @@ if __name__ == '__main__':
     rotor['aero_0.rho'] = 1.225  # (Float, kg/m**3): density of air
     rotor['aero_0.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['aero_0.shearExp'] = 0.25  # (Float): shear exponent
-    rotor['hub_height'] = 90.0  # (Float, m): hub height
+    rotor['hub_height'] = myref.hub_height  # (Float, m): hub height
     rotor['turbine_class'] = myref.turbine_class #TURBINE_CLASS['I']  # (Enum): IEC turbine class
     rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
     rotor['gust_stddev'] = 3
