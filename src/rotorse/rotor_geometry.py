@@ -144,24 +144,45 @@ class NREL5MW(ReferenceBlade):
         # Raw data from https://www.nrel.gov/docs/fy09osti/38060.pdf
         #Node,RNodes,AeroTwst,DRNodes,Chord,Airfoil,Table
         #(-),(m),(deg),(m),(m),(-)
+        # raw = StringIO(
+        # """1,2.8667,13.308,2.7333,3.542,Cylinder1.dat
+        # 2,5.6000,13.308,2.7333,3.854,Cylinder1.dat
+        # 3,8.3333,13.308,2.7333,4.167,Cylinder2.dat
+        # 4,11.7500,13.308,4.1000,4.557,DU40_A17.dat
+        # 5,15.8500,11.480,4.1000,4.652,DU35_A17.dat
+        # 6,19.9500,10.162,4.1000,4.458,DU35_A17.dat
+        # 7,24.0500,9.011,4.1000,4.249,DU30_A17.dat
+        # 8,28.1500,7.795,4.1000,4.007,DU25_A17.dat
+        # 9,32.2500,6.544,4.1000,3.748,DU25_A17.dat
+        # 10,36.3500,5.361,4.1000,3.502,DU21_A17.dat
+        # 11,40.4500,4.188,4.1000,3.256,DU21_A17.dat
+        # 12,44.5500,3.125,4.1000,3.010,NACA64_A17.dat
+        # 13,48.6500,2.319,4.1000,2.764,NACA64_A17.dat
+        # 14,52.7500,1.526,4.1000,2.518,NACA64_A17.dat
+        # 15,56.1667,0.863,2.7333,2.313,NACA64_A17.dat
+        # 16,58.9000,0.370,2.7333,2.086,NACA64_A17.dat
+        # 17,61.6333,0.106,2.7333,1.419,NACA64_A17.dat""")
+
         raw = StringIO(
-        """1,2.8667,13.308,2.7333,3.542,Cylinder1.dat
-        2,5.6000,13.308,2.7333,3.854,Cylinder1.dat
-        3,8.3333,13.308,2.7333,4.167,Cylinder2.dat
-        4,11.7500,13.308,4.1000,4.557,DU40_A17.dat
-        5,15.8500,11.480,4.1000,4.652,DU35_A17.dat
-        6,19.9500,10.162,4.1000,4.458,DU35_A17.dat
-        7,24.0500,9.011,4.1000,4.249,DU30_A17.dat
-        8,28.1500,7.795,4.1000,4.007,DU25_A17.dat
-        9,32.2500,6.544,4.1000,3.748,DU25_A17.dat
-        10,36.3500,5.361,4.1000,3.502,DU21_A17.dat
-        11,40.4500,4.188,4.1000,3.256,DU21_A17.dat
-        12,44.5500,3.125,4.1000,3.010,NACA64_A17.dat
-        13,48.6500,2.319,4.1000,2.764,NACA64_A17.dat
-        14,52.7500,1.526,4.1000,2.518,NACA64_A17.dat
-        15,56.1667,0.863,2.7333,2.313,NACA64_A17.dat
-        16,58.9000,0.370,2.7333,2.086,NACA64_A17.dat
-        17,61.6333,0.106,2.7333,1.419,NACA64_A17.dat""")
+        """0.0000000E+00,1.3308000E+01,3.5420000E+00,Cylinder1.dat
+        1.3667000E+00,1.3308000E+01,3.5420000E+00,Cylinder1.dat
+        4.1000000E+00,1.3308000E+01,3.8540000E+00,Cylinder1.dat
+        6.8333000E+00,1.3308000E+01,4.1670000E+00,Cylinder2.dat
+        1.0250000E+01,1.3308000E+01,4.5570000E+00,DU40_A17.dat
+        1.4350000E+01,1.1480000E+01,4.6520000E+00,DU35_A17.dat
+        1.8450000E+01,1.0162000E+01,4.4580000E+00,DU35_A17.dat
+        2.2550000E+01,9.0110000E+00,4.2490000E+00,DU30_A17.dat
+        2.6650000E+01,7.7950000E+00,4.0070000E+00,DU25_A17.dat
+        3.0750000E+01,6.5440000E+00,3.7480000E+00,DU25_A17.dat
+        3.4850000E+01,5.3610000E+00,3.5020000E+00,DU21_A17.dat
+        3.8950000E+01,4.1880000E+00,3.2560000E+00,DU21_A17.dat
+        4.3050000E+01,3.1250000E+00,3.0100000E+00,NACA64_A17.dat
+        4.7150000E+01,2.3190000E+00,2.7640000E+00,NACA64_A17.dat
+        5.1250000E+01,1.5260000E+00,2.5180000E+00,NACA64_A17.dat
+        5.4666700E+01,8.6300000E-01,2.3130000E+00,NACA64_A17.dat
+        5.7400000E+01,3.7000000E-01,2.0860000E+00,NACA64_A17.dat
+        6.0133300E+01,1.0600000E-01,1.4190000E+00,NACA64_A17.dat
+        6.1500000E+01,1.0600000E-01,1.4190000E+00,NACA64_A17.dat""")
 
         # from Sandia 61.5m blade, Numad
         raw_r_thick = np.array([0.0000000E+00, 3.0000000E-01, 4.0000000E-01, 5.0000000E-01, 6.0000000E-01, 7.0000000E-01, 8.0000000E-01, 1.3667000E+00, 1.5000000E+00, 1.6000000E+00, 4.1000000E+00, 5.5000000E+00, 6.8333000E+00, 9.0000000E+00, 1.0250000E+01, 1.2000000E+01, 1.4350000E+01, 1.7000000E+01, 1.8450000E+01, 2.0500000E+01, 2.2550000E+01, 2.4600000E+01, 2.6650000E+01, 3.0750000E+01, 3.2000000E+01, 3.4850000E+01, 3.7000000E+01, 3.8950000E+01, 4.1000000E+01, 4.2000000E+01, 4.3050000E+01, 4.5000000E+01, 4.7150000E+01, 5.1250000E+01, 5.4666700E+01, 5.7400000E+01, 6.0133300E+01, 6.1500000E+01])
@@ -177,7 +198,7 @@ class NREL5MW(ReferenceBlade):
         self.drivetrain    = DRIVETRAIN_TYPE['GEARED']
 
         self.hub_height  = 90.0
-        self.hubFraction = 0.025 
+        self.hubFraction = 1.5/61.5
         self.bladeLength = 61.5
         self.precone     = 2.5
         self.tilt        = 5.0
@@ -196,12 +217,12 @@ class NREL5MW(ReferenceBlade):
         
         # Blade aero geometry
         raw    = list([row for row in csv.reader(raw)])
-        raw_r  = np.array([float(m[1]) for m in raw]) / float(raw[-1][1])
-        raw_tw = np.array([float(m[2]) for m in raw])
-        raw_c  = np.array([float(m[4]) for m in raw])
+        raw_r  = np.array([float(m[0]) for m in raw]) / float(raw[-1][0])
+        raw_tw = np.array([float(m[1]) for m in raw])
+        raw_c  = np.array([float(m[2]) for m in raw])
         raw_af = [m[-1] for m in raw]
 
-        idx_cylinder = np.argmin(np.abs(raw_r - 11.75/61.6333))
+        idx_cylinder = raw_af.index('DU40_A17.dat') - 1
         self.r_cylinder  = raw_r[idx_cylinder]
         self.r_max_chord = raw_r[np.argmax(raw_c)]
         self.setRin()
@@ -946,6 +967,6 @@ class RotorGeometry(Group):
 if __name__ == "__main__":
 
     # refBlade = DTU10MW()
-    # refBlade = NREL5MW()
-    refBlade = TUM3_35MW()
+    refBlade = NREL5MW()
+    # refBlade = TUM3_35MW()
     rotor = RotorGeometry(refBlade)
