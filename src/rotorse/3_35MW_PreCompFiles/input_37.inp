@@ -14,8 +14,8 @@ location   position   length    twist         file          file
 Span_loc    Le_loc    Chord    Tw_aero   Af_shape_file  Int_str_file
   (-)        (-)       (m)    (degrees)       (-)           (-)
 
-0.00 27.419324 9.902733e+01 -1.883438 shape_37.inp layup_37.inp
-1.00 27.419324 9.902733e+01 -1.883438 shape_37.inp layup_37.inp
+0.00 0.316137 1.968750e+00 -0.439562 shape_37.inp layup_37.inp
+1.00 0.316137 1.968750e+00 -0.439562 shape_37.inp layup_37.inp
 
 Webs (spars) data  --------------------------------------------------
 
