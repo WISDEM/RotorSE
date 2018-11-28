@@ -83,7 +83,7 @@ class ReferenceBlade(object):
             data.append(coord)
         return data
 
-    def set_polars(self, thickness, af_thicknesses, af_files):
+    def set_polars(self, thickness, af_thicknesses, af_files, blend=True):
         af_ref = ['']*len(af_thicknesses)
         afinit = CCAirfoil.initFromAerodynFile
         for k, af_file in enumerate(af_files):
@@ -91,8 +91,16 @@ class ReferenceBlade(object):
         # Get common alpha
         af_alpha = Airfoil.initFromAerodynFile(af_files[0])
         alpha, Re, _, _, _ = af_alpha.createDataGrid()
-        # Blend airfoil polars
-        self.BlendAirfoils(af_ref, af_thicknesses, alpha, Re, thickness)
+
+        if blend:
+            # Blend airfoil polars
+            self.BlendAirfoils(af_ref, af_thicknesses, alpha, Re, thickness)
+        else:
+            self.airfoils = ['']*self.npts
+            for k, thk in enumerate(thickness):
+                af_idx = np.argmin(abs(af_thicknesses - thk))
+                self.airfoils[k] = af_ref[af_idx]
+
             
     def BlendAirfoils(self, af_ref, af_thicknesses, alpha, Re, thickness):
 
@@ -678,6 +686,7 @@ class TUM3_35MW(ReferenceBlade):
         af_thicknesses  = np.array([21.0, 25.0, 30.0, 35.0, 40.0, 50.0, 100.0])
         airfoil_files_ref = ['DU08-W-210.dat', 'DU91-W2-250.dat', 'DU97-W-300.dat', 'DU00-W2-350.dat', 'FX77-W-400.dat', 'FX77-W-500.dat', 'Cylinder.dat']
         airfoil_files_ref = [os.path.join(afpath, af_file) for af_file in airfoil_files_ref]
+        # self.set_polars(thickness, af_thicknesses, airfoil_files_ref, blend=False)
         self.set_polars(thickness, af_thicknesses, airfoil_files_ref)
 
         # Now set best guess at airfoil cordinates along span without interpolating like the polar (this is just for plotting)
