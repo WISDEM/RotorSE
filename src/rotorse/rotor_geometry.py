@@ -16,6 +16,8 @@ from ccblade import CCAirfoil
 from airfoilprep import Airfoil
 from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 
+from scipy.interpolate import PchipInterpolator
+
 NINPUT = 5
 TURBULENCE_CLASS = commonse.enum.Enum('A B C')
 TURBINE_CLASS = commonse.enum.Enum('I II III')
@@ -101,48 +103,88 @@ class ReferenceBlade(object):
                 af_idx = np.argmin(abs(af_thicknesses - thk))
                 self.airfoils[k] = af_ref[af_idx]
 
-            
     def BlendAirfoils(self, af_ref, af_thicknesses, alpha, Re, thickness):
 
-        self.airfoils = ['']*self.npts
-        for k, thk in enumerate(thickness):
-            # Blend airfoils with exception handling
-            if thk in af_thicknesses:
-                af_out = af_ref[np.where(af_thicknesses==thk)[0][0]]
-                # print thk, thk
-            elif thk > max(af_thicknesses):
-                af_out = af_ref[np.argmax(af_thicknesses)]
-                # print thk, af_thicknesses[np.argmax(af_thicknesses)]
-            elif thk < min(af_thicknesses):
-                af_out = af_ref[np.argmin(af_thicknesses)]
-                # print thk, af_thicknesses[np.argmin(af_thicknesses)]
-            else:
-                # Blend airfoils
-                af1 = max(np.where(af_thicknesses < thk)[0])
-                af2 = min(np.where(af_thicknesses > thk)[0])
-                thk1 = af_thicknesses[af1]
-                thk2 = af_thicknesses[af2]
-                blend2 = (thk-thk1)/(thk2-thk1)
-                blend1 = 1-blend2
+        af_thicknesses = np.asarray(af_thicknesses)
+        thickness    = np.asarray(thickness)
 
-                cl1, cd1 = af_ref[af1].evaluate(alpha*np.pi/180., Re)
-                cl2, cd2 = af_ref[af2].evaluate(alpha*np.pi/180., Re)
 
-                cl = cl1*blend1 + cl2*blend2
-                cd = cd1*blend1 + cd2*blend2
+        n_af_ref  = len(af_ref)
+        n_aoa     = len(alpha)
+        n_span    = len(thickness)
 
-                af_out = CCAirfoil(alpha, Re, cl, cd)
+        # error handling for spanwise thickness greater/less than the max/min airfoil thicknesses
+        np.place(thickness, thickness>max(af_thicknesses), max(af_thicknesses))
+        np.place(thickness, thickness<min(af_thicknesses), min(af_thicknesses))
 
-                # print '%0.3f\t%d*%0.3f\t%d*%0.3f'%(thk, thk1,blend1, thk2,blend2)
-                # import matplotlib.pyplot as plt
-                # plt.figure()
-                # plt.plot(alpha, cl1, label=str(thk1))
-                # plt.plot(alpha, cl2, label=str(thk2))
-                # plt.plot(alpha, cl, label=str(thk))
-                # plt.legend()
-                # plt.show()
+        # get reference airfoil polars
+        cl_ref = np.zeros((n_aoa, n_af_ref))
+        cd_ref = np.zeros((n_aoa, n_af_ref))
+        for i in range(n_af_ref):
+            cl_ref[:,i], cd_ref[:,i] = af_ref[i].evaluate(alpha*np.pi/180., Re)
 
-            self.airfoils[k] = af_out
+        # spline selection
+        _spline = PchipInterpolator
+
+        # interpolate
+        spline_cl = _spline(af_thicknesses, cl_ref, axis=1)
+        spline_cd = _spline(af_thicknesses, cd_ref, axis=1)
+        cl = spline_cl(thickness)
+        cd = spline_cd(thickness)
+
+
+        # CCBlade airfoil class instances
+        self.airfoils = [None]*n_span
+        for i in range(n_span):
+            self.airfoils[i] = CCAirfoil(alpha, Re, cl[:,i], cd[:,i])
+
+            # import matplotlib.pyplot as plt
+            # plt.figure()
+            # plt.plot(alpha, cl[:,i])
+            # plt.legend()
+            # plt.show()
+
+    # def BlendAirfoils(self, af_ref, af_thicknesses, alpha, Re, thickness):
+
+    #     self.airfoils = ['']*self.npts
+    #     for k, thk in enumerate(thickness):
+    #         # Blend airfoils with exception handling
+    #         if thk in af_thicknesses:
+    #             af_out = af_ref[np.where(af_thicknesses==thk)[0][0]]
+    #             # print thk, thk
+    #         elif thk > max(af_thicknesses):
+    #             af_out = af_ref[np.argmax(af_thicknesses)]
+    #             # print thk, af_thicknesses[np.argmax(af_thicknesses)]
+    #         elif thk < min(af_thicknesses):
+    #             af_out = af_ref[np.argmin(af_thicknesses)]
+    #             # print thk, af_thicknesses[np.argmin(af_thicknesses)]
+    #         else:
+    #             # Blend airfoils
+    #             af1 = max(np.where(af_thicknesses < thk)[0])
+    #             af2 = min(np.where(af_thicknesses > thk)[0])
+    #             thk1 = af_thicknesses[af1]
+    #             thk2 = af_thicknesses[af2]
+    #             blend2 = (thk-thk1)/(thk2-thk1)
+    #             blend1 = 1-blend2
+
+    #             cl1, cd1 = af_ref[af1].evaluate(alpha*np.pi/180., Re)
+    #             cl2, cd2 = af_ref[af2].evaluate(alpha*np.pi/180., Re)
+
+    #             cl = cl1*blend1 + cl2*blend2
+    #             cd = cd1*blend1 + cd2*blend2
+
+    #             af_out = CCAirfoil(alpha, Re, cl, cd)
+
+    #             # print '%0.3f\t%d*%0.3f\t%d*%0.3f'%(thk, thk1,blend1, thk2,blend2)
+    #             # import matplotlib.pyplot as plt
+    #             # plt.figure()
+    #             # plt.plot(alpha, cl1, label=str(thk1))
+    #             # plt.plot(alpha, cl2, label=str(thk2))
+    #             # plt.plot(alpha, cl, label=str(thk))
+    #             # plt.legend()
+    #             # plt.show()
+
+    #         self.airfoils[k] = af_out
 
         
 class NREL5MW(ReferenceBlade):
@@ -976,6 +1018,6 @@ class RotorGeometry(Group):
 if __name__ == "__main__":
 
     # refBlade = DTU10MW()
-    refBlade = NREL5MW()
-    # refBlade = TUM3_35MW()
+    # refBlade = NREL5MW()
+    refBlade = TUM3_35MW()
     rotor = RotorGeometry(refBlade)
