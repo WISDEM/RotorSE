@@ -324,14 +324,14 @@ class NREL5MW(ReferenceBlade):
 
 
         myspline = Akima(raw_r_thick, raw_thick)
-        thickness, _, _, _ = myspline.interp(self.r)
+        self.thickness, _, _, _ = myspline.interp(self.r)
          
         # Load airfoil polar files
         afpath = self.getAeroPath()
         af_thicknesses  = np.array([18., 21., 25., 30., 35., 40., 100.])
         airfoil_files = ['NACA64_A17.dat', 'DU21_A17.dat', 'DU25_A17.dat', 'DU30_A17.dat', 'DU35_A17.dat', 'DU40_A17.dat', 'Cylinder1.dat']
         airfoil_files = [os.path.join(afpath, af_file) for af_file in airfoil_files]
-        self.set_polars(thickness, af_thicknesses, airfoil_files)
+        self.set_polars(self.thickness, af_thicknesses, airfoil_files)
 
         # Now set best guess at airfoil cordinates along span without interpolating like the polar (this is just for plotting)
         self.airfoil_files = ['']*self.npts
@@ -511,8 +511,8 @@ class DTU10MW(ReferenceBlade):
         self.te_thickness, _, _, _ = myspline.interp(self.r_in)
         
         myspline = Akima(raw_r, raw_th)
-        thickness, _, _, _ = myspline.interp(self.r)
-        thickness = np.minimum(100.0, thickness)
+        self.thickness, _, _, _ = myspline.interp(self.r)
+        self.thickness = np.minimum(100.0, self.thickness)
 
         # Load airfoil polar files
         afpath = self.getAeroPath()
@@ -520,12 +520,12 @@ class DTU10MW(ReferenceBlade):
         af_thicknesses  = np.array([24.1, 30.1, 36.0, 48.0, 60.0, 100.0])
         airfoil_files = ['FFA_W3_241.dat', 'FFA_W3_301.dat', 'FFA_W3_360.dat', 'FFA_W3_480.dat', 'FFA_W3_600.dat', 'Cylinder.dat']
         airfoil_files = [os.path.join(afpath, af_file) for af_file in airfoil_files]
-        self.set_polars(thickness, af_thicknesses, airfoil_files)
+        self.set_polars(self.thickness, af_thicknesses, airfoil_files)
 
         # Now set best guess at airfoil cordinates along span without interpolating like the polar (this is just for plotting)
         self.airfoil_files = ['']*self.npts
         for k in range(self.npts):
-            idx_thick       = np.where(thickness[k] <= af_thicknesses)[0]
+            idx_thick       = np.where(self.thickness[k] <= af_thicknesses)[0]
             if idx_thick.size > 0 and idx_thick[0] < af_thicknesses.size-1:
                 prefix   = 'FFA_W3_'
                 thickStr = str(np.int(10*af_thicknesses[idx_thick[0]]))
@@ -720,8 +720,8 @@ class TUM3_35MW(ReferenceBlade):
         self.te_thickness, _, _, _ = myspline.interp(self.r_in)
         
         myspline = Akima(raw_r, raw_th)
-        thickness, _, _, _ = myspline.interp(self.r)
-        thickness = np.minimum(100.0, thickness)
+        self.thickness, _, _, _ = myspline.interp(self.r)
+        self.thickness = np.minimum(100.0, self.thickness)
 
         # Load airfoil polar files
         afpath = self.getAeroPath()
@@ -729,12 +729,12 @@ class TUM3_35MW(ReferenceBlade):
         airfoil_files_ref = ['DU08-W-210.dat', 'DU91-W2-250.dat', 'DU97-W-300.dat', 'DU00-W2-350.dat', 'FX77-W-400.dat', 'FX77-W-500.dat', 'Cylinder.dat']
         airfoil_files_ref = [os.path.join(afpath, af_file) for af_file in airfoil_files_ref]
         # self.set_polars(thickness, af_thicknesses, airfoil_files_ref, blend=False)
-        self.set_polars(thickness, af_thicknesses, airfoil_files_ref)
+        self.set_polars(self.thickness, af_thicknesses, airfoil_files_ref)
 
         # Now set best guess at airfoil cordinates along span without interpolating like the polar (this is just for plotting)
         self.airfoil_files = ['']*self.npts
         for k in range(self.npts):
-            self.airfoil_files[k] = airfoil_files_ref[np.argmin(np.abs(af_thicknesses - thickness[k]))]
+            self.airfoil_files[k] = airfoil_files_ref[np.argmin(np.abs(af_thicknesses - self.thickness[k]))]
 
         # Structural analysis inputs
         raw_le = np.array([0.5000, 0.4965, 0.4930, 0.4857, 0.4716, 0.4519, 0.4280, 0.4078, 0.3891, 0.3557, 0.3293, 0.3084, 0.2918, 0.2785,
