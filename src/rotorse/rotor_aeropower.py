@@ -373,7 +373,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         def myfun(myv):
             P, _, _, _ = spline.interp(myv)
             return (P - params['control_ratedPower'])
-        if (myfun(params['control_Vout']) > params['control_ratedPower']):
+        #if (myfun(params['control_Vout']) > params['control_ratedPower']):
+        if (myfun(params['control_Vout']) > 0.):
             Vrated = brentq(lambda x: myfun(x), params['control_Vin'], params['control_Vout'])
         else:
             Vrated = params['control_Vout']
