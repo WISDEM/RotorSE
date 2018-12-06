@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import numpy as np
+from scipy.optimize import curve_fit
 import os
 from openmdao.api import IndepVarComp, Component, Group, Problem
 from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometry
@@ -21,6 +22,8 @@ from rotorse import RPM2RS, RS2RPM
 # Base Components
 # ---------------------
 
+
+
 class BeamPropertiesBase(Component):
     def __init__(self, NPTS):
         super(BeamPropertiesBase, self).__init__()
@@ -35,6 +38,9 @@ class BeamPropertiesBase(Component):
         self.add_output('beam:Tw_iner', val=np.zeros(NPTS), units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
         self.add_output('beam:x_ec', val=np.zeros(NPTS), units='m', desc='x-distance to elastic center from point about which above structural properties are computed (airfoil aligned coordinate system)')
         self.add_output('beam:y_ec', val=np.zeros(NPTS), units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
+
+        self.add_output('beam:flap_iner', val=np.zeros(NPTS), units='kg/m', desc='Section flap inertia about the Y_G axis per unit length.')
+        self.add_output('beam:edge_iner', val=np.zeros(NPTS), units='kg/m', desc='Section lag inertia about the X_G axis per unit length')
 
 class StrucBase(Component):
     def __init__(self, NPTS):
@@ -326,6 +332,9 @@ class PreCompSections(BeamPropertiesBase):
         beam_rhoJ = np.zeros(nsec)
         beam_Tw_iner = np.zeros(nsec)
 
+        beam_flap_iner = np.zeros(nsec)
+        beam_edge_iner = np.zeros(nsec)
+
         # distance to elastic center from point about which structural properties are computed
         # using airfoil coordinate system
         beam_x_ec = np.zeros(nsec)
@@ -397,8 +406,12 @@ class PreCompSections(BeamPropertiesBase):
             beam_rhoJ[i] = results[15] + results[16]  # perpindicular axis theorem
             beam_Tw_iner[i] = results[17]
 
+            beam_flap_iner[i] = results[15]
+            beam_edge_iner[i] = results[16]
+
             x_ec_nose[i] = results[13] + leLoc[i]*chord[i]
             y_ec_nose[i] = results[12]  # switch b.c of coordinate system used
+
 
         unknowns['beam:z'] = beam_z
         unknowns['beam:EIxx'] = beam_EIxx
@@ -411,6 +424,8 @@ class PreCompSections(BeamPropertiesBase):
         unknowns['beam:rhoA'] = beam_rhoA
         unknowns['beam:rhoJ'] = beam_rhoJ
         unknowns['beam:Tw_iner'] = beam_Tw_iner
+        unknowns['beam:flap_iner'] = beam_flap_iner
+        unknowns['beam:edge_iner'] = beam_edge_iner
         unknowns['eps_crit_spar'] = self.panelBucklingStrain(params, strain_idx_spar)
         unknowns['eps_crit_te'] = self.panelBucklingStrain(params, strain_idx_te)
 
@@ -546,11 +561,16 @@ class CurveFEM(Component):
         self.add_param('beam:rhoJ', val=np.zeros(NPTS), units='kg*m', desc='polar mass moment of inertia per unit length')
         self.add_param('beam:x_ec', val=np.zeros(NPTS), units='m', desc='x-distance to elastic center from point about which above structural properties are computed (airfoil aligned coordinate system)')
         self.add_param('beam:y_ec', val=np.zeros(NPTS), units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
+        self.add_param('beam:Tw_iner', val=np.zeros(NPTS), units='m', desc='y-distance to elastic center from point about which above structural properties are computed')
+        self.add_param('beam:flap_iner', val=np.zeros(NPTS), units='kg/m', desc='Section flap inertia about the Y_G axis per unit length.')
+        self.add_param('beam:edge_iner', val=np.zeros(NPTS), units='kg/m', desc='Section lag inertia about the X_G axis per unit length')
         self.add_param('theta', val=np.zeros(NPTS), units='deg', desc='structural twist distribution')
         self.add_param('precurve', val=np.zeros(NPTS), units='m', desc='structural precuve (see FAST definition)')
         self.add_param('presweep', val=np.zeros(NPTS), units='m', desc='structural presweep (see FAST definition)')
 
         self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='first nF natural frequencies')
+        self.add_output('modes_coef', val=np.zeros((3, 5)), desc='mode shapes as 6th order polynomials, in the format accepted by ElastoDyn, [[c_x2, c_],..]')
+        # self.add_output('')
 
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
@@ -560,10 +580,111 @@ class CurveFEM(Component):
 
     def solve_nonlinear(self, params, unknowns, resids):
 
-        mycurve = _pBEAM.CurveFEM(params['Omega'], params['theta'], params['beam:z'], params['precurve'], params['presweep'], params['beam:rhoA'], True)
-        freq = mycurve.frequencies(params['beam:EA'], params['beam:EIxx'], params['beam:EIyy'], params['beam:GJ'], params['beam:rhoJ'])
+        mycurve = _pBEAM.CurveFEM(params['Omega'], params['beam:Tw_iner'], params['beam:z'], params['precurve'], params['presweep'], params['beam:rhoA'], True)
+        # mycurve = _pBEAM.CurveFEM(params['Omega'], params['theta'], params['beam:z'], params['precurve'], params['presweep'], params['beam:rhoA'], True)
+        n = len(params['beam:z'])
+        freq, eig_vec = mycurve.frequencies(params['beam:EA'], params['beam:EIxx'], params['beam:EIyy'], params['beam:GJ'], params['beam:rhoJ'], n)
         unknowns['freq'] = freq[:NFREQ]
+        
+        # Parse eigen vectors
+        R = params['beam:z']
+        R = np.asarray([(Ri-R[0])/(R[-1]-R[0]) for Ri in R])
+        ndof = 6
 
+        flap = np.zeros((NFREQ, n))
+        edge = np.zeros((NFREQ, n))
+        for i in range(NFREQ):
+            eig_vec_i = eig_vec[:,i]
+            for j in range(n):
+                flap[i,j] = eig_vec_i[0+j*ndof]
+                edge[i,j] = eig_vec_i[1+j*ndof]
+
+
+        # Mode shape polynomial fit
+        def mode_fit(x, a, b, c, d, e):
+            return a*x**2. + b*x**3. + c*x**4. + d*x**5. + e*x**6.
+        # First Flapwise
+        coef, pcov = curve_fit(mode_fit, R, flap[0,:])
+        coef_norm = [c/sum(coef) for c in coef]
+        unknowns['modes_coef'][0,:] = coef_norm
+        # Second Flapwise
+        coef, pcov = curve_fit(mode_fit, R, flap[1,:])
+        coef_norm = [c/sum(coef) for c in coef]
+        unknowns['modes_coef'][1,:] = coef_norm
+        # First Edgewise
+        coef, pcov = curve_fit(mode_fit, R, edge[0,:])
+        coef_norm = [c/sum(coef) for c in coef]
+        unknowns['modes_coef'][2,:] = coef_norm
+
+
+        # # temp
+        # from bmodes import BModes_tools
+        # r = np.asarray([(ri-params['beam:z'][0])/(params['beam:z'][-1]-params['beam:z'][0]) for ri in params['beam:z']])
+        # prop = np.column_stack((r, params['theta'], params['beam:Tw_iner'], params['beam:rhoA'], params['beam:flap_iner'], params['beam:edge_iner'], params['beam:EIyy'], \
+        #         params['beam:EIxx'], params['beam:GJ'], params['beam:EA'], np.zeros_like(r), np.zeros_like(r), np.zeros_like(r)))
+        
+        # bm = BModes_tools()
+        # bm.setup.radius = params['beam:z'][-1]
+        # bm.setup.hub_rad = params['beam:z'][0]
+        # bm.setup.precone = -2.5
+        # bm.prop = prop
+        # bm.exe_BModes = 'C:/Users/egaertne/WT_Codes/bModes/BModes.exe'
+        # bm.execute()
+        # print(bm.freq)
+
+        # import matplotlib.pyplot as plt
+
+        # fig, ax = plt.subplots(nrows=2, ncols=4, figsize=(12., 6.), sharex=True, sharey=True)
+        # # fig.subplots_adjust(bottom=0.2, top=0.9)
+        # fig.subplots_adjust(bottom=0.15, left=0.1, hspace=0, wspace=0)
+        # i = 0
+        # k_flap = bm.flap_disp[i,-1]/flap[i,-1]
+        # k_edge = bm.lag_disp[i,-1]/edge[i,-1]
+        # ax[0,0].plot(R, flap[i,:]*k_flap ,'k',label='CurveFEM')
+        # ax[0,0].plot(bm.r[i,:], bm.flap_disp[i,:],'bx',label='BModes')
+        # ax[0,0].set_ylabel('Flapwise Disp.')
+        # ax[0,0].set_title('1st Mode')
+        # ax[1,0].plot(R, edge[i,:]*k_edge ,'k')
+        # ax[1,0].plot(bm.r[i,:], bm.lag_disp[i,:],'bx')
+        # ax[1,0].set_ylabel('Edgewise Disp.')
+
+        # i = 1
+        # k_flap = bm.flap_disp[i,-1]/flap[i,-1]
+        # k_edge = bm.lag_disp[i,-1]/edge[i,-1]
+        # ax[0,1].plot(R, flap[i,:]*k_flap ,'k')
+        # ax[0,1].plot(bm.r[i,:], bm.flap_disp[i,:],'bx')
+        # ax[0,1].set_title('2nd Mode')
+        # ax[1,1].plot(R, edge[i,:]*k_edge ,'k')
+        # ax[1,1].plot(bm.r[i,:], bm.lag_disp[i,:],'bx')
+
+        # i = 2
+        # k_flap = bm.flap_disp[i,-1]/flap[i,-1]
+        # k_edge = bm.lag_disp[i,-1]/edge[i,-1]
+        # ax[0,2].plot(R, flap[i,:]*k_flap ,'k')
+        # ax[0,2].plot(bm.r[i,:], bm.flap_disp[i,:],'bx')
+        # ax[0,2].set_title('3rd Mode')
+        # ax[1,2].plot(R, edge[i,:]*k_edge ,'k')
+        # ax[1,2].plot(bm.r[i,:], bm.lag_disp[i,:],'bx')
+        # fig.legend(loc='lower center', ncol=2)
+
+        # i = 3
+        # k_flap = bm.flap_disp[i,-1]/flap[i,-1]
+        # k_edge = bm.lag_disp[i,-1]/edge[i,-1]
+        # ax[0,3].plot(R, flap[i,:]*k_flap ,'k')
+        # ax[0,3].plot(bm.r[i,:], bm.flap_disp[i,:],'bx')
+        # ax[0,3].set_title('4th Mode')
+        # ax[1,3].plot(R, edge[i,:]*k_edge ,'k')
+        # ax[1,3].plot(bm.r[i,:], bm.lag_disp[i,:],'bx')
+        # fig.legend(loc='lower center', ncol=2)
+        # fig.text(0.5, 0.075, 'Blade Spanwise Position, $r/R$', ha='center')
+
+        # (n,m)=np.shape(ax)
+        # for i in range(n):
+        #     for j in range(m):
+        #         ax[i,j].tick_params(axis='both', which='major', labelsize=8)
+        #         ax[i,j].grid(True, linestyle=':')
+
+        # plt.show()
 
 
 class RotorWithpBEAM(StrucBase):
@@ -2011,6 +2132,7 @@ class OutputsStructures(Component):
         self.add_param('I_all_blades_in', shape=6, desc='out of plane moments of inertia in yaw-aligned c.s.')
         self.add_param('freq_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_param('freq_curvefem_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
+        self.add_param('modes_coef_curvefem_in', val=np.zeros((3, 5)), desc='mode shapes as 6th order polynomials, in the format accepted by ElastoDyn, [[c_x2, c_],..]')
         self.add_param('tip_deflection_in', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
         self.add_param('tip_position_in', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
         self.add_param('ground_clearance_in', val=0.0, units='m', desc='distance between blade tip and ground')
@@ -2050,6 +2172,7 @@ class OutputsStructures(Component):
         self.add_output('I_all_blades', shape=6, desc='out of plane moments of inertia in yaw-aligned c.s.')
         self.add_output('freq', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_output('freq_curvefem', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
+        self.add_output('modes_coef_curvefem', val=np.zeros((3, 5)), desc='mode shapes as 6th order polynomials, in the format accepted by ElastoDyn, [[c_x2, c_],..]')
         self.add_output('tip_deflection', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
         self.add_output('tip_position', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
         self.add_output('ground_clearance', val=0.0, units='m', desc='distance between blade tip and ground')
@@ -2091,6 +2214,7 @@ class OutputsStructures(Component):
         unknowns['I_all_blades'] = params['I_all_blades_in']
         unknowns['freq'] = params['freq_in']
         unknowns['freq_curvefem'] = params['freq_curvefem_in']
+        unknowns['modes_coef_curvefem'] = params['modes_coef_curvefem_in']
         unknowns['tip_deflection'] = params['tip_deflection_in']
         unknowns['tip_position'] = params['tip_position_in']
         unknowns['ground_clearance'] = params['ground_clearance_in']
@@ -2505,6 +2629,9 @@ class RotorStructure(Group):
         self.connect('beam.beam:rhoJ', 'curvefem.beam:rhoJ')
         self.connect('beam.beam:x_ec', 'curvefem.beam:x_ec')
         self.connect('beam.beam:y_ec', 'curvefem.beam:y_ec')
+        self.connect('beam.beam:flap_iner', 'curvefem.beam:flap_iner')
+        self.connect('beam.beam:edge_iner', 'curvefem.beam:edge_iner')
+        self.connect('beam.beam:Tw_iner', 'curvefem.beam:Tw_iner')
         self.connect('theta', 'curvefem.theta')
         self.connect('precurve', 'curvefem.precurve')
         self.connect('presweep', 'curvefem.presweep')
@@ -2569,6 +2696,7 @@ class RotorStructure(Group):
         self.connect('mass.I_all_blades', 'I_all_blades_in')
         self.connect('struc.freq', 'freq_in')
         self.connect('curvefem.freq', 'freq_curvefem_in')
+        self.connect('curvefem.modes_coef', 'modes_coef_curvefem_in')
         self.connect('tip.tip_deflection', 'tip_deflection_in')
         self.connect('tip.tip_position', 'tip_position_in')
         self.connect('tip.ground_clearance', 'ground_clearance_in')
@@ -2649,7 +2777,7 @@ class RotorStructure(Group):
 if __name__ == '__main__':
     myref = NREL5MW()
     #myref = DTU10MW()
-    #myref = TUM3_35MW()
+    # myref = TUM3_35MW()
 
     rotor = Problem()
     rotor.root = RotorStructure(myref)
@@ -2746,8 +2874,12 @@ if __name__ == '__main__':
     print('mass_all_blades =', rotor['mass_all_blades'])
     print('I_all_blades =', rotor['I_all_blades'])
     print('freq =', rotor['freq'])
+    print('freq curvefem =', rotor['freq_curvefem'])
     print('tip_deflection =', rotor['tip_deflection'])
     print('root_bending_moment =', rotor['root_bending_moment'])
+
+    print('CurveFEM calculated mode shape curve fit coef. for ElastoDyn =')
+    print(rotor['modes_coef_curvefem'])
 
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
@@ -2767,39 +2899,39 @@ if __name__ == '__main__':
     # precomp_out.execute()
     
 
-    import matplotlib.pyplot as plt
-    plt.figure()
-    plt.plot(rotor['r_pts'], rotor['strainU_spar'], label='suction')
-    plt.plot(rotor['r_pts'], rotor['strainL_spar'], label='pressure')
-    plt.plot(rotor['r_pts'], rotor['eps_crit_spar'], label='critical')
-    plt.ylim([-5e-3, 5e-3])
-    plt.xlabel('r')
-    plt.ylabel('strain')
-    plt.legend()
-    # plt.save('/Users/sning/Desktop/strain_spar.pdf')
-    # plt.save('/Users/sning/Desktop/strain_spar.png')
+    # import matplotlib.pyplot as plt
+    # plt.figure()
+    # plt.plot(rotor['r_pts'], rotor['strainU_spar'], label='suction')
+    # plt.plot(rotor['r_pts'], rotor['strainL_spar'], label='pressure')
+    # plt.plot(rotor['r_pts'], rotor['eps_crit_spar'], label='critical')
+    # plt.ylim([-5e-3, 5e-3])
+    # plt.xlabel('r')
+    # plt.ylabel('strain')
+    # plt.legend()
+    # # plt.save('/Users/sning/Desktop/strain_spar.pdf')
+    # # plt.save('/Users/sning/Desktop/strain_spar.png')
 
-    plt.figure()
-    plt.plot(rotor['r_pts'], rotor['strainU_te'], label='suction')
-    plt.plot(rotor['r_pts'], rotor['strainL_te'], label='pressure')
-    plt.plot(rotor['r_pts'], rotor['eps_crit_te'], label='critical')
-    plt.ylim([-5e-3, 5e-3])
-    plt.xlabel('r')
-    plt.ylabel('strain')
-    plt.legend()
-    # plt.save('/Users/sning/Desktop/strain_te.pdf')
-    # plt.save('/Users/sning/Desktop/strain_te.png')
+    # plt.figure()
+    # plt.plot(rotor['r_pts'], rotor['strainU_te'], label='suction')
+    # plt.plot(rotor['r_pts'], rotor['strainL_te'], label='pressure')
+    # plt.plot(rotor['r_pts'], rotor['eps_crit_te'], label='critical')
+    # plt.ylim([-5e-3, 5e-3])
+    # plt.xlabel('r')
+    # plt.ylabel('strain')
+    # plt.legend()
+    # # plt.save('/Users/sning/Desktop/strain_te.pdf')
+    # # plt.save('/Users/sning/Desktop/strain_te.png')
 
-    plt.show()
-    # ----------------
-    '''
-    f = open('deriv_structure.dat','w')
-    out = rotor.check_partial_derivatives(f, compact_print=True)
-    f.close()
-    tol = 1e-4
-    for comp in out.keys():
-        for k in out[comp].keys():
-            if ( (out[comp][k]['rel error'][0] > tol) and (out[comp][k]['abs error'][0] > tol) ):
-                print(k, out[comp][k]['rel error'][0], out[comp][k]['abs error'][0])
-    '''
+    # plt.show()
+    # # ----------------
+    # '''
+    # f = open('deriv_structure.dat','w')
+    # out = rotor.check_partial_derivatives(f, compact_print=True)
+    # f.close()
+    # tol = 1e-4
+    # for comp in out.keys():
+    #     for k in out[comp].keys():
+    #         if ( (out[comp][k]['rel error'][0] > tol) and (out[comp][k]['abs error'][0] > tol) ):
+    #             print(k, out[comp][k]['rel error'][0], out[comp][k]['abs error'][0])
+    # '''
 
