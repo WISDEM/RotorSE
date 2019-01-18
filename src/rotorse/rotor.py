@@ -9,9 +9,9 @@ Copyright (c)  NREL. All rights reserved.
 
 # from __future__ import print_function
 import numpy as np
-import os
+import os, time
 from openmdao.api import IndepVarComp, Component, Group, Problem, ExecComp
-from rotor_aeropower import SetupRunVarSpeed, CSMDrivetrain, RegulatedPowerCurve, AEP, OutputsAero
+from rotor_aeropower import RegulatedPowerCurve, AEP, OutputsAero
 from rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, \
     BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, \
     PreCompSections, RotorWithpBEAM, ConstraintsStructures
@@ -26,7 +26,7 @@ from rotorse import RPM2RS, RS2RPM, TURBULENCE_CLASS, DRIVETRAIN_TYPE
 
 
 class RotorSE(Group):
-    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200):
+    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True):
         super(RotorSE, self).__init__()
         """rotor model"""
 
@@ -36,6 +36,8 @@ class RotorSE(Group):
         self.add('gust_stddev', IndepVarComp('gust_stddev', val=3, pass_by_obj=True), promotes=['*'])
         #self.add('cdf_reference_height_wind_speed', IndepVarComp('cdf_reference_height_wind_speed', val=0.0, units='m', desc='reference hub height for IEC wind speed (used in CDF calculation)'), promotes=['*'])
         self.add('VfactorPC', IndepVarComp('VfactorPC', val=0.7, desc='fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation'), promotes=['*'])
+        self.add('rho', IndepVarComp('rho', val=1.225), promotes=['*'])
+        self.add('mu', IndepVarComp('mu', val=1.81e-5), promotes=['*'])
 
         # --- control ---
         self.add('c_Vin', IndepVarComp('control_Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
@@ -45,6 +47,7 @@ class RotorSE(Group):
         self.add('c_maxOmega', IndepVarComp('control_maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed'), promotes=['*'])
         self.add('c_tsr', IndepVarComp('control_tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
         self.add('c_pitch', IndepVarComp('control_pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
+        self.add('c_maxTS', IndepVarComp('control_maxTS', val=0.0, units='m/s', desc='max blade tip speed'), promotes=['*'])
         self.add('pitch_extreme', IndepVarComp('pitch_extreme', val=0.0, units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
         self.add('azimuth_extreme', IndepVarComp('azimuth_extreme', val=0.0, units='deg', desc='worst-case azimuth at survival wind condition'), promotes=['*'])
 
@@ -76,10 +79,7 @@ class RotorSE(Group):
         self.add('rotorGeometry', RotorGeometry(RefBlade), promotes=['*'])
 
         # self.add('tipspeed', MaxTipSpeed())
-        self.add('setup', SetupRunVarSpeed(npts_coarse_power_curve))
-        self.add('analysis', CCBladePower(NPTS, npts_coarse_power_curve))
-        self.add('dt', CSMDrivetrain(npts_coarse_power_curve))
-        self.add('powercurve', RegulatedPowerCurve(npts_coarse_power_curve, npts_spline_power_curve))
+        self.add('powercurve', RegulatedPowerCurve(NPTS, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5=regulation_reg_II5, regulation_reg_III=regulation_reg_III))
         self.add('wind', PowerWind(1))
         # self.add('cdf', WeibullWithMeanCDF(npts_spline_power_curve))
         self.add('cdf', RayleighCDF(npts_spline_power_curve))
@@ -128,58 +128,36 @@ class RotorSE(Group):
         # self.connect('max_tip_speed', 'tipspeed.Vtip_max')
         # self.connect('tipspeed.Omega_max', 'control_maxOmega')
 
-        # connections to setup
-        self.connect('control_Vin', 'setup.control_Vin')
-        self.connect('control_Vout', 'setup.control_Vout')
-        self.connect('control_maxOmega', 'setup.control_maxOmega')
-        self.connect('control_pitch', 'setup.control_pitch')
-        self.connect('control_tsr', 'setup.control_tsr')
-        self.connect('geom.R', 'setup.R')
-
-        # connections to analysis
-        self.connect('r_pts', 'analysis.r')
-        self.connect('chord', 'analysis.chord')
-        self.connect('theta', 'analysis.theta')
-        self.connect('precurve', 'analysis.precurve')
-        self.connect('precurve_tip', 'analysis.precurveTip')
-        self.connect('Rhub', 'analysis.Rhub')
-        self.connect('Rtip', 'analysis.Rtip')
-        self.connect('precone', 'analysis.precone')
-        self.connect('tilt', 'analysis.tilt')
-        self.connect('yaw', 'analysis.yaw')
-        self.connect('airfoils', 'analysis.airfoils')
-        self.connect('nBlades', 'analysis.B')
-        self.connect('nSector', 'analysis.nSector')
-        self.connect('setup.Uhub', 'analysis.Uhub')
-        self.connect('setup.Omega', 'analysis.Omega')
-        self.connect('setup.pitch', 'analysis.pitch')
-
-        # Connections from external modules
-        self.connect('hub_height', ['analysis.hubHt','aero_0.hubHt','aero_120.hubHt','aero_240.hubHt','aero_defl_powercurve.hubHt','aero_extrm_forces.hubHt','aero_extrm.hubHt','aero_rated.hubHt'])
-        self.connect('analysis.rho', ['aero_0.rho','aero_120.rho','aero_240.rho','aero_defl_powercurve.rho','aero_extrm_forces.rho','aero_extrm.rho','aero_rated.rho'])
-        self.connect('analysis.mu', ['aero_0.mu','aero_120.mu','aero_240.mu','aero_defl_powercurve.mu','aero_extrm_forces.mu','aero_extrm.mu','aero_rated.mu'])
-        self.connect('wind.shearExp', ['analysis.shearExp', 'aero_0.shearExp','aero_120.shearExp','aero_240.shearExp','aero_defl_powercurve.shearExp','aero_extrm_forces.shearExp','aero_extrm.shearExp','aero_rated.shearExp'])
-        #self.connect('analysis.shearExp', ['aero_0.shearExp','aero_120.shearExp','aero_240.shearExp','aero_defl_powercurve.shearExp','aero_extrm_forces.shearExp','aero_extrm.shearExp','aero_rated.shearExp'])
-        
-        # connections to drivetrain
-        self.connect('analysis.P', 'dt.aeroPower')
-        self.connect('analysis.Q', 'dt.aeroTorque')
-        self.connect('analysis.T', 'dt.aeroThrust')
-        self.connect('machine_rating', 'dt.ratedPower')
-        self.connect('drivetrainType', 'dt.drivetrainType')
-
         # connections to powercurve
+        self.connect('r_pts', 'powercurve.r')
+        self.connect('chord', 'powercurve.chord')
+        self.connect('theta', 'powercurve.theta')
+        self.connect('precurve', 'powercurve.precurve')
+        self.connect('precurve_tip', 'powercurve.precurveTip')
+        self.connect('Rhub', 'powercurve.Rhub')
+        self.connect('Rtip', 'powercurve.Rtip')
+        self.connect('precone', 'powercurve.precone')
+        self.connect('tilt', 'powercurve.tilt')
+        self.connect('yaw', 'powercurve.yaw')
+        self.connect('airfoils', 'powercurve.airfoils')
+        self.connect('nBlades', 'powercurve.B')
+        self.connect('nSector', 'powercurve.nSector')
+
+        self.connect('drivetrainType', 'powercurve.drivetrainType')
         self.connect('control_Vin', 'powercurve.control_Vin')
         self.connect('control_Vout', 'powercurve.control_Vout')
+        self.connect('control_maxTS', 'powercurve.control_maxTS')
         self.connect('control_maxOmega', 'powercurve.control_maxOmega')
         self.connect('control_minOmega', 'powercurve.control_minOmega')
         self.connect('control_pitch', 'powercurve.control_pitch')
         self.connect('machine_rating', 'powercurve.control_ratedPower')
         self.connect('control_tsr', 'powercurve.control_tsr')
-        self.connect('setup.Uhub', 'powercurve.Vcoarse')
-        self.connect('dt.power', 'powercurve.Pcoarse')
-        self.connect('analysis.T', 'powercurve.Tcoarse')
-        self.connect('geom.R', 'powercurve.R')
+
+        # Connections from external modules
+        self.connect('hub_height', ['powercurve.hubHt','aero_0.hubHt','aero_120.hubHt','aero_240.hubHt','aero_defl_powercurve.hubHt','aero_extrm_forces.hubHt','aero_extrm.hubHt','aero_rated.hubHt'])
+        self.connect('rho', ['powercurve.rho', 'aero_0.rho','aero_120.rho','aero_240.rho','aero_defl_powercurve.rho','aero_extrm_forces.rho','aero_extrm.rho','aero_rated.rho'])
+        self.connect('mu', ['powercurve.mu', 'aero_0.mu','aero_120.mu','aero_240.mu','aero_defl_powercurve.mu','aero_extrm_forces.mu','aero_extrm.mu','aero_rated.mu'])
+        self.connect('wind.shearExp', ['powercurve.shearExp', 'aero_0.shearExp','aero_120.shearExp','aero_240.shearExp','aero_defl_powercurve.shearExp','aero_extrm_forces.shearExp','aero_extrm.shearExp','aero_rated.shearExp'])
 
         # connections to wind
         # self.connect('cdf_reference_mean_wind_speed', 'wind.Uref')
@@ -188,18 +166,18 @@ class RotorSE(Group):
         self.connect('turbineclass.V_mean', 'wind.Uref')
 
         # connections to cdf
-        self.connect('powercurve.V', 'cdf.x')
+        self.connect('powercurve.V_spline', 'cdf.x')
         self.connect('wind.U', 'cdf.xbar', src_indices=[0])
         self.connect('shape_parameter', 'cdf.k')
 
         # connections to aep
         self.connect('cdf.F', 'aep.CDF_V')
-        self.connect('powercurve.P', 'aep.P')
+        self.connect('powercurve.P_spline', 'aep.P')
         self.connect('AEP_loss_factor', 'aep.lossFactor')
 
         # connections to outputs
-        self.connect('powercurve.V', 'V_in')
-        self.connect('powercurve.P', 'P_in')
+        self.connect('powercurve.V_spline', 'V_in')
+        self.connect('powercurve.P_spline', 'P_in')
         self.connect('aep.AEP', 'AEP_in')
         self.connect('powercurve.rated_V', 'rated_V_in')
         self.connect('powercurve.rated_Omega', 'rated_Omega_in')
@@ -260,7 +238,6 @@ class RotorSE(Group):
         self.connect('gust.V_gust', 'aero_rated.V_load')
         self.connect('powercurve.rated_Omega', 'aero_rated.Omega_load')
         self.connect('powercurve.rated_pitch', 'aero_rated.pitch_load')
-        self.connect('powercurve.azimuth', 'aero_rated.azimuth_load')
         self.aero_rated.azimuth_load = 180.0  # closest to tower
 
         # connections to aero_extrm (for max strain)
@@ -551,10 +528,10 @@ class RotorSE(Group):
         self.connect('azimuth_load120', 'aero_120.azimuth_load')
         self.connect('azimuth_load240', 'aero_240.azimuth_load')
 
-        self.connect('tiploss', ['analysis.tiploss', 'aero_0.tiploss','aero_120.tiploss','aero_240.tiploss','aero_defl_powercurve.tiploss','aero_extrm_forces.tiploss','aero_extrm.tiploss','aero_rated.tiploss'])
-        self.connect('hubloss', ['analysis.hubloss', 'aero_0.hubloss','aero_120.hubloss','aero_240.hubloss','aero_defl_powercurve.hubloss','aero_extrm_forces.hubloss','aero_extrm.hubloss','aero_rated.hubloss'])
-        self.connect('wakerotation', ['analysis.wakerotation', 'aero_0.wakerotation','aero_120.wakerotation','aero_240.wakerotation','aero_defl_powercurve.wakerotation','aero_extrm_forces.wakerotation','aero_extrm.wakerotation','aero_rated.wakerotation'])
-        self.connect('usecd', ['analysis.usecd', 'aero_0.usecd','aero_120.usecd','aero_240.usecd','aero_defl_powercurve.usecd','aero_extrm_forces.usecd','aero_extrm.usecd','aero_rated.usecd'])
+        self.connect('tiploss', ['powercurve.tiploss', 'aero_0.tiploss','aero_120.tiploss','aero_240.tiploss','aero_defl_powercurve.tiploss','aero_extrm_forces.tiploss','aero_extrm.tiploss','aero_rated.tiploss'])
+        self.connect('hubloss', ['powercurve.hubloss', 'aero_0.hubloss','aero_120.hubloss','aero_240.hubloss','aero_defl_powercurve.hubloss','aero_extrm_forces.hubloss','aero_extrm.hubloss','aero_rated.hubloss'])
+        self.connect('wakerotation', ['powercurve.wakerotation', 'aero_0.wakerotation','aero_120.wakerotation','aero_240.wakerotation','aero_defl_powercurve.wakerotation','aero_extrm_forces.wakerotation','aero_extrm.wakerotation','aero_rated.wakerotation'])
+        self.connect('usecd', ['powercurve.usecd', 'aero_0.usecd','aero_120.usecd','aero_240.usecd','aero_defl_powercurve.usecd','aero_extrm_forces.usecd','aero_extrm.usecd','aero_rated.usecd'])
 
         # connections to root moment for drivetrain
 
@@ -589,15 +566,17 @@ class RotorSE(Group):
 
         
 if __name__ == '__main__':
-    # myref = NREL5MW() 
+    myref = NREL5MW() 
     # myref = DTU10MW()
-    myref = TUM3_35MW()
+    # myref = TUM3_35MW()
 
     rotor = Problem()
     npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
     npts_spline_power_curve = 200  # (Int): number of points to use in fitting spline to power curve
+    regulation_reg_II5 = False # calculate Region 2.5 pitch schedule, False will not maximize power in region 2.5
+    regulation_reg_III = False # calculate Region 3 pitch schedule, False will return erroneous Thrust, Torque, and Moment for above rated
 
-    rotor.root = RotorSE(myref, npts_coarse_power_curve, npts_spline_power_curve)
+    rotor.root = RotorSE(myref, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5, regulation_reg_III)
     rotor.setup()
 
     # === blade grid ===
@@ -622,8 +601,8 @@ if __name__ == '__main__':
     # ------------------
 
     # === atmosphere ===
-    rotor['analysis.rho'] = 1.225  # (Float, kg/m**3): density of air
-    rotor['analysis.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
+    rotor['rho'] = 1.225  # (Float, kg/m**3): density of air
+    rotor['mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['wind.shearExp'] = 0.25  # (Float): shear exponent
     rotor['hub_height'] = myref.hub_height #90.0  # (Float, m): hub height
     rotor['turbine_class'] = myref.turbine_class #TURBINE_CLASS['I']  # (Enum): IEC turbine class
@@ -639,6 +618,7 @@ if __name__ == '__main__':
     rotor['control_maxOmega'] = myref.control_maxOmega #12.0  # (Float, rpm): maximum allowed rotor rotation speed
     rotor['control_tsr'] = myref.control_tsr #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
     rotor['control_pitch'] = myref.control_pitch #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    rotor['control_maxTS'] = myref.control_maxTS
     rotor['machine_rating'] = myref.rating #5e6  # (Float, W): rated power
     rotor['pitch_extreme'] = 0.0  # (Float, deg): worst-case pitch at survival wind condition
     rotor['azimuth_extreme'] = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
@@ -683,8 +663,10 @@ if __name__ == '__main__':
     # from myutilities import plt
 
     # === run and outputs ===
+    tt = time.time()
     rotor.run()
 
+    print('Run Time = ', time.time()-tt)
     print('AEP =', rotor['AEP'])
     print('diameter =', rotor['diameter'])
     print('ratedConditions.V =', rotor['rated_V'])

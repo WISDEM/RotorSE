@@ -68,6 +68,7 @@ class ReferenceBlade(object):
         self.control_tsr  = None
         self.control_minOmega = None
         self.control_maxOmega = None
+        self.control_maxTS = None
         
     def setRin(self):
         self.r_in = np.r_[0.0, self.r_cylinder, np.linspace(self.r_max_chord, 1.0, NINPUT-2)]
@@ -364,6 +365,7 @@ class NREL5MW(ReferenceBlade):
         self.control_maxOmega = 12.1
         self.control_tsr      = 80.0 / 11.4
         self.control_pitch    = 0.0
+        self.control_maxTS    = 80.0
         
         
 class DTU10MW(ReferenceBlade):
@@ -588,6 +590,7 @@ class DTU10MW(ReferenceBlade):
         self.control_maxOmega = 90.0 / self.bladeLength * (60.0/(2.0*np.pi))
         self.control_tsr      = 10.58
         self.control_pitch    = 0.0
+        self.control_maxTS    = 90.
         
 class TUM3_35MW(ReferenceBlade):
     def __init__(self):
@@ -774,9 +777,11 @@ class TUM3_35MW(ReferenceBlade):
         self.control_Vin      = 3.
         self.control_Vout     = 25.0
         self.control_minOmega = 3.77165108498795
-        self.control_maxOmega = 12.928278454234
+        self.control_maxOmega = 11.75298041294
         self.control_tsr      = 8.16326530612245
         self.control_pitch    = 0.803344518293558
+        self.control_maxTS    = 80.
+        
 
 
 class BladeGeometry(Component):
