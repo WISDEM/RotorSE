@@ -784,7 +784,7 @@ class Profile:
 
 
         # check if coordinates were input in other direction
-        if y[1] < y[0]:
+        if np.mean(y[0:i]) < 0.:
             temp = yu
             yu = yl
             yl = temp

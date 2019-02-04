@@ -10,13 +10,14 @@ from commonse.csystem import DirectionVector
 from commonse.utilities import trapz_deriv, interp_with_deriv
 from precomp import _precomp
 from akima import Akima, akima_interp_with_derivs
-from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, TUM3_35MW, NINPUT, TURBULENCE_CLASS
+from rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
 import _pBEAM
 # import ccblade._bem as _bem  # TODO: move to rotoraero
 import _bem  # TODO: move to rotoraero
 
 from rotorse import RPM2RS, RS2RPM
 
+from rotor_geometry_yaml import ReferenceBlade
 
 # ---------------------
 # Base Components
@@ -367,9 +368,10 @@ class PreCompSections(BeamPropertiesBase):
             nu12[i] = mat[i].nu12
             rho[i] = mat[i].rho
 
+        # for i in range(nsec):
+        #     print(csW[i], type(csW[i]))
 
         for i in range(nsec):
-
             xnode, ynode = profile[i]._preCompFormat()
             locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU = csU[i]._preCompFormat()
             locL, n_laminaL, n_pliesL, tL, thetaL, mat_idxL = csL[i]._preCompFormat()
@@ -386,14 +388,12 @@ class PreCompSections(BeamPropertiesBase):
                 thetaW = [0]
                 mat_idxW = [0]
 
-
             results = _precomp.properties(chord[i], theta[i],
                 th_prime[i], leLoc[i],
                 xnode, ynode, E1, E2, G12, nu12, rho,
                 locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU,
                 locL, n_laminaL, n_pliesL, tL, thetaL, mat_idxL,
                 nwebs, locW, n_laminaW, n_pliesW, tW, thetaW, mat_idxW)
-
 
             beam_EIxx[i] = results[1]  # EIedge
             beam_EIyy[i] = results[0]  # EIflat
@@ -412,6 +412,20 @@ class PreCompSections(BeamPropertiesBase):
             x_ec_nose[i] = results[13] + leLoc[i]*chord[i]
             y_ec_nose[i] = results[12]  # switch b.c of coordinate system used
 
+            # beam_EIxx[i]      = None # EIedge
+            # beam_EIyy[i]      = None # EIflat
+            # beam_GJ[i]        = None
+            # beam_EA[i]        = None
+            # beam_EIxy[i]      = None # EIflapedge
+            # beam_x_ec[i]      = None - results[10]
+            # beam_y_ec[i]      = None - results[11]
+            # beam_rhoA[i]      = None
+            # beam_rhoJ[i]      = None + results[16]  # perpindicular axis theorem
+            # beam_Tw_iner[i]   = None
+            # beam_flap_iner[i] = None
+            # beam_edge_iner[i] = None
+            # x_ec_nose[i]      = None + leLoc[i]*chord[i]
+            # y_ec_nose[i]      = None  # switch b.c of coordinate system used
 
         unknowns['beam:z'] = beam_z
         unknowns['beam:EIxx'] = beam_EIxx
@@ -836,6 +850,10 @@ class RotorWithpBEAM(StrucBase):
         p_tip = _pBEAM.TipData()  # no tip mass
         p_base = _pBEAM.BaseData(np.ones(6), 1.0)  # rigid base
 
+        # import matplotlib.pyplot as plt
+        # plt.plot(params['beam:z'], params['beam:rhoA'])
+        # plt.show()
+
 
         # ----- tip deflection -----
 
@@ -990,10 +1008,10 @@ class TotalLoads(Component):
     def __init__(self, NPTS):
         super(TotalLoads, self).__init__()
         # variables
-        self.add_param('aeroloads_r', val=np.zeros(NPTS+2), units='m', desc='radial positions along blade going toward tip')
-        self.add_param('aeroloads_Px', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_param('aeroloads_Py', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_param('aeroloads_Pz', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_param('aeroloads_r', val=np.zeros(NPTS), units='m', desc='radial positions along blade going toward tip')
+        self.add_param('aeroloads_Px', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('aeroloads_Py', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('aeroloads_Pz', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned z-direction')
         self.add_param('aeroloads_Omega', val=0.0, units='rpm', desc='rotor rotation speed')
         self.add_param('aeroloads_pitch', val=0.0, units='deg', desc='pitch angle')
         self.add_param('aeroloads_azimuth', val=0.0, units='deg', desc='azimuthal angle')
@@ -1042,7 +1060,6 @@ class TotalLoads(Component):
         P_a.x, self.dPax_dr, self.dPax_daeror, self.dPax_daeroPx = akima_interp_with_derivs(params['aeroloads_r'], params['aeroloads_Px'], self.r)
         P_a.y, self.dPay_dr, self.dPay_daeror, self.dPay_daeroPy = akima_interp_with_derivs(params['aeroloads_r'], params['aeroloads_Py'], self.r)
         P_a.z, self.dPaz_dr, self.dPaz_daeror, self.dPaz_daeroPz = akima_interp_with_derivs(params['aeroloads_r'], params['aeroloads_Pz'], self.r)
-
 
         # --- weight loads ---
 
@@ -1522,10 +1539,10 @@ class RootMoment(Component):
     """blade root bending moment"""
     def __init__(self, NPTS):
         super(RootMoment, self).__init__()
-        self.add_param('aeroloads_r', val=np.zeros(NPTS+2), units='m', desc='radial positions along blade going toward tip')
-        self.add_param('aeroloads_Px', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_param('aeroloads_Py', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_param('aeroloads_Pz', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_param('aeroloads_r', val=np.zeros(NPTS), units='m', desc='radial positions along blade going toward tip')
+        self.add_param('aeroloads_Px', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('aeroloads_Py', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('aeroloads_Pz', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned z-direction')
         self.add_param('r_pts', val=np.zeros(NPTS), units='m')
         self.add_param('totalCone', val=np.zeros(NPTS), units='deg', desc='total cone angle from precone and curvature')
         self.add_param('x_az', val=np.zeros(NPTS), units='m', desc='location of blade in azimuth x-coordinate system')
@@ -2317,10 +2334,10 @@ class OutputsStructures(Component):
 
 
 class RotorStructure(Group):
-    def __init__(self, RefBlade):
+    def __init__(self, refBlade):
         super(RotorStructure, self).__init__()
         """rotor model"""
-        NPTS = RefBlade.npts
+        NPTS = len(refBlade['pf']['s'])
 
         #self.add('rho', IndepVarComp('rho', val=1.225), promotes=['*'])
         #self.add('mu', IndepVarComp('mu', val=1.81e-5), promotes=['*'])
@@ -2365,11 +2382,11 @@ class RotorStructure(Group):
         self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
 
         # Geometry
-        self.add('rotorGeometry', RotorGeometry(RefBlade), promotes=['*'])
+        self.add('rotorGeometry', RotorGeometry(refBlade), promotes=['*'])
 
         # --- add structures ---
         self.add('curvature', BladeCurvature(NPTS))
-        self.add('resize', ResizeCompositeSection(NPTS))
+        # self.add('resize', ResizeCompositeSection(NPTS))
         self.add('gust', GustETM())
         self.add('setuppc',  SetupPCModVarSpeed())
         self.add('beam', PreCompSections(NPTS))
@@ -2408,16 +2425,18 @@ class RotorStructure(Group):
         self.connect('presweep', 'curvature.presweep')
         self.connect('precone', 'curvature.precone')
 
-        # connections to resize
-        self.connect('chord', 'resize.chord')
-        self.connect('sparT', 'resize.sparT')
-        self.connect('teT', 'resize.teT')
-        self.connect('upperCS', 'resize.upperCS_in')
-        self.connect('lowerCS', 'resize.lowerCS_in')
-        self.connect('websCS', 'resize.websCS_in')
-        self.connect('chord_ref', 'resize.chord_ref')
-        self.connect('sector_idx_strain_spar', ['resize.sector_idx_strain_spar','beam.sector_idx_strain_spar'])
-        self.connect('sector_idx_strain_te', ['resize.sector_idx_strain_te','beam.sector_idx_strain_te'])
+        # # connections to resize
+        # self.connect('chord', 'resize.chord')
+        # self.connect('sparT', 'resize.sparT')
+        # self.connect('teT', 'resize.teT')
+        # self.connect('upperCS', 'resize.upperCS_in')
+        # self.connect('lowerCS', 'resize.lowerCS_in')
+        # self.connect('websCS', 'resize.websCS_in')
+        # self.connect('chord_ref', 'resize.chord_ref')
+        # self.connect('sector_idx_strain_spar', ['resize.sector_idx_strain_spar','beam.sector_idx_strain_spar'])
+        # self.connect('sector_idx_strain_te', ['resize.sector_idx_strain_te','beam.sector_idx_strain_te'])
+        self.connect('sector_idx_strain_spar', 'beam.sector_idx_strain_spar')
+        self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')
@@ -2519,9 +2538,9 @@ class RotorStructure(Group):
         self.connect('r_pts', 'beam.r')
         self.connect('chord', 'beam.chord')
         self.connect('theta', 'beam.theta')
-        self.connect('resize.upperCS', 'beam.upperCS')
-        self.connect('resize.lowerCS', 'beam.lowerCS')
-        self.connect('resize.websCS', 'beam.websCS')
+        self.connect('upperCS', 'beam.upperCS')
+        self.connect('lowerCS', 'beam.lowerCS')
+        self.connect('websCS', 'beam.websCS')
         self.connect('profile', 'beam.profile')
         self.connect('le_location', 'beam.le_location')
         self.connect('materials', 'beam.materials')
@@ -2775,50 +2794,60 @@ class RotorStructure(Group):
         self.connect('aero_rated.Omega_load', 'Omega')
         
 if __name__ == '__main__':
-    myref = NREL5MW()
-    #myref = DTU10MW()
-    # myref = TUM3_35MW()
+    NINPUT = 5
 
+    # Turbine Ontology input
+    fname_input = "turbine_inputs/nrel5mw_mod.yaml"
+
+    # Initialize blade design
+    refBlade = ReferenceBlade()
+    refBlade.verbose = True
+    refBlade.NINPUT  = NINPUT
+    refBlade.NPITS   = 50
+
+    refBlade.spar_var = 'Spar_Cap_SS'
+    refBlade.te_var   = 'TE_reinforcement'
+
+    blade = refBlade.initialize(fname_input)
     rotor = Problem()
-    rotor.root = RotorStructure(myref)
+    rotor.root = RotorStructure(blade)
     
     #rotor.setup(check=False)
     rotor.setup()
 
     # === blade grid ===
-    rotor['hubFraction'] = myref.hubFraction #0.025  # (Float): hub location as fraction of radius
-    rotor['bladeLength'] = myref.bladeLength #61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+    rotor['hubFraction'] = blade['config']['hubD']/2./blade['pf']['r'][-1] #0.025  # (Float): hub location as fraction of radius
+    rotor['bladeLength'] = blade['pf']['r'][-1] #61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
     # rotor['delta_bladeLength'] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading
-    rotor['precone'] = myref.precone #2.5  # (Float, deg): precone angle
-    rotor['tilt'] = myref.tilt #5.0  # (Float, deg): shaft tilt
+    rotor['precone'] = blade['config']['cone_angle'] #2.5  # (Float, deg): precone angle
+    rotor['tilt'] = blade['config']['tilt_angle'] #5.0  # (Float, deg): shaft tilt
     rotor['yaw'] = 0.0  # (Float, deg): yaw error
-    rotor['nBlades'] = myref.nBlades #3  # (Int): number of blades
+    rotor['nBlades'] = blade['config']['number_of_blades'] #3  # (Int): number of blades
     # ------------------
     
     # === blade geometry ===
-    rotor['r_max_chord'] =  myref.r_max_chord  # 0.23577 #(Float): location of max chord on unit radius
-    rotor['chord_in'] = myref.chord # np.array([3.2612, 4.3254, 4.5709, 3.7355, 2.69923333, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-    rotor['theta_in'] = myref.theta # np.array([0.0, 13.2783, 12.30514836,  6.95106536,  2.72696309, -0.0878099]) # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-    rotor['precurve_in'] = myref.precurve #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-    rotor['presweep_in'] = myref.presweep #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-    # rotor['delta_precurve_in'] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading
-    rotor['sparT_in'] = myref.spar_thickness # np.array([0.0, 0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-    rotor['teT_in'] = myref.te_thickness # np.array([0.0, 0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+    rotor['r_max_chord'] =  blade['ctrl_pts']['r_max_chord']  # 0.23577 #(Float): location of max chord on unit radius
+    rotor['chord_in'] = blade['ctrl_pts']['chord_in'] # np.array([3.2612, 4.3254, 4.5709, 3.7355, 2.69923333, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    rotor['theta_in'] = blade['ctrl_pts']['theta_in'] # np.array([0.0, 13.2783, 12.30514836,  6.95106536,  2.72696309, -0.0878099]) # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
+    rotor['precurve_in'] = blade['ctrl_pts']['precurve_in'] #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
+    rotor['presweep_in'] = blade['ctrl_pts']['presweep_in'] #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
+    rotor['sparT_in'] = blade['ctrl_pts']['sparT_in'] # np.array([0.0, 0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
+    rotor['teT_in'] = blade['ctrl_pts']['teT_in'] # np.array([0.0, 0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
     # ------------------
 
     # === atmosphere ===
     rotor['aero_0.rho'] = 1.225  # (Float, kg/m**3): density of air
     rotor['aero_0.mu'] = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['aero_0.shearExp'] = 0.25  # (Float): shear exponent
-    rotor['hub_height'] = myref.hub_height  # (Float, m): hub height
-    rotor['turbine_class'] = myref.turbine_class #TURBINE_CLASS['I']  # (Enum): IEC turbine class
-    rotor['turbulence_class'] = TURBULENCE_CLASS['B']  # (Enum): IEC turbulence class class
+    rotor['hub_height'] = blade['config']['hub_height']  # (Float, m): hub height
+    rotor['turbine_class'] = TURBINE_CLASS[blade['config']['turbine_class'].upper()] #TURBINE_CLASS['I']  # (Enum): IEC turbine class
+    rotor['turbulence_class'] = TURBULENCE_CLASS[blade['config']['turbulence_class'].upper()]  # (Enum): IEC turbulence class class
     rotor['gust_stddev'] = 3
     # ----------------------
 
     # === control ===
-    rotor['control_tsr'] = myref.control_tsr #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
-    rotor['control_pitch'] = myref.control_pitch #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
+    rotor['control_tsr'] = blade['config']['tsr'] #7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)
+    rotor['control_pitch'] = blade['config']['pitch'] #0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)
     rotor['pitch_extreme'] = 0.0  # (Float, deg): worst-case pitch at survival wind condition
     rotor['azimuth_extreme'] = 0.0  # (Float, deg): worst-case azimuth at survival wind condition
     rotor['VfactorPC'] = 0.7  # (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation
@@ -2843,7 +2872,7 @@ if __name__ == '__main__':
         1.8459E+003, 1.5582E+003, 1.2896E+003, 1.0427E+003, 8.2015E+002, 6.2449E+002, 4.5229E+002,
         3.0658E+002, 1.8746E+002, 9.6475E+001, 4.2677E+001, 1.5409E+001, 1.8426E+000])  # (Array, N*m): damage equivalent moments about blade c.s. y-direction
     xp = np.r_[0.0, r_aero]
-    xx = np.r_[0.0, myref.r]
+    xx = np.r_[0.0, blade['pf']['s']]
     rotor['rstar_damage'] = np.interp(xx, xp, rstar_damage)
     rotor['Mxb_damage'] = np.interp(xx, xp, Mxb_damage)
     rotor['Myb_damage'] = np.interp(xx, xp, Myb_damage)
@@ -2881,57 +2910,43 @@ if __name__ == '__main__':
     print('CurveFEM calculated mode shape curve fit coef. for ElastoDyn =')
     print(rotor['modes_coef_curvefem'])
 
-    #for io in rotor.root.unknowns:
-    #    print(io + ' ' + str(rotor.root.unknowns[io]))
 
-    ## Write precomp files out
-    # from rotorse.precomp import PreCompWriter
-    # dir_out     = 'temp'
-    # materials   = rotor['materials']
-    # upper       = rotor['upperCS']
-    # lower       = rotor['lowerCS']
-    # webs        = rotor['websCS']
-    # profile     = rotor['profile']
-    # chord       = rotor['chord']
-    # twist       = rotor['theta']
-    # p_le        = rotor['le_location']
-    # precomp_out = PreCompWriter(dir_out, materials, upper, lower, webs, profile, chord, twist, p_le)
-    # precomp_out.execute()
+    # Write precomp files out
+    from rotorse.precomp import PreCompWriter
+    dir_out     = 'temp'
+    materials   = rotor['materials']
+    upper       = rotor['upperCS']
+    lower       = rotor['lowerCS']
+    webs        = rotor['websCS']
+    profile     = rotor['profile']
+    chord       = rotor['chord']
+    twist       = rotor['theta']
+    p_le        = rotor['le_location']
+    precomp_out = PreCompWriter(dir_out, materials, upper, lower, webs, profile, chord, twist, p_le)
+    precomp_out.execute()
     
 
-    # import matplotlib.pyplot as plt
-    # plt.figure()
-    # plt.plot(rotor['r_pts'], rotor['strainU_spar'], label='suction')
-    # plt.plot(rotor['r_pts'], rotor['strainL_spar'], label='pressure')
-    # plt.plot(rotor['r_pts'], rotor['eps_crit_spar'], label='critical')
-    # plt.ylim([-5e-3, 5e-3])
-    # plt.xlabel('r')
-    # plt.ylabel('strain')
-    # plt.legend()
-    # # plt.save('/Users/sning/Desktop/strain_spar.pdf')
-    # # plt.save('/Users/sning/Desktop/strain_spar.png')
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.plot(rotor['r_pts'], rotor['strainU_spar'], label='suction')
+    plt.plot(rotor['r_pts'], rotor['strainL_spar'], label='pressure')
+    plt.plot(rotor['r_pts'], rotor['eps_crit_spar'], label='critical')
+    plt.ylim([-5e-3, 5e-3])
+    plt.xlabel('r')
+    plt.ylabel('strain')
+    plt.legend()
+    # plt.save('/Users/sning/Desktop/strain_spar.pdf')
+    # plt.save('/Users/sning/Desktop/strain_spar.png')
 
-    # plt.figure()
-    # plt.plot(rotor['r_pts'], rotor['strainU_te'], label='suction')
-    # plt.plot(rotor['r_pts'], rotor['strainL_te'], label='pressure')
-    # plt.plot(rotor['r_pts'], rotor['eps_crit_te'], label='critical')
-    # plt.ylim([-5e-3, 5e-3])
-    # plt.xlabel('r')
-    # plt.ylabel('strain')
-    # plt.legend()
-    # # plt.save('/Users/sning/Desktop/strain_te.pdf')
-    # # plt.save('/Users/sning/Desktop/strain_te.png')
+    plt.figure()
+    plt.plot(rotor['r_pts'], rotor['strainU_te'], label='suction')
+    plt.plot(rotor['r_pts'], rotor['strainL_te'], label='pressure')
+    plt.plot(rotor['r_pts'], rotor['eps_crit_te'], label='critical')
+    plt.ylim([-5e-3, 5e-3])
+    plt.xlabel('r')
+    plt.ylabel('strain')
+    plt.legend()
+    # plt.save('/Users/sning/Desktop/strain_te.pdf')
+    # plt.save('/Users/sning/Desktop/strain_te.png')
 
-    # plt.show()
-    # # ----------------
-    # '''
-    # f = open('deriv_structure.dat','w')
-    # out = rotor.check_partial_derivatives(f, compact_print=True)
-    # f.close()
-    # tol = 1e-4
-    # for comp in out.keys():
-    #     for k in out[comp].keys():
-    #         if ( (out[comp][k]['rel error'][0] > tol) and (out[comp][k]['abs error'][0] > tol) ):
-    #             print(k, out[comp][k]['rel error'][0], out[comp][k]['abs error'][0])
-    # '''
-
+    plt.show()
