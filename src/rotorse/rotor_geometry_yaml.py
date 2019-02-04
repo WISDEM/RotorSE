@@ -246,6 +246,8 @@ class ReferenceBlade(object):
             add_s = np.linspace(self.s[-2],1,num=self.NPTS-len(self.s)+2).tolist()[1:-1]
             self.s = list(sorted(set(np.linspace(0,1,num=self.NPTS-len(r_points)).tolist() + r_points + add_s)))
 
+        # R = [0., 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.3667, 1.5, 1.6, 4.1, 5.5, 6.8333, 9, 10.25, 12, 14.35, 17, 18.45, 20.5, 22.55, 24.6, 26.65, 30.75, 32, 34.85, 37, 38.95, 41, 42, 43.05, 45, 47.15, 51.25, 54.6667, 57.4, 60.1333, 61.5]
+        # self.s = [Ri/R[-1] for Ri in R]
         return st
 
     
@@ -503,19 +505,12 @@ class ReferenceBlade(object):
         # Set any end points that are fixed to other sections, loop through composites again
         for idx_sec, sec in enumerate(blade['st']['sections']):
             if 'fixed' in blade['st']['sections'][idx_sec].keys():
-                if 's0' in blade['st']['sections'][idx_sec]['fixed'].keys():
-                    target_name  = blade['st']['sections'][idx_sec]['fixed']['s0'][0]
-                    target_point = blade['st']['sections'][idx_sec]['fixed']['s0'][1]
+                for var in blade['st']['sections'][idx_sec]['fixed'].keys():
+                    target_name  = blade['st']['sections'][idx_sec]['fixed'][var][0]
+                    target_point = blade['st']['sections'][idx_sec]['fixed'][var][1]
                     target_idx   = [i for i, sec in enumerate(blade['st']['sections']) if sec['name']==target_name][0]
-                    blade['st']['sections'][idx_sec]['s0']['grid']   = blade['st']['sections'][target_idx][target_point]['grid']
-                    blade['st']['sections'][idx_sec]['s0']['values'] = blade['st']['sections'][target_idx][target_point]['values']
-
-                if 's1' in blade['st']['sections'][idx_sec]['fixed'].keys():
-                    target_name = blade['st']['sections'][idx_sec]['fixed']['s1'][0]
-                    target_point = blade['st']['sections'][idx_sec]['fixed']['s1'][1]
-                    target_idx  = [i for i, sec in enumerate(blade['st']['sections']) if sec['name']==target_name][0]
-                    blade['st']['sections'][idx_sec]['s1']['grid']   = blade['st']['sections'][target_idx][target_point]['grid']
-                    blade['st']['sections'][idx_sec]['s1']['values'] = blade['st']['sections'][target_idx][target_point]['values']
+                    blade['st']['sections'][idx_sec][var]['grid']   = blade['st']['sections'][target_idx][target_point]['grid']
+                    blade['st']['sections'][idx_sec][var]['values'] = blade['st']['sections'][target_idx][target_point]['values']
 
 
         return blade
@@ -591,11 +586,6 @@ class ReferenceBlade(object):
         # plt.legend()
         # plt.show()
 
-        #### TODO: Thickness not currently a design variable
-        # thk_ref = [af_ref[af]['relative_thickness'] for af in blade_ref['bem_aero']['airfoil_position']['labels']]
-        # blade['pf']['rthick']   = remap2grid(blade_ref['bem_aero']['airfoil_position']['grid'], thk_ref, self.s)
-        # blade['pf']['p_le']     = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['r_in'], self.s)
-
         return blade
 
         
@@ -604,14 +594,23 @@ class ReferenceBlade(object):
         def region_stacking(i, idx, S0, S1, blade, material_dict, materials, region_loc):
             # Recieve start and end of composite sections chordwise, find which composites layers are in each
             # chordwise regions, generate the precomp composite class instance
+
+            # error handling to makes sure there were no numeric errors causing values very close too, but not exactly, 0 or 1
+            S0 = [0. if S0i!=0. and np.isclose(S0i,0.) else S0i for S0i in S0]
+            S1 = [0. if S1i!=0. and np.isclose(S1i,0.) else S1i for S1i in S1]
+            S0 = [1. if S0i!=1. and np.isclose(S0i,1.) else S0i for S0i in S0]
+            S1 = [1. if S1i!=1. and np.isclose(S1i,1.) else S1i for S1i in S1]
+
+            # region end points
             dp = sorted(list(set(S0+S1)))
+
+            #initialize
             n_plies = []
             thk = []
             theta = []
             mat_idx = []
 
-            # print i, dp
-
+            # loop through division points, find what layers make up the stack between those bounds
             for i_reg, (dp0, dp1) in enumerate(zip(dp[0:-1], dp[1:])):
                 n_pliesi = []
                 thki     = []
@@ -685,6 +684,7 @@ class ReferenceBlade(object):
         for var in region_loc_vars:
             region_loc_ss[var] = [None]*self.NPTS
             region_loc_ps[var] = [None]*self.NPTS
+
 
         ## Materials
         if 'materials' not in blade['precomp']:
@@ -760,19 +760,19 @@ class ReferenceBlade(object):
                 websCS[i] = web_stacking(i, web_idx, web_S0, web_S1, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], flatback, upperCS[i])
 
             
-            blade['precomp']['upperCS']       = upperCS
-            blade['precomp']['lowerCS']       = lowerCS
-            blade['precomp']['websCS']        = websCS
-            blade['precomp']['profile']       = profile
+        blade['precomp']['upperCS']       = upperCS
+        blade['precomp']['lowerCS']       = lowerCS
+        blade['precomp']['websCS']        = websCS
+        blade['precomp']['profile']       = profile
 
-            # Assumptions:
-            # - pressure and suction side regions are the same (i.e. spar cap is the Nth region on both side)
-            # - if the composite layer is divided into multiple regions (i.e. if the spar cap is split into 3 regions due to the web locations),
-            #   the middle region is selected with int(n_reg/2), note for an even number of regions, this rounds up
-            blade['precomp']['sector_idx_strain_spar'] = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.spar_var]]
-            blade['precomp']['sector_idx_strain_te']   = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.te_var]]
-            blade['precomp']['spar_var'] = self.spar_var
-            blade['precomp']['te_var']   = self.te_var
+        # Assumptions:
+        # - pressure and suction side regions are the same (i.e. spar cap is the Nth region on both side)
+        # - if the composite layer is divided into multiple regions (i.e. if the spar cap is split into 3 regions due to the web locations),
+        #   the middle region is selected with int(n_reg/2), note for an even number of regions, this rounds up
+        blade['precomp']['sector_idx_strain_spar'] = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.spar_var]]
+        blade['precomp']['sector_idx_strain_te']   = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.te_var]]
+        blade['precomp']['spar_var'] = self.spar_var
+        blade['precomp']['te_var']   = self.te_var
         
         return blade
 
@@ -781,7 +781,7 @@ class ReferenceBlade(object):
 if __name__ == "__main__":
 
     ## File managment
-    fname_input        = "turbine_inputs/nrel5mw_mod2.yaml"
+    fname_input        = "turbine_inputs/nrel5mw_mod.yaml"
     fname_output       = "turbine_inputs/nrel5mw_mod_out.yaml"
     flag_write_out     = True
     flag_write_precomp = True
@@ -790,9 +790,10 @@ if __name__ == "__main__":
     ## Load and Format Blade
     tt = time.time()
     refBlade = ReferenceBlade()
-    refBlade.verbose = True
+    refBlade.verbose  = True
     refBlade.spar_var = 'Spar_Cap_SS'
     refBlade.te_var   = 'TE_reinforcement'
+    refBlade.NPTS     = 38
 
     blade = refBlade.initialize(fname_input)
 

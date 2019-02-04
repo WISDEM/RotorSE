@@ -826,8 +826,8 @@ class BladeGeometry(Component):
             refBlade.te_var     = blade['precomp']['te_var']
 
         
-        # blade_out = blade
-        blade_out = refBlade.update(blade)
+        blade_out = blade
+        # blade_out = refBlade.update(blade)
 
         
         # Although the inputs get mirrored to outputs, this is still necessary so that the user can designate the inputs as design variables
