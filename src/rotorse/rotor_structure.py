@@ -866,6 +866,15 @@ class RotorWithpBEAM(StrucBase):
         blade = _pBEAM.Beam(p_section, p_loads, p_tip, p_base)
         dx_pc_defl, dy_pc_defl, dz_pc_defl, dtheta_r1, dtheta_r2, dtheta_z = blade.displacement()
 
+        # dx_defl = np.r_[0., dx_defl, 0.]
+        # dy_defl = np.r_[0., dy_defl, 0.]
+        # dz_defl = np.r_[0., dz_defl, 0.]
+        # dx_pc_defl = np.r_[0., dx_pc_defl, 0.]
+        # dy_pc_defl = np.r_[0., dy_pc_defl, 0.]
+        # dz_pc_defl = np.r_[0., dz_pc_defl, 0.]
+        # dtheta_r1 = np.r_[0.,dtheta_r1, 0.]
+        # dtheta_r2 = np.r_[0.,dtheta_r2, 0.]
+        # dtheta_z = np.r_[0.,dtheta_z, 0.]
 
         # --- mass ---
         blade_mass = blade.mass()
@@ -910,6 +919,7 @@ class RotorWithpBEAM(StrucBase):
         unknowns['damageL_spar'] = damageL_spar
         unknowns['damageU_te'] = damageU_te
         unknowns['damageL_te'] = damageL_te
+
         
 
 class DamageLoads(Component):
@@ -1393,7 +1403,6 @@ class BladeDeflection(Component):
         self.r_pts0 = params['r_pts0']
         self.precurve0 = params['precurve0']
         self.bladeLength0 = params['bladeLength0']
-
 
         theta = self.theta + self.pitch
 
@@ -2804,7 +2813,7 @@ if __name__ == '__main__':
     refBlade = ReferenceBlade()
     refBlade.verbose = True
     refBlade.NINPUT  = NINPUT
-    refBlade.NPITS   = 50
+    refBlade.NPTS    = 50
 
     refBlade.spar_var = 'Spar_Cap_SS'
     refBlade.te_var   = 'TE_reinforcement'
@@ -2909,6 +2918,85 @@ if __name__ == '__main__':
 
     print('CurveFEM calculated mode shape curve fit coef. for ElastoDyn =')
     print(rotor['modes_coef_curvefem'])
+
+    # print('______________________________________________________________________________')
+    # print('mass_one_blade_in', rotor['mass_one_blade_in'])
+    # print('mass_all_blades_in', rotor['mass_all_blades_in'])
+    # print('I_all_blades_in', rotor['I_all_blades_in'])
+    # print('freq_in', rotor['freq_in'])
+    # print('freq_curvefem_in', rotor['freq_curvefem_in'])
+    # print('modes_coef_curvefem_in', rotor['modes_coef_curvefem_in'])
+    # print('tip_deflection_in', rotor['tip_deflection_in'])
+    # print('tip_position_in', rotor['tip_position_in'])
+    # print('ground_clearance_in', rotor['ground_clearance_in'])
+    # print('strainU_spar_in', rotor['strainU_spar_in'])
+    # print('strainL_spar_in', rotor['strainL_spar_in'])
+    # print('strainU_te_in', rotor['strainU_te_in'])
+    # print('strainL_te_in', rotor['strainL_te_in'])
+    # print('eps_crit_spar_in', rotor['eps_crit_spar_in'])
+    # print('eps_crit_te_in', rotor['eps_crit_te_in'])
+    # print('root_bending_moment_in', rotor['root_bending_moment_in'])
+    # print('damageU_spar_in', rotor['damageU_spar_in'])
+    # print('damageL_spar_in', rotor['damageL_spar_in'])
+    # print('damageU_te_in', rotor['damageU_te_in'])
+    # print('damageL_te_in', rotor['damageL_te_in'])
+    # print('delta_bladeLength_out_in', rotor['delta_bladeLength_out_in'])
+    # print('delta_precurve_sub_out_in', rotor['delta_precurve_sub_out_in'])
+    # print('Fxyz_1_in', rotor['Fxyz_1_in'])
+    # print('Fxyz_2_in', rotor['Fxyz_2_in'])
+    # print('Fxyz_3_in', rotor['Fxyz_3_in'])
+    # print('Fxyz_4_in', rotor['Fxyz_4_in'])
+    # print('Fxyz_5_in', rotor['Fxyz_5_in'])
+    # print('Fxyz_6_in', rotor['Fxyz_6_in'])
+    # print('Mxyz_1_in', rotor['Mxyz_1_in'])
+    # print('Mxyz_2_in', rotor['Mxyz_2_in'])
+    # print('Mxyz_3_in', rotor['Mxyz_3_in'])
+    # print('Mxyz_4_in', rotor['Mxyz_4_in'])
+    # print('Mxyz_5_in', rotor['Mxyz_5_in'])
+    # print('Mxyz_6_in', rotor['Mxyz_6_in'])
+    # print('TotalCone_in', rotor['TotalCone_in'])
+    # print('Pitch_in', rotor['Pitch_in'])
+    # print('nBlades', rotor['nBlades'])
+    # print('mass_one_blade', rotor['mass_one_blade'])
+    # print('mass_all_blades', rotor['mass_all_blades'])
+    # print('I_all_blades', rotor['I_all_blades'])
+    # print('freq', rotor['freq'])
+    # print('freq_curvefem', rotor['freq_curvefem'])
+    # print('modes_coef_curvefem', rotor['modes_coef_curvefem'])
+    # print('tip_deflection', rotor['tip_deflection'])
+    # print('tip_position', rotor['tip_position'])
+    # print('ground_clearance', rotor['ground_clearance'])
+    # print('strainU_spar', rotor['strainU_spar'])
+    # print('strainL_spar', rotor['strainL_spar'])
+    # print('strainU_te', rotor['strainU_te'])
+    # print('strainL_te', rotor['strainL_te'])
+    # print('eps_crit_spar', rotor['eps_crit_spar'])
+    # print('eps_crit_te', rotor['eps_crit_te'])
+    # print('root_bending_moment', rotor['root_bending_moment'])
+    # print('damageU_spar', rotor['damageU_spar'])
+    # print('damageL_spar', rotor['damageL_spar'])
+    # print('damageU_te', rotor['damageU_te'])
+    # print('damageL_te', rotor['damageL_te'])
+    # print('delta_bladeLength_out', rotor['delta_bladeLength_out'])
+    # print('delta_precurve_sub_out', rotor['delta_precurve_sub_out'])
+    # print('Fxyz_1', rotor['Fxyz_1'])
+    # print('Fxyz_2', rotor['Fxyz_2'])
+    # print('Fxyz_3', rotor['Fxyz_3'])
+    # print('Fxyz_4', rotor['Fxyz_4'])
+    # print('Fxyz_5', rotor['Fxyz_5'])
+    # print('Fxyz_6', rotor['Fxyz_6'])
+    # print('Mxyz_1', rotor['Mxyz_1'])
+    # print('Mxyz_2', rotor['Mxyz_2'])
+    # print('Mxyz_3', rotor['Mxyz_3'])
+    # print('Mxyz_4', rotor['Mxyz_4'])
+    # print('Mxyz_5', rotor['Mxyz_5'])
+    # print('Mxyz_6', rotor['Mxyz_6'])
+    # print('Fxyz_total', rotor['Fxyz_total'])
+    # print('Mxyz_total', rotor['Mxyz_total'])
+    # print('TotalCone', rotor['TotalCone'])
+    # print('Pitch', rotor['Pitch'])
+
+
 
 
     # Write precomp files out

@@ -211,43 +211,66 @@ class ReferenceBlade(object):
         yaml.dump(wt_out, f)
 
     def calc_spanwise_grid(self, st):
-
         ### Spanwise grid
-        # Finds spanwise composite start and end points, creates a linear distribution with the addition of the explist starts and ends
+        # Finds the start and end points of all composite layers, which are required points in the new grid
+        # Attempts to roughly evenly space points between the required start/end points to output the user specified grid size
+
+        n = self.NPTS
+        # Find unique composite start and end points
         r_points = []
         for idx_sec, sec in enumerate(st['sections']):
             for var in sec.keys():
                 if type(sec[var]) not in [str, bool]:
                     if 'grid' in sec[var].keys():
                         if len(sec[var]['grid']) > 0.:
-
                             # remove approximate duplicates
                             r0 = sec[var]['grid'][0]
                             r1 = sec[var]['grid'][-1]
 
-                            if r0 != 0:
-                                r0_close = np.isclose(r0,r_points)
-                                if len(r0_close)>0 and any(r0_close):
-                                    st['sections'][idx_sec][var]['grid'][0] = r_points[np.argmax(r0_close)]
-                                else:
-                                    r_points.append(r0)
+                            r0_close = np.isclose(r0,r_points)
+                            if len(r0_close)>0 and any(r0_close):
+                                st['sections'][idx_sec][var]['grid'][0] = r_points[np.argmax(r0_close)]
+                            else:
+                                r_points.append(r0)
 
-                            if r1 != 1:
-                                r1_close = np.isclose(r1,r_points)
-                                if any(r1_close):
-                                    st['sections'][idx_sec][var]['grid'][-1] = r_points[np.argmax(r1_close)]
-                                else:
-                                    r_points.append(r1)
+                            r1_close = np.isclose(r1,r_points)
+                            if any(r1_close):
+                                st['sections'][idx_sec][var]['grid'][-1] = r_points[np.argmax(r1_close)]
+                            else:
+                                r_points.append(r1)
 
-        self.s = list(sorted(set(np.linspace(0,1,num=self.NPTS-len(r_points)).tolist() + r_points)))
+        # Check for large enough grid size
+        r_points = sorted(r_points)
+        n_pts = len(r_points)
+        if n_pts > n:
+            grid_size_warning = "A grid size of %d was specified, but %d unique composite layer start/end points were found.  It is highly recommended to increase the grid size to >= %d to avoid errors or unrealistic results "%(n, n_pts, n_pts)
+            warnings.warn(grid_size_warning)
 
-        # error handling for 1 or more composite section start/end point falling on the linspace grid
-        if self.NPTS - len(self.s) != 0:
-            add_s = np.linspace(self.s[-2],1,num=self.NPTS-len(self.s)+2).tolist()[1:-1]
-            self.s = list(sorted(set(np.linspace(0,1,num=self.NPTS-len(r_points)).tolist() + r_points + add_s)))
+        # estimate length of the linspaces between required start/end points
+        r_points_idx = [int(n*i) for i in r_points]
+        lengths = []
+        for i in range(1,len(r_points_idx)):
+            len_i = max([r_points_idx[i] - r_points_idx[i-1] + 2, 2])
+            lengths.append(len_i)
+
+        # Correct lengths down to the total number of requested points
+        n_estimate = sum(lengths)-len(r_points_idx)+2
+        n_diff = n_estimate - n
+        if n_diff > 0:
+            lengths[np.argmax(lengths)] -= n_diff
+
+        # Build grid as concatenation of linspaces between required points
+        grid_out = []
+        for i in range(1,n_pts):
+            if i == n_pts-1:
+                grid_out.append(np.linspace(r_points[i-1], r_points[i], lengths[i-1]))
+            else:
+                grid_out.append(np.linspace(r_points[i-1], r_points[i], lengths[i-1])[:-1])
+        self.s = np.concatenate(grid_out)
 
         # R = [0., 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.3667, 1.5, 1.6, 4.1, 5.5, 6.8333, 9, 10.25, 12, 14.35, 17, 18.45, 20.5, 22.55, 24.6, 26.65, 30.75, 32, 34.85, 37, 38.95, 41, 42, 43.05, 45, 47.15, 51.25, 54.6667, 57.4, 60.1333, 61.5]
         # self.s = [Ri/R[-1] for Ri in R]
+        # print self.s, '<---------------------------------------------------------------------'
         return st
 
     
@@ -526,7 +549,7 @@ class ReferenceBlade(object):
             cyl_thk_min = 0.9
             idx_s       = np.argmax(blade['pf']['rthick']<1)
             idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
-            r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-2:-1], blade['pf']['s'][idx_e:idx_s-2:-1], cyl_thk_min)
+            r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-1:-1], blade['pf']['s'][idx_e:idx_s-1:-1], cyl_thk_min)
 
             # solve for max chord radius
             if r_max_chord == 0.:
@@ -793,7 +816,7 @@ if __name__ == "__main__":
     refBlade.verbose  = True
     refBlade.spar_var = 'Spar_Cap_SS'
     refBlade.te_var   = 'TE_reinforcement'
-    refBlade.NPTS     = 38
+    refBlade.NPTS     = 45
 
     blade = refBlade.initialize(fname_input)
 
