@@ -990,10 +990,10 @@ class TotalLoads(Component):
     def __init__(self, NPTS):
         super(TotalLoads, self).__init__()
         # variables
-        self.add_param('aeroloads_r', val=np.zeros(NPTS+2), units='m', desc='radial positions along blade going toward tip')
-        self.add_param('aeroloads_Px', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_param('aeroloads_Py', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_param('aeroloads_Pz', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_param('aeroloads_r', val=np.zeros(NPTS), units='m', desc='radial positions along blade going toward tip')
+        self.add_param('aeroloads_Px', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('aeroloads_Py', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('aeroloads_Pz', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned z-direction')
         self.add_param('aeroloads_Omega', val=0.0, units='rpm', desc='rotor rotation speed')
         self.add_param('aeroloads_pitch', val=0.0, units='deg', desc='pitch angle')
         self.add_param('aeroloads_azimuth', val=0.0, units='deg', desc='azimuthal angle')
@@ -1522,10 +1522,10 @@ class RootMoment(Component):
     """blade root bending moment"""
     def __init__(self, NPTS):
         super(RootMoment, self).__init__()
-        self.add_param('aeroloads_r', val=np.zeros(NPTS+2), units='m', desc='radial positions along blade going toward tip')
-        self.add_param('aeroloads_Px', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned x-direction')
-        self.add_param('aeroloads_Py', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned y-direction')
-        self.add_param('aeroloads_Pz', val=np.zeros(NPTS+2), units='N/m', desc='distributed loads in blade-aligned z-direction')
+        self.add_param('aeroloads_r', val=np.zeros(NPTS), units='m', desc='radial positions along blade going toward tip')
+        self.add_param('aeroloads_Px', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned x-direction')
+        self.add_param('aeroloads_Py', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned y-direction')
+        self.add_param('aeroloads_Pz', val=np.zeros(NPTS), units='N/m', desc='distributed loads in blade-aligned z-direction')
         self.add_param('r_pts', val=np.zeros(NPTS), units='m')
         self.add_param('totalCone', val=np.zeros(NPTS), units='deg', desc='total cone angle from precone and curvature')
         self.add_param('x_az', val=np.zeros(NPTS), units='m', desc='location of blade in azimuth x-coordinate system')
