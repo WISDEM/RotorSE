@@ -744,7 +744,8 @@ class BladeGeometry(Component):
 
         self.refBlade = RefBlade
         npts = len(self.refBlade['pf']['s'])
-        
+        NINPUT = len(self.refBlade['ctrl_pts']['r_in'])
+
         # variables
         self.add_param('bladeLength', val=0.0, units='m', desc='blade length (if not precurved or swept) otherwise length of blade before curvature')
         self.add_param('r_max_chord', val=0.0, desc='location of max chord on unit radius')
@@ -796,6 +797,8 @@ class BladeGeometry(Component):
         
     def solve_nonlinear(self, params, unknowns, resids):
 
+        NINPUT = len(self.refBlade['ctrl_pts']['r_in'])
+
         Rhub = params['hubFraction'] * params['bladeLength']
         Rtip = Rhub + params['bladeLength']
 
@@ -803,6 +806,8 @@ class BladeGeometry(Component):
         unknowns['Rtip']     = Rtip
         r_in                 = np.r_[0.0, self.refBlade['ctrl_pts']['r_cylinder'].tolist(), np.linspace(params['r_max_chord'], 1.0, NINPUT-2)]
         unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.r_[0.0, self.refBlade['ctrl_pts']['r_cylinder'].tolist(), np.linspace(params['r_max_chord'], 1.0, NINPUT-2)]
+        # r_in                 = self.refBlade['ctrl_pts']['r_in']
+        # unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.array(r_in)
 
 
         blade = copy.deepcopy(self.refBlade)
@@ -817,7 +822,7 @@ class BladeGeometry(Component):
 
         # Update
         refBlade = ReferenceBlade()
-        refBlade.verbose        = True
+        refBlade.verbose        = False
         refBlade.NINPUT         = len(unknowns['r_in'])
         refBlade.NPTS           = len(blade['pf']['s'])
         refBlade.analysis_level = blade['analysis_level']
@@ -907,6 +912,7 @@ class RotorGeometry(Group):
     def __init__(self, RefBlade):
         super(RotorGeometry, self).__init__()
         """rotor model"""
+        NINPUT = len(RefBlade['ctrl_pts']['r_in'])
 
         self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])

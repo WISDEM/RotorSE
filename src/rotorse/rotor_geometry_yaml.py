@@ -1,5 +1,5 @@
 
-import os, sys, copy, time
+import os, sys, copy, time, warnings
 import csv
 import operator
 
@@ -61,6 +61,7 @@ class ReferenceBlade(object):
         self.NPTS            = 50
         self.NPTS_AfProfile  = 200
         self.NPTS_AfPolar    = 100
+        self.r_in            = []          # User definied input grid (must be from 0-1)
 
         # 
         self.analysis_level  = 0           # 0: Precomp, (1: FAST/ElastoDyn, 2: FAST/BeamDyn)
@@ -100,7 +101,7 @@ class ReferenceBlade(object):
         blade = self.remap_profiles(blade, blade_ref, af_ref)
         blade = self.remap_polars(blade, blade_ref, af_ref)
         blade = self.calc_composite_bounds(blade)
-        blade = self.calc_control_points(blade)
+        blade = self.calc_control_points(blade, self.r_in)
         
         blade['analysis_level'] = self.analysis_level
 
@@ -190,18 +191,31 @@ class ReferenceBlade(object):
 
         #### Build Output dictionary
 
+        # Planform
+        wt_out['components']['blade']['bem_aero']['chord']['values']             = blade['pf']['chord'].tolist()
+        wt_out['components']['blade']['bem_aero']['chord']['grid']               = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['bem_aero']['twist']['values']             = blade['pf']['theta'].tolist()
+        wt_out['components']['blade']['bem_aero']['twist']['grid']               = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['bem_aero']['pitch_axis']['values']        = blade['pf']['p_le'].tolist()
+        wt_out['components']['blade']['bem_aero']['pitch_axis']['grid']          = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['bem_aero']['coordinates']['x']['values']  = blade['pf']['r'].tolist()
+        wt_out['components']['blade']['bem_aero']['coordinates']['x']['grid']    = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['bem_aero']['coordinates']['y']['values']  = blade['pf']['precurve'].tolist()
+        wt_out['components']['blade']['bem_aero']['coordinates']['y']['grid']    = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['bem_aero']['coordinates']['z']['values']  = blade['pf']['presweep'].tolist()
+        wt_out['components']['blade']['bem_aero']['coordinates']['z']['grid']    = blade['pf']['s'].tolist()
+
         # Composite layups
         st = blade['st']
         for idx_sec, sec in enumerate(st['sections']):
             for var in st['sections'][idx_sec].keys():
                 try:
                     _ = st['sections'][idx_sec][var].keys()
-                    st['sections'][idx_sec][var]['grid'] = [r for val, r in zip(st['sections'][idx_sec][var]['values'], st['sections'][idx_sec][var]['grid']) if val != None]
-                    st['sections'][idx_sec][var]['values'] = [val for val in st['sections'][idx_sec][var]['values'] if val != None]
+                    st['sections'][idx_sec][var]['grid'] = [float(r) for val, r in zip(st['sections'][idx_sec][var]['values'], st['sections'][idx_sec][var]['grid']) if val != None]
+                    st['sections'][idx_sec][var]['values'] = [float(val) for val in st['sections'][idx_sec][var]['values'] if val != None]
                 except:
                     pass
         wt_out['components']['blade']['2d_fem'] = st
-
 
         f = open(fname, "w")
         yaml=YAML()
@@ -268,9 +282,6 @@ class ReferenceBlade(object):
                 grid_out.append(np.linspace(r_points[i-1], r_points[i], lengths[i-1])[:-1])
         self.s = np.concatenate(grid_out)
 
-        # R = [0., 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.3667, 1.5, 1.6, 4.1, 5.5, 6.8333, 9, 10.25, 12, 14.35, 17, 18.45, 20.5, 22.55, 24.6, 26.65, 30.75, 32, 34.85, 37, 38.95, 41, 42, 43.05, 45, 47.15, 51.25, 54.6667, 57.4, 60.1333, 61.5]
-        # self.s = [Ri/R[-1] for Ri in R]
-        # print self.s, '<---------------------------------------------------------------------'
         return st
 
     
@@ -532,29 +543,29 @@ class ReferenceBlade(object):
                     target_name  = blade['st']['sections'][idx_sec]['fixed'][var][0]
                     target_point = blade['st']['sections'][idx_sec]['fixed'][var][1]
                     target_idx   = [i for i, sec in enumerate(blade['st']['sections']) if sec['name']==target_name][0]
-                    blade['st']['sections'][idx_sec][var]['grid']   = blade['st']['sections'][target_idx][target_point]['grid']
+                    blade['st']['sections'][idx_sec][var]['grid']   = blade['st']['sections'][target_idx][target_point]['grid'].tolist()
                     blade['st']['sections'][idx_sec][var]['values'] = blade['st']['sections'][target_idx][target_point]['values']
 
 
         return blade
 
-    def calc_control_points(self, blade, r_max_chord=0., r_in=[]):
+    def calc_control_points(self, blade, r_in=[], r_max_chord=0.):
 
         if 'ctrl_pts' not in blade.keys():
             blade['ctrl_pts'] = {}
 
+        # solve for max chord radius
+        if r_max_chord == 0.:
+            r_max_chord = blade['pf']['s'][np.argmax(blade['pf']['chord'])]
+
+        # solve for end of cylinder radius by interpolating relative thickness
+        cyl_thk_min = 0.9
+        idx_s       = np.argmax(blade['pf']['rthick']<1)
+        idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
+        r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-1:-1], blade['pf']['s'][idx_e:idx_s-1:-1], cyl_thk_min)
+
         # Build Control Point Grid, if not provided with key word arg
         if len(r_in)==0:
-            # solve for end of cylinder radius by interpolating relative thickness
-            cyl_thk_min = 0.9
-            idx_s       = np.argmax(blade['pf']['rthick']<1)
-            idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
-            r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-1:-1], blade['pf']['s'][idx_e:idx_s-1:-1], cyl_thk_min)
-
-            # solve for max chord radius
-            if r_max_chord == 0.:
-                r_max_chord = blade['pf']['s'][np.argmax(blade['pf']['chord'])]
-
             # control point grid
             r_in = np.r_[[0.], [r_cylinder], np.linspace(r_max_chord, 1., self.NINPUT-2)]
 
@@ -581,6 +592,7 @@ class ReferenceBlade(object):
         blade['ctrl_pts']['r_in']         = r_in
         blade['ctrl_pts']['r_cylinder']   = r_cylinder
         blade['ctrl_pts']['r_max_chord']  = r_max_chord
+        blade['ctrl_pts']['bladeLength']  = blade['pf']['r'][-1]
 
         return blade
 
@@ -596,10 +608,10 @@ class ReferenceBlade(object):
         idx_spar  = [i for i, sec in enumerate(blade['st']['sections']) if sec['name']==self.spar_var][0]
         idx_te    = [i for i, sec in enumerate(blade['st']['sections']) if sec['name']==self.te_var][0]
 
-        blade['st']['sections'][idx_spar]['thickness']['grid']   = self.s
-        blade['st']['sections'][idx_spar]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['sparT_in'], self.s)
-        blade['st']['sections'][idx_te]['thickness']['grid']   = self.s
-        blade['st']['sections'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s)
+        blade['st']['sections'][idx_spar]['thickness']['grid']   = self.s.tolist()
+        blade['st']['sections'][idx_spar]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['sparT_in'], self.s).tolist()
+        blade['st']['sections'][idx_te]['thickness']['grid']   = self.s.tolist()
+        blade['st']['sections'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s).tolist()
 
         # print blade['ctrl_pts']['r_in']
         # print blade['ctrl_pts']['theta_in']
@@ -806,8 +818,8 @@ if __name__ == "__main__":
     ## File managment
     fname_input        = "turbine_inputs/nrel5mw_mod.yaml"
     fname_output       = "turbine_inputs/nrel5mw_mod_out.yaml"
-    flag_write_out     = True
-    flag_write_precomp = True
+    flag_write_out     = False
+    flag_write_precomp = False
     dir_precomp_out    = "turbine_inputs/precomp"
 
     ## Load and Format Blade
@@ -816,13 +828,9 @@ if __name__ == "__main__":
     refBlade.verbose  = True
     refBlade.spar_var = 'Spar_Cap_SS'
     refBlade.te_var   = 'TE_reinforcement'
-    refBlade.NPTS     = 45
+    refBlade.NPTS     = 50
 
     blade = refBlade.initialize(fname_input)
-
-    ## Parmeterization
-
-
 
 
     ## save output yaml

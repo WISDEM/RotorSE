@@ -232,6 +232,7 @@ class RotorSE(Group):
         self.connect('precurve_tip', 'aero_rated.precurveTip')
         self.connect('Rhub', 'aero_rated.Rhub')
         self.connect('Rtip', 'aero_rated.Rtip')
+        self.connect('hub_height', 'aero_rated.hubHt')
         self.connect('precone', 'aero_rated.precone')
         self.connect('tilt', 'aero_rated.tilt')
         self.connect('yaw', 'aero_rated.yaw')
@@ -251,6 +252,7 @@ class RotorSE(Group):
         self.connect('precurve_tip', 'aero_extrm.precurveTip')
         self.connect('Rhub', 'aero_extrm.Rhub')
         self.connect('Rtip', 'aero_extrm.Rtip')
+        self.connect('hub_height', 'aero_rated.hubHt')
         self.connect('precone', 'aero_extrm.precone')
         self.connect('tilt', 'aero_extrm.tilt')
         self.connect('yaw', 'aero_extrm.yaw')
@@ -566,30 +568,7 @@ class RotorSE(Group):
         self.add('obj_cmp', ExecComp('obj = -AEP', AEP=1000000.0), promotes=['*'])
 
 
-
-        
-if __name__ == '__main__':
-    NINPUT = 5
-
-    # Turbine Ontology input
-    fname_input = "turbine_inputs/nrel5mw_mod.yaml"
-
-    # Initialize blade design
-    refBlade = ReferenceBlade()
-    refBlade.verbose = True
-    refBlade.NINPUT  = NINPUT
-    refBlade.NPITS   = 50
-
-    refBlade.spar_var = 'Spar_Cap_SS'
-    refBlade.te_var   = 'TE_reinforcement'
-
-    blade = refBlade.initialize(fname_input)
-    rotor = Problem()
-    rotor.root = RotorSE(blade)
-    
-    #rotor.setup(check=False)
-    rotor.setup()
-
+def Init_RotorSE_wRefBlade(rotor, blade):
     # === blade grid ===
     rotor['hubFraction'] = blade['config']['hubD']/2./blade['pf']['r'][-1] #0.025  # (Float): hub location as fraction of radius
     rotor['bladeLength'] = blade['pf']['r'][-1] #61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
@@ -602,12 +581,12 @@ if __name__ == '__main__':
     
     # === blade geometry ===
     rotor['r_max_chord']      = blade['ctrl_pts']['r_max_chord']  # 0.23577 #(Float): location of max chord on unit radius
-    rotor['chord_in']         = blade['ctrl_pts']['chord_in'] # np.array([3.2612, 4.3254, 4.5709, 3.7355, 2.69923333, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
-    rotor['theta_in']         = blade['ctrl_pts']['theta_in'] # np.array([0.0, 13.2783, 12.30514836,  6.95106536,  2.72696309, -0.0878099]) # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
-    rotor['precurve_in']      = blade['ctrl_pts']['precurve_in'] #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-    rotor['presweep_in']      = blade['ctrl_pts']['presweep_in'] #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
-    rotor['sparT_in']         = blade['ctrl_pts']['sparT_in'] # np.array([0.0, 0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
-    rotor['teT_in']           = blade['ctrl_pts']['teT_in'] # np.array([0.0, 0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+    rotor['chord_in']         = np.array(blade['ctrl_pts']['chord_in']) # np.array([3.2612, 4.3254, 4.5709, 3.7355, 2.69923333, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip
+    rotor['theta_in']         = np.array(blade['ctrl_pts']['theta_in']) # np.array([0.0, 13.2783, 12.30514836,  6.95106536,  2.72696309, -0.0878099]) # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip
+    rotor['precurve_in']      = np.array(blade['ctrl_pts']['precurve_in']) #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
+    rotor['presweep_in']      = np.array(blade['ctrl_pts']['presweep_in']) #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
+    rotor['sparT_in']         = np.array(blade['ctrl_pts']['sparT_in']) # np.array([0.0, 0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
+    rotor['teT_in']           = np.array(blade['ctrl_pts']['teT_in']) # np.array([0.0, 0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
     # ------------------
 
     # === atmosphere ===
@@ -645,8 +624,8 @@ if __name__ == '__main__':
 
     # === fatigue ===
     r_aero = np.array([0.02222276, 0.06666667, 0.11111057, 0.2, 0.23333333, 0.3, 0.36666667, 0.43333333,
-	               0.5, 0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333,
-	               0.97777724])  # (Array): new aerodynamic grid on unit radius
+                   0.5, 0.56666667, 0.63333333, 0.64, 0.7, 0.83333333, 0.88888943, 0.93333333,
+                   0.97777724])  # (Array): new aerodynamic grid on unit radius
     rstar_damage = np.array([0.000, 0.022, 0.067, 0.111, 0.167, 0.233, 0.300, 0.367, 0.433, 0.500,
         0.567, 0.633, 0.700, 0.767, 0.833, 0.889, 0.933, 0.978])  # (Array): nondimensional radial locations of damage equivalent moments
     Mxb_damage = 1e3*np.array([2.3743E+003, 2.0834E+003, 1.8108E+003, 1.5705E+003, 1.3104E+003,
@@ -669,8 +648,31 @@ if __name__ == '__main__':
     rotor['m_damage']        = 10.0  # (Float): slope of S-N curve for fatigue analysis
     rotor['struc.lifetime']  = 20.0  # (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed
     # ----------------
+    return rotor
+        
+if __name__ == '__main__':
+    NINPUT = 5
 
-    # from myutilities import plt
+    # Turbine Ontology input
+    fname_input = "turbine_inputs/nrel5mw_mod.yaml"
+
+    # Initialize blade design
+    refBlade = ReferenceBlade()
+    refBlade.verbose = True
+    refBlade.NINPUT  = NINPUT
+    refBlade.NPITS   = 50
+
+    refBlade.spar_var = 'Spar_Cap_SS'
+    refBlade.te_var   = 'TE_reinforcement'
+
+    blade = refBlade.initialize(fname_input)
+    rotor = Problem()
+    rotor.root = RotorSE(blade)
+    
+    #rotor.setup(check=False)
+    rotor.setup()
+    rotor = Init_RotorSE_wRefBlade(rotor, blade)
+
 
     # === run and outputs ===
     tt = time.time()
@@ -690,6 +692,7 @@ if __name__ == '__main__':
     print('freq =', rotor['freq'])
     print('tip_deflection =', rotor['tip_deflection'])
     print('root_bending_moment =', rotor['root_bending_moment'])
+
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
     '''
