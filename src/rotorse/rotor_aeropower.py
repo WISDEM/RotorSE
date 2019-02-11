@@ -22,10 +22,10 @@ from commonse.utilities import vstack, trapz_deriv, linspace_with_deriv, smooth_
 from commonse.environment import PowerWind
 #from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 from akima import Akima
-from rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
+from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
 from rotorse import RPM2RS, RS2RPM
 
-from rotor_geometry_yaml import ReferenceBlade
+from rotorse.rotor_geometry_yaml import ReferenceBlade
 
 import time
 # ---------------------

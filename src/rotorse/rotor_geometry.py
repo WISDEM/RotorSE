@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import os
 # Python 2/3 compatibility:
@@ -14,7 +15,7 @@ from akima import Akima, akima_interp_with_derivs
 from ccblade.ccblade_component import CCBladeGeometry
 from ccblade import CCAirfoil
 from airfoilprep import Airfoil
-from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
+from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
 
 from scipy.interpolate import PchipInterpolator
 
@@ -23,7 +24,7 @@ TURBULENCE_CLASS = commonse.enum.Enum('A B C')
 TURBINE_CLASS = commonse.enum.Enum('I II III')
 DRIVETRAIN_TYPE = commonse.enum.Enum('geared single_stage multi_drive pm_direct_drive')
 
-from rotor_geometry_yaml import ReferenceBlade
+from rotorse.rotor_geometry_yaml import ReferenceBlade
 
 import copy, time
 

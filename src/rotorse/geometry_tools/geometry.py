@@ -1,11 +1,12 @@
+from __future__ import print_function
 import sys
 import numpy as np
 from scipy.optimize import minimize
 from scipy.interpolate import pchip, Akima1DInterpolator
 
-from geom_tools import calculate_length, curvature
-from cubicspline import NaturalCubicSpline
-from distfunc import distfunc
+from rotorse.geometry_tools.geom_tools import calculate_length, curvature
+from rotorse.geometry_tools.cubicspline import NaturalCubicSpline
+from rotorse.geometry_tools.distfunc import distfunc
 
 
 class Curve(object):
@@ -263,7 +264,7 @@ class AirfoilShape(Curve):
 
         t0 = np.abs(self.points[-1, 1] - self.points[0, 1])
         dt = (t - t0) / 2.
-        print 'dt', dt
+        print('dt', dt)
         # linearly add thickness from LE to TE
         iLE = np.argmin(self.points[:,0])
         xLE = self.points[iLE, 0]

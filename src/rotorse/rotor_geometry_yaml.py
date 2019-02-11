@@ -1,4 +1,4 @@
-
+from __future__ import print_function
 import os, sys, copy, time, warnings
 import csv
 import operator
@@ -18,8 +18,8 @@ from akima import Akima, akima_interp_with_derivs
 from ccblade.ccblade_component import CCBladeGeometry
 from ccblade import CCAirfoil
 from airfoilprep.airfoilprep import Airfoil, Polar
-from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp, PreCompWriter
 
+from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp, PreCompWriter
 from rotorse.geometry_tools.geometry import AirfoilShape, Curve
 
 
@@ -77,7 +77,7 @@ class ReferenceBlade(object):
     def initialize(self, fname):
         if self.verbose:
             t0 = time.time()
-            print 'Running initialization: %s' % fname
+            print('Running initialization: %s' % fname)
 
         # Load input
         self.fname_input = fname
@@ -90,7 +90,7 @@ class ReferenceBlade(object):
             af_ref[afi['name']] = afi
 
         if self.verbose:
-            print 'Complete: Load Input File: \t%f s'%(time.time()-t0)
+            print('Complete: Load Input File: \t%f s'%(time.time()-t0))
             t1 = time.time()
 
         # build blade
@@ -106,14 +106,14 @@ class ReferenceBlade(object):
         blade['analysis_level'] = self.analysis_level
 
         if self.verbose:
-            print 'Complete: Geometry Analysis: \t%f s'%(time.time()-t1)
+            print('Complete: Geometry Analysis: \t%f s'%(time.time()-t1))
             
         # Conversion
         if self.analysis_level == 0:
             t2 = time.time()
             blade = self.convert_precomp(blade, self.wt_ref['materials'])
             if self.verbose:
-                print 'Complete: Precomp Conversion: \t%f s'%(time.time()-t2)
+                print('Complete: Precomp Conversion: \t%f s'%(time.time()-t2))
         elif self.analysis_level == 1:
             # sonata/ anba
 
@@ -131,14 +131,14 @@ class ReferenceBlade(object):
         blade = self.calc_composite_bounds(blade)
 
         if self.verbose:
-            print 'Complete: Geometry Update: \t%f s'%(time.time()-t1)
+            prin('Complete: Geometry Update: \t%f s'%(time.time()-t1))
 
         # Conversion
         if self.analysis_level == 0:
             t2 = time.time()
             blade = self.convert_precomp(blade)
             if self.verbose:
-                print 'Complete: Precomp Conversion: \t%f s'%(time.time()-t2)
+                print('Complete: Precomp Conversion: \t%f s'%(time.time()-t2))
 
 
         return blade
@@ -613,8 +613,8 @@ class ReferenceBlade(object):
         blade['st']['sections'][idx_te]['thickness']['grid']   = self.s.tolist()
         blade['st']['sections'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s).tolist()
 
-        # print blade['ctrl_pts']['r_in']
-        # print blade['ctrl_pts']['theta_in']
+        # print(blade['ctrl_pts']['r_in'])
+        # print(blade['ctrl_pts']['theta_in'])
         # import matplotlib.pyplot as plt
         # plt.plot(self.s, thk_te, label='input')
         # plt.plot(self.s, thk_te2, label='fit')
@@ -838,7 +838,7 @@ if __name__ == "__main__":
         t3 = time.time()
         refBlade.write_ontology(fname_output, blade, refBlade.wt_ref)
         if refBlade.verbose:
-            print 'Complete: Write Output: \t%f s'%(time.time()-t3)
+            print('Complete: Write Output: \t%f s'%(time.time()-t3))
 
     ## save precomp out
     if flag_write_precomp:
@@ -854,4 +854,4 @@ if __name__ == "__main__":
         precomp_write = PreCompWriter(dir_precomp_out, materials, upper, lower, webs, profile, chord, twist, p_le)
         precomp_write.execute()
         if refBlade.verbose:
-            print 'Complete: Write PreComp: \t%f s'%(time.time()-t4)
+            print('Complete: Write PreComp: \t%f s'%(time.time()-t4))

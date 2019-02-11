@@ -2,7 +2,7 @@
 import numpy as np
 from scipy.linalg import solve_banded
 # from fusedwind.lib.utilities import _checkIfFloat
-from utilities import _checkIfFloat
+from rotorse.geometry_tools.utilities import _checkIfFloat
 
 class NaturalCubicSpline(object):
     """

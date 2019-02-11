@@ -7,24 +7,22 @@ Created by Andrew Ning on 2012-02-28.
 Copyright (c)  NREL. All rights reserved.
 """
 
-# from __future__ import print_function
+from __future__ import print_function
 import numpy as np
 import os, time
 from openmdao.api import IndepVarComp, Component, Group, Problem, ExecComp
-from rotor_aeropower import RegulatedPowerCurve, AEP, OutputsAero
-from rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, \
-    BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, \
-    PreCompSections, RotorWithpBEAM, ConstraintsStructures
-
 from ccblade.ccblade_component import CCBladeGeometry, CCBladePower, CCBladeLoads
 from commonse.distribution import RayleighCDF, WeibullWithMeanCDF
 from commonse.environment import PowerWind
-from precomp import Profile, Orthotropic2DMaterial, CompositeSection
-from rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
 
 from rotorse import RPM2RS, RS2RPM
-
-from rotor_geometry_yaml import ReferenceBlade
+from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection
+from rotorse.rotor_geometry_yaml import ReferenceBlade
+from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
+from rotorse.rotor_aeropower import RegulatedPowerCurve, AEP, OutputsAero
+from rotorse.rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, \
+    BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, \
+    PreCompSections, RotorWithpBEAM, ConstraintsStructures
 
 
 class RotorSE(Group):

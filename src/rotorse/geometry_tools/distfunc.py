@@ -101,7 +101,7 @@ def tanhdist(delta1=None,delta2=None,_len=None,i1=None,i2=None):
                 for i in range(ni + 1):
                     fdist[i]=np.tanh(0.5 * delta * i / ni) / np.tanh(0.5 * delta)
             else:
-                print 'Error from tandist, no cell hight is given'
+                print('Error from tandist, no cell hight is given')
     for i in range(ni + 1):
         fdist[i]=fdist[i] * _len
     return fdist
@@ -211,7 +211,7 @@ def transtanh_(b=None):
     b=tanh(delta)/delta
     """
     if (b > 1.0):
-        print ' Error form transtanh: Can not be gridded '
+        print(' Error form transtanh: Can not be gridded ')
         return delta
     rlim=1.e-6
     nmax=100000
@@ -224,9 +224,9 @@ def transtanh_(b=None):
         res = np.abs((delta - delta_old)/ delta_old)
         if res < rlim: return delta
         if ((n == nmax) and ( res > rlim)):
-            print ' Convergence problem in transtanh dist. function !!! '
-            print ' residual ',((delta - delta_old) / delta_old)
-            print 'n= ', n, '  nmax=',nmax, '   delta=', delta, '   delta_old=',delta_old,'  rlim=',rlim
+            print(' Convergence problem in transtanh dist. function !!! ')
+            print(' residual ',((delta - delta_old) / delta_old))
+            print('n= ', n, '  nmax=',nmax, '   delta=', delta, '   delta_old=',delta_old,'  rlim=',rlim)
         delta_old= delta
     return delta
 

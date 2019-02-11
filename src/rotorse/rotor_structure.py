@@ -8,16 +8,14 @@ from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometr
 from commonse import gravity, NFREQ
 from commonse.csystem import DirectionVector
 from commonse.utilities import trapz_deriv, interp_with_deriv
-from precomp import _precomp
 from akima import Akima, akima_interp_with_derivs
-from rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
 import _pBEAM
-# import ccblade._bem as _bem  # TODO: move to rotoraero
 import _bem  # TODO: move to rotoraero
 
 from rotorse import RPM2RS, RS2RPM
-
-from rotor_geometry_yaml import ReferenceBlade
+from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
+from rotorse.rotor_geometry_yaml import ReferenceBlade
+from rotorse.precomp import _precomp
 
 # ---------------------
 # Base Components
