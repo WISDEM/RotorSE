@@ -330,6 +330,7 @@ class RotorSE(Group):
         self.connect('curvature.totalCone', 'loads_defl.totalCone')
         self.connect('curvature.z_az', 'loads_defl.z_az')
         self.connect('beam.beam:rhoA', 'loads_defl.rhoA')
+        self.connect('dynamic_amplication_tip_deflection', 'loads_defl.dynamicFactor')
 
         # connections to loads_pc_defl
         self.connect('aero_defl_powercurve.loads_Omega', 'loads_pc_defl.aeroloads_Omega')
@@ -345,6 +346,7 @@ class RotorSE(Group):
         self.connect('curvature.totalCone', 'loads_pc_defl.totalCone')
         self.connect('curvature.z_az', 'loads_pc_defl.z_az')
         self.connect('beam.beam:rhoA', 'loads_pc_defl.rhoA')
+        self.connect('dynamic_amplication_tip_deflection', 'loads_pc_defl.dynamicFactor')
 
 
         # connections to loads_strain
@@ -361,6 +363,7 @@ class RotorSE(Group):
         self.connect('curvature.totalCone', 'loads_strain.totalCone')
         self.connect('curvature.z_az', 'loads_strain.z_az')
         self.connect('beam.beam:rhoA', 'loads_strain.rhoA')
+        self.connect('dynamic_amplication_tip_deflection', 'loads_strain.dynamicFactor')
 
 
         # connections to damage
@@ -451,6 +454,7 @@ class RotorSE(Group):
         self.connect('curvature.y_az', 'root_moment.y_az')
         self.connect('curvature.z_az', 'root_moment.z_az')
         self.connect('curvature.s', 'root_moment.s')
+        self.connect('dynamic_amplication_tip_deflection', 'root_moment.dynamicFactor')
 
         # connections to mass
         self.connect('struc.blade_mass', 'mass.blade_mass')
@@ -548,6 +552,7 @@ class RotorSE(Group):
         self.connect('curvature.y_az', ['root_moment_0.y_az','root_moment_120.y_az','root_moment_240.y_az'])
         self.connect('curvature.z_az', ['root_moment_0.z_az','root_moment_120.z_az','root_moment_240.z_az'])
         self.connect('curvature.s', ['root_moment_0.s','root_moment_120.s','root_moment_240.s'])
+        self.connect('dynamic_amplication_tip_deflection', ['root_moment_0.dynamicFactor','root_moment_120.dynamicFactor','root_moment_240.dynamicFactor'])
 
         # connections to root Mxyz outputs
         self.connect('root_moment_0.Mxyz','Mxyz_1_in')
@@ -638,7 +643,7 @@ def Init_RotorSE_wRefBlade(rotor, blade):
     rotor['Mxb_damage']      = np.interp(xx, xp, Mxb_damage)
     rotor['Myb_damage']      = np.interp(xx, xp, Myb_damage)
     rotor['strain_ult_spar'] = 1.0e-2  # (Float): ultimate strain in spar cap
-    rotor['strain_ult_te']   = 2500*1e-6 * 2   # (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
+    rotor['strain_ult_te']   = 2500*1e-6   # (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.
     rotor['gamma_fatigue']   = 1.755 # (Float): safety factor for fatigue
     rotor['gamma_f']         = 1.35 # (Float): safety factor for loads/stresses
     rotor['gamma_m']         = 1.1 # (Float): safety factor for materials
@@ -649,7 +654,6 @@ def Init_RotorSE_wRefBlade(rotor, blade):
     return rotor
         
 if __name__ == '__main__':
-    NINPUT = 5
 
     # Turbine Ontology input
     fname_input = "turbine_inputs/nrel5mw_mod.yaml"
@@ -657,15 +661,14 @@ if __name__ == '__main__':
     # Initialize blade design
     refBlade = ReferenceBlade()
     refBlade.verbose = True
-    refBlade.NINPUT  = NINPUT
+    refBlade.NINPUT  = 5
     refBlade.NPITS   = 50
-
     refBlade.spar_var = 'Spar_Cap_SS'
     refBlade.te_var   = 'TE_reinforcement'
 
     blade = refBlade.initialize(fname_input)
     rotor = Problem()
-    rotor.root = RotorSE(blade)
+    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=False)
     
     #rotor.setup(check=False)
     rotor.setup()
