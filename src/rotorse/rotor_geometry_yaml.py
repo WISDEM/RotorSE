@@ -289,6 +289,7 @@ class ReferenceBlade(object):
 
         blade['config'] = {}
 
+        blade['config']['name']  = wt_ref['name']
         for var in wt_ref['assembly']['global']:
             blade['config'][var] = wt_ref['assembly']['global'][var]
         for var in wt_ref['assembly']['control']:
@@ -831,7 +832,6 @@ if __name__ == "__main__":
     refBlade.NPTS     = 50
 
     blade = refBlade.initialize(fname_input)
-
 
     ## save output yaml
     if flag_write_out:
