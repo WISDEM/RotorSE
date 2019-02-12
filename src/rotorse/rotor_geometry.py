@@ -774,6 +774,7 @@ class BladeGeometry(Component):
         # self.add_output('teT', val=np.zeros(npts), units='m', desc='dimensional trailing-edge panel thickness distribution')
 
         self.add_output('hub_diameter', val=0.0, units='m')
+        self.add_output('diameter', val=0.0, units='m')
         
         self.add_output('airfoils', val=[], desc='Spanwise coordinates for aerodynamic analysis', pass_by_obj=True)
         self.add_output('le_location', val=np.zeros(npts), desc='Leading-edge positions from a reference blade axis (usually blade pitch axis). Locations are normalized by the local chord length. Positive in -x direction for airfoil-aligned coordinate system')
@@ -839,6 +840,7 @@ class BladeGeometry(Component):
         # Although the inputs get mirrored to outputs, this is still necessary so that the user can designate the inputs as design variables
         unknowns['hub_diameter']           = 2.0*Rhub
         unknowns['r_pts']                  = Rhub + (Rtip-Rhub)*np.array(blade_out['pf']['s'])
+        unknowns['diameter']               = 2.0*unknowns['r_pts'][-1]
 
         unknowns['chord']                  = blade_out['pf']['chord']
         unknowns['max_chord']              = max(blade_out['pf']['chord'])
