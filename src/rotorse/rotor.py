@@ -208,6 +208,8 @@ class RotorSE(Group):
         # self.connect('chord_ref', 'resize.chord_ref')
         # self.connect('sector_idx_strain_spar', ['resize.sector_idx_strain_spar','beam.sector_idx_strain_spar'])
         # self.connect('sector_idx_strain_te', ['resize.sector_idx_strain_te','beam.sector_idx_strain_te'])
+        self.connect('sector_idx_strain_spar', 'beam.sector_idx_strain_spar')
+        self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')
