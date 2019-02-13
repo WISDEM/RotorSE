@@ -1,4 +1,5 @@
-name: NREL 5MW Offshore Reference Wind Turbine, modified for a more realisitic manufacturable blade with constant width spar caps, trailing edge reinforcement, and leading edge foam that wraps around the full LE w/o a gap -EMG
+name: 5MW
+comments: NREL 5MW Offshore Reference Wind Turbine, modified for a more realisitic manufacturable blade with constant width spar caps, trailing edge reinforcement, and leading edge foam that wraps around the full LE w/o a gap -EMG
 
 components:
     blade:
@@ -9,6 +10,8 @@ components:
             chord:
                 values: [3.5420, 3.5420, 3.8540, 4.1670, 4.5570, 4.6520, 4.4580, 4.2490, 4.0070, 3.7480, 3.5020, 3.2560, 3.0100, 2.7640, 2.5180, 2.3130, 2.0860, 1.4190, 1.4190]
                 grid: [0., 0.022222764, 0.066666667, 0.111110569, 0.166666667, 0.233333333, 0.3, 0.366666667, 0.433333333, 0.5, 0.566666667, 0.633333333, 0.7, 0.766666667, 0.833333333, 0.888889431, 0.933333333, 0.977777236, 1.]
+                # grid: [0, 0.004878049, 0.022222764, 0.166666667, 0.233333333, 0.366666667, 0.433333333, 0.5, 0.566666667, 0.633333333, 0.7, 0.766666667, 0.833333333, 0.888889431, 0.933333333, 0.977777236, 1]
+                # values: [3.386, 3.386, 3.386, 4.557, 4.652, 4.249, 4.007, 3.748, 3.502, 3.256, 3.01, 2.764, 2.518, 2.313, 2.086, 1.419, 1.0855]
             coordinates:
                 x: &id001
                     values: [0.0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.3667, 1.5, 1.6, 4.1, 5.5, 6.8333, 9.0, 10.25, 12.0, 14.35, 17.0, 18.45, 20.5, 22.55, 24.6, 26.65, 30.75, 32.0, 34.85, 37.0, 38.95, 41.0, 42.0, 43.05, 45.0, 47.15, 51.25, 54.6667, 57.4, 60.1333, 61.5]
@@ -62,9 +65,6 @@ components:
                   thickness:
                       grid: [0.024390244, 0.089430894, 0.111110569, 0.366666667, 0.4, 0.633333333, 0.666666667, 0.933333333]
                       values: [0.020, 0.020, 0.090, 0.090, 0.060, 0.060, 0.020, 0.020]
-                  # s0:
-                  #     grid: [0.024390244, 0.933333333]
-                  #     values: [-1, -1]
                   fixed:
                       s0: ['TE_reinforcement', 'midpoint']
                       s1: ['Spar_Cap_PS', 's0']
@@ -73,9 +73,6 @@ components:
                   thickness:
                       grid: [0.024390244, 0.089430894, 0.111110569, 0.366666667, 0.4, 0.633333333, 0.666666667, 0.933333333]
                       values: [0.020, 0.020, 0.090, 0.090, 0.060, 0.060, 0.020, 0.020]
-                  # s1:
-                  #     grid: [0.024390244, 0.933333333]
-                  #     values: [1., 1.]
                   fixed:
                       s0: ['Spar_Cap_SS', 's1']
                       s1: ['TE_reinforcement', 'midpoint']
@@ -89,7 +86,7 @@ components:
                       values: [0.00047, 0.00047, 0.0423, 0.0423, 0.03055, 0.00047]
                   width:
                       grid: [0.0, 1.0]
-                      values: [0.7, 0.7]
+                      values: [0.75, 0.75]
                -  name: Spar_Cap_SS
                   material: CarbonUD
                   midpoint:
@@ -100,7 +97,7 @@ components:
                       values: [0.00047, 0.00047, 0.0423, 0.0423, 0.03055, 0.00047]
                   width:
                       grid: [0.0, 1.0]
-                      values: [0.7, 0.7]
+                      values: [0.75, 0.75]
                -  name: LE_foam_PS
                   material: FOAM
                   thickness:
