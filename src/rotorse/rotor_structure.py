@@ -2395,7 +2395,7 @@ class RotorStructure(Group):
 
 
         # --- options ---
-        self.add('dynamic_amplication_tip_deflection', IndepVarComp('dynamic_amplication_tip_deflection', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
+        self.add('dynamic_amplication', IndepVarComp('dynamic_amplication', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
 
         # Geometry
         self.add('rotorGeometry', RotorGeometry(refBlade), promotes=['*'])
@@ -2580,7 +2580,7 @@ class RotorStructure(Group):
         self.connect('curvature.totalCone', 'loads_defl.totalCone')
         self.connect('curvature.z_az', 'loads_defl.z_az')
         self.connect('beam.beam:rhoA', 'loads_defl.rhoA')
-        self.connect('dynamic_amplication_tip_deflection', 'loads_defl.dynamicFactor')
+        self.connect('dynamic_amplication', 'loads_defl.dynamicFactor')
 
         # connections to loads_pc_defl
         self.connect('aero_defl_powercurve.loads_Omega', 'loads_pc_defl.aeroloads_Omega')
@@ -2596,7 +2596,7 @@ class RotorStructure(Group):
         self.connect('curvature.totalCone', 'loads_pc_defl.totalCone')
         self.connect('curvature.z_az', 'loads_pc_defl.z_az')
         self.connect('beam.beam:rhoA', 'loads_pc_defl.rhoA')
-        self.connect('dynamic_amplication_tip_deflection', 'loads_pc_defl.dynamicFactor')
+        self.connect('dynamic_amplication', 'loads_pc_defl.dynamicFactor')
 
         # connections to loads_strain
         self.connect('aero_extrm.loads_Omega', 'loads_strain.aeroloads_Omega')
@@ -2612,7 +2612,7 @@ class RotorStructure(Group):
         self.connect('curvature.totalCone', 'loads_strain.totalCone')
         self.connect('curvature.z_az', 'loads_strain.z_az')
         self.connect('beam.beam:rhoA', 'loads_strain.rhoA')
-        self.connect('dynamic_amplication_tip_deflection', 'loads_strain.dynamicFactor')
+        self.connect('dynamic_amplication', 'loads_strain.dynamicFactor')
 
         # connections to damage
         self.connect('rstar_damage', 'damage.rstar')
@@ -2689,7 +2689,7 @@ class RotorStructure(Group):
         self.connect('downwind', 'tip.downwind')
         self.connect('hub_height', 'tip.hub_height')
         self.connect('curvature.totalCone', 'tip.totalConeTip', src_indices=[NPTS-1])
-        self.connect('dynamic_amplication_tip_deflection', 'tip.dynamicFactor')
+        self.connect('dynamic_amplication', 'tip.dynamicFactor')
 
 
         # connections to root moment
@@ -2703,7 +2703,7 @@ class RotorStructure(Group):
         self.connect('curvature.y_az', 'root_moment.y_az')
         self.connect('curvature.z_az', 'root_moment.z_az')
         self.connect('curvature.s', 'root_moment.s')
-        self.connect('dynamic_amplication_tip_deflection', 'root_moment.dynamicFactor')
+        self.connect('dynamic_amplication', 'root_moment.dynamicFactor')
 
 
         # connections to mass
@@ -2798,7 +2798,7 @@ class RotorStructure(Group):
         self.connect('curvature.y_az', ['root_moment_0.y_az','root_moment_120.y_az','root_moment_240.y_az'])
         self.connect('curvature.z_az', ['root_moment_0.z_az','root_moment_120.z_az','root_moment_240.z_az'])
         self.connect('curvature.s', ['root_moment_0.s','root_moment_120.s','root_moment_240.s'])
-        self.connect('dynamic_amplication_tip_deflection', ['root_moment_0.dynamicFactor','root_moment_120.dynamicFactor','root_moment_240.dynamicFactor'])
+        self.connect('dynamic_amplication', ['root_moment_0.dynamicFactor','root_moment_120.dynamicFactor','root_moment_240.dynamicFactor'])
 
         # connections to root Mxyz outputs
         self.connect('root_moment_0.Mxyz','Mxyz_1_in')
@@ -2854,7 +2854,7 @@ def Init_RotorStructure_wRefBlade(rotor, blade):
 
     # === aero and structural analysis options ===
     rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
-    rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
+    rotor['dynamic_amplication'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
     # ----------------------
 
     # === fatigue ===
