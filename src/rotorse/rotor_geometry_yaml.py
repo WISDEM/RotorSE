@@ -560,7 +560,7 @@ class ReferenceBlade(object):
             r_max_chord = blade['pf']['s'][np.argmax(blade['pf']['chord'])]
 
         # solve for end of cylinder radius by interpolating relative thickness
-        cyl_thk_min = 0.9
+        cyl_thk_min = 0.999
         idx_s       = np.argmax(blade['pf']['rthick']<1)
         idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
         r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-1:-1], blade['pf']['s'][idx_e:idx_s-1:-1], cyl_thk_min)
