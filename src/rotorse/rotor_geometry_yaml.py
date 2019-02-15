@@ -127,6 +127,8 @@ class ReferenceBlade(object):
     def update(self, blade):
         # 
         t1 = time.time()
+        blade['st'] = self.calc_spanwise_grid(blade['st'])
+
         blade = self.update_planform(blade)
         blade = self.calc_composite_bounds(blade)
 
@@ -231,7 +233,7 @@ class ReferenceBlade(object):
 
         n = self.NPTS
         # Find unique composite start and end points
-        r_points = []
+        r_points = self.r_in
         for idx_sec, sec in enumerate(st['sections']):
             for var in sec.keys():
                 if type(sec[var]) not in [str, bool]:
