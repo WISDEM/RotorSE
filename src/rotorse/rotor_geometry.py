@@ -782,7 +782,124 @@ class TUM3_35MW(ReferenceBlade):
         self.control_pitch    = 0.803344518293558
         self.control_maxTS    = 80.
         
+class WindPact1_5MW(ReferenceBlade):        
+    def __init__(self):
+        super(WindPact1_5MW, self).__init__()
 
+        self.name   = '1_5MW'    
+        
+        self.bladeLength = 33.25
+        
+        eps = 1e-4
+        self.r = np.array([eps, 0.02105, 0.04812, 0.07519, 0.10226, 0.12932, 0.15639, 0.18346, 0.21053, 0.26316, 0.31579,
+        0.36842, 0.42105, 0.47368, 0.52632, 0.57895, 0.63158, 0.68421, 0.73684, 0.78947, 0.84211, 0.89474, 0.94737, 1.00000 -eps])
+        self.npts = self.r.size
+        self.chord_ref = np.array([1.89 ,  1.89 , 2.02 , 2.15 , 2.28 , 2.41 , 2.54 , 2.67 , 2.8 ,  2.672 , 2.544 , 2.416 , 2.288 , 2.16 ,
+        2.032 , 1.904 , 1.776 , 1.648 , 1.52 ,  1.391 , 1.262 , 1.133 , 1.004 , 0.875])
+        self.le_location = np.array([0.5 , 0.5 , 0.47678571 , 0.45357143 , 0.43035714 , 0.40714286, 0.38392857 , 0.36071429 ,
+        0.3375 , 0.3375 , 0.3375 , 0.3375 ,  0.3375 , 0.3375 , 0.3375 , 0.3375 , 0.3375 , 0.3375 , 0.3375 , 0.3375 , 0.3375 , 0.3375 , 0.3375 , 0.3375 ])
+        
+class SNL13_2MW_00(ReferenceBlade):
+    def __init__(self):
+        super(SNL13_2MW_00, self).__init__()
+
+        self.name   = '13_2MW_00'    
+        
+        self.bladeLength = 100.
+        
+        eps = 1e-4       
+        self.r = np.array([eps, 0.00500, 0.00700,  0.00900 ,0.01100 , 0.01300 , 0.02400 , 0.02600 , 0.04700 , 0.06800 , 0.08900 , 0.11400 ,
+        0.14600 , 0.16300 , 0.17900 , 0.19500 , 0.22200 , 0.24900 , 0.27600 , 0.35800 , 0.43900 , 0.52000 , 0.60200 , 0.66700 ,
+        0.68300 , 0.73200 , 0.76400 , 0.84600 , 0.89400 , 0.94300 , 0.95700 , 0.97200 , 0.98600 , 1.00000 -eps])
+        self.npts = self.r.size
+        self.chord_ref = np.array([5.694 , 5.694 , 5.694 , 5.694 , 5.694 , 5.694 , 5.792 ,5.811 ,6.058 ,6.304 ,6.551 ,6.835 ,7.215 ,7.404 ,
+        7.552 ,7.628 ,7.585 ,7.488 ,7.347 ,6.923 ,6.429 ,5.915 , 5.417 ,5.019 ,4.92  ,4.621 ,4.422 ,3.925 ,3.619 ,2.824 ,
+        2.375 ,1.836 ,1.208 ,0.1])
+        self.le_location = np.array([0.5, 0.5   ,0.5   ,0.5   ,0.5   ,0.5   ,0.499 ,0.498 ,0.483 ,0.468 ,0.453 ,0.435 ,0.41  ,0.4   ,0.39  ,0.38  ,0.378 ,
+        0.377 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 ,0.375 , 0.375 ])       
+        
+
+        
+class BAR_00(ReferenceBlade):
+    def __init__(self):
+        super(BAR_00, self).__init__()
+
+        self.name           = 'BAR_00'    
+        
+        self.rating         = 5.0e6
+        self.nBlades        = 3
+        self.downwind       = False
+        self.turbine_class  = TURBINE_CLASS['III']
+        self.drivetrain     = DRIVETRAIN_TYPE['GEARED']
+
+        self.hub_height     = 140.0
+        self.bladeLength    = 100.0
+        self.hubFraction    = 3. / self.bladeLength
+        self.precone        = 2.5
+        self.tilt           = 5.0
+        
+        eps                 = 1e-4       
+        self.r              = np.array([eps, 0.00500, 0.00700,  0.00900 ,0.01100 , 0.01300 , 0.02400 , 0.02600 , 0.04700 , 0.06800 , 0.08900 , 0.09500, 0.10200, 0.11400 , 0.14600 , 0.16300 , 0.17900 , 0.19500 , 0.22200 , 0.24900 , 0.27600 , 0.35800 , 0.43900 , 0.52000 , 0.60200 , 0.66700 , 0.68300 , 0.73200 , 0.76400 , 0.84600 , 0.89400 , 0.94300 , 0.95700 , 0.97200 , 0.98600 , 1.00000 -eps])
+        self.npts           = self.r.size        
+        self.chord_ref      = np.array([4.500000, 4.505882, 4.508235, 4.510588, 4.512941, 4.515294, 4.551818, 4.560909, 4.656364, 4.779091, 4.901765, 4.930000, 4.9900000, 5.034118, 5.155455, 5.193636, 5.222727, 5.226471, 5.213939, 5.181212, 5.124848, 4.883333, 4.576667, 4.225455, 3.825000, 3.472121, 3.380000, 3.099091, 2.900909, 2.357879, 2.019118, 1.653030, 1.542727, 1.420000, 1.183529, 0.500000])
+        
+        theta_ref           = np.array([11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 11.130000, 10.837059, 10.186364, 9.572727, 9.006364, 7.504242, 6.240000, 5.132727, 4.147647, 3.444848, 3.280000, 2.804545, 2.502727, 1.783939, 1.382647, 0.987273, 0.874848, 0.756667, 0.551765, 0.000000])
+        self.le_location    = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.499, 0.498, 0.483, 0.468, 0.453, 0.445, 0.440, 0.435, 0.41, 0.4, 0.39, 0.38, 0.378, 0.377, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375])
+        t_spar      = [0.1051, 0.0891, 0.0851, 0.0841, 0.0831, 0.0881, 0.0941, 0.1001, 0.1101, 0.1201, 0.1191, 0.1291, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.1141, 0.0991, 0.0891, 0.0791, 0.0691, 0.0591, 0.0491, 0.0191, 0.0191, 0.0191, 0.0191, 0.0191] 
+        t_te        = [0.1051, 0.0861, 0.0751, 0.0641, 0.0531, 0.0481, 0.0441, 0.0401, 0.0401, 0.0401, 0.1001, 0.0951, 0.0801, 0.0801, 0.0801, 0.0921, 0.0421, 0.0921, 0.0921, 0.0921, 0.0801, 0.0771, 0.0491, 0.0291, 0.0141, 0.0141, 0.0141, 0.0141, 0.0141, 0.0141, 0.0141, 0.0141, 0.0141, 0.0141, 0.0141, 0.0141]
+        self.thickness = np.array([100. , 100.,   99.25, 98.5,  97.75,  97.,   93.1,  92.4051586,   85.02312448,  77.67246576,  70.62348547,  63., 60.0, 57.0,   54.87, 50.47279154, 46.39520394,  42.86, 37.70304653, 34.23, 32.57464363,  29.42125572,  27.,   23.8275728,   20.7582483,   19.,   18.66669067,  18.,   18.,   18.,   18.,   18.,  18.,   18.,   18.,   18.])
+        
+        # idx_cylinder        = 10
+        # self.r_cylinder     = self.r[idx_cylinder]
+        # self.r_max_chord    = self.r[np.argmax(self.chord_ref)]
+        # self.setRin()
+        
+        # myspline            = PchipInterpolator(self.r, self.chord_ref)
+        # self.chord          = myspline(self.r_in)
+               
+        # myspline            = PchipInterpolator(self.r, theta_ref)
+        # self.theta          = myspline(self.r_in)
+        
+        # myspline            = PchipInterpolator(self.r, np.zeros_like(self.r))
+        # self.precurve       = myspline(self.r_in)
+        # self.precurveT      = 0.0
+        # self.presweep       = myspline(self.r_in)
+        
+        
+        # myspline    = PchipInterpolator(self.r, t_spar)
+        # self.spar_thickness = myspline(self.r_in)
+        # myspline    = PchipInterpolator(self.r, t_te)
+        # self.te_thickness = myspline(self.r_in)
+
+        # # Load airfoil polar files
+        # afpath = self.getAeroPath()
+        # af_thicknesses  = np.array([18.0, 19.0, 27.0, 34.23, 42.86, 54.87, 63.00, 97.0 , 100.0])
+        # airfoil_files_ref = ['NACA-64-618.dat', 'NACA-64-618_19.dat', 'FB-2700-0230.dat', 'FB-3423-0596.dat', 'FB-4286-0802.dat','FB-5487-1216.dat','FB-6300-1800.dat','SNL-100m-Ellipse97.dat','Cylinder.dat']
+        # airfoil_files_ref = [os.path.join(afpath, af_file) for af_file in airfoil_files_ref]
+        # self.set_polars(self.thickness, af_thicknesses, airfoil_files_ref)
+
+        # # Now set best guess at airfoil cordinates along span without interpolating like the polar (this is just for plotting)
+        # self.airfoil_files = ['']*self.npts
+        # for k in range(self.npts):
+            # self.airfoil_files[k] = airfoil_files_ref[np.argmin(np.abs(af_thicknesses - self.thickness[k]))]
+        
+        # self.sector_idx_strain_spar = np.array([1]*self.npts)
+        # self.sector_idx_strain_te = np.array([4]*self.npts)
+        
+        
+        # self.web1 = np.nan * np.ones(self.r.shape)
+        # self.web2 = np.nan * np.ones(self.web1.shape)
+        # self.web3 = np.nan * np.ones(self.web2.shape)
+        # self.web4 = np.nan * np.ones(self.web3.shape)
+        
+        # # Control
+        # self.control_Vin      = 3.
+        # self.control_Vout     = 25.0
+        # self.control_minOmega = 4.0
+        # self.control_maxOmega = 8.0
+        # self.control_tsr      = 9.66
+        # self.control_pitch    = 0.00        
+        
 
 class BladeGeometry(Component):
     
@@ -892,7 +1009,7 @@ class BladeGeometry(Component):
             if not np.isnan(self.refBlade.web3[i]): webLoc.append(self.refBlade.web3[i])
             if not np.isnan(self.refBlade.web4[i]): webLoc.append(self.refBlade.web4[i])
 
-            istr = str(i+1) if self.refBlade.name == '5MW' else str(i)
+            istr = str(i+1) if self.refBlade.name == '5MW' or self.refBlade.name == 'BAR_00'  else str(i)
             upperCS[i], lowerCS[i], websCS[i] = CompositeSection.initFromPreCompLayupFile(os.path.join(strucpath, 'layup_' + istr + '.inp'), webLoc, materials)
             profile[i] = Profile.initFromPreCompFile(os.path.join(strucpath, 'shape_' + istr + '.inp'))
 
