@@ -811,7 +811,6 @@ class BladeGeometry(Component):
         # r_in                 = self.refBlade['ctrl_pts']['r_in']
         # unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.array(r_in)
 
-
         blade = copy.deepcopy(self.refBlade)
         blade['ctrl_pts']['bladeLength'] = params['bladeLength']
         blade['ctrl_pts']['r_in']        = r_in
@@ -821,6 +820,7 @@ class BladeGeometry(Component):
         blade['ctrl_pts']['presweep_in'] = params['presweep_in']
         blade['ctrl_pts']['sparT_in']    = params['sparT_in']
         blade['ctrl_pts']['teT_in']      = params['teT_in']
+        blade['ctrl_pts']['r_max_chord'] = params['r_max_chord']
 
         # Update
         refBlade = ReferenceBlade()
@@ -831,11 +831,9 @@ class BladeGeometry(Component):
         if blade['analysis_level'] == 0:
             refBlade.spar_var   = blade['precomp']['spar_var']
             refBlade.te_var     = blade['precomp']['te_var']
-
         
         # blade_out = blade
         blade_out = refBlade.update(blade)
-
         
         # Although the inputs get mirrored to outputs, this is still necessary so that the user can designate the inputs as design variables
         unknowns['hub_diameter']           = 2.0*Rhub
