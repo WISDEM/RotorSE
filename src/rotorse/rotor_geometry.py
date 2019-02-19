@@ -678,6 +678,11 @@ class TUM3_35MW(ReferenceBlade):
                            0.734693877551, 0.755102040816, 0.775510204082, 0.795918367347, 0.816326530612, 0.836734693878,
                            0.857142857143, 0.877551020408, 0.897959183673, 0.918367346939, 0.938775510204, 0.959183673469,
                            0.979591836735, 1.0-eps])
+        
+        # self.r = np.linspace(0, 1.0, 21)
+        # self.r[0]=eps
+        # self.r[-1]=1. - eps
+        
         self.npts = self.r.size
 
         raw     = np.loadtxt(raw, delimiter=',')
@@ -706,7 +711,28 @@ class TUM3_35MW(ReferenceBlade):
 
         myspline = Akima(raw_r, raw_sw)
         self.presweep, _, _, _ = myspline.interp(self.r_in)
+        
+        
+        # myspline = PchipInterpolator(raw_r, raw_tw)
+        # self.theta = myspline(self.r_in)
+        
+        # myspline = PchipInterpolator(raw_r, raw_c)
+        # self.chord     = myspline(self.r_in)
+        # self.chord_ref = myspline(self.r)
 
+        # myspline = PchipInterpolator(raw_r, raw_pre)
+        # self.precurve = myspline(self.r_in)
+        # self.precurveT = 0.0
+
+        # myspline = PchipInterpolator(raw_r, raw_sw)
+        # self.presweep = myspline(self.r_in)
+        
+        
+        
+        
+        
+        
+        
         t_spar = [0.065000, 0.060000, 0.055000, 0.050000, 0.045714, 0.041429, 0.037143, 0.032857, 0.028571, 0.029933, 0.032814,
                   0.035695, 0.038576, 0.041457, 0.044338, 0.048504, 0.052670, 0.056836, 0.061002, 0.065168, 0.062554, 0.059939,
                   0.057325, 0.054710, 0.052096, 0.051623, 0.051150, 0.050676, 0.050203, 0.049730, 0.048233, 0.046736, 0.045239,
@@ -725,11 +751,30 @@ class TUM3_35MW(ReferenceBlade):
         myspline = Akima(raw_r, raw_th)
         self.thickness, _, _, _ = myspline.interp(self.r)
         self.thickness = np.minimum(100.0, self.thickness)
-
+        
+        
+        # myspline = PchipInterpolator(raw_r, t_spar)
+        # self.spar_thickness = myspline(self.r_in)
+        # myspline = PchipInterpolator(raw_r, t_te)
+        # self.te_thickness = myspline(self.r_in)
+        
+        # myspline = PchipInterpolator(raw_r, raw_th)
+        # self.thickness = myspline(self.r)
+        # self.thickness = np.minimum(100.0, self.thickness)
+        
+        
+        
+        
+        
         # Load airfoil polar files
         afpath = self.getAeroPath()
         af_thicknesses  = np.array([21.0, 25.0, 30.0, 35.0, 40.0, 50.0, 100.0])
         airfoil_files_ref = ['DU08-W-210.dat', 'DU91-W2-250.dat', 'DU97-W-300.dat', 'DU00-W2-350.dat', 'FX77-W-400.dat', 'FX77-W-500.dat', 'Cylinder.dat']
+        
+        # af_thicknesses  = np.array([21.0, 25.0, 35.0, 40.0, 100.0])
+        # airfoil_files_ref = ['DU08-W-210.dat', 'DU91-W2-250.dat', 'DU00-W2-350.dat', 'FX77-W-400.dat', 'Cylinder.dat']
+        
+        
         airfoil_files_ref = [os.path.join(afpath, af_file) for af_file in airfoil_files_ref]
         # self.set_polars(thickness, af_thicknesses, airfoil_files_ref, blend=False)
         self.set_polars(self.thickness, af_thicknesses, airfoil_files_ref)
@@ -781,6 +826,7 @@ class TUM3_35MW(ReferenceBlade):
         self.control_tsr      = 8.16326530612245
         self.control_pitch    = 0.803344518293558
         self.control_maxTS    = 80.
+        # self.control_maxTS    = 85.
         
 class WindPact1_5MW(ReferenceBlade):        
     def __init__(self):
