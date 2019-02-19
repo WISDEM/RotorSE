@@ -395,7 +395,7 @@ class OutputsAero(Component):
         unknowns['rated_pitch'] = params['rated_pitch_in']
         unknowns['rated_T'] = params['rated_T_in']
         unknowns['rated_Q'] = params['rated_Q_in']
-        # unknowns['diameter'] = params['diameter_in']
+        unknowns['diameter'] = params['diameter_in']
         unknowns['V_extreme'] = params['V_extreme_in']
         unknowns['T_extreme'] = params['T_extreme_in']
         unknowns['Q_extreme'] = params['Q_extreme_in']
@@ -422,7 +422,7 @@ class OutputsAero(Component):
         return J
 
 class RotorAeroPower(Group):
-    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_III=True):
+    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True):
         super(RotorAeroPower, self).__init__()
 
         self.add('rho', IndepVarComp('rho', val=1.225), promotes=['*'])
