@@ -131,12 +131,15 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # self.ccblade = CCBlade(params['r'], chord, params['theta'], params['airfoils'], params['Rhub'], params['Rtip'], params['B'], params['rho'], params['mu'], params['precone'], params['tilt'], params['yaw'], params['shearExp'], params['hubHt'], params['nSector'])        
         self.ccblade = CCBlade(params['r'], params['chord'], params['theta'], params['airfoils'], params['Rhub'], params['Rtip'], params['B'], params['rho'], params['mu'], params['precone'], params['tilt'], params['yaw'], params['shearExp'], params['hubHt'], params['nSector'])        
 
+        
+        
         # BEM solver optimization/root finding wrappers
         def P_residual_U(Uhub):
             Omega = min(Omega_max, Uhub*params['control_tsr']/params['Rtip']*30./np.pi)
             pitch = params['control_pitch']
             P_aero, _, _, _ = self.ccblade.evaluate([Uhub], [Omega], [pitch], coefficients=False)
-            P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
+            P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])         
+            
             return params['control_ratedPower'] - P[0]
 
         def P_residual_pitch(pitch, Uhub):
@@ -153,38 +156,67 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         # Region II.5 wind speed
         Omega_max   = min(params['control_maxOmega'], params['control_maxTS']/params['Rtip']*30./np.pi)
+
         U_reg       = Omega_max*np.pi/30. * params['Rtip'] / params['control_tsr']
 
         # Region III wind speed
-        try:
+        P_out = P_residual_U(params['control_Vout'])
+        
+        U_range = params['control_Vout'] - params['control_Vin']
+            
+        if P_out > params['control_ratedPower']:
+            # Region III exists
             U_rated = brentq(lambda x: P_residual_U(x), params['control_Vin'],params['control_Vout'], xtol=1e-8)
-        except ValueError:
-            U_rated = params['control_Vout']
-
-        # Region wind grids
-        odd = 0
-        if self.n_pc % 2 != 0:
-            odd = 1
-        if U_reg < U_rated:
-            regionII5 = True
-            U_II  = np.linspace(params['control_Vin'],U_reg, int(self.n_pc/2)+odd)
-            U_II5 = np.linspace(U_reg, U_rated, 4)[1:]
-            U_III = np.linspace(U_rated, params['control_Vout'], int(self.n_pc/2)-2)[1:]
-
+            if U_reg < U_rated:
+                # Region II5 exists
+                n_ptsII = np.ceil((U_reg - params['control_Vin']) / U_range * self.n_pc)
+                if n_ptsII < 2:
+                    n_ptsII = 2
+                U_II    = np.linspace(params['control_Vin'], U_reg, n_ptsII)
+                n_ptsII5= np.ceil((U_rated - U_reg) / U_range * self.n_pc)
+                if n_ptsII5 < 2:
+                    n_ptsII5 = 2
+                U_II5   = np.linspace(U_reg, UU_rated, n_ptsII5)
+                U_III   = np.linspace(U_rated, params['control_Vout'], self.n_pc - n_ptsII - n_ptsII5)
+            else:
+                # Region II5 does not exist
+                n_ptsII = np.ceil((U_rated - params['control_Vin']) / U_range * self.n_pc)
+                if n_ptsII < 2:
+                    n_ptsII = 2
+                U_II    = np.linspace(params['control_Vin'], U_rated, n_ptsII)
+                U_III   = np.linspace(U_rated, params['control_Vout'], self.n_pc - n_ptsII)
+                U_II5   = []
+            
         else:
-            regionII5 = False
-            U_II  = np.linspace(params['control_Vin'],U_rated, int(self.n_pc/2)+odd+1)
-            U_II5 = []
-            U_III = np.linspace(U_rated, params['control_Vout'], int(self.n_pc/2))[1:]
+            # Region III does not exist
+            U_rated = params['control_Vout']
+            U_III   = []
+            if U_reg < U_rated:
+                # Region II5 exists
+                n_ptsII = np.ceil((U_reg - params['control_Vin']) / U_range * self.n_pc)
+                if n_ptsII < 2:
+                    n_ptsII = 2
+                U_II    = np.linspace(params['control_Vin'], U_reg, n_ptsII)
+                U_II5   = np.linspace(U_reg, params['control_Vout'], self.n_pc - n_ptsII)
+                
+            else:
+                # Region II5 does not exist
+                U_II    = np.linspace(params['control_Vin'], U_reg, self.n_pc)
+                U_II5   = []
+        
 
+        
+        
+        
+        
         # Region II Pitch, Rotor Speed
         Omega_II = U_II*params['control_tsr']/params['Rtip']*30./np.pi
         pitch_II = np.array([params['control_pitch']]*len(U_II))
-
+                
         # Region II5 Pitch, Rotor Speed
         options = {}
         options['disp'] = False
-        if regionII5:
+        if U_II5 != []:
             Omega_II5 = [Omega_max]*len(U_II5)
             pitch_II5 = [params['control_pitch']]*len(U_II5)
             if self.regulation_reg_II5:
@@ -197,8 +229,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         else:
             pitch_II5 = []
             Omega_II5 = []
-
-
+        
         # Region III Pitch, Rotor Speed
         Omega_III = [Omega_max]*len(U_III)
         pitch_III = [params['control_pitch']]*len(U_III)
@@ -217,22 +248,28 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         # BEM solution for full operating range
         U     = np.concatenate((U_II, U_II5, U_III))
+        
+        
+        
         Omega = np.concatenate((Omega_II, Omega_II5, Omega_III))
         pitch = np.concatenate((pitch_II, pitch_II5, pitch_III))
 
         P_aero, T, Q, M, Cp_aero, _, _, _ = self.ccblade.evaluate(U, Omega, pitch, coefficients=True)
         P, eff  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
         Cp = Cp_aero*eff
-
+        
+        
         # If above rated regulation not determined, P(U>U_rated) = P_rated
         if not self.regulation_reg_III:
             P = np.array([min(Pi, params['control_ratedPower']) for Pi in P])
-
+        
+        
         # Fit spline to powercurve for higher grid density
         spline   = PchipInterpolator(U, P)
         V_spline = np.linspace(params['control_Vin'],params['control_Vout'], num=self.n_pc_spline)
         P_spline = spline(V_spline)
-
+        
+        
         # outputs
         unknowns['V']       = U
         unknowns['Omega']   = Omega
@@ -422,7 +459,7 @@ class OutputsAero(Component):
         return J
 
 class RotorAeroPower(Group):
-    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_III=True):
+    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5 = True, regulation_reg_III=True):
         super(RotorAeroPower, self).__init__()
 
         self.add('rho', IndepVarComp('rho', val=1.225), promotes=['*'])
@@ -462,7 +499,7 @@ class RotorAeroPower(Group):
         self.add('rotorGeom', RotorGeometry(RefBlade), promotes=['*'])
 
         # self.add('tipspeed', MaxTipSpeed())
-        self.add('powercurve', RegulatedPowerCurve(RefBlade.npts, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_III))
+        self.add('powercurve', RegulatedPowerCurve(RefBlade.npts, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5, regulation_reg_III))
         self.add('wind', PowerWind(1))
         # self.add('cdf', WeibullWithMeanCDF(npts_coarse_power_curve))
         self.add('cdf', RayleighCDF(npts_spline_power_curve))

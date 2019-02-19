@@ -669,19 +669,19 @@ class TUM3_35MW(ReferenceBlade):
         1.000,200.0,-4.62,21.00,42.00,2500.0,0.000,25.00""")
 
         eps = 1e-4
-        self.r = np.array([eps, 0.0204081632653, 0.0408163265306, 0.0612244897959, 0.0816326530612, 0.102040816327,
-                           0.122448979592, 0.142857142857, 0.163265306122, 0.183673469388, 0.204081632653, 0.224489795918,
-                           0.244897959184, 0.265306122449, 0.285714285714, 0.30612244898, 0.326530612245, 0.34693877551,
-                           0.367346938776, 0.387755102041, 0.408163265306, 0.428571428571, 0.448979591837, 0.469387755102,
-                           0.489795918367, 0.510204081633, 0.530612244898, 0.551020408163, 0.571428571429, 0.591836734694,
-                           0.612244897959, 0.632653061224, 0.65306122449, 0.673469387755, 0.69387755102, 0.714285714286,
-                           0.734693877551, 0.755102040816, 0.775510204082, 0.795918367347, 0.816326530612, 0.836734693878,
-                           0.857142857143, 0.877551020408, 0.897959183673, 0.918367346939, 0.938775510204, 0.959183673469,
-                           0.979591836735, 1.0-eps])
+        # self.r = np.array([eps, 0.0204081632653, 0.0408163265306, 0.0612244897959, 0.0816326530612, 0.102040816327,
+                           # 0.122448979592, 0.142857142857, 0.163265306122, 0.183673469388, 0.204081632653, 0.224489795918,
+                           # 0.244897959184, 0.265306122449, 0.285714285714, 0.30612244898, 0.326530612245, 0.34693877551,
+                           # 0.367346938776, 0.387755102041, 0.408163265306, 0.428571428571, 0.448979591837, 0.469387755102,
+                           # 0.489795918367, 0.510204081633, 0.530612244898, 0.551020408163, 0.571428571429, 0.591836734694,
+                           # 0.612244897959, 0.632653061224, 0.65306122449, 0.673469387755, 0.69387755102, 0.714285714286,
+                           # 0.734693877551, 0.755102040816, 0.775510204082, 0.795918367347, 0.816326530612, 0.836734693878,
+                           # 0.857142857143, 0.877551020408, 0.897959183673, 0.918367346939, 0.938775510204, 0.959183673469,
+                           # 0.979591836735, 1.0-eps])
         
-        # self.r = np.linspace(0, 1.0, 21)
-        # self.r[0]=eps
-        # self.r[-1]=1. - eps
+        self.r = np.linspace(0, 1.0, 21)
+        self.r[0]=eps
+        self.r[-1]=1. - eps
         
         self.npts = self.r.size
 
@@ -693,39 +693,39 @@ class TUM3_35MW(ReferenceBlade):
         raw_pre = raw[:,5] * 1e-3
         raw_sw  = raw[:,6] * 1e-3
 
-        idx_cylinder = 10
-        self.r_cylinder  = raw_r[idx_cylinder]
-        self.r_max_chord = raw_r[np.argmax(raw_c)]
-        self.setRin()
+        idx_cylinder = 4
+        # self.r_cylinder  = raw_r[idx_cylinder]
+        # self.r_max_chord = raw_r[np.argmax(raw_c)]
+        # self.setRin()
         
-        myspline = Akima(raw_r, raw_tw)
-        self.theta, _, _, _ = myspline.interp(self.r_in)
+        # myspline = Akima(raw_r, raw_tw)
+        # self.theta, _, _, _ = myspline.interp(self.r_in)
         
-        myspline = Akima(raw_r, raw_c)
-        self.chord, _, _, _     = myspline.interp(self.r_in)
-        self.chord_ref, _, _, _ = myspline.interp(self.r)
+        # myspline = Akima(raw_r, raw_c)
+        # self.chord, _, _, _     = myspline.interp(self.r_in)
+        # self.chord_ref, _, _, _ = myspline.interp(self.r)
 
-        myspline = Akima(raw_r, raw_pre)
-        self.precurve, _, _, _ = myspline.interp(self.r_in)
-        self.precurveT = 0.0
-
-        myspline = Akima(raw_r, raw_sw)
-        self.presweep, _, _, _ = myspline.interp(self.r_in)
-        
-        
-        # myspline = PchipInterpolator(raw_r, raw_tw)
-        # self.theta = myspline(self.r_in)
-        
-        # myspline = PchipInterpolator(raw_r, raw_c)
-        # self.chord     = myspline(self.r_in)
-        # self.chord_ref = myspline(self.r)
-
-        # myspline = PchipInterpolator(raw_r, raw_pre)
-        # self.precurve = myspline(self.r_in)
+        # myspline = Akima(raw_r, raw_pre)
+        # self.precurve, _, _, _ = myspline.interp(self.r_in)
         # self.precurveT = 0.0
 
-        # myspline = PchipInterpolator(raw_r, raw_sw)
-        # self.presweep = myspline(self.r_in)
+        # myspline = Akima(raw_r, raw_sw)
+        # self.presweep, _, _, _ = myspline.interp(self.r_in)
+        
+        
+        myspline = PchipInterpolator(raw_r, raw_tw)
+        self.theta = myspline(self.r_in)
+        
+        myspline = PchipInterpolator(raw_r, raw_c)
+        self.chord     = myspline(self.r_in)
+        self.chord_ref = myspline(self.r)
+
+        myspline = PchipInterpolator(raw_r, raw_pre)
+        self.precurve = myspline(self.r_in)
+        self.precurveT = 0.0
+
+        myspline = PchipInterpolator(raw_r, raw_sw)
+        self.presweep = myspline(self.r_in)
         
         
         
@@ -743,24 +743,24 @@ class TUM3_35MW(ReferenceBlade):
                 0.008325, 0.008160, 0.007995, 0.008364, 0.008733, 0.009102, 0.009471, 0.009840, 0.008671, 0.007501, 0.006332,
                 0.005163, 0.003994, 0.003595, 0.003196, 0.002797, 0.002399, 0.002000, 0.002166, 0.002331, 0.002497, 0.002662,
                 0.002828, 0.001075, 0.001056, 0.001037, 0.001019, 0.001000, 0.001000, 0.001000, 0.001000, 0.001000, 0.001000]
-        myspline = Akima(raw_r, t_spar)
-        self.spar_thickness, _, _, _ = myspline.interp(self.r_in)
-        myspline = Akima(raw_r, t_te)
-        self.te_thickness, _, _, _ = myspline.interp(self.r_in)
+        # myspline = Akima(raw_r, t_spar)
+        # self.spar_thickness, _, _, _ = myspline.interp(self.r_in)
+        # myspline = Akima(raw_r, t_te)
+        # self.te_thickness, _, _, _ = myspline.interp(self.r_in)
         
-        myspline = Akima(raw_r, raw_th)
-        self.thickness, _, _, _ = myspline.interp(self.r)
-        self.thickness = np.minimum(100.0, self.thickness)
-        
-        
-        # myspline = PchipInterpolator(raw_r, t_spar)
-        # self.spar_thickness = myspline(self.r_in)
-        # myspline = PchipInterpolator(raw_r, t_te)
-        # self.te_thickness = myspline(self.r_in)
-        
-        # myspline = PchipInterpolator(raw_r, raw_th)
-        # self.thickness = myspline(self.r)
+        # myspline = Akima(raw_r, raw_th)
+        # self.thickness, _, _, _ = myspline.interp(self.r)
         # self.thickness = np.minimum(100.0, self.thickness)
+        
+        
+        myspline = PchipInterpolator(raw_r, t_spar)
+        self.spar_thickness = myspline(self.r_in)
+        myspline = PchipInterpolator(raw_r, t_te)
+        self.te_thickness = myspline(self.r_in)
+        
+        myspline = PchipInterpolator(raw_r, raw_th)
+        self.thickness = myspline(self.r)
+        self.thickness = np.minimum(100.0, self.thickness)
         
         
         
@@ -768,11 +768,11 @@ class TUM3_35MW(ReferenceBlade):
         
         # Load airfoil polar files
         afpath = self.getAeroPath()
-        af_thicknesses  = np.array([21.0, 25.0, 30.0, 35.0, 40.0, 50.0, 100.0])
-        airfoil_files_ref = ['DU08-W-210.dat', 'DU91-W2-250.dat', 'DU97-W-300.dat', 'DU00-W2-350.dat', 'FX77-W-400.dat', 'FX77-W-500.dat', 'Cylinder.dat']
+        # af_thicknesses  = np.array([21.0, 25.0, 30.0, 35.0, 40.0, 50.0, 100.0])
+        # airfoil_files_ref = ['DU08-W-210.dat', 'DU91-W2-250.dat', 'DU97-W-300.dat', 'DU00-W2-350.dat', 'FX77-W-400.dat', 'FX77-W-500.dat', 'Cylinder.dat']
         
-        # af_thicknesses  = np.array([21.0, 25.0, 35.0, 40.0, 100.0])
-        # airfoil_files_ref = ['DU08-W-210.dat', 'DU91-W2-250.dat', 'DU00-W2-350.dat', 'FX77-W-400.dat', 'Cylinder.dat']
+        af_thicknesses  = np.array([21.0, 25.0, 35.0, 40.0, 100.0])
+        airfoil_files_ref = ['DU08-W-210.dat', 'DU91-W2-250.dat', 'DU00-W2-350.dat', 'FX77-W-400.dat', 'Cylinder.dat']
         
         
         airfoil_files_ref = [os.path.join(afpath, af_file) for af_file in airfoil_files_ref]
@@ -825,8 +825,8 @@ class TUM3_35MW(ReferenceBlade):
         self.control_maxOmega = 11.75298041294
         self.control_tsr      = 8.16326530612245
         self.control_pitch    = 0.803344518293558
-        self.control_maxTS    = 80.
-        # self.control_maxTS    = 85.
+        # self.control_maxTS    = 80.
+        self.control_maxTS    = 85.
         
 class WindPact1_5MW(ReferenceBlade):        
     def __init__(self):
