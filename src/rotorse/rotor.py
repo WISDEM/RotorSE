@@ -85,8 +85,7 @@ class RotorSE(Group):
         # self.add('cdf', WeibullWithMeanCDF(npts_spline_power_curve))
         self.add('cdf', RayleighCDF(npts_spline_power_curve))
         self.add('aep', AEP(npts_spline_power_curve))
-
-        self.add('outputs_aero', OutputsAero(npts_spline_power_curve), promotes=['*'])
+        self.add('outputs_aero', OutputsAero(npts_coarse_power_curve), promotes=['*'])
 
 
         # --- add structures ---
@@ -177,9 +176,10 @@ class RotorSE(Group):
         self.connect('AEP_loss_factor', 'aep.lossFactor')
 
         # connections to outputs
-        self.connect('powercurve.V_spline', 'V_in')
-        self.connect('powercurve.P_spline', 'P_in')
+        self.connect('powercurve.V', 'V_in')
+        self.connect('powercurve.P', 'P_in')
         self.connect('aep.AEP', 'AEP_in')
+        self.connect('powercurve.Cp', 'Cp_in')
         self.connect('powercurve.rated_V', 'rated_V_in')
         self.connect('powercurve.rated_Omega', 'rated_Omega_in')
         self.connect('powercurve.rated_pitch', 'rated_pitch_in')

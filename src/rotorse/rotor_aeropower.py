@@ -392,7 +392,7 @@ class OutputsAero(Component):
         unknowns['AEP'] = params['AEP_in']
         unknowns['V'] = params['V_in']
         unknowns['Cp'] = params['Cp_in']
-        unknowns['V'] = params['V_in']
+        unknowns['P'] = params['P_in']
         unknowns['rated_V'] = params['rated_V_in']
         unknowns['rated_Omega'] = params['rated_Omega_in']
         unknowns['rated_pitch'] = params['rated_pitch_in']
@@ -410,7 +410,7 @@ class OutputsAero(Component):
         J['AEP', 'AEP_in'] = 1
         J['V', 'V_in'] = np.diag(np.ones(len(params['V_in'])))
         J['P', 'P_in'] = np.diag(np.ones(len(params['P_in'])))
-        J['Cp', 'Cp_in'] = np.diag(np.ones(len(params['P_in'])))
+        J['Cp', 'Cp_in'] = np.diag(np.ones(len(params['Cp_in'])))
         J['rated_V', 'rated_V_in'] = 1
         J['rated_Omega', 'rated_Omega_in'] = 1
         J['rated_pitch', 'rated_pitch_in'] = 1
