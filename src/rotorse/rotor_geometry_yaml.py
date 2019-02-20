@@ -233,7 +233,7 @@ class ReferenceBlade(object):
 
         n = self.NPTS
         # Find unique composite start and end points
-        r_points = self.r_in
+        r_points = copy.copy(self.r_in)
         for idx_sec, sec in enumerate(st['sections']):
             for var in sec.keys():
                 if type(sec[var]) not in [str, bool]:
@@ -570,7 +570,7 @@ class ReferenceBlade(object):
         # Build Control Point Grid, if not provided with key word arg
         if len(r_in)==0:
             # control point grid
-            r_in = np.r_[[0.], [r_cylinder], np.linspace(r_max_chord, 1., self.NINPUT-2)]
+            r_in = np.array(sorted(np.r_[[0.], [r_cylinder], np.linspace(r_max_chord, 1., self.NINPUT-2)]))
 
         # Fit control points to planform variables
         blade['ctrl_pts']['theta_in']     = remap2grid(blade['pf']['s'], blade['pf']['theta'], r_in)
