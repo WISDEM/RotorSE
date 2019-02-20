@@ -694,9 +694,9 @@ class TUM3_35MW(ReferenceBlade):
         raw_sw  = raw[:,6] * 1e-3
 
         idx_cylinder = 4
-        # self.r_cylinder  = raw_r[idx_cylinder]
-        # self.r_max_chord = raw_r[np.argmax(raw_c)]
-        # self.setRin()
+        self.r_cylinder  = raw_r[idx_cylinder]
+        self.r_max_chord = raw_r[np.argmax(raw_c)]
+        self.setRin()
         
         # myspline = Akima(raw_r, raw_tw)
         # self.theta, _, _, _ = myspline.interp(self.r_in)
@@ -722,6 +722,7 @@ class TUM3_35MW(ReferenceBlade):
 
         myspline = PchipInterpolator(raw_r, raw_pre)
         self.precurve = myspline(self.r_in)
+        self.precurve_ref = myspline(self.r)
         self.precurveT = 0.0
 
         myspline = PchipInterpolator(raw_r, raw_sw)
@@ -789,8 +790,8 @@ class TUM3_35MW(ReferenceBlade):
                            0.2678, 0.2593, 0.2527, 0.2477, 0.2442, 0.2419, 0.2408, 0.2408, 0.2418, 0.2438, 0.2468, 0.2508, 0.2556, 0.2611,
                            0.2672, 0.2734, 0.2796, 0.2855, 0.2913, 0.2967, 0.3016, 0.3060, 0.3098, 0.3128, 0.3149, 0.3159, 0.3179, 0.3173,
                            0.3157, 0.3126, 0.3080, 0.3021, 0.2956, 0.2887, 0.2824, 0.2767, 0.2725, 0.2692, 0.2671, 0.2644, 0.2500])
-        myspline = Akima(raw_r, raw_le)
-        self.le_location, _, _, _ = myspline.interp(self.r)
+        myspline = PchipInterpolator(raw_r, raw_le)
+        self.le_location = myspline(self.r)
 
         # self.sector_idx_strain_spar = np.array([0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 0])
         # self.sector_idx_strain_te = np.array([1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 1])
@@ -1015,6 +1016,9 @@ class BladeGeometry(Component):
         unknowns['Rtip']     = Rtip
         unknowns['hub_diameter'] = 2.0*Rhub
         unknowns['r_pts']    = Rhub + (Rtip-Rhub)*self.refBlade.r
+        
+        # print(self.refBlade.r_cylinder)
+        # exit()
         unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.r_[0.0, self.refBlade.r_cylinder, np.linspace(params['r_max_chord'], 1.0, NINPUT-2)]
 
         # Although the inputs get mirrored to outputs, this is still necessary so that the user can designate the inputs as design variables
