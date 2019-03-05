@@ -121,8 +121,10 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.n_pc_spline                = n_pc_spline
         self.regulation_reg_II5         = regulation_reg_II5
         self.regulation_reg_III         = regulation_reg_III
+        self.deriv_options['type'] = 'fd'
         self.deriv_options['form']      = 'central'
         self.deriv_options['step_calc'] = 'relative'
+
         
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -573,6 +575,10 @@ class RotorAeroPower(Group):
         self.connect('powercurve.rated_pitch', 'rated_pitch_in')
         self.connect('powercurve.rated_T', 'rated_T_in')
         self.connect('powercurve.rated_Q', 'rated_Q_in')
+
+        self.deriv_options['type'] = 'fd'
+        self.deriv_options['form']      = 'central'
+        self.deriv_options['step_calc'] = 'relative'
 
 
 if __name__ == '__main__':
