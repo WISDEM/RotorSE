@@ -953,7 +953,7 @@ class BladeGeometry(Component):
     def __init__(self, RefBlade):
         super(BladeGeometry, self).__init__()
 
-        assert isinstance(RefBlade, ReferenceBlade), 'Must pass in either NREL5MW or DTU10MW Reference Blade instance'
+        # assert isinstance(RefBlade, ReferenceBlade), 'Must pass in either NREL5MW or DTU10MW Reference Blade instance'
         self.refBlade = RefBlade
         npts = self.refBlade.npts
         
@@ -1127,7 +1127,7 @@ class RotorGeometry(Group):
     def __init__(self, RefBlade):
         super(RotorGeometry, self).__init__()
         """rotor model"""
-        assert isinstance(RefBlade, ReferenceBlade), 'Must pass in either NREL5MW or DTU10MW Reference Blade instance'
+        # assert isinstance(RefBlade, ReferenceBlade), 'Must pass in either NREL5MW or DTU10MW Reference Blade instance'
 
         self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
