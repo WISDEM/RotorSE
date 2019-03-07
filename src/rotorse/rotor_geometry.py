@@ -121,8 +121,15 @@ class ReferenceBlade(object):
         # get reference airfoil polars
         cl_ref = np.zeros((n_aoa, n_af_ref))
         cd_ref = np.zeros((n_aoa, n_af_ref))
+        cm_ref = np.zeros((n_aoa, n_af_ref))
         for i in range(n_af_ref):
-            cl_ref[:,i], cd_ref[:,i] = af_ref[i].evaluate(alpha*np.pi/180., Re)
+            cl_ref[:,i], cd_ref[:,i], cm_ref[:,i] = af_ref[i].evaluate(alpha*np.pi/180., Re, return_cm=True)
+            cl_ref[ 0,i] = 0.
+            cl_ref[-1,i] = 0.
+            cm_ref[ 0,i] = 0.
+            cm_ref[-1,i] = 0.
+            cd_ref[-1,i] = cd_ref[0,i]
+
 
         # spline selection
         _spline = PchipInterpolator
@@ -130,14 +137,17 @@ class ReferenceBlade(object):
         # interpolate
         spline_cl = _spline(af_thicknesses, cl_ref, axis=1)
         spline_cd = _spline(af_thicknesses, cd_ref, axis=1)
+        spline_cm = _spline(af_thicknesses, cm_ref, axis=1)
         cl = spline_cl(thickness)
         cd = spline_cd(thickness)
+        cm = spline_cm(thickness)
 
 
         # CCBlade airfoil class instances
         self.airfoils = [None]*n_span
         for i in range(n_span):
-            self.airfoils[i] = CCAirfoil(alpha, Re, cl[:,i], cd[:,i])
+            self.airfoils[i] = CCAirfoil(alpha, Re, cl[:,i], cd[:,i], cm[:,i])
+            self.airfoils[i].eval_unsteady(alpha, cl[:,i], cd[:,i], cm[:,i])
 
             # import matplotlib.pyplot as plt
             # plt.figure()
@@ -1097,7 +1107,8 @@ class TurbineClass(Component):
 
         # outputs should be constant
         self.add_output('V_mean', shape=1, units='m/s', desc='IEC mean wind speed for Rayleigh distribution')
-        self.add_output('V_extreme', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
+        self.add_output('V_extreme1', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
+        self.add_output('V_extreme50', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
         self.add_output('V_extreme_full', shape=2, units='m/s', desc='IEC extreme wind speed at hub height')
         
         self.deriv_options['type'] = 'fd'
@@ -1117,7 +1128,8 @@ class TurbineClass(Component):
             Vref = 30.0
 
         unknowns['V_mean'] = 0.2*Vref
-        unknowns['V_extreme'] = 1.4*Vref
+        unknowns['V_extreme1'] = 0.8*Vref
+        unknowns['V_extreme50'] = 1.4*Vref
         unknowns['V_extreme_full'][0] = 1.4*Vref # for extreme cases TODO: check if other way to do
         unknowns['V_extreme_full'][1] = 1.4*Vref
 

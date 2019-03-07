@@ -73,6 +73,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('control_tsr',        val=0.0,               desc='tip-speed ratio in Region 2 (should be optimized externally)')
         self.add_param('control_pitch',      val=0.0, units='deg',  desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
         self.add_param('drivetrainType',     val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True)
+        self.add_param('drivetrainEff',     val=0.0,               desc='overwrite drivetrain model with a given efficiency, used for FAST analysis')
         
         self.add_param('r',         val=np.zeros(naero), units='m',   desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
         self.add_param('chord',     val=np.zeros(naero), units='m',   desc='chord length at each section')
@@ -121,54 +122,53 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.n_pc_spline                = n_pc_spline
         self.regulation_reg_II5         = regulation_reg_II5
         self.regulation_reg_III         = regulation_reg_III
-        self.deriv_options['type'] = 'fd'
         self.deriv_options['form']      = 'central'
         self.deriv_options['step_calc'] = 'relative'
-
         
     def solve_nonlinear(self, params, unknowns, resids):
 
         # Init BEM solver
-        # chord = [2.6001099, 2.62242763, 2.67996425, 2.90085584, 3.17531587, 3.42387123, 3.64330915, 3.83052412, 3.98212681, 4.10594413, 4.19584165, 4.26048096, 4.28580291, 4.29671995, 4.27768742, 4.23738792, 4.17189564, 4.08924059, 3.98766963, 3.87233115, 3.74355951, 3.60392971, 3.45902389, 3.3113602, 3.1659319, 3.02649254, 2.89457583, 2.77070512, 2.6548174, 2.54683906, 2.44672653, 2.3545666, 2.27039966, 2.19417705, 2.12588872, 2.06554844, 2.01316757, 1.96875011, 1.93235573, 1.90390608, 1.88232097, 1.8583458, 1.82120335, 1.75844402, 1.65851675, 1.50997905, 1.30133456, 1.02070032, 0.65731181, 0.20224083]
-        # self.ccblade = CCBlade(params['r'], chord, params['theta'], params['airfoils'], params['Rhub'], params['Rtip'], params['B'], params['rho'], params['mu'], params['precone'], params['tilt'], params['yaw'], params['shearExp'], params['hubHt'], params['nSector'])        
-        self.ccblade = CCBlade(params['r'], params['chord'], params['theta'], params['airfoils'], params['Rhub'], params['Rtip'], params['B'], params['rho'], params['mu'], params['precone'], params['tilt'], params['yaw'], params['shearExp'], params['hubHt'], params['nSector'])        
+        self.ccblade = CCBlade(params['r'], params['chord'], params['theta'], params['airfoils'], params['Rhub'], params['Rtip'], params['B'], params['rho'], params['mu'], params['precone'], params['tilt'], params['yaw'], params['shearExp'], params['hubHt'], params['nSector'], tiploss=True, hubloss=True, wakerotation=True, usecd=True)        
 
-        
-        
         # BEM solver optimization/root finding wrappers
         def P_residual_U(Uhub):
             Omega = min(Omega_max, Uhub*params['control_tsr']/params['Rtip']*30./np.pi)
             pitch = params['control_pitch']
             P_aero, _, _, _ = self.ccblade.evaluate([Uhub], [Omega], [pitch], coefficients=False)
-            P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])         
-            
+            if params['drivetrainEff'] != 0:
+                P = P_aero*params['drivetrainEff']
+            else:
+                P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])         
             return params['control_ratedPower'] - P[0]
 
         def P_residual_pitch(pitch, Uhub):
             Omega = min(Omega_max, Uhub*params['control_tsr']/params['Rtip']*30./np.pi)
             P_aero, _, _, _ = self.ccblade.evaluate([Uhub], [Omega], [pitch], coefficients=False)
-            P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
+            if params['drivetrainEff'] != 0:
+                P = P_aero*params['drivetrainEff']
+            else:
+                P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
             return params['control_ratedPower'] - P[0]
 
         def P_max(pitch, Uhub):
             P_aero, _, _, _ = self.ccblade.evaluate([Uhub], [Omega_max], [pitch], coefficients=False)
-            P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
+            if params['drivetrainEff'] != 0:
+                P = P_aero*params['drivetrainEff']
+            else:
+                P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
             return abs(P - params['control_ratedPower'])
 
 
         # Region II.5 wind speed
         Omega_max   = min(params['control_maxOmega'], params['control_maxTS']/params['Rtip']*30./np.pi)
-
         U_reg       = Omega_max*np.pi/30. * params['Rtip'] / params['control_tsr']
 
         # Region III wind speed
-        P_out = P_residual_U(params['control_Vout'])
-        
         U_range = params['control_Vout'] - params['control_Vin']
             
-        if P_out > params['control_ratedPower']:
+        if P_residual_U(params['control_Vout']) <= 0.:
             # Region III exists
-            U_rated = brentq(lambda x: P_residual_U(x), params['control_Vin'],params['control_Vout'], xtol=1e-8)
+            U_rated = brentq(lambda x: P_residual_U(x), params['control_Vin'],params['control_Vout'], xtol=1e-10)
             if U_reg < U_rated:
                 # Region II5 exists
                 n_ptsII = np.ceil((U_reg - params['control_Vin']) / U_range * self.n_pc)
@@ -178,7 +178,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 n_ptsII5= np.ceil((U_rated - U_reg) / U_range * self.n_pc)
                 if n_ptsII5 < 2:
                     n_ptsII5 = 2
-                U_II5   = np.linspace(U_reg, UU_rated, n_ptsII5)
+                U_II5   = np.linspace(U_reg, U_rated, n_ptsII5)
                 U_III   = np.linspace(U_rated, params['control_Vout'], self.n_pc - n_ptsII - n_ptsII5)
             else:
                 # Region II5 does not exist
@@ -250,9 +250,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         # BEM solution for full operating range
         U     = np.concatenate((U_II, U_II5, U_III))
-        
-        
-        
         Omega = np.concatenate((Omega_II, Omega_II5, Omega_III))
         pitch = np.concatenate((pitch_II, pitch_II5, pitch_III))
 
@@ -563,7 +560,7 @@ class RotorAeroPower(Group):
 
         # connect to outputs
         self.connect('geom.diameter', 'diameter_in')
-        self.connect('turbineclass.V_extreme', 'V_extreme_in')
+        self.connect('turbineclass.V_extreme50', 'V_extreme_in')
         self.connect('precurve_tip', 'precurveTip_in')
         self.connect('presweep_tip', 'presweepTip_in')
 
