@@ -78,9 +78,11 @@ class FASTLoadCases(Component):
         self.Analysis_Level      = FASTpref['Analysis_Level']
         self.FAST_ver            = FASTpref['FAST_ver']
         self.FAST_exe            = os.path.abspath(FASTpref['FAST_exe'])
+        self.FAST_directory      = os.path.abspath(FASTpref['FAST_directory'])
         self.Turbsim_exe         = os.path.abspath(FASTpref['Turbsim_exe'])
         self.debug_level         = FASTpref['debug_level']
         self.FAST_runDirectory   = FASTpref['FAST_runDirectory']
+        self.FAST_InputFile      = FASTpref['FAST_InputFile']
         self.FAST_namingOut      = FASTpref['FAST_namingOut']
         self.dev_branch          = FASTpref['dev_branch']
         self.cores               = FASTpref['cores']
@@ -129,6 +131,8 @@ class FASTLoadCases(Component):
         # Create instance of FAST reference model 
 
         fst_vt = copy.deepcopy(params['fst_vt_in'])
+
+        fst_vt['Fst']['OutFileFmt'] = 2
 
         # Update ElastoDyn
         fst_vt['ElastoDyn']['TipRad'] = params['Rtip']
@@ -286,6 +290,8 @@ class FASTLoadCases(Component):
 
         fastBatch.FAST_exe          = self.FAST_exe
         fastBatch.FAST_runDirectory = self.FAST_runDirectory
+        fastBatch.FAST_InputFile    = self.FAST_InputFile
+        fastBatch.FAST_directory    = self.FAST_directory
         fastBatch.debug_level       = self.debug_level
         fastBatch.dev_branch        = self.dev_branch
         fastBatch.fst_vt            = fst_vt
@@ -433,7 +439,6 @@ class FASTLoadCases(Component):
 
             if casei in [4]:
                 # turbulent wind with multiplt seeds
-
                 idx_turb = [i for i, casej in enumerate(case_keys) if casej==4]
                 data_concat = {}
                 for i, fast_out_idx in enumerate(idx_turb):
