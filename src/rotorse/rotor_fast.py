@@ -317,6 +317,8 @@ class FASTLoadCases(Component):
         writer.dev_branch        = self.dev_branch
         writer.execute()
 
+        print(self.FAST_runDirectory, self.FAST_namingOut)
+
     def post_process(self, FAST_Output, case_keys, R_out, params, unknowns):
 
         def post_gust(data, case_type):
@@ -425,7 +427,7 @@ class FASTLoadCases(Component):
             if casei in [2]:
                 # gust: return tip deflections and bending moments
                 idx_gust = case_keys.index(casei)
-                data = FAST_Output[idx_rated]
+                data = FAST_Output[idx_gust]
                 post_gust(data, casei)
                 Gust_Outputs = True
 

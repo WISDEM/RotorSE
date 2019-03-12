@@ -664,12 +664,12 @@ if __name__ == '__main__':
 
         # DLCs
         FASTpref['DLC_powercurve']      = None      # AEP               ### Not in place yet
-        FASTpref['DLC_gust']            = None      # Max deflection
-        FASTpref['DLC_extrm']           = None      # Max strain
-        # FASTpref['DLC_rated']           = RotorSE_DLC_1_4_Rated       # Max deflection    ### Not in place yet
-        # FASTpref['DLC_extrm']           = RotorSE_DLC_7_1_Steady      # Max strain        ### Not in place yet
-        FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb      # Alternate turbulent case, replacing rated and extreme DLCs for calculating max deflection and strain
-
+        # FASTpref['DLC_gust']            = None      # Max deflection
+        # FASTpref['DLC_extrm']           = None      # Max strain
+        FASTpref['DLC_gust']            = RotorSE_DLC_1_4_Rated       # Max deflection    ### Not in place yet
+        FASTpref['DLC_extrm']           = RotorSE_DLC_7_1_Steady      # Max strain        ### Not in place yet
+        # FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb      # Alternate turbulent case, replacing rated and extreme DLCs for calculating max deflection and strain
+        FASTpref['DLC_turbulent']       = None
 
         # Initialize, read initial FAST files to avoid doing it iteratively
         fast = InputReader_OpenFAST(FAST_ver=FASTpref['FAST_ver'], dev_branch=FASTpref['dev_branch'])
