@@ -642,7 +642,7 @@ if __name__ == '__main__':
     # myref = DTU10MW()
     # myref = TUM3_35MW()
 
-    Analysis_Level = 1 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
+    Analysis_Level = 0 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
 
     # Set FAST Inputs
     if Analysis_Level >= 0:

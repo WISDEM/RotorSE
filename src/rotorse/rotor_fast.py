@@ -110,6 +110,7 @@ class FASTLoadCases(Component):
         self.add_output('loads_Omega', val=0.0, units='rpm', desc='rotor rotation speed')
         self.add_output('loads_pitch', val=0.0, units='deg', desc='pitch angle')
         self.add_output('loads_azimuth', val=0.0, units='deg', desc='azimuthal angle')
+        self.add_output('model_updated', val=False, desc='boolean, Analysis Level 0: fast model written, but not run')
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -123,7 +124,7 @@ class FASTLoadCases(Component):
 
         elif self.Analysis_Level == 0:
             # Write FAST files, do not run
-            self.write_FAST(fst_vt)
+            self.write_FAST(fst_vt, unknowns)
 
 
     def update_FAST_model(self, params):
@@ -309,7 +310,7 @@ class FASTLoadCases(Component):
 
         return FAST_Output
 
-    def write_FAST(self, fst_vt):
+    def write_FAST(self, fst_vt, unknowns):
         writer                   = InputWriter_OpenFAST(FAST_ver=self.FAST_ver)
         writer.fst_vt            = fst_vt
         writer.FAST_runDirectory = self.FAST_runDirectory
@@ -317,7 +318,9 @@ class FASTLoadCases(Component):
         writer.dev_branch        = self.dev_branch
         writer.execute()
 
-        print(self.FAST_runDirectory, self.FAST_namingOut)
+        unknowns['model_updated'] = True
+        if self.debug_level > 0:
+            print('RAN UPDATE: ', self.FAST_runDirectory, self.FAST_namingOut)
 
     def post_process(self, FAST_Output, case_keys, R_out, params, unknowns):
 
