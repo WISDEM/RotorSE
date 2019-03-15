@@ -600,7 +600,8 @@ if __name__ == '__main__':
     tt = time.time()
 
     # Turbine Ontology input
-    fname_input  = "turbine_inputs/nrel5mw_mod.yaml"
+    fname_input = "C:/linux/Results/results_steady/results/data8_bkup/OptFAST_2x0_steady8_aep_10_L/blade_out.yaml"
+    # fname_input  = "turbine_inputs/nrel5mw_mod.yaml"
     fname_output = "turbine_inputs/nrel5mw_mod_out.yaml"
 
     # Initialize blade design
@@ -615,13 +616,16 @@ if __name__ == '__main__':
     rotor = Problem()
     npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
     npts_spline_power_curve = 2000  # (Int): number of points to use in fitting spline to power curve
-    regulation_reg_II5 = True # calculate Region 2.5 pitch schedule, False will not maximize power in region 2.5
+    regulation_reg_II5 = False # calculate Region 2.5 pitch schedule, False will not maximize power in region 2.5
     regulation_reg_III = False # calculate Region 3 pitch schedule, False will return erroneous Thrust, Torque, and Moment for above rated
     rotor.root = RotorAeroPower(blade, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5, regulation_reg_III)
     
     #rotor.setup(check=False)
     rotor.setup()
     rotor = Init_RotorAeropower_wRefBlade(rotor, blade)
+
+    # rotor['control_tsr'] = 7.017543860e+00
+    rotor['control_tsr'] = 6.9
 
     # === run and outputs ===
     rotor.run()

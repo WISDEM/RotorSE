@@ -406,6 +406,7 @@ class ReferenceBlade(object):
         airfoils = [None]*n_span
         for i in range(n_span):
             airfoils[i] = CCAirfoil(np.degrees(alpha), Re, cl[:,i], cd[:,i], cm[:,i])
+            airfoils[i].eval_unsteady(np.degrees(alpha), cl[:,i], cd[:,i], cm[:,i])
 
         blade['airfoils'] = airfoils
 
