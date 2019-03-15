@@ -74,6 +74,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('control_tsr',        val=0.0,               desc='tip-speed ratio in Region 2 (should be optimized externally)')
         self.add_param('control_pitch',      val=0.0, units='deg',  desc='pitch angle in region 2 (and region 3 for fixed pitch machines)')
         self.add_param('drivetrainType',     val=DRIVETRAIN_TYPE['GEARED'], pass_by_obj=True)
+        self.add_param('drivetrainEff',     val=0.0,               desc='overwrite drivetrain model with a given efficiency, used for FAST analysis')
         
         self.add_param('r',         val=np.zeros(naero), units='m',   desc='radial locations where blade is defined (should be increasing and not go all the way to hub or tip)')
         self.add_param('chord',     val=np.zeros(naero), units='m',   desc='chord length at each section')
@@ -136,20 +137,28 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             Omega = min(Omega_max, Uhub*params['control_tsr']/params['Rtip']*30./np.pi)
             pitch = params['control_pitch']
             P_aero, _, _, _ = self.ccblade.evaluate([Uhub], [Omega], [pitch], coefficients=False)
-            P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
+            if params['drivetrainEff'] != 0:
+                P = P_aero*params['drivetrainEff']
+            else:
+                P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])         
             return params['control_ratedPower'] - P[0]
 
         def P_residual_pitch(pitch, Uhub):
             Omega = min(Omega_max, Uhub*params['control_tsr']/params['Rtip']*30./np.pi)
             P_aero, _, _, _ = self.ccblade.evaluate([Uhub], [Omega], [pitch], coefficients=False)
-            P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
+            if params['drivetrainEff'] != 0:
+                P = P_aero*params['drivetrainEff']
+            else:
+                P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
             return params['control_ratedPower'] - P[0]
 
         def P_max(pitch, Uhub):
             P_aero, _, _, _ = self.ccblade.evaluate([Uhub], [Omega_max], [pitch], coefficients=False)
-            P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
+            if params['drivetrainEff'] != 0:
+                P = P_aero*params['drivetrainEff']
+            else:
+                P, _  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
             return abs(P - params['control_ratedPower'])
-
 
         # Region II.5 wind speed
         Omega_max   = min(params['control_maxOmega'], params['control_maxTS']/params['Rtip']*30./np.pi)
@@ -532,7 +541,7 @@ class RotorAeroPower(Group):
 
         # connect to outputs
         # self.connect('geom.diameter', 'diameter_in')
-        self.connect('turbineclass.V_extreme', 'V_extreme_in')
+        self.connect('turbineclass.V_extreme50', 'V_extreme_in')
         self.connect('precurve_tip', 'precurveTip_in')
         self.connect('presweep_tip', 'presweepTip_in')
 

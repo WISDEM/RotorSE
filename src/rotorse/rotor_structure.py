@@ -2175,6 +2175,7 @@ class OutputsStructures(Component):
         self.add_param('eps_crit_spar_in', val=np.zeros(NPTS), desc='critical strain in spar from panel buckling calculation')
         self.add_param('eps_crit_te_in', val=np.zeros(NPTS),  desc='critical strain in trailing-edge panels from panel buckling calculation')
         self.add_param('root_bending_moment_in', val=0.0, units='N*m', desc='total magnitude of bending moment at root of blade')
+        self.add_param('Mxyz_in', val=np.zeros(3), units='N*m', desc='bending moment at root of blade, x,y,z')
         self.add_param('damageU_spar_in', val=np.zeros(NPTS), desc='fatigue damage on upper surface in spar cap')
         self.add_param('damageL_spar_in', val=np.zeros(NPTS), desc='fatigue damage on lower surface in spar cap')
         self.add_param('damageU_te_in', val=np.zeros(NPTS), desc='fatigue damage on upper surface in trailing-edge panels')
@@ -2215,6 +2216,7 @@ class OutputsStructures(Component):
         self.add_output('eps_crit_spar', val=np.zeros(NPTS), desc='critical strain in spar from panel buckling calculation')
         self.add_output('eps_crit_te', val=np.zeros(NPTS),  desc='critical strain in trailing-edge panels from panel buckling calculation')
         self.add_output('root_bending_moment', val=0.0, units='N*m', desc='total magnitude of bending moment at root of blade')
+        self.add_output('Mxyz', val=np.zeros(3), units='N*m', desc='bending moment at root of blade, x,y,z')
         self.add_output('damageU_spar', val=np.zeros(NPTS), desc='fatigue damage on upper surface in spar cap')
         self.add_output('damageL_spar', val=np.zeros(NPTS), desc='fatigue damage on lower surface in spar cap')
         self.add_output('damageU_te', val=np.zeros(NPTS), desc='fatigue damage on upper surface in trailing-edge panels')
@@ -2257,6 +2259,7 @@ class OutputsStructures(Component):
         unknowns['eps_crit_spar'] = params['eps_crit_spar_in']
         unknowns['eps_crit_te'] = params['eps_crit_te_in']
         unknowns['root_bending_moment'] = params['root_bending_moment_in']
+        unknowns['Mxyz'] = params['Mxyz_in']
         unknowns['damageU_spar'] = params['damageU_spar_in']
         unknowns['damageL_spar'] = params['damageL_spar_in']
         unknowns['damageU_te'] = params['damageU_te_in']
@@ -2330,6 +2333,7 @@ class OutputsStructures(Component):
         J['eps_crit_spar', 'eps_crit_spar_in'] = np.diag(np.ones(len(params['eps_crit_spar_in'])))
         J['eps_crit_te', 'eps_crit_te_in'] = np.diag(np.ones(len(params['eps_crit_te_in'])))
         J['root_bending_moment', 'root_bending_moment_in'] = 1
+        J['Mxyz', 'Mxyz_in'] = np.diag(np.ones(len(params['Mxyz_in'])))
         J['damageU_spar', 'damageU_spar_in'] = np.diag(np.ones(len(params['damageU_spar_in'])))
         J['damageL_spar', 'damageL_spar_in'] = np.diag(np.ones(len(params['damageL_spar_in'])))
         J['damageU_te', 'damageU_te_in'] = np.diag(np.ones(len(params['damageU_te_in'])))

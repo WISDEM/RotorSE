@@ -883,7 +883,8 @@ class TurbineClass(Component):
 
         # outputs should be constant
         self.add_output('V_mean', shape=1, units='m/s', desc='IEC mean wind speed for Rayleigh distribution')
-        self.add_output('V_extreme', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
+        self.add_output('V_extreme1', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
+        self.add_output('V_extreme50', shape=1, units='m/s', desc='IEC extreme wind speed at hub height')
         self.add_output('V_extreme_full', shape=2, units='m/s', desc='IEC extreme wind speed at hub height')
         
         self.deriv_options['type'] = 'fd'
@@ -903,7 +904,8 @@ class TurbineClass(Component):
             Vref = 30.0
 
         unknowns['V_mean'] = 0.2*Vref
-        unknowns['V_extreme'] = 1.4*Vref
+        unknowns['V_extreme1'] = 0.8*Vref
+        unknowns['V_extreme50'] = 1.4*Vref
         unknowns['V_extreme_full'][0] = 1.4*Vref # for extreme cases TODO: check if other way to do
         unknowns['V_extreme_full'][1] = 1.4*Vref
 
