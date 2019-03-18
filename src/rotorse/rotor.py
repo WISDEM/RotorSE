@@ -652,7 +652,7 @@ class RotorSE(Group):
 
 def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
 
-    Analysis_Level = rotor.Analysis_Level
+    Analysis_Level = rotor.root.Analysis_Level
 
     # === FAST model ===
     if Analysis_Level >= 0:
@@ -805,6 +805,7 @@ if __name__ == '__main__':
     rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=False, regulation_reg_III=True, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
     #rotor.setup(check=False)
     rotor.setup()
+
     rotor = Init_RotorSE_wRefBlade(rotor, blade, fst_vt=fst_vt)
 
     # === run and outputs ===
