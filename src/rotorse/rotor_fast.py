@@ -24,13 +24,13 @@ try:
     from AeroelasticSE.FAST_wrapper import FastWrapper
     from AeroelasticSE.runFAST_pywrapper import runFAST_pywrapper, runFAST_pywrapper_batch
     # from AeroelasticSE.CaseGen_IEC import CaseGen_IEC
-    from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb
+    from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve_fit
     from AeroelasticSE.FAST_post import return_timeseries
 except:
     pass
 
 class FASTLoadCases(Component):
-    def __init__(self, NPTS, npts_coarse_power_curve, FASTpref):
+    def __init__(self, NPTS, npts_coarse_power_curve, npts_spline_power_curve, FASTpref):
         super(FASTLoadCases, self).__init__()
         self.add_param('fst_vt_in', val={})
 
@@ -60,11 +60,13 @@ class FASTLoadCases(Component):
         self.add_param('hubHt', val=0.0, units='m', desc='hub height')
         self.add_param('turbulence_class', val=TURBULENCE_CLASS['A'], desc='IEC turbulence class', pass_by_obj=True)
         self.add_param('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbulence class', pass_by_obj=True)
-        
+        self.add_param('control_ratedPower', val=0., desc='machine power rating')
+
         # Initial conditions
         self.add_param('U_init', val=np.zeros(npts_coarse_power_curve), units='m/s', desc='wind speeds')
         self.add_param('Omega_init', val=np.zeros(npts_coarse_power_curve), units='rpm', desc='rotation speeds to run')
         self.add_param('pitch_init', val=np.zeros(npts_coarse_power_curve), units='deg', desc='pitch angles to run')
+        self.add_param('V_out', val=np.zeros(npts_spline_power_curve), units='m/s', desc='wind speeds to output powercurve')
 
         # Environmental conditions 
         self.add_param('Vrated', val=11.0, units='m/s', desc='rated wind speed')
@@ -111,6 +113,8 @@ class FASTLoadCases(Component):
         self.add_output('loads_pitch', val=0.0, units='deg', desc='pitch angle')
         self.add_output('loads_azimuth', val=0.0, units='deg', desc='azimuthal angle')
         self.add_output('model_updated', val=False, desc='boolean, Analysis Level 0: fast model written, but not run')
+
+        self.add_output('P_out', val=np.zeros(npts_spline_power_curve), units='W', desc='electrical power from rotor')
 
     def solve_nonlinear(self, params, unknowns, resids):
 
@@ -253,6 +257,13 @@ class FASTLoadCases(Component):
         turbulence_class = TURBULENCE_CLASS[params['turbulence_class']]
         turbine_class    = TURBINE_CLASS[params['turbine_class']]
 
+        if self.DLC_powercurve != None:
+            list_cases_PwrCrv, list_casenames_PwrCrv, requited_channels_PwrCrv = self.DLC_powercurve(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'])
+            list_cases        += list_cases_PwrCrv
+            list_casenames    += list_casenames_PwrCrv
+            required_channels += requited_channels_PwrCrv
+            case_keys         += [1]*len(list_cases_PwrCrv)    
+
         if self.DLC_gust != None:
             list_cases_gust, list_casenames_gust, requited_channels_gust = self.DLC_gust(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'])
             list_cases        += list_cases_gust
@@ -260,7 +271,6 @@ class FASTLoadCases(Component):
             required_channels += requited_channels_gust
             case_keys         += [2]*len(list_cases_gust)
 
-        
         if self.DLC_extrm != None:
             list_cases_rated, list_casenames_rated, requited_channels_rated = self.DLC_extrm(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vextreme'])
             list_cases        += list_cases_rated
@@ -274,7 +284,6 @@ class FASTLoadCases(Component):
             list_casenames    += list_casenames_turb
             required_channels += requited_channels_turb
             case_keys         += [4]*len(list_cases_turb)
-
 
         required_channels = sorted(list(set(required_channels)))
         channels_out = {}
@@ -414,18 +423,43 @@ class FASTLoadCases(Component):
             unknowns['loads_pitch'] = data['BldPitch1'][idx_max_strain]
             unknowns['loads_azimuth'] = data['Azimuth'][idx_max_strain]
 
+        def post_AEP(data):
+            def my_cubic(f, x):
+                return np.array([f[3]+ f[2]*xi + f[1]*xi**2. + f[0]*xi**3. for xi in x])
+
+            U = np.array([np.mean(datai['Wind1VelX']) for datai in data])
+            P = np.array([np.mean(datai['GenPwr']) for datai in data])*1000.
+            P_coef = np.polyfit(U, P, 3)
+
+            P_out = my_cubic(P_coef, params['V_out'])
+            np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
+            unknowns['P_out'] = P_out
+
+            import matplotlib.pyplot as plt
+            plt.plot(U, P, 'o')
+            plt.plot(params['V_out'], unknowns['P_out'])            
+            plt.show()
+
+
         ############
 
         Gust_Outputs = False
         Extreme_Outputs = False
+        AEP_Outputs = False
         #
         for casei in case_keys:
             if Gust_Outputs and Extreme_Outputs:
                 break
 
-            if casei in[1]:
+            if casei == 1:
                 # power curve
-                pass
+                if AEP_Outputs:
+                    pass
+                else:
+                    idx_AEP = [i for i, casej in enumerate(case_keys) if casej==1]
+                    data = [datai for i, datai in enumerate(FAST_Output) if i in idx_AEP]
+                    post_AEP(data)
+                    AEP_Outputs = True
 
             if casei in [2]:
                 # gust: return tip deflections and bending moments
@@ -440,7 +474,6 @@ class FASTLoadCases(Component):
                 data = FAST_Output[idx_extreme]
                 post_extreme(data, casei)
                 Extreme_Outputs = True
-
 
             if casei in [4]:
                 # turbulent wind with multiplt seeds

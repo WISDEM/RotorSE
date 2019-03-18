@@ -31,7 +31,7 @@ from AeroelasticSE.FAST_writer import InputWriter_Common, InputWriter_OpenFAST, 
 from AeroelasticSE.FAST_wrapper import FastWrapper
 from AeroelasticSE.runFAST_pywrapper import runFAST_pywrapper, runFAST_pywrapper_batch
 from AeroelasticSE.CaseGen_IEC import CaseGen_IEC
-from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb
+from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve_fit
 # except:
 #     pass
 
@@ -145,7 +145,7 @@ class RotorSE(Group):
         # self.connect('tipspeed.Omega_max', 'control_maxOmega')
 
         if self.Analysis_Level>=0:
-            self.add('aeroelastic', FASTLoadCases(NPTS, npts_coarse_power_curve, self.FASTpref))
+            self.add('aeroelastic', FASTLoadCases(NPTS, npts_coarse_power_curve, npts_spline_power_curve, self.FASTpref))
 
             self.connect('fst_vt_in', 'aeroelastic.fst_vt_in')
             self.connect('r_pts', 'aeroelastic.r')
@@ -180,6 +180,7 @@ class RotorSE(Group):
             self.connect('wind.shearExp', 'aeroelastic.shearExp')
 
             self.connect('drivetrainEff', 'powercurve.drivetrainEff')
+            self.connect('machine_rating',  'aeroelastic.control_ratedPower')
 
         # connections to powercurve
         self.connect('r_pts',           'powercurve.r')
@@ -225,7 +226,11 @@ class RotorSE(Group):
 
         # connections to aep
         self.connect('cdf.F', 'aep.CDF_V')
-        self.connect('powercurve.P_spline', 'aep.P')
+        if self.Analysis_Level>0:
+            self.connect('powercurve.V_spline', 'aeroelastic.V_out')
+            self.connect('aeroelastic.P_out', 'aep.P')
+        else:
+            self.connect('powercurve.P_spline', 'aep.P')
         self.connect('AEP_loss_factor', 'aep.lossFactor')
 
         # connections to outputs
@@ -775,13 +780,14 @@ if __name__ == '__main__':
         FASTpref['debug_level']         = 2 # verbosity: set to 0 for quiet, 1 & 2 for increasing levels of output
 
         # DLCs
-        # FASTpref['DLC_gust']            = None      # Max deflection
-        # FASTpref['DLC_extrm']           = None      # Max strain
-        FASTpref['DLC_gust']            = RotorSE_DLC_1_4_Rated       # Max deflection    ### Not in place yet
-        FASTpref['DLC_extrm']           = RotorSE_DLC_7_1_Steady      # Max strain        ### Not in place yet
-        # FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb      # Alternate turbulent case, replacing rated and extreme DLCs for calculating max deflection and strain
+        FASTpref['DLC_gust']            = None      # Max deflection
+        # FASTpref['DLC_gust']            = RotorSE_DLC_1_4_Rated       # Max deflection    ### Not in place yet
+        FASTpref['DLC_extrm']           = None      # Max strain
+        # FASTpref['DLC_extrm']           = RotorSE_DLC_7_1_Steady      # Max strain        ### Not in place yet
         FASTpref['DLC_turbulent']       = None
-        FASTpref['DLC_powercurve']      = None      # AEP               ### Not in place yet
+        # FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb      # Alternate turbulent case, replacing rated and extreme DLCs for calculating max deflection and strain
+        FASTpref['DLC_powercurve']      = power_curve_fit      # AEP
+        # FASTpref['DLC_powercurve']      = None      # AEP
 
         # Initialize, read initial FAST files to avoid doing it iteratively
         fast = InputReader_OpenFAST(FAST_ver=FASTpref['FAST_ver'], dev_branch=FASTpref['dev_branch'])
@@ -794,7 +800,7 @@ if __name__ == '__main__':
         fst_vt = {}
 
     rotor = Problem()
-    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=False, regulation_reg_III=False, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
+    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=False, regulation_reg_III=True, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
     #rotor.setup(check=False)
     rotor.setup()
     rotor = Init_RotorSE_wRefBlade(rotor, blade, fst_vt=fst_vt)
