@@ -652,6 +652,8 @@ class RotorSE(Group):
 
 def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
 
+    Analysis_Level = rotor.Analysis_Level
+
     # === FAST model ===
     if Analysis_Level >= 0:
         rotor['fst_vt_in'] = fst_vt
