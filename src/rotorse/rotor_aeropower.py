@@ -479,8 +479,8 @@ class RotorAeroPower(Group):
         # self.add('tipspeed', MaxTipSpeed())
         self.add('powercurve', RegulatedPowerCurve(NPTS, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5, regulation_reg_III))
         self.add('wind', PowerWind(1))
-        # self.add('cdf', WeibullWithMeanCDF(npts_coarse_power_curve))
-        self.add('cdf', RayleighCDF(npts_spline_power_curve))
+        self.add('cdf', WeibullWithMeanCDF(npts_spline_power_curve))
+        # self.add('cdf', RayleighCDF(npts_spline_power_curve))
         self.add('aep', AEP(npts_spline_power_curve))
 
         self.add('outputs_aero', OutputsAero(npts_coarse_power_curve), promotes=['*'])
@@ -634,7 +634,10 @@ if __name__ == '__main__':
     rotor = Init_RotorAeropower_wRefBlade(rotor, blade)
 
     # rotor['control_tsr'] = 7.017543860e+00
-    rotor['control_tsr'] = 6.9
+    # rotor['control_tsr'] = 6.9
+    rotor['V_mean_overwrite'] = 9.49458645559464
+    rotor['shape_parameter'] = 2.12758542821052
+
 
     # === run and outputs ===
     rotor.run()

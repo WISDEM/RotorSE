@@ -96,8 +96,8 @@ class RotorSE(Group):
         # self.add('tipspeed', MaxTipSpeed())
         self.add('powercurve', RegulatedPowerCurve(NPTS, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5=regulation_reg_II5, regulation_reg_III=regulation_reg_III))
         self.add('wind', PowerWind(1))
-        # self.add('cdf', WeibullWithMeanCDF(npts_spline_power_curve))
-        self.add('cdf', RayleighCDF(npts_spline_power_curve))
+        self.add('cdf', WeibullWithMeanCDF(npts_spline_power_curve))
+        # self.add('cdf', RayleighCDF(npts_spline_power_curve))
         self.add('aep', AEP(npts_spline_power_curve))
 
         self.add('outputs_aero', OutputsAero(npts_coarse_power_curve), promotes=['*'])
