@@ -111,8 +111,8 @@ class ReferenceBlade(object):
     def __init__(self):
 
         # Validate input file against JSON schema
-        self.validate        = False       # (bool) run IEA turbine ontology JSON validation
-        self.fname_schema    = ''          # IEA turbine ontology JSON schema file
+        self.validate        = True       # (bool) run IEA turbine ontology JSON validation
+        # self.fname_schema    = ''          # IEA turbine ontology JSON schema file
 
         # Grid sizes
         self.NINPUT          = 5
@@ -132,14 +132,15 @@ class ReferenceBlade(object):
 
         
 
-    def initialize(self, fname):
+    def initialize(self, fname_input, fname_schema):
         if self.verbose:
             t0 = time.time()
-            print('Running initialization: %s' % fname)
+            print('Running initialization: %s' % fname_input)
+            print('Schema for validation: %s' % fname_schema)
 
         # Load input
-        self.fname_input = fname
-        self.wt_ref = self.load_ontology(self.fname_input, validate=self.validate, fname_schema=self.fname_schema)
+        self.fname_input = fname_input
+        self.wt_ref = self.load_ontology(self.fname_input, validate=self.validate, fname_schema=fname_schema)
 
         # Renaming and converting lists to dicts for simplicity
         blade_ref = copy.deepcopy(self.wt_ref['components']['blade'])
@@ -204,21 +205,22 @@ class ReferenceBlade(object):
         return blade
 
     def load_ontology(self, fname_input, validate=False, fname_schema=''):
-        # """ Load inputs IEA turbine ontology yaml inputs, optional validation """
-        # # Read IEA turbine ontology yaml input file
-        # with open(fname_input, 'r') as myfile:
-        #     inputs = myfile.read()
+        """ Load inputs IEA turbine ontology yaml inputs, optional validation """
+        # Read IEA turbine ontology yaml input file
+        with open(fname_input, 'r') as myfile:
+            inputs = myfile.read()
 
-        # # Validate the turbine input with the IEA turbine ontology schema
-        # if validate:
-        #     with open(fname_schema, 'r') as myfile:
-        #         schema = myfile.read()
-        #     json.validate(yaml.load(inputs), yaml.load(schema))
+        # Validate the turbine input with the IEA turbine ontology schema
+        yaml = YAML()
+        if validate:
+            with open(fname_schema, 'r') as myfile:
+                schema = myfile.read()
+            json.validate(yaml.load(inputs), yaml.load(schema))
 
         # return yaml.load(inputs)
         with open(fname_input, 'r') as myfile:
             inputs = myfile.read()
-        yaml = YAML()
+        
         return yaml.load(inputs)
 
     def write_ontology(self, fname, blade, wt_out):
@@ -463,6 +465,7 @@ class ReferenceBlade(object):
         # CCBlade airfoil class instances
         airfoils = [None]*n_span
         for i in range(n_span):
+                        
             airfoils[i] = CCAirfoil(np.degrees(alpha), Re, cl[:,i], cd[:,i], cm[:,i])
             airfoils[i].eval_unsteady(np.degrees(alpha), cl[:,i], cd[:,i], cm[:,i])
 
@@ -528,6 +531,7 @@ class ReferenceBlade(object):
         def calc_axis_intersection(rotation, offset, p_le_d, side):
             # dimentional analysis that takes a rotation and offset from the pitch axis and calculates the airfoil intersection
             # rotation
+            
             offset_x   = offset*np.cos(rotation) + p_le_d[0]
             offset_y   = offset*np.sin(rotation) + p_le_d[1]
 
@@ -635,6 +639,7 @@ class ReferenceBlade(object):
                             warnings.warn(warning_invalid_side_value)
 
                         midpoint = calc_axis_intersection(rotation, offset, p_le_d, [side])[0]
+                        
                         blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] = midpoint-width/arc_L/2.
                         blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]   = midpoint+width/arc_L/2.
 
@@ -646,6 +651,9 @@ class ReferenceBlade(object):
                             offset = sec['offset_x_pa']['values'][i]
                         else:
                             offset = 0.
+                        
+                        
+                        
                         [blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i], blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]] = sorted(calc_axis_intersection(rotation, offset, p_le_d, ['suction', 'pressure']))
 
                     elif 'midpoint_nd_arc' in blade['st'][type_sec][idx_sec].keys():
