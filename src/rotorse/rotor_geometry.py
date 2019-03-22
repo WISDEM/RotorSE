@@ -24,7 +24,7 @@ TURBULENCE_CLASS = commonse.enum.Enum('A B C')
 TURBINE_CLASS = commonse.enum.Enum('I II III')
 DRIVETRAIN_TYPE = commonse.enum.Enum('geared single_stage multi_drive pm_direct_drive')
 
-from rotorse.rotor_geometry_yaml import ReferenceBlade
+from rotorse.rotor_geometry_yaml2 import ReferenceBlade
 
 import copy, time
 

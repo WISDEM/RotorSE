@@ -17,7 +17,7 @@ from commonse.environment import PowerWind
 
 from rotorse import RPM2RS, RS2RPM
 from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection
-from rotorse.rotor_geometry_yaml import ReferenceBlade
+from rotorse.rotor_geometry_yaml2 import ReferenceBlade
 from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
 from rotorse.rotor_aeropower import RegulatedPowerCurve, AEP, OutputsAero
 from rotorse.rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, \
@@ -744,9 +744,9 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
 if __name__ == '__main__':
 
     # Turbine Ontology input
-    fname_input = "turbine_inputs/nrel5mw_mod.yaml"
+    fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
 
-    Analysis_Level = 1 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
+    Analysis_Level = -1 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
 
     # Initialize blade design
     refBlade = ReferenceBlade()
@@ -802,7 +802,7 @@ if __name__ == '__main__':
         fst_vt = {}
 
     rotor = Problem()
-    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=False, regulation_reg_III=True, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
+    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=False, regulation_reg_III=False, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
     #rotor.setup(check=False)
     rotor.setup()
 

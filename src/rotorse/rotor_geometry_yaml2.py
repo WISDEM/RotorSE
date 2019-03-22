@@ -1,0 +1,1079 @@
+from __future__ import print_function
+import os, sys, copy, time, warnings
+import csv
+import operator
+
+from ruamel import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+from scipy.interpolate import PchipInterpolator, Akima1DInterpolator, interp1d
+import numpy as np
+import jsonschema as json
+
+# WISDEM
+from openmdao.api import Component, Group, IndepVarComp, Problem
+import commonse
+from akima import Akima, akima_interp_with_derivs
+from ccblade.ccblade_component import CCBladeGeometry
+from ccblade import CCAirfoil
+from airfoilprep.airfoilprep import Airfoil, Polar
+
+from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp, PreCompWriter
+from rotorse.geometry_tools.geometry import AirfoilShape, Curve
+
+
+TURBULENCE_CLASS = commonse.enum.Enum('A B C')
+TURBINE_CLASS = commonse.enum.Enum('I II III')
+DRIVETRAIN_TYPE = commonse.enum.Enum('geared single_stage multi_drive pm_direct_drive')
+
+def remap2grid(x_ref, y_ref, x, spline=PchipInterpolator):
+
+
+    try:
+        spline_y = spline(x_ref, y_ref)
+    except:
+        x_ref = np.flip(x_ref, axis=0)
+        y_ref = np.flip(y_ref, axis=0)
+        spline_y = spline(x_ref, y_ref)
+
+    # error handling for x[-1] - x_ref[-1] > 0 and x[-1]~x_ref[-1]
+    try:
+        _ = iter(x)
+        if x[-1]>max(x_ref) and np.isclose(x[-1], x_ref[-1]):
+            x[-1]=x_ref[-1]
+    except:
+        if np.isclose(x, 0.):
+            x = 0.
+        if x>max(x_ref) and np.isclose(x, x_ref[-1]):
+            x=x_ref[-1]
+
+    return spline_y(x)
+
+def remapWbreak(x_ref, y_ref, x0, idx_break, spline=PchipInterpolator):
+    # for interpolating on airfoil surface, split x into two sections and determine which to use
+    if x0 >= x_ref[idx_break]:
+        x = x_ref[idx_break:]
+        y = y_ref[idx_break:]
+    else:
+        x = x_ref[:idx_break+1]
+        y = y_ref[:idx_break+1]
+    return remap2grid(x, y, x0, spline=spline)
+
+
+def arc_length(x, y, high_fidelity=False):
+    npts = len(x)
+    arc = np.array([0.]*npts)
+    # if high_fidelity:
+    #     # iteratively fit a spline between points
+    #     if all(np.diff(x)<0):
+    #         # correct for decending data
+    #         x *= -1.
+    #     if not all(np.diff(x)>0):
+    #         # if data has more than one zero crossing, break the data up
+    #         zero_crossings = [0]+np.where(np.diff(np.sign(x)))[0].tolist()+[len(x)]
+    #         # print(zero_crossings)
+    #         arc = [arc_length(x[zero_crossings[idx-1]:zero_crossings[idx]+1], y[zero_crossings[idx-1]:zero_crossings[idx]+1]) for idx in range(1,len(zero_crossings))]
+            
+    #         for idx, arci in enumerate(arc):
+    #             if idx == 0:
+    #                 arc_out = list(arci)
+    #             else:
+    #                 arc_out = arc_out + list(arci[1:]+arc_out[-1])
+
+    #         return arc_out
+            
+
+    #     spline = PchipInterpolator(x, y)
+    #     for k in range(1, npts):
+    #         a = x[k-1]
+    #         b = x[k]
+    #         tz = np.linspace(a, b, num=10)
+    #         f = spline(t2)
+    #         arc[k] = arc[k-1] + arc_length(tz, f)[-1]
+
+
+    # else:
+    for k in range(1, npts):
+        arc[k] = arc[k-1] + np.sqrt((x[k] - x[k-1])**2 + (y[k] - y[k-1])**2)
+
+    return arc
+
+
+def rotate(xo, yo, xp, yp, angle):
+    ## Rotate a point clockwise by a given angle around a given origin.
+    # angle *= -1.
+    qx = xo + np.cos(angle) * (xp - xo) - np.sin(angle) * (yp - yo)
+    qy = yo + np.sin(angle) * (xp - xo) + np.cos(angle) * (yp - yo)
+    return qx, qy
+
+class ReferenceBlade(object):
+    def __init__(self):
+
+        # Validate input file against JSON schema
+        self.validate        = False       # (bool) run IEA turbine ontology JSON validation
+        self.fname_schema    = ''          # IEA turbine ontology JSON schema file
+
+        # Grid sizes
+        self.NINPUT          = 5
+        self.NPTS            = 50
+        self.NPTS_AfProfile  = 200
+        self.NPTS_AfPolar    = 100
+        self.r_in            = []          # User definied input grid (must be from 0-1)
+
+        # 
+        self.analysis_level  = 0           # 0: Precomp, (1: FAST/ElastoDyn, 2: FAST/BeamDyn)
+        self.verbose         = False
+
+        # Precomp analyis
+        self.spar_var        = ''          # name of composite layer for RotorSE spar cap buckling analysis
+        self.te_var          = ''          # name of composite layer for RotorSE trailing edge buckling analysis
+
+
+        
+
+    def initialize(self, fname):
+        if self.verbose:
+            t0 = time.time()
+            print('Running initialization: %s' % fname)
+
+        # Load input
+        self.fname_input = fname
+        self.wt_ref = self.load_ontology(self.fname_input, validate=self.validate, fname_schema=self.fname_schema)
+
+        # Renaming and converting lists to dicts for simplicity
+        blade_ref = copy.deepcopy(self.wt_ref['components']['blade'])
+        af_ref    = {}
+        for afi in self.wt_ref['airfoils']:
+            af_ref[afi['name']] = afi
+
+        if self.verbose:
+            print('Complete: Load Input File: \t%f s'%(time.time()-t0))
+            t1 = time.time()
+
+        # build blade
+        blade = {}
+        blade = self.set_configuration(blade, self.wt_ref)
+        blade = self.remap_composites(blade, blade_ref)
+        blade = self.remap_planform(blade, blade_ref, af_ref)
+        blade = self.remap_profiles(blade, blade_ref, af_ref)
+        blade = self.remap_polars(blade, blade_ref, af_ref)
+        blade = self.calc_composite_bounds(blade)
+        blade = self.calc_control_points(blade, self.r_in)
+        
+        blade['analysis_level'] = self.analysis_level
+
+        if self.verbose:
+            print('Complete: Geometry Analysis: \t%f s'%(time.time()-t1))
+            
+        # Conversion
+        if self.analysis_level == 0:
+            t2 = time.time()
+            blade = self.convert_precomp(blade, self.wt_ref['materials'])
+            if self.verbose:
+                print('Complete: Precomp Conversion: \t%f s'%(time.time()-t2))
+        elif self.analysis_level == 1:
+            # sonata/ anba
+
+            # meshing with sonata
+
+            # 
+            pass
+
+        return blade
+
+    def update(self, blade):
+        # 
+        t1 = time.time()
+        blade['st'] = self.calc_spanwise_grid(blade['st'])
+
+        blade = self.update_planform(blade)
+        blade = self.calc_composite_bounds(blade)
+
+        if self.verbose:
+            prin('Complete: Geometry Update: \t%f s'%(time.time()-t1))
+
+        # Conversion
+        if self.analysis_level == 0:
+            t2 = time.time()
+            blade = self.convert_precomp(blade)
+            if self.verbose:
+                print('Complete: Precomp Conversion: \t%f s'%(time.time()-t2))
+
+
+        return blade
+
+    def load_ontology(self, fname_input, validate=False, fname_schema=''):
+        # """ Load inputs IEA turbine ontology yaml inputs, optional validation """
+        # # Read IEA turbine ontology yaml input file
+        # with open(fname_input, 'r') as myfile:
+        #     inputs = myfile.read()
+
+        # # Validate the turbine input with the IEA turbine ontology schema
+        # if validate:
+        #     with open(fname_schema, 'r') as myfile:
+        #         schema = myfile.read()
+        #     json.validate(yaml.load(inputs), yaml.load(schema))
+
+        # return yaml.load(inputs)
+        with open(fname_input, 'r') as myfile:
+            inputs = myfile.read()
+        yaml = YAML()
+        return yaml.load(inputs)
+
+    def write_ontology(self, fname, blade, wt_out):
+
+        ### this works for dictionaries, but not what ever ordered dictionary nonsenes is coming out of ruamel
+        # def format_dict_for_yaml(out):
+        # # recursively loop through output dictionary, convert numpy objects to base python
+        #     def get_dict(vartree, branch):
+        #         return reduce(operator.getitem, branch, vartree)
+        #     def loop_dict(vartree_full, vartree, branch):
+        #         for var in vartree.keys():
+        #             branch_i = copy.copy(branch)
+        #             branch_i.append(var)
+        #             if type(vartree[var]) in [dict, CommentedMap]:
+        #                 loop_dict(vartree_full, vartree[var], branch_i)
+        #             else:
+        #                 if type(get_dict(vartree_full, branch_i[:-1])[branch_i[-1]]) is np.ndarray:
+        #                     get_dict(vartree_full, branch_i[:-1])[branch_i[-1]] = get_dict(vartree_full, branch_i[:-1])[branch_i[-1]].tolist()
+        #                 elif type(get_dict(vartree_full, branch_i[:-1])[branch_i[-1]]) is np.float64:
+        #                     get_dict(vartree_full, branch_i[:-1])[branch_i[-1]] = float(get_dict(vartree_full, branch_i[:-1])[branch_i[-1]])
+        #                 elif type(get_dict(vartree_full, branch_i[:-1])[branch_i[-1]]) in [tuple, list, CommentedSeq]:
+        #                     get_dict(vartree_full, branch_i[:-1])[branch_i[-1]] = [loop_dict(obji, obji, []) for obji in get_dict(vartree_full, branch_i[:-1])[branch_i[-1]] if type(obji) in [dict, CommentedMap]]
+
+
+        #     loop_dict(out, out, [])
+        #     return out
+
+        # dict_out = format_dict_for_yaml(dict_out)
+
+
+        #### Build Output dictionary
+
+        # Planform
+        wt_out['components']['blade']['outer_shape_bem']['chord']['values']             = blade['pf']['chord'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['chord']['grid']               = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['twist']['values']             = np.radians(blade['pf']['theta']).tolist()
+        wt_out['components']['blade']['outer_shape_bem']['twist']['grid']               = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['pitch_axis']['values']        = blade['pf']['p_le'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['pitch_axis']['grid']          = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['values']  = blade['pf']['r'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['grid']    = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['values']  = blade['pf']['precurve'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['grid']    = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['values']  = blade['pf']['presweep'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['grid']    = blade['pf']['s'].tolist()
+
+        # Composite layups
+        st = blade['st']
+        for idx_sec, sec in enumerate(st['layers']):
+            for var in st['layers'][idx_sec].keys():
+                try:
+                    _ = st['layers'][idx_sec][var].keys()
+                    st['layers'][idx_sec][var]['grid'] = [float(r) for val, r in zip(st['layers'][idx_sec][var]['values'], st['layers'][idx_sec][var]['grid']) if val != None]
+                    st['layers'][idx_sec][var]['values'] = [float(val) for val in st['layers'][idx_sec][var]['values'] if val != None]
+                except:
+                    pass
+        wt_out['components']['blade']['internal_structure_2d_fem'] = st
+
+        f = open(fname, "w")
+        yaml=YAML()
+        yaml.default_flow_style = None
+        yaml.width = float("inf")
+        yaml.indent(mapping=4, sequence=6, offset=3)
+        yaml.dump(wt_out, f)
+
+    def calc_spanwise_grid(self, st):
+        ### Spanwise grid
+        # Finds the start and end points of all composite layers, which are required points in the new grid
+        # Attempts to roughly evenly space points between the required start/end points to output the user specified grid size
+
+        n = self.NPTS
+        # Find unique composite start and end points
+        r_points = copy.copy(self.r_in)
+        for type_sec, idx_sec, sec in zip(['webs']*len(st['webs'])+['layers']*len(st['layers']), range(len(st['webs']))+range(len(st['layers'])), st['webs']+st['layers']):
+            for var in sec.keys():
+                if type(sec[var]) not in [str, bool]:
+                    if 'grid' in sec[var].keys():
+                        if len(sec[var]['grid']) > 0.:
+                            # remove approximate duplicates
+                            r0 = sec[var]['grid'][0]
+                            r1 = sec[var]['grid'][-1]
+
+                            r0_close = np.isclose(r0,r_points)
+                            if len(r0_close)>0 and any(r0_close):
+                                st[type_sec][idx_sec][var]['grid'][0] = r_points[np.argmax(r0_close)]
+                            else:
+                                r_points.append(r0)
+
+                            r1_close = np.isclose(r1,r_points)
+                            if any(r1_close):
+                                st[type_sec][idx_sec][var]['grid'][-1] = r_points[np.argmax(r1_close)]
+                            else:
+                                r_points.append(r1)
+
+        # Check for large enough grid size
+        r_points = sorted(r_points)
+        n_pts = len(r_points)
+        if n_pts > n:
+            grid_size_warning = "A grid size of %d was specified, but %d unique composite layer start/end points were found.  It is highly recommended to increase the grid size to >= %d to avoid errors or unrealistic results "%(n, n_pts, n_pts)
+            warnings.warn(grid_size_warning)
+
+        # estimate length of the linspaces between required start/end points
+        r_points_idx = [int(n*i) for i in r_points]
+        lengths = []
+        for i in range(1,len(r_points_idx)):
+            len_i = max([r_points_idx[i] - r_points_idx[i-1] + 2, 2])
+            lengths.append(len_i)
+
+        # Correct lengths down to the total number of requested points
+        n_estimate = sum(lengths)-len(r_points_idx)+2
+        n_diff = n_estimate - n
+        if n_diff > 0:
+            lengths[np.argmax(lengths)] -= n_diff
+
+        # Build grid as concatenation of linspaces between required points
+        grid_out = []
+        for i in range(1,n_pts):
+            if i == n_pts-1:
+                grid_out.append(np.linspace(r_points[i-1], r_points[i], lengths[i-1]))
+            else:
+                grid_out.append(np.linspace(r_points[i-1], r_points[i], lengths[i-1])[:-1])
+        self.s = np.concatenate(grid_out)
+
+        return st
+
+    
+    def set_configuration(self, blade, wt_ref):
+
+        blade['config'] = {}
+
+        blade['config']['name']  = wt_ref['name']
+        for var in wt_ref['assembly']['global']:
+            blade['config'][var] = wt_ref['assembly']['global'][var]
+        for var in wt_ref['assembly']['control']:
+            blade['config'][var] = wt_ref['assembly']['control'][var]
+
+        return blade
+
+    def remap_planform(self, blade, blade_ref, af_ref):
+
+        blade['pf'] = {}
+
+        blade['pf']['s']        = self.s
+        blade['pf']['chord']    = remap2grid(blade_ref['outer_shape_bem']['chord']['grid'], blade_ref['outer_shape_bem']['chord']['values'], self.s)
+        blade['pf']['theta']    = np.degrees(remap2grid(blade_ref['outer_shape_bem']['twist']['grid'], blade_ref['outer_shape_bem']['twist']['values'], self.s))
+        blade['pf']['p_le']     = remap2grid(blade_ref['outer_shape_bem']['pitch_axis']['grid'], blade_ref['outer_shape_bem']['pitch_axis']['values'], self.s)
+        blade['pf']['r']        = remap2grid(blade_ref['outer_shape_bem']['reference_axis']['x']['grid'], blade_ref['outer_shape_bem']['reference_axis']['x']['values'], self.s)
+        blade['pf']['precurve'] = remap2grid(blade_ref['outer_shape_bem']['reference_axis']['y']['grid'], blade_ref['outer_shape_bem']['reference_axis']['y']['values'], self.s)
+        blade['pf']['presweep'] = remap2grid(blade_ref['outer_shape_bem']['reference_axis']['z']['grid'], blade_ref['outer_shape_bem']['reference_axis']['z']['values'], self.s)
+
+        thk_ref = [af_ref[af]['relative_thickness'] for af in blade_ref['outer_shape_bem']['airfoil_position']['labels']]
+        blade['pf']['rthick']   = remap2grid(blade_ref['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
+        return blade
+
+    def remap_profiles(self, blade, blade_ref, AFref, spline=PchipInterpolator):
+
+        # Get airfoil thicknesses in decending order and cooresponding airfoil names
+        AFref_thk = [AFref[af]['relative_thickness'] for af in blade_ref['outer_shape_bem']['airfoil_position']['labels']]
+
+        af_thk_dict = {}
+        for afi in blade_ref['outer_shape_bem']['airfoil_position']['labels']:
+            afi_thk = AFref[afi]['relative_thickness']
+            if afi_thk not in af_thk_dict.keys():
+                af_thk_dict[afi_thk] = afi
+
+        af_thk = sorted(af_thk_dict.keys())
+        af_labels = [af_thk_dict[afi] for afi in af_thk]
+        
+        # Build array of reference airfoil coordinates, remapped
+        AFref_n  = len(af_labels)
+        AFref_xy = np.zeros((self.NPTS_AfProfile, 2, AFref_n))
+
+        for afi, af_label in enumerate(af_labels):
+            points = np.column_stack((AFref[af_label]['coordinates']['x'], AFref[af_label]['coordinates']['y']))
+            af = AirfoilShape(points=points)
+            af.redistribute(self.NPTS_AfProfile, dLE=True)
+
+            af_points = af.points
+            af_points[:,0] -= af.LE[0]
+            af_points[:,1] -= af.LE[1]
+            c = max(af_points[:,0])-min(af_points[:,0])
+            af_points[:,:] /= c
+
+            AFref_xy[:,:,afi] = af_points
+
+        # Spanwise thickness interpolation
+        profile_spline = spline(af_thk, AFref_xy, axis=2)
+        blade['profile'] = profile_spline(blade['pf']['rthick'])
+        blade['profile_spline'] = profile_spline
+
+
+        for i in range(self.NPTS):
+            af_le = blade['profile'][np.argmin(blade['profile'][:,0,i]),:,i]
+            blade['profile'][:,0,i] -= af_le[0]
+            blade['profile'][:,1,i] -= af_le[1]
+            c = max(blade['profile'][:,0,i]) - min(blade['profile'][:,0,i])
+            blade['profile'][:,:,i] /= c
+
+        return blade
+
+    def remap_polars(self, blade, blade_ref, AFref, spline=PchipInterpolator):
+        # TODO: does not support multiple polars at different Re, takes the first polar from list
+
+        ## Set angle of attack grid for airfoil resampling
+        # assume grid for last airfoil is sufficient
+        alpha = np.array(AFref[blade_ref['outer_shape_bem']['airfoil_position']['labels'][-1]]['polars'][0]['c_l']['grid'])
+        Re    = [AFref[blade_ref['outer_shape_bem']['airfoil_position']['labels'][-1]]['polars'][0]['re']]
+
+        # get reference airfoil polars
+        af_ref = []
+        for afi in blade_ref['outer_shape_bem']['airfoil_position']['labels']:
+            if afi not in af_ref:
+                af_ref.append(afi)
+
+        n_af_ref  = len(af_ref)
+        n_aoa     = len(alpha)
+        n_span    = self.NPTS
+
+        cl_ref = np.zeros((n_aoa, n_af_ref))
+        cd_ref = np.zeros((n_aoa, n_af_ref))
+        cm_ref = np.zeros((n_aoa, n_af_ref))
+        for i, af in enumerate(af_ref[::-1]):
+            cl_ref[:,i] = remap2grid(np.array(AFref[af]['polars'][0]['c_l']['grid']), np.array(AFref[af]['polars'][0]['c_l']['values']), alpha)
+            cd_ref[:,i] = remap2grid(np.array(AFref[af]['polars'][0]['c_d']['grid']), np.array(AFref[af]['polars'][0]['c_d']['values']), alpha)
+            cm_ref[:,i] = remap2grid(np.array(AFref[af]['polars'][0]['c_m']['grid']), np.array(AFref[af]['polars'][0]['c_m']['values']), alpha)
+
+        # reference airfoil and spanwise thicknesses
+        thk_span  = blade['pf']['rthick']
+        thk_afref = [AFref[af]['relative_thickness'] for af in af_ref[::-1]]
+        # error handling for spanwise thickness greater/less than the max/min airfoil thicknesses
+        np.place(thk_span, thk_span>max(thk_afref), max(thk_afref))
+        np.place(thk_span, thk_span<min(thk_afref), min(thk_afref))
+
+        # interpolate
+        spline_cl = spline(thk_afref, cl_ref, axis=1)
+        spline_cd = spline(thk_afref, cd_ref, axis=1)
+        spline_cm = spline(thk_afref, cm_ref, axis=1)
+        cl = spline_cl(thk_span)
+        cd = spline_cd(thk_span)
+        cm = spline_cm(thk_span)
+
+        # CCBlade airfoil class instances
+        airfoils = [None]*n_span
+        for i in range(n_span):
+            airfoils[i] = CCAirfoil(np.degrees(alpha), Re, cl[:,i], cd[:,i], cm[:,i])
+            airfoils[i].eval_unsteady(np.degrees(alpha), cl[:,i], cd[:,i], cm[:,i])
+
+        blade['airfoils'] = airfoils
+
+        return blade
+
+
+    def remap_composites(self, blade, blade_ref):
+        # Remap composite sections to a common grid
+        t = time.time()
+        
+        st = copy.deepcopy(blade_ref['internal_structure_2d_fem'])
+        st = self.calc_spanwise_grid(st)
+
+        # remap
+        for type_sec, idx_sec, sec in zip(['webs']*len(st['webs'])+['layers']*len(st['layers']), range(len(st['webs']))+range(len(st['layers'])), st['webs']+st['layers']):
+            for var in sec.keys():
+                if type(sec[var]) not in [str, bool]:
+                    if 'grid' in sec[var].keys():
+                        if len(sec[var]['grid']) > 0.:
+                            # if section is only for part of the blade, find start and end of new grid
+                            if sec[var]['grid'][0] > 0.:
+                                idx_s = np.argmax(np.array(self.s)>=sec[var]['grid'][0])
+                            else:
+                                idx_s = 0
+                            if sec[var]['grid'][-1] < 1.:
+                                idx_e = np.argmax(np.array(self.s)>sec[var]['grid'][-1])
+                            else:
+                                idx_e = -1
+
+                            # interpolate
+                            if idx_s != 0 or idx_e !=-1:
+                                vals = np.full(self.NPTS, None)
+                                vals[idx_s:idx_e] = remap2grid(sec[var]['grid'], sec[var]['values'], self.s[idx_s:idx_e])
+                                st[type_sec][idx_sec][var]['values'] = vals.tolist()
+                            else:
+                                st[type_sec][idx_sec][var]['values'] = remap2grid(sec[var]['grid'], sec[var]['values'], self.s).tolist()
+                            st[type_sec][idx_sec][var]['grid'] = self.s
+
+            ## if vars not provided as inputs
+            # input_vars = st['layers'][idx_sec].keys()
+            # if 'fiber_orientation' not in input_vars:
+            #     st['layers'][idx_sec]['fiber_orientation'] = {}
+            #     st['layers'][idx_sec]['fiber_orientation']['grid'] = self.s
+            #     st['layers'][idx_sec]['fiber_orientation']['values'] = [0. if thki != None else None for thki in st['layers'][idx_sec]['thickness']['values']]
+            # if 'web_flag' not in input_vars:
+            #     st['layers'][idx_sec]['web_flag'] = False
+            # if 'full_circumference' not in input_vars:
+            #     if all(['midpoint' not in input_vars, 'width' not in input_vars, 'start_nd_arc' not in input_vars, 'end_nd_arc' not in input_vars]):
+            #         st['layers'][idx_sec]['full_circumference'] = True
+            #     else:
+            #         st['layers'][idx_sec]['full_circumference'] = False
+
+        blade['st'] = st
+
+        return blade
+
+
+    def calc_composite_bounds(self, blade):
+
+        #######
+        def calc_axis_intersection(rotation, offset, p_le_d, side):
+            # dimentional analysis that takes a rotation and offset from the pitch axis and calculates the airfoil intersection
+            # rotation
+            offset_x   = offset*np.cos(rotation) + p_le_d[0]
+            offset_y   = offset*np.sin(rotation) + p_le_d[1]
+
+            m_rot      = np.sin(rotation)/np.cos(rotation)       # slope of rotated axis
+            plane_rot  = [m_rot, -1*m_rot*p_le_d[0]+ p_le_d[1]]  # coefficients for rotated axis line: a1*x + a0
+
+            m_intersection     = np.sin(rotation+np.pi/2.)/np.cos(rotation+np.pi/2.)   # slope perpendicular to rotated axis
+            plane_intersection = [m_intersection, -1*m_intersection*offset_x+offset_y] # coefficients for line perpendicular to rotated axis line at the offset: a1*x + a0
+
+            # intersection between airfoil surface and the line perpendicular to the rotated/offset axis
+            y_intersection = np.polyval(plane_intersection, profile_i[:,0])
+            idx_inter      = np.argwhere(np.diff(np.sign(profile_i[:,1] - y_intersection))).flatten() # find closest airfoil surface points to intersection 
+
+            midpoint_arc = []
+            for sidei in side:
+                if sidei.lower() == 'suction':
+                    tangent_line = np.polyfit(profile_i[idx_inter[0]:idx_inter[0]+2, 0], profile_i[idx_inter[0]:idx_inter[0]+2, 1], 1)
+                elif sidei.lower() == 'pressure':
+                    tangent_line = np.polyfit(profile_i[idx_inter[1]:idx_inter[1]+2, 0], profile_i[idx_inter[1]:idx_inter[1]+2, 1], 1)
+
+                midpoint_x = (tangent_line[1]-plane_intersection[1])/(plane_intersection[0]-tangent_line[0])
+                midpoint_y = plane_intersection[0]*(tangent_line[1]-plane_intersection[1])/(plane_intersection[0]-tangent_line[0]) + plane_intersection[1]
+
+                # convert to arc position
+                if sidei.lower() == 'suction':
+                    x_half = profile_i[:idx_le+1,0]
+                    arc_half = profile_i_arc[:idx_le+1]
+                elif sidei.lower() == 'pressure':
+                    x_half = profile_i[idx_le:,0]
+                    arc_half = profile_i_arc[idx_le:]
+
+                midpoint_arc.append(remap2grid(x_half, arc_half, midpoint_x))#, spline=interp1d))
+
+            return midpoint_arc
+            ########
+
+        # Format profile for interpolation
+        profile   = copy.copy(blade['profile'])
+
+        profile_d = copy.copy(profile)
+        profile_d[:,0,:] = profile[:,0,:] - blade['pf']['p_le'][np.newaxis, :]
+        profile_d = np.flip(profile_d*blade['pf']['chord'][np.newaxis, np.newaxis, :], axis=0)
+
+        for i in range(self.NPTS):
+            s_all = []
+
+            profile_i = copy.copy(profile_d[:,:,i])
+            if list(profile_i[-1,:]) != list(profile_i[-1,:]):
+                TE = np.mean((profile_i[-1,:], profile_i[-1,:]), axis=0)
+                profile_i = np.row_stack((TE, profile_i, TE))
+
+            idx_le = np.argmin(profile_i[:,0])
+
+            profile_i_arc = arc_length(profile_i[:,0], profile_i[:,1], high_fidelity=False)
+            arc_L = profile_i_arc[-1]
+            profile_i_arc /= arc_L
+
+            
+            # loop through composite layups
+            for type_sec, idx_sec, sec in zip(['webs']*len(blade['st']['webs'])+['layers']*len(blade['st']['layers']), range(len(blade['st']['webs']))+range(len(blade['st']['layers'])), blade['st']['webs']+blade['st']['layers']):
+                # for idx_sec, sec in enumerate(blade['st'][type_sec]):
+
+                # initialize chord wise start end points
+                if i == 0:
+                    # print(sec['name'], blade['st'][type_sec][idx_sec].keys())
+                    if all([field not in blade['st'][type_sec][idx_sec].keys() for field in ['midpoint_nd_arc','start_nd_arc','end_nd_arc','rotation','web']]):
+                        blade['st'][type_sec][idx_sec]['start_nd_arc'] = {}
+                        blade['st'][type_sec][idx_sec]['start_nd_arc']['grid'] = self.s
+                        blade['st'][type_sec][idx_sec]['start_nd_arc']['values'] = np.full(self.NPTS, 0.).tolist()
+                        blade['st'][type_sec][idx_sec]['end_nd_arc'] = {}
+                        blade['st'][type_sec][idx_sec]['end_nd_arc']['grid'] = self.s
+                        blade['st'][type_sec][idx_sec]['end_nd_arc']['values'] = np.full(self.NPTS, 1.).tolist()
+                    if 'start_nd_arc' not in blade['st'][type_sec][idx_sec].keys():
+                        blade['st'][type_sec][idx_sec]['start_nd_arc'] = {}
+                        blade['st'][type_sec][idx_sec]['start_nd_arc']['grid'] = self.s
+                        blade['st'][type_sec][idx_sec]['start_nd_arc']['values'] = np.full(self.NPTS, None).tolist()
+                    if 'end_nd_arc' not in blade['st'][type_sec][idx_sec].keys():
+                        blade['st'][type_sec][idx_sec]['end_nd_arc'] = {}
+                        blade['st'][type_sec][idx_sec]['end_nd_arc']['grid'] = self.s
+                        blade['st'][type_sec][idx_sec]['end_nd_arc']['values'] = np.full(self.NPTS, None).tolist()
+                    if 'fiber_orientation' not in blade['st'][type_sec][idx_sec].keys():
+                        blade['st'][type_sec][idx_sec]['fiber_orientation'] = {}
+                        blade['st'][type_sec][idx_sec]['fiber_orientation']['grid'] = self.s
+                        blade['st'][type_sec][idx_sec]['fiber_orientation']['values'] = np.zeros(self.NPTS).tolist()                        
+
+                # If non-dimensional coordinates are given, ignore other methods
+                calc_bounds = True
+                if 'values' in blade['st'][type_sec][idx_sec]['start_nd_arc'].keys() and 'values' in blade['st'][type_sec][idx_sec]['end_nd_arc'].keys():
+                    if blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] != None and blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i] != None:
+                        calc_bounds = False
+
+                if calc_bounds:
+                    if 'rotation' in blade['st'][type_sec][idx_sec].keys() and 'width' in blade['st'][type_sec][idx_sec].keys() and 'side' in blade['st'][type_sec][idx_sec].keys():
+                        # layer midpoint definied with a rotation and offset about the pitch axis
+                        rotation   = sec['rotation']['values'][i] # radians
+                        width      = sec['width']['values'][i]    # meters
+                        p_le_d     = [0., 0.]                     # pitch axis for dimentional profile
+                        side       = sec['side']
+                        if 'offset_x_pa' in blade['st'][type_sec][idx_sec].keys():
+                            offset = sec['offset_x_pa']['values'][i]
+                        else:
+                            offset = 0.
+                        if side.lower() != 'suction' and side.lower() != 'pressure':
+                            warning_invalid_side_value = 'Invalid airfoil value give: side = "%s" for layer = "%s" at r[%d] = %f. Must be set to "suction" or "pressure".'%(side, sec['name'], i, blade['pf']['r'][i])
+                            warnings.warn(warning_invalid_side_value)
+
+                        midpoint = calc_axis_intersection(rotation, offset, p_le_d, [side])[0]
+                        blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] = midpoint-width/arc_L/2.
+                        blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]   = midpoint+width/arc_L/2.
+
+                    elif 'rotation' in blade['st'][type_sec][idx_sec].keys():
+                        # web defined with a rotatio and offset about the pitch axis
+                        rotation   = sec['rotation']['values'][i] # radians
+                        p_le_d     = [0., 0.]                     # pitch axis for dimentional profile
+                        if 'offset_x_pa' in blade['st'][type_sec][idx_sec].keys():
+                            offset = sec['offset_x_pa']['values'][i]
+                        else:
+                            offset = 0.
+                        [blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i], blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]] = sorted(calc_axis_intersection(rotation, offset, p_le_d, ['suction', 'pressure']))
+
+                    elif 'midpoint_nd_arc' in blade['st'][type_sec][idx_sec].keys():
+                        # fixed to LE or TE
+                        width      = sec['width']['values'][i]    # meters
+                        if blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'te':
+                            midpoint = 1.
+                        elif blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'le':
+                            midpoint = profile_i_arc[idx_le[i]]
+                        else:
+                            warning_invalid_side_value = 'Invalid fixed midpoint give: midpoint_nd_arc[fixed] = "%s" for layer = "%s" at r[%d] = %f. Must be set to "LE" or "TE".'%(blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'], sec['name'], i, blade['pf']['r'][i])
+                            warnings.warn(warning_invalid_side_value)
+
+                        blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] = midpoint-width/arc_L/2.
+                        blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]   = midpoint+width/arc_L/2.
+                        if blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i] > 1.:
+                            blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i] -= 1.
+                    
+
+        # Set any end points that are fixed to other sections, loop through composites again
+        for idx_sec, sec in enumerate(blade['st']['layers']):
+            if 'fixed' in blade['st']['layers'][idx_sec]['start_nd_arc'].keys() and 'fixed' in blade['st']['layers'][idx_sec]['end_nd_arc'].keys():
+                target_name  = blade['st']['layers'][idx_sec]['start_nd_arc']['fixed']
+                target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
+                blade['st']['layers'][idx_sec]['start_nd_arc']['grid']   = blade['st']['layers'][target_idx]['end_nd_arc']['grid'].tolist()
+                blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = blade['st']['layers'][target_idx]['end_nd_arc']['values']
+
+                target_name  = blade['st']['layers'][idx_sec]['end_nd_arc']['fixed']
+                target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
+                blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = blade['st']['layers'][target_idx]['start_nd_arc']['grid'].tolist()
+                blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = blade['st']['layers'][target_idx]['start_nd_arc']['values']
+
+
+        return blade
+
+    def calc_control_points(self, blade, r_in=[], r_max_chord=0.):
+
+        if 'ctrl_pts' not in blade.keys():
+            blade['ctrl_pts'] = {}
+
+        # solve for max chord radius
+        if r_max_chord == 0.:
+            r_max_chord = blade['pf']['s'][np.argmax(blade['pf']['chord'])]
+
+        # solve for end of cylinder radius by interpolating relative thickness
+        cyl_thk_min = 0.999
+        idx_s       = np.argmax(blade['pf']['rthick']<1)
+        idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
+        r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-1:-1], blade['pf']['s'][idx_e:idx_s-1:-1], cyl_thk_min)
+
+        # Build Control Point Grid, if not provided with key word arg
+        if len(r_in)==0:
+            # control point grid
+            r_in = np.array(sorted(np.r_[[0.], [r_cylinder], np.linspace(r_max_chord, 1., self.NINPUT-2)]))
+
+        # Fit control points to planform variables
+        blade['ctrl_pts']['theta_in']     = remap2grid(blade['pf']['s'], blade['pf']['theta'], r_in)
+        blade['ctrl_pts']['chord_in']     = remap2grid(blade['pf']['s'], blade['pf']['chord'], r_in)
+        blade['ctrl_pts']['precurve_in']  = remap2grid(blade['pf']['s'], blade['pf']['precurve'], r_in)
+        blade['ctrl_pts']['presweep_in']  = remap2grid(blade['pf']['s'], blade['pf']['presweep'], r_in)
+        blade['ctrl_pts']['thickness_in'] = remap2grid(blade['pf']['s'], blade['pf']['rthick'], r_in)
+
+        # Fit control points to composite thickness variables variables 
+        #   Note: entering 0 thickness for areas where composite section does not extend to, however the precomp region selection vars 
+        #   sector_idx_strain_spar, sector_idx_strain_te) will still be None over these ranges
+        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==self.spar_var][0]
+        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==self.te_var][0]
+        grid_spar = blade['st']['layers'][idx_spar]['thickness']['grid']
+        grid_te   = blade['st']['layers'][idx_te]['thickness']['grid']
+        vals_spar = [0. if val==None else val for val in blade['st']['layers'][idx_spar]['thickness']['values']]
+        vals_te   = [0. if val==None else val for val in blade['st']['layers'][idx_te]['thickness']['values']]
+        blade['ctrl_pts']['sparT_in']     = remap2grid(grid_spar, vals_spar, r_in)
+        blade['ctrl_pts']['teT_in']       = remap2grid(grid_te, vals_te, r_in)
+
+        # Store additional rotorse variables
+        blade['ctrl_pts']['r_in']         = r_in
+        blade['ctrl_pts']['r_cylinder']   = r_cylinder
+        blade['ctrl_pts']['r_max_chord']  = r_max_chord
+        blade['ctrl_pts']['bladeLength']  = blade['pf']['r'][-1]
+
+        return blade
+
+    def update_planform(self, blade):
+
+        if blade['ctrl_pts']['r_in'][2] != blade['ctrl_pts']['r_max_chord']:
+            blade['ctrl_pts']['r_in'] = np.r_[[0.], [blade['ctrl_pts']['r_cylinder']], np.linspace(blade['ctrl_pts']['r_max_chord'], 1., self.NINPUT-2)]
+
+        self.s                  = blade['pf']['s'] # TODO: assumes the start and end points of composite sections does not change
+        blade['pf']['chord']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['chord_in'], self.s)
+        blade['pf']['theta']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['theta_in'], self.s)
+        blade['pf']['r']        = blade['ctrl_pts']['bladeLength']*np.array(self.s)
+        blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s)
+        blade['pf']['presweep'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['presweep_in'], self.s)
+
+        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==self.spar_var][0]
+        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==self.te_var][0]
+
+        blade['st']['layers'][idx_spar]['thickness']['grid']   = self.s.tolist()
+        blade['st']['layers'][idx_spar]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['sparT_in'], self.s).tolist()
+        blade['st']['layers'][idx_te]['thickness']['grid']   = self.s.tolist()
+        blade['st']['layers'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s).tolist()
+
+        # print(blade['ctrl_pts']['r_in'])
+        # print(blade['ctrl_pts']['theta_in'])
+        # import matplotlib.pyplot as plt
+        # plt.plot(self.s, thk_te, label='input')
+        # plt.plot(self.s, thk_te2, label='fit')
+        # plt.legend()
+        # plt.show()
+
+        return blade
+
+        
+    def convert_precomp(self, blade, materials_in=[]):
+
+        ##############################
+        def region_stacking(i, idx, start_nd_arc, end_nd_arc, blade, material_dict, materials, region_loc):
+            # Recieve start and end of composite sections chordwise, find which composites layers are in each
+            # chordwise regions, generate the precomp composite class instance
+
+            # error handling to makes sure there were no numeric errors causing values very close too, but not exactly, 0 or 1
+            start_nd_arc = [0. if start_nd_arci!=0. and np.isclose(start_nd_arci,0.) else start_nd_arci for start_nd_arci in start_nd_arc]
+            end_nd_arc = [0. if end_nd_arci!=0. and np.isclose(end_nd_arci,0.) else end_nd_arci for end_nd_arci in end_nd_arc]
+            start_nd_arc = [1. if start_nd_arci!=1. and np.isclose(start_nd_arci,1.) else start_nd_arci for start_nd_arci in start_nd_arc]
+            end_nd_arc = [1. if end_nd_arci!=1. and np.isclose(end_nd_arci,1.) else end_nd_arci for end_nd_arci in end_nd_arc]
+
+            # region end points
+            dp = sorted(list(set(start_nd_arc+end_nd_arc)))
+
+            #initialize
+            n_plies = []
+            thk = []
+            theta = []
+            mat_idx = []
+
+            # loop through division points, find what layers make up the stack between those bounds
+            for i_reg, (dp0, dp1) in enumerate(zip(dp[0:-1], dp[1:])):
+                n_pliesi = []
+                thki     = []
+                thetai   = []
+                mati     = []
+                for i_sec, start_nd_arci, end_nd_arci in zip(idx, start_nd_arc, end_nd_arc):
+                    name = blade['st']['layers'][i_sec]['name']
+                    if start_nd_arci <= dp0 and end_nd_arci >= dp1:
+                        
+                        if name in region_loc.keys():
+                            if region_loc[name][i] == None:
+                                region_loc[name][i] = [i_reg]
+                            else:
+                                region_loc[name][i].append(i_reg)
+
+                        n_pliesi.append(1.)
+                        thki.append(blade['st']['layers'][i_sec]['thickness']['values'][i])
+                        thetai.append(blade['st']['layers'][i_sec]['fiber_orientation']['values'][i])
+                        mati.append(material_dict[blade['st']['layers'][i_sec]['material']])
+
+                n_plies.append(np.array(n_pliesi))
+                thk.append(np.array(thki))
+                theta.append(np.array(thetai))
+                mat_idx.append(np.array(mati))
+
+            sec = CompositeSection(dp, n_plies, thk, theta, mat_idx, materials)
+            return sec, region_loc
+            ##############################
+
+        def web_stacking(i, web_idx, web_start_nd_arc, web_end_nd_arc, blade, material_dict, materials, flatback, upperCSi):
+            dp = []
+            n_plies = []
+            thk = []
+            theta = []
+            mat_idx = []
+
+            if len(web_idx)>0:
+                dp = np.mean((np.abs(web_start_nd_arc), np.abs(web_start_nd_arc)), axis=0).tolist()
+
+                dp_all = [[-1.*start_nd_arci, -1.*end_nd_arci] for start_nd_arci, end_nd_arci in zip(web_start_nd_arc, web_end_nd_arc)]
+                web_dp, web_ids = np.unique(dp_all, axis=0, return_inverse=True)
+                for webi in np.unique(web_ids):
+                    # store variable values (thickness, orientation, material) for layers that make up each web, based on the mapping array web_ids
+                    n_pliesi = [1. for i_reg, web_idi in zip(web_idx, web_ids) if web_idi==webi]
+                    thki     = [blade['st']['layers'][i_reg]['thickness']['values'][i] for i_reg, web_idi in zip(web_idx, web_ids) if web_idi==webi]
+                    thetai   = [blade['st']['layers'][i_reg]['fiber_orientation']['values'][i] for i_reg, web_idi in zip(web_idx, web_ids) if web_idi==webi]
+                    mati     = [material_dict[blade['st']['layers'][i_reg]['material']] for i_reg, web_idi in zip(web_idx, web_ids) if web_idi==webi]
+
+                    n_plies.append(np.array(n_pliesi))
+                    thk.append(np.array(thki))
+                    theta.append(np.array(thetai))
+                    mat_idx.append(np.array(mati))
+
+            if flatback:
+                dp.append(1.)
+                n_plies.append(upperCSi.n_plies[-1])
+                thk.append(upperCSi.t[-1])
+                theta.append(upperCSi.theta[-1])
+                mat_idx.append(upperCSi.mat_idx[-1])
+
+            dp_out = sorted(list(set(dp)))
+            sec = CompositeSection(dp_out, n_plies, thk, theta, mat_idx, materials)
+            return sec
+            ##############################
+
+        ## Initialization
+        if 'precomp' not in blade.keys():
+            blade['precomp'] = {}
+
+        region_loc_vars = [self.te_var, self.spar_var]
+        region_loc_ss = {} # track precomp regions for user selected composite layers
+        region_loc_ps = {}
+        for var in region_loc_vars:
+            region_loc_ss[var] = [None]*self.NPTS
+            region_loc_ps[var] = [None]*self.NPTS
+
+
+        ## Materials
+        if 'materials' not in blade['precomp']:
+            material_dict = {}
+            materials     = []
+            for i, mati in enumerate(materials_in):
+                material_id = i
+                material_dict[mati['name']] = material_id
+                materials.append(Orthotropic2DMaterial(mati['E'][0]*1e3, mati['E'][1]*1e3, mati['G'][0]*1e3, mati['nu'][0]*1e3, mati['rho'], mati['name']))
+            blade['precomp']['materials']     = materials
+            blade['precomp']['material_dict'] = material_dict
+
+        
+        upperCS = [None]*self.NPTS
+        lowerCS = [None]*self.NPTS
+        websCS  = [None]*self.NPTS
+        profile = [None]*self.NPTS
+
+        ## Spanwise
+        for i in range(self.NPTS):
+        
+            ## Profiles
+            # rotate
+            profile_i = np.flip(copy.copy(blade['profile'][:,:,i]), axis=0)
+            profile_i_rot = np.column_stack(rotate(blade['pf']['p_le'][i], 0., profile_i[:,0], profile_i[:,1], -1.*np.radians(blade['pf']['theta'][i])))
+            # normalize
+            profile_i_rot[:,0] -= min(profile_i_rot[:,0])
+            profile_i_rot = profile_i_rot/ max(profile_i_rot[:,0])
+
+
+            # handle rotated flat backs by connecting them to furthest aft point
+
+            # elif profile_i_rot[0,0] < 1.:
+            #     profile_i_rot = np.row_stack((profile_i_rot[-1,:], profile_i_rot))
+
+            ### TODO: unlikely case of 0. rotation + flatback, old way of handling
+            # if list(profile_i[-1,:]) != list(profile_i[-1,:]):
+            #     TE = np.mean((profile_i[-1,:], profile_i[-1,:]), axis=0)
+            #     profile_i = np.row_stack((TE, profile_i, TE))
+
+            profile_i_rot_precomp = copy.copy(profile_i_rot)
+            idx_le_precomp = np.argmax(profile_i_rot_precomp[:,0])
+            if idx_le_precomp != 0:
+                if profile_i_rot_precomp[0,0] == profile_i_rot_precomp[-1,0]:
+                     idx_s = 1
+                profile_i_rot_precomp = np.row_stack((profile_i_rot_precomp[idx_le_precomp:], profile_i_rot_precomp[idx_s:idx_le_precomp,:]))
+            profile_i_rot_precomp[:,1] -= profile_i_rot_precomp[np.argmin(profile_i_rot_precomp[:,0]),1]
+
+            if profile_i_rot_precomp[-1,0] != 1.:
+                profile_i_rot_precomp = np.row_stack((profile_i_rot_precomp, profile_i_rot_precomp[0,:]))
+
+
+            # import matplotlib.pyplot as plt
+            # plt.plot(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
+            # plt.show()
+
+
+            profile[i] = Profile.initWithTEtoTEdata(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
+            # profile[i] = Profile.initWithTEtoTEdata(blade['profile'][:,0,i], blade['profile'][:,1,i])
+
+            # find arc
+            ### TODO: if rotated nose down, then arc calc should start at pressure side of the flat back, which is now part of the 'sucction side'
+            # idx_te = np.argmax(profile_i[:,0])
+
+            idx_le = np.argmin(profile_i_rot[:,0])
+
+            profile_i_arc = arc_length(profile_i_rot[:,0], profile_i_rot[:,1], high_fidelity=False)
+            arc_L = profile_i_arc[-1]
+            profile_i_arc /= arc_L
+
+            loc_LE = profile_i_arc[idx_le]
+            len_PS = 1.-loc_LE
+
+            ## Composites
+            ss_idx           = []
+            ss_start_nd_arc  = []
+            ss_end_nd_arc    = []
+            ps_idx           = []
+            ps_start_nd_arc  = []
+            ps_end_nd_arc    = []
+            web_start_nd_arc = []
+            web_end_nd_arc   = []
+            web_idx          = []
+
+            # Determine spanwise composite layer elements that are non-zero at this spanwise location,
+            # determine their chord-wise start and end location on the pressure and suctions side
+            for idx_sec, sec in enumerate(blade['st']['layers']):
+
+                if 'web' not in sec.keys():
+                    if sec['start_nd_arc']['values'][i] != None and sec['thickness']['values'][i] != None:
+                        if sec['start_nd_arc']['values'][i] < loc_LE or sec['end_nd_arc']['values'][i] < loc_LE:
+                            ss_idx.append(idx_sec)
+                            if sec['start_nd_arc']['values'][i] < loc_LE:
+                                # ss_start_nd_arc.append(sec['start_nd_arc']['values'][i])
+                                ss_end_nd_arc_temp = float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['start_nd_arc']['values'][i]))
+                                if ss_end_nd_arc_temp == profile_i_rot[0,0] and profile_i_rot[0,0] != 1.:
+                                    ss_end_nd_arc_temp = 1.
+                                ss_end_nd_arc.append(ss_end_nd_arc_temp)
+                            else:
+                                ss_end_nd_arc.append(1.)
+                            # ss_end_nd_arc.append(min(sec['end_nd_arc']['values'][i], loc_LE)/loc_LE)
+                            if sec['end_nd_arc']['values'][i] < loc_LE:
+                                ss_start_nd_arc.append(float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['end_nd_arc']['values'][i])))
+                            else:
+                                ss_start_nd_arc.append(0.)
+                            
+                        if sec['start_nd_arc']['values'][i] > loc_LE or sec['end_nd_arc']['values'][i] > loc_LE:
+                            ps_idx.append(idx_sec)
+                            # ps_start_nd_arc.append((max(sec['start_nd_arc']['values'][i], loc_LE)-loc_LE)/len_PS)
+                            # ps_end_nd_arc.append((min(sec['end_nd_arc']['values'][i], 1.)-loc_LE)/len_PS)
+
+                            if sec['start_nd_arc']['values'][i] > loc_LE and sec['end_nd_arc']['values'][i] < loc_LE:
+                                # ps_start_nd_arc.append(float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['start_nd_arc']['values'][i])))
+                                ps_end_nd_arc.append(1.)
+                            else:
+                                ps_end_nd_arc_temp = float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['end_nd_arc']['values'][i]))
+                                if ps_end_nd_arc_temp == profile_i_rot[-1,0] and profile_i_rot[-1,0] != 1.:
+                                    ps_end_nd_arc_temp = 1.
+                                ps_end_nd_arc.append(ps_end_nd_arc_temp)
+                            if sec['start_nd_arc']['values'][i] < loc_LE:
+                                ps_start_nd_arc.append(0.)
+                            else:
+                                ps_start_nd_arc.append(float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['start_nd_arc']['values'][i])))
+
+
+                else:
+                    target_name  = blade['st']['layers'][idx_sec]['web']
+                    target_idx   = [k for k, webi in enumerate(blade['st']['webs']) if webi['name']==target_name][0]
+
+                    if blade['st']['webs'][target_idx]['start_nd_arc']['values'][i] != None and blade['st']['layers'][idx_sec]['thickness']['values'][i] != None:
+                        web_idx.append(idx_sec)
+
+                        start_nd_arc = float(remap2grid(profile_i_arc, profile_i_rot[:,0], blade['st']['webs'][target_idx]['start_nd_arc']['values'][i]))
+                        end_nd_arc = float(remap2grid(profile_i_arc, profile_i_rot[:,0], blade['st']['webs'][target_idx]['end_nd_arc']['values'][i]))
+
+                        web_start_nd_arc.append(start_nd_arc)
+                        web_end_nd_arc.append(end_nd_arc)
+
+
+            # if ps_end_nd_arc[-1] != 1.:
+            #     ps_end_nd_arc[-1] = ps_end_nd_arc[-1]/profile_i_rot[-1, 0]
+            # if ss_end_nd_arc[-1] != 1.:
+            #     ss_end_nd_arc[-1] = ss_end_nd_arc[-1]/profile_i_rot[0, 0]
+
+
+
+
+            # 'web' at trailing edge needed for flatback airfoils
+            if blade['profile'][0,1,i] != blade['profile'][-1,1,i]:
+                flatback = True
+            else:
+                flatback = False
+
+            # generate the Precomp composite stacks for chordwise regions
+            upperCS[i], region_loc_ss = region_stacking(i, ss_idx, ss_start_nd_arc, ss_end_nd_arc, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], region_loc_ss)
+            lowerCS[i], region_loc_ps = region_stacking(i, ps_idx, ps_start_nd_arc, ps_end_nd_arc, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], region_loc_ps)
+            if len(web_idx)>0 or flatback:
+                websCS[i] = web_stacking(i, web_idx, web_start_nd_arc, web_end_nd_arc, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], flatback, upperCS[i])
+
+            
+        blade['precomp']['upperCS']       = upperCS
+        blade['precomp']['lowerCS']       = lowerCS
+        blade['precomp']['websCS']        = websCS
+        blade['precomp']['profile']       = profile
+
+        # Assumptions:
+        # - pressure and suction side regions are the same (i.e. spar cap is the Nth region on both side)
+        # - if the composite layer is divided into multiple regions (i.e. if the spar cap is split into 3 regions due to the web locations),
+        #   the middle region is selected with int(n_reg/2), note for an even number of regions, this rounds up
+        blade['precomp']['sector_idx_strain_spar'] = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.spar_var]]
+        blade['precomp']['sector_idx_strain_te']   = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.te_var]]
+        blade['precomp']['spar_var'] = self.spar_var
+        blade['precomp']['te_var']   = self.te_var
+        
+        return blade
+
+        
+
+if __name__ == "__main__":
+
+    ## File managment
+    fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
+    fname_output       = "turbine_inputs/nrel5mw_mod_update_out.yaml"
+    flag_write_out     = False
+    flag_write_precomp = True
+    dir_precomp_out    = "turbine_inputs/precomp"
+
+    ## Load and Format Blade
+    tt = time.time()
+    refBlade = ReferenceBlade()
+    refBlade.verbose  = True
+    refBlade.spar_var = 'Spar_Cap_SS'
+    refBlade.te_var   = 'TE_reinforcement'
+    refBlade.NPTS     = 50
+
+    blade = refBlade.initialize(fname_input)
+
+    ## save output yaml
+    if flag_write_out:
+        t3 = time.time()
+        refBlade.write_ontology(fname_output, blade, refBlade.wt_ref)
+        if refBlade.verbose:
+            print('Complete: Write Output: \t%f s'%(time.time()-t3))
+
+    ## save precomp out
+    if flag_write_precomp:
+        t4 = time.time()
+        materials = blade['precomp']['materials']
+        upper     = blade['precomp']['upperCS']
+        lower     = blade['precomp']['lowerCS']
+        webs      = blade['precomp']['websCS']
+        profile   = blade['precomp']['profile']
+        chord     = blade['pf']['chord']
+        twist     = blade['pf']['theta']
+        p_le      = blade['pf']['p_le']
+        precomp_write = PreCompWriter(dir_precomp_out, materials, upper, lower, webs, profile, chord, twist, p_le)
+        precomp_write.execute()
+        if refBlade.verbose:
+            print('Complete: Write PreComp: \t%f s'%(time.time()-t4))

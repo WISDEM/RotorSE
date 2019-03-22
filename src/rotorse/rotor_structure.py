@@ -14,7 +14,7 @@ import _bem  # TODO: move to rotoraero
 
 from rotorse import RPM2RS, RS2RPM
 from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
-from rotorse.rotor_geometry_yaml import ReferenceBlade
+from rotorse.rotor_geometry_yaml2 import ReferenceBlade
 from rotorse.precomp import _precomp
 
 # ---------------------
@@ -2505,7 +2505,7 @@ class RotorStructure(Group):
         self.connect('airfoils', 'aero_extrm.airfoils')
         self.connect('nBlades', 'aero_extrm.B')
         self.connect('nSector', 'aero_extrm.nSector')
-        self.connect('turbineclass.V_extreme', 'aero_extrm.V_load')
+        self.connect('turbineclass.V_extreme50', 'aero_extrm.V_load')
         self.connect('pitch_extreme', 'aero_extrm.pitch_load')
         self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
         self.aero_extrm.Omega_load = 0.0  # parked case
@@ -2897,7 +2897,7 @@ def Init_RotorStructure_wRefBlade(rotor, blade):
 
 if __name__ == '__main__':
     # Turbine Ontology input
-    fname_input  = "turbine_inputs/nrel5mw_mod.yaml"
+    fname_input  = "turbine_inputs/nrel5mw_mod_update.yaml"
     fname_output = "turbine_inputs/nrel5mw_mod_out.yaml"
 
     # Initialize blade design
@@ -2932,7 +2932,7 @@ if __name__ == '__main__':
     # Update
     refBlade.verbose  = False
     blade_out = refBlade.update(blade_out)
-    refBlade.write_ontology(fname_output, blade_out, refBlade.wt_ref)
+    # refBlade.write_ontology(fname_output, blade_out, refBlade.wt_ref)
 
 
     print('mass_one_blade =', rotor['mass_one_blade'])

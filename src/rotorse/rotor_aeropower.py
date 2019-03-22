@@ -25,7 +25,7 @@ from akima import Akima
 
 from rotorse import RPM2RS, RS2RPM
 from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
-from rotorse.rotor_geometry_yaml import ReferenceBlade
+from rotorse.rotor_geometry_yaml2 import ReferenceBlade
 
 import time
 # ---------------------
@@ -609,8 +609,7 @@ if __name__ == '__main__':
     tt = time.time()
 
     # Turbine Ontology input
-    fname_input = "C:/linux/Results/results_steady/results/data8_bkup/OptFAST_2x0_steady8_aep_10_L/blade_out.yaml"
-    # fname_input  = "turbine_inputs/nrel5mw_mod.yaml"
+    fname_input  = "turbine_inputs/nrel5mw_mod_update.yaml"
     fname_output = "turbine_inputs/nrel5mw_mod_out.yaml"
 
     # Initialize blade design
