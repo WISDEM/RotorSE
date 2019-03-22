@@ -435,10 +435,10 @@ class FASTLoadCases(Component):
             np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
             unknowns['P_out'] = P_out
 
-            import matplotlib.pyplot as plt
-            plt.plot(U, P, 'o')
-            plt.plot(params['V_out'], unknowns['P_out'])            
-            plt.show()
+            # import matplotlib.pyplot as plt
+            # plt.plot(U, P, 'o')
+            # plt.plot(params['V_out'], unknowns['P_out'])            
+            # plt.show()
 
 
         ############

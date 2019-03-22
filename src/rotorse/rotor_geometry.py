@@ -880,6 +880,7 @@ class TurbineClass(Component):
         super(TurbineClass, self).__init__()
         # parameters
         self.add_param('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True)
+        self.add_param('V_mean_overwrite', val=0., desc='overwrite value for mean velocity for using user defined CDFs')
 
         # outputs should be constant
         self.add_output('V_mean', shape=1, units='m/s', desc='IEC mean wind speed for Rayleigh distribution')
@@ -903,7 +904,10 @@ class TurbineClass(Component):
         elif self.turbine_class == TURBINE_CLASS['IV']:
             Vref = 30.0
 
-        unknowns['V_mean'] = 0.2*Vref
+        if params['V_mean_overwrite'] == 0.:
+            unknowns['V_mean'] = 0.2*Vref
+        else:
+            unknowns['V_mean'] = params['V_mean_overwrite']
         unknowns['V_extreme1'] = 0.8*Vref
         unknowns['V_extreme50'] = 1.4*Vref
         unknowns['V_extreme_full'][0] = 1.4*Vref # for extreme cases TODO: check if other way to do
@@ -932,6 +936,8 @@ class RotorGeometry(Group):
         self.add('nBlades', IndepVarComp('nBlades', 3, pass_by_obj=True), promotes=['*'])
         self.add('downwind', IndepVarComp('downwind', False, pass_by_obj=True), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
+        self.add('V_mean_overwrite', IndepVarComp('V_mean_overwrite', val=0., desc='optional overwrite value for mean velocity for using user defined CDFs'), promotes=['*'])
+
         
         # --- composite sections ---
         self.add('sparT_in', IndepVarComp('sparT_in', val=np.zeros(NINPUT), units='m', desc='spar cap thickness parameters'), promotes=['*'])
@@ -946,6 +952,7 @@ class RotorGeometry(Group):
 
         # connections to turbineclass
         self.connect('turbine_class', 'turbineclass.turbine_class')
+        self.connect('V_mean_overwrite', 'turbineclass.V_mean_overwrite')
 
         # connections to spline0
         #self.connect('r_max_chord', 'spline0.r_max_chord')
