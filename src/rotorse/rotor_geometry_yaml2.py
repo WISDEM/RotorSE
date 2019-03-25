@@ -48,7 +48,12 @@ def remap2grid(x_ref, y_ref, x, spline=PchipInterpolator):
         if x>max(x_ref) and np.isclose(x, x_ref[-1]):
             x=x_ref[-1]
 
-    return spline_y(x)
+    y_out = spline_y(x)
+
+    np.place(y_out, y_out < min(y_ref), min(y_ref))
+    np.place(y_out, y_out > max(y_ref), max(y_ref))
+
+    return y_out
 
 def remapWbreak(x_ref, y_ref, x0, idx_break, spline=PchipInterpolator):
     # for interpolating on airfoil surface, split x into two sections and determine which to use
@@ -112,7 +117,7 @@ class ReferenceBlade(object):
 
         # Validate input file against JSON schema
         self.validate        = True       # (bool) run IEA turbine ontology JSON validation
-        # self.fname_schema    = ''          # IEA turbine ontology JSON schema file
+        self.fname_schema    = ''          # IEA turbine ontology JSON schema file
 
         # Grid sizes
         self.NINPUT          = 5
@@ -132,25 +137,20 @@ class ReferenceBlade(object):
 
         
 
-    def initialize(self, fname_input, fname_schema):
+    def initialize(self, fname_input):
         if self.verbose:
-            t0 = time.time()
             print('Running initialization: %s' % fname_input)
-            print('Schema for validation: %s' % fname_schema)
 
         # Load input
         self.fname_input = fname_input
-        self.wt_ref = self.load_ontology(self.fname_input, validate=self.validate, fname_schema=fname_schema)
+        self.wt_ref = self.load_ontology(self.fname_input, validate=self.validate, fname_schema=self.fname_schema)
 
+        t1 = time.time()
         # Renaming and converting lists to dicts for simplicity
         blade_ref = copy.deepcopy(self.wt_ref['components']['blade'])
         af_ref    = {}
         for afi in self.wt_ref['airfoils']:
             af_ref[afi['name']] = afi
-
-        if self.verbose:
-            print('Complete: Load Input File: \t%f s'%(time.time()-t0))
-            t1 = time.time()
 
         # build blade
         blade = {}
@@ -208,18 +208,31 @@ class ReferenceBlade(object):
         """ Load inputs IEA turbine ontology yaml inputs, optional validation """
         # Read IEA turbine ontology yaml input file
         with open(fname_input, 'r') as myfile:
+            t_load = time.time()
             inputs = myfile.read()
 
         # Validate the turbine input with the IEA turbine ontology schema
         yaml = YAML()
         if validate:
+            t_validate = time.time()
+
             with open(fname_schema, 'r') as myfile:
                 schema = myfile.read()
             json.validate(yaml.load(inputs), yaml.load(schema))
 
+            t_validate = time.time()-t_validate
+            if self.verbose:
+                print('Complete: Schema "%s" validation: \t%f s'%(fname_schema, t_validate))
+        else:
+            t_validate = 0.
+
         # return yaml.load(inputs)
         with open(fname_input, 'r') as myfile:
             inputs = myfile.read()
+
+        if self.verbose:
+            t_load = time.time() - t_load - t_validate
+            print('Complete: Load Input File: \t%f s'%(t_load))
         
         return yaml.load(inputs)
 
@@ -373,6 +386,7 @@ class ReferenceBlade(object):
 
         thk_ref = [af_ref[af]['relative_thickness'] for af in blade_ref['outer_shape_bem']['airfoil_position']['labels']]
         blade['pf']['rthick']   = remap2grid(blade_ref['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
+
         return blade
 
     def remap_profiles(self, blade, blade_ref, AFref, spline=PchipInterpolator):
@@ -395,18 +409,28 @@ class ReferenceBlade(object):
 
         for afi, af_label in enumerate(af_labels):
             points = np.column_stack((AFref[af_label]['coordinates']['x'], AFref[af_label]['coordinates']['y']))
+
+            # check that airfoil points are declared from the TE suction side to TE pressure side
+            idx_le = np.argmin(AFref[af_label]['coordinates']['x'])
+            if np.mean(AFref[af_label]['coordinates']['y'][:idx_le]) > 0.:
+                points = np.flip(points, axis=0)
+                # airfoil_coordinate_warning = 'Ontology Input Error: Airfoil coordinates for "%s" should be entered from TE suction side to TE pressure side \nCorrected for and continuing. To disable future warnings, correct input file.' % AFref[af_label]['name']
+                # warnings.warn(airfoil_coordinate_warning)
+
             af = AirfoilShape(points=points)
             af.redistribute(self.NPTS_AfProfile, dLE=True)
 
             af_points = af.points
-            af_points[:,0] -= af.LE[0]
-            af_points[:,1] -= af.LE[1]
+            if [1,0] not in af_points.tolist():
+                af_points[:,0] -= af.LE[0]
+                af_points[:,1] -= af.LE[1]
             c = max(af_points[:,0])-min(af_points[:,0])
             af_points[:,:] /= c
 
             AFref_xy[:,:,afi] = af_points
-
+            
         # Spanwise thickness interpolation
+        spline = Akima1DInterpolator
         profile_spline = spline(af_thk, AFref_xy, axis=2)
         blade['profile'] = profile_spline(blade['pf']['rthick'])
         blade['profile_spline'] = profile_spline
@@ -634,6 +658,16 @@ class ReferenceBlade(object):
                             offset = sec['offset_x_pa']['values'][i]
                         else:
                             offset = 0.
+
+                        if rotation == None:
+                            rotation = 0
+                        if width == None:
+                            width = 0
+                        if side == None:
+                            side = 0
+                        if offset == None:
+                            offset = 0
+
                         if side.lower() != 'suction' and side.lower() != 'pressure':
                             warning_invalid_side_value = 'Invalid airfoil value give: side = "%s" for layer = "%s" at r[%d] = %f. Must be set to "suction" or "pressure".'%(side, sec['name'], i, blade['pf']['r'][i])
                             warnings.warn(warning_invalid_side_value)
@@ -651,8 +685,11 @@ class ReferenceBlade(object):
                             offset = sec['offset_x_pa']['values'][i]
                         else:
                             offset = 0.
-                        
-                        
+
+                        if rotation == None:
+                            rotation = 0
+                        if offset == None:
+                            offset = 0
                         
                         [blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i], blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]] = sorted(calc_axis_intersection(rotation, offset, p_le_d, ['suction', 'pressure']))
 
@@ -662,10 +699,13 @@ class ReferenceBlade(object):
                         if blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'te':
                             midpoint = 1.
                         elif blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'le':
-                            midpoint = profile_i_arc[idx_le[i]]
+                            midpoint = profile_i_arc[idx_le]
                         else:
                             warning_invalid_side_value = 'Invalid fixed midpoint give: midpoint_nd_arc[fixed] = "%s" for layer = "%s" at r[%d] = %f. Must be set to "LE" or "TE".'%(blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'], sec['name'], i, blade['pf']['r'][i])
                             warnings.warn(warning_invalid_side_value)
+
+                        if width == None:
+                            width = 0
 
                         blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] = midpoint-width/arc_L/2.
                         blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]   = midpoint+width/arc_L/2.
@@ -719,8 +759,8 @@ class ReferenceBlade(object):
         # Fit control points to composite thickness variables variables 
         #   Note: entering 0 thickness for areas where composite section does not extend to, however the precomp region selection vars 
         #   sector_idx_strain_spar, sector_idx_strain_te) will still be None over these ranges
-        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==self.spar_var][0]
-        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==self.te_var][0]
+        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
+        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
         grid_spar = blade['st']['layers'][idx_spar]['thickness']['grid']
         grid_te   = blade['st']['layers'][idx_te]['thickness']['grid']
         vals_spar = [0. if val==None else val for val in blade['st']['layers'][idx_spar]['thickness']['values']]
@@ -748,8 +788,8 @@ class ReferenceBlade(object):
         blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s)
         blade['pf']['presweep'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['presweep_in'], self.s)
 
-        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==self.spar_var][0]
-        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==self.te_var][0]
+        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
+        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
 
         blade['st']['layers'][idx_spar]['thickness']['grid']   = self.s.tolist()
         blade['st']['layers'][idx_spar]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['sparT_in'], self.s).tolist()
@@ -872,9 +912,27 @@ class ReferenceBlade(object):
             material_dict = {}
             materials     = []
             for i, mati in enumerate(materials_in):
+                if mati['orth'] == 1 or mati['orth'] == True:
+                    try:
+                        iter(mati['E'])
+                    except:
+                        warnings.warn('Ontology input warning: Material "%s" entered as Orthogonal, must supply E, G, and nu as a list representing the 3 principle axes.'%mati['name'])
+                if 'G' not in mati.keys():
+                    
+                    if mati['orth'] == 1 or mati['orth'] == True:
+                        warning_shear_modulus_orthogonal = 'Ontology input warning: No shear modulus, G, provided for material "%s".'%mati['name']
+                        warnings.warn(warning_shear_modulus_orthogonal)
+                    else:
+                        warning_shear_modulus_isotropic = 'Ontology input warning: No shear modulus, G, provided for material "%s".  Assuming 2G*(1 + nu) = E, which is only valid for isotropic materials.'%mati['name']
+                        warnings.warn(warning_shear_modulus_isotropic)
+                        mati['G'] = mati['E']/(2*(1+mati['nu']))
+
                 material_id = i
                 material_dict[mati['name']] = material_id
-                materials.append(Orthotropic2DMaterial(mati['E'][0]*1e3, mati['E'][1]*1e3, mati['G'][0]*1e3, mati['nu'][0]*1e3, mati['rho'], mati['name']))
+                if mati['orth'] == 1 or mati['orth'] == True:
+                    materials.append(Orthotropic2DMaterial(mati['E'][0]*1e3, mati['E'][1]*1e3, mati['G'][0]*1e3, mati['nu'][0]*1e3, mati['rho'], mati['name']))
+                else:
+                    materials.append(Orthotropic2DMaterial(mati['E']*1e3, mati['E']*1e3, mati['G']*1e3, mati['nu']*1e3, mati['rho'], mati['name']))
             blade['precomp']['materials']     = materials
             blade['precomp']['material_dict'] = material_dict
 
@@ -1048,7 +1106,8 @@ if __name__ == "__main__":
 
     ## File managment
     fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_output       = "turbine_inputs/nrel5mw_mod_update_out.yaml"
+    # fname_input        = "turbine_inputs/BAR00.yaml"
+    # fname_output       = "turbine_inputs/nrel5mw_mod_update_out.yaml"
     flag_write_out     = False
     flag_write_precomp = True
     dir_precomp_out    = "turbine_inputs/precomp"
@@ -1057,9 +1116,11 @@ if __name__ == "__main__":
     tt = time.time()
     refBlade = ReferenceBlade()
     refBlade.verbose  = True
-    refBlade.spar_var = 'Spar_Cap_SS'
+    refBlade.spar_var = 'Spar_cap_ss'
     refBlade.te_var   = 'TE_reinforcement'
     refBlade.NPTS     = 50
+    refBlade.validate = True
+    refBlade.fname_schema = "turbine_inputs/IEAontology_schema.yaml"
 
     blade = refBlade.initialize(fname_input)
 

@@ -744,20 +744,23 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
 if __name__ == '__main__':
 
     # Turbine Ontology input
-    fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
-    
+    # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
+    # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
+    fname_input = "turbine_inputs/BAR00.yaml"
     
     Analysis_Level = -1 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
 
     # Initialize blade design
     refBlade = ReferenceBlade()
-    refBlade.verbose = True
-    refBlade.NINPUT  = 5
-    refBlade.NPITS   = 50
-    refBlade.spar_var = 'Spar_Cap_SS'
-    refBlade.te_var   = 'TE_reinforcement'
-    blade = refBlade.initialize(fname_input, fname_schema)
+    refBlade.verbose      = True
+    refBlade.NINPUT       = 5
+    refBlade.NPITS        = 100
+    refBlade.spar_var     = 'Spar_Cap_SS'
+    refBlade.te_var       = 'TE_reinforcement'
+    refBlade.validate     = True
+    refBlade.fname_schema = fname_schema
+    blade = refBlade.initialize(fname_input)
 
     # Set FAST Inputs
     if Analysis_Level >= 0:
