@@ -244,10 +244,16 @@ class PreCompSections(BeamPropertiesBase):
             pf  = profile[i]
             idx = sector_idx_strain[i]
 
-            xun[i] = 0.5*(csU.loc[idx] + csU.loc[idx+1])
-            xln[i] = 0.5*(csL.loc[idx] + csL.loc[idx+1])
-            yun[i] = np.interp(xun[i], pf.x, pf.yu)
-            yln[i] = np.interp(xln[i], pf.x, pf.yl)
+            if idx == None:
+                xun[i] = 0.
+                xln[i] = 0.
+                yun[i] = 0.
+                yln[i] = 0.
+            else:
+                xun[i] = 0.5*(csU.loc[idx] + csU.loc[idx+1])
+                xln[i] = 0.5*(csL.loc[idx] + csL.loc[idx+1])
+                yun[i] = np.interp(xun[i], pf.x, pf.yu)
+                yln[i] = np.interp(xln[i], pf.x, pf.yl)
 
         # make dimensional and define relative to elastic center
         xu = xun*chord - x_ec_nose
@@ -284,21 +290,26 @@ class PreCompSections(BeamPropertiesBase):
 
             cs = CS_list[i]
             sector_idx = sector_idx_strain[i]
+            
+            if sector_idx == None:
+                eps_crit[i] = 0.
 
-            # chord-wise length of sector
-            sector_length = chord[i] * (cs.loc[sector_idx+1] - cs.loc[sector_idx])
+            else:
 
-            # get matrices
-            A, B, D, totalHeight = cs.compositeMatrices(sector_idx)
-            E = cs.effectiveEAxial(sector_idx)
-            D1 = D[0, 0]
-            D2 = D[1, 1]
-            D3 = D[0, 1] + 2*D[2, 2]
+                # chord-wise length of sector
+                sector_length = chord[i] * (cs.loc[sector_idx+1] - cs.loc[sector_idx])
 
-            # use empirical formula
-            Nxx = 2 * (np.pi/sector_length)**2 * (np.sqrt(D1*D2) + D3)
+                # get matrices
+                A, B, D, totalHeight = cs.compositeMatrices(sector_idx)
+                E = cs.effectiveEAxial(sector_idx)
+                D1 = D[0, 0]
+                D2 = D[1, 1]
+                D3 = D[0, 1] + 2*D[2, 2]
 
-            eps_crit[i] = - Nxx / totalHeight / E
+                # use empirical formula
+                Nxx = 2 * (np.pi/sector_length)**2 * (np.sqrt(D1*D2) + D3)
+
+                eps_crit[i] = - Nxx / totalHeight / E
 
         return eps_crit
 
@@ -386,12 +397,56 @@ class PreCompSections(BeamPropertiesBase):
                 thetaW = [0]
                 mat_idxW = [0]
 
-            results = _precomp.properties(chord[i], theta[i],
-                th_prime[i], leLoc[i],
-                xnode, ynode, E1, E2, G12, nu12, rho,
-                locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU,
-                locL, n_laminaL, n_pliesL, tL, thetaL, mat_idxL,
-                nwebs, locW, n_laminaW, n_pliesW, tW, thetaW, mat_idxW)
+            try:
+                results = _precomp.properties(chord[i], theta[i],
+                    th_prime[i], leLoc[i],
+                    xnode, ynode, E1, E2, G12, nu12, rho,
+                    locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU,
+                    locL, n_laminaL, n_pliesL, tL, thetaL, mat_idxL,
+                    nwebs, locW, n_laminaW, n_pliesW, tW, thetaW, mat_idxW)
+            except:
+                print(i)
+                # print('chord[i]', chord[i])
+                # print('theta[i]', theta[i])
+                # print('th_prime[i]', th_prime[i])
+                # print('leLoc[i]', leLoc[i])
+                # print('xnode', xnode)
+                # print('ynode', ynode)
+                # print('E1', E1)
+                # print('E2', E2)
+                # print('G12', G12)
+                # print('nu12', nu12)
+                # print('rho', rho)
+                # print('locU', locU)
+                # print('n_laminaU', n_laminaU)
+                # print('n_pliesU', n_pliesU)
+                # print('tU', tU)
+                # print('thetaU', thetaU)
+                # print('mat_idxU', mat_idxU)
+                # print('locL', locL)
+                # print('n_laminaL', n_laminaL)
+                # print('n_pliesL', n_pliesL)
+                # print('tL', tL)
+                # print('thetaL', thetaL)
+                # print('mat_idxL', mat_idxL)
+                # print('nwebs', nwebs)
+                # print('locW', locW)
+                # print('n_laminaW', n_laminaW)
+                # print('n_pliesW', n_pliesW)
+                # print('tW', tW)
+                # print('thetaW', thetaW)
+                # print('mat_idxW ', mat_idxW )
+                import matplotlib.pyplot as plt
+                plt.plot(xnode,ynode)
+                plt.axis('equal')
+                plt.show()
+
+                results = _precomp.properties(chord[i], theta[i],
+                    th_prime[i], leLoc[i],
+                    xnode, ynode, E1, E2, G12, nu12, rho,
+                    locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU,
+                    locL, n_laminaL, n_pliesL, tL, thetaL, mat_idxL,
+                    nwebs, locW, n_laminaW, n_pliesW, tW, thetaW, mat_idxW)
 
             beam_EIxx[i] = results[1]  # EIedge
             beam_EIyy[i] = results[0]  # EIflat

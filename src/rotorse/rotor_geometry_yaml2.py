@@ -847,13 +847,24 @@ class ReferenceBlade(object):
 
                         n_pliesi.append(1.)
                         thki.append(blade['st']['layers'][i_sec]['thickness']['values'][i])
-                        thetai.append(blade['st']['layers'][i_sec]['fiber_orientation']['values'][i])
+                        if blade['st']['layers'][i_sec]['fiber_orientation']['values'][i] == None:
+                            thetai.append(0.)
+                        else:
+                            thetai.append(blade['st']['layers'][i_sec]['fiber_orientation']['values'][i])
                         mati.append(material_dict[blade['st']['layers'][i_sec]['material']])
 
                 n_plies.append(np.array(n_pliesi))
                 thk.append(np.array(thki))
                 theta.append(np.array(thetai))
                 mat_idx.append(np.array(mati))
+
+            # print('----------------------')
+            # print('dp', dp)
+            # print('n_plies', n_plies)
+            # print('thk', thk)
+            # print('theta', theta)
+            # print('mat_idx', mat_idx)
+            # print('materials', materials)
 
             sec = CompositeSection(dp, n_plies, thk, theta, mat_idx, materials)
             return sec, region_loc
@@ -876,6 +887,7 @@ class ReferenceBlade(object):
                     n_pliesi = [1. for i_reg, web_idi in zip(web_idx, web_ids) if web_idi==webi]
                     thki     = [blade['st']['layers'][i_reg]['thickness']['values'][i] for i_reg, web_idi in zip(web_idx, web_ids) if web_idi==webi]
                     thetai   = [blade['st']['layers'][i_reg]['fiber_orientation']['values'][i] for i_reg, web_idi in zip(web_idx, web_ids) if web_idi==webi]
+                    thetai   = [0. if theta_ij==None else theta_ij for theta_ij in thetai]
                     mati     = [material_dict[blade['st']['layers'][i_reg]['material']] for i_reg, web_idi in zip(web_idx, web_ids) if web_idi==webi]
 
                     n_plies.append(np.array(n_pliesi))
@@ -891,6 +903,14 @@ class ReferenceBlade(object):
                 mat_idx.append(upperCSi.mat_idx[-1])
 
             dp_out = sorted(list(set(dp)))
+
+            # print('----------------------')
+            # print('dp', dp_out)
+            # print('n_plies', n_plies)
+            # print('thk', thk)
+            # print('theta', theta)
+            # print('mat_idx', mat_idx)
+            # print('materials', materials)
             sec = CompositeSection(dp_out, n_plies, thk, theta, mat_idx, materials)
             return sec
             ##############################
@@ -930,9 +950,9 @@ class ReferenceBlade(object):
                 material_id = i
                 material_dict[mati['name']] = material_id
                 if mati['orth'] == 1 or mati['orth'] == True:
-                    materials.append(Orthotropic2DMaterial(mati['E'][0]*1e3, mati['E'][1]*1e3, mati['G'][0]*1e3, mati['nu'][0]*1e3, mati['rho'], mati['name']))
+                    materials.append(Orthotropic2DMaterial(mati['E'][0], mati['E'][1], mati['G'][0], mati['nu'][0], mati['rho'], mati['name']))
                 else:
-                    materials.append(Orthotropic2DMaterial(mati['E']*1e3, mati['E']*1e3, mati['G']*1e3, mati['nu']*1e3, mati['rho'], mati['name']))
+                    materials.append(Orthotropic2DMaterial(mati['E'], mati['E'], mati['G'], mati['nu'], mati['rho'], mati['name']))
             blade['precomp']['materials']     = materials
             blade['precomp']['material_dict'] = material_dict
 
@@ -974,6 +994,12 @@ class ReferenceBlade(object):
 
             if profile_i_rot_precomp[-1,0] != 1.:
                 profile_i_rot_precomp = np.row_stack((profile_i_rot_precomp, profile_i_rot_precomp[0,:]))
+
+            # 'web' at trailing edge needed for flatback airfoils
+            if profile_i_rot_precomp[0,1] != profile_i_rot_precomp[-1,1] and profile_i_rot_precomp[0,0] == profile_i_rot_precomp[-1,0]:
+                flatback = True
+            else:
+                flatback = False
 
 
             # import matplotlib.pyplot as plt
@@ -1069,19 +1095,13 @@ class ReferenceBlade(object):
             #     ss_end_nd_arc[-1] = ss_end_nd_arc[-1]/profile_i_rot[0, 0]
 
 
-
-
-            # 'web' at trailing edge needed for flatback airfoils
-            if blade['profile'][0,1,i] != blade['profile'][-1,1,i]:
-                flatback = True
-            else:
-                flatback = False
-
             # generate the Precomp composite stacks for chordwise regions
             upperCS[i], region_loc_ss = region_stacking(i, ss_idx, ss_start_nd_arc, ss_end_nd_arc, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], region_loc_ss)
             lowerCS[i], region_loc_ps = region_stacking(i, ps_idx, ps_start_nd_arc, ps_end_nd_arc, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], region_loc_ps)
             if len(web_idx)>0 or flatback:
                 websCS[i] = web_stacking(i, web_idx, web_start_nd_arc, web_end_nd_arc, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], flatback, upperCS[i])
+            else:
+                websCS[i] = CompositeSection([], [], [], [], [], [])
 
             
         blade['precomp']['upperCS']       = upperCS
@@ -1105,8 +1125,8 @@ class ReferenceBlade(object):
 if __name__ == "__main__":
 
     ## File managment
-    fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    # fname_input        = "turbine_inputs/BAR00.yaml"
+    # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
+    fname_input        = "turbine_inputs/BAR00.yaml"
     # fname_output       = "turbine_inputs/nrel5mw_mod_update_out.yaml"
     flag_write_out     = False
     flag_write_precomp = True

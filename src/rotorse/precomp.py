@@ -1094,6 +1094,7 @@ class PreCompWriter:
 
 
         for idx, (lower_i, upper_i, webs_i) in enumerate(zip(self.lower, self.upper, self.webs)):
+            print(idx)
 
             text = []
             text.append('Composite laminae lay-up inside the blade section\n')
