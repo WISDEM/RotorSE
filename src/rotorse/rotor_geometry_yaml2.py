@@ -55,17 +55,18 @@ def remap2grid(x_ref, y_ref, x, spline=PchipInterpolator):
 
     return y_out
 
-def remapWbreak(x_ref, y_ref, x0, idx_break, spline=PchipInterpolator):
-    # for interpolating on airfoil surface, split x into two sections and determine which to use
-    if x0 >= x_ref[idx_break]:
-        x = x_ref[idx_break:]
-        y = y_ref[idx_break:]
-    else:
-        x = x_ref[:idx_break+1]
-        y = y_ref[:idx_break+1]
-    return remap2grid(x, y, x0, spline=spline)
+# def remapWbreak(x_ref, y_ref, x0, idx_break, spline=PchipInterpolator):
+#     # for interpolating on airfoil surface, split x into two sections and determine which to use
+#     if x0 >= x_ref[idx_break]:
+#         x = x_ref[idx_break:]
+#         y = y_ref[idx_break:]
+#     else:
+#         x = x_ref[:idx_break+1]
+#         y = y_ref[:idx_break+1]
+#     return remap2grid(x, y, x0, spline=spline)
 
 def remapAirfoil(x_ref, y_ref, x0):
+    # for interpolating airfoil surface
     x = copy.copy(x_ref)
     y = copy.copy(y_ref)
     x_in = copy.copy(x0)
@@ -73,7 +74,6 @@ def remapAirfoil(x_ref, y_ref, x0):
     idx_le = np.argmin(x)
     x[:idx_le] *= -1.
 
-    # idx = np.where(np.diff(np.sign(np.diff(x0)))).tolist()
     idx = [ix0 for ix0, dx0 in enumerate(np.diff(x_in)) if dx0 >0][0]
     x_in[:idx] *= -1.
 

@@ -798,20 +798,20 @@ class BladeGeometry(Component):
         self.deriv_options['step_size'] = 1e-5
         
     def solve_nonlinear(self, params, unknowns, resids):
+        blade = copy.deepcopy(self.refBlade)
 
-        NINPUT = len(self.refBlade['ctrl_pts']['r_in'])
+        NINPUT = len(blade['ctrl_pts']['r_in'])
 
         Rhub = params['hubFraction'] * params['bladeLength']
         Rtip = Rhub + params['bladeLength']
 
         unknowns['Rhub']     = Rhub
         unknowns['Rtip']     = Rtip
-        r_in                 = np.r_[0.0, self.refBlade['ctrl_pts']['r_cylinder'].tolist(), np.linspace(params['r_max_chord'], 1.0, NINPUT-2)]
-        unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.r_[0.0, self.refBlade['ctrl_pts']['r_cylinder'].tolist(), np.linspace(params['r_max_chord'], 1.0, NINPUT-2)]
-        # r_in                 = self.refBlade['ctrl_pts']['r_in']
+        r_in                 = np.r_[0.0, blade['ctrl_pts']['r_cylinder'].tolist(), np.linspace(params['r_max_chord'], 1.0, NINPUT-2)]
+        unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.r_[0.0, blade['ctrl_pts']['r_cylinder'].tolist(), np.linspace(params['r_max_chord'], 1.0, NINPUT-2)]
+        # r_in                 = blade['ctrl_pts']['r_in']
         # unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.array(r_in)
 
-        blade = copy.deepcopy(self.refBlade)
         blade['ctrl_pts']['bladeLength'] = params['bladeLength']
         blade['ctrl_pts']['r_in']        = r_in
         blade['ctrl_pts']['chord_in']    = params['chord_in']
