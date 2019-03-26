@@ -65,6 +65,19 @@ def remapWbreak(x_ref, y_ref, x0, idx_break, spline=PchipInterpolator):
         y = y_ref[:idx_break+1]
     return remap2grid(x, y, x0, spline=spline)
 
+def remapAirfoil(x_ref, y_ref, x0):
+    x = copy.copy(x_ref)
+    y = copy.copy(y_ref)
+    x_in = copy.copy(x0)
+
+    idx_le = np.argmin(x)
+    x[:idx_le] *= -1.
+
+    # idx = np.where(np.diff(np.sign(np.diff(x0)))).tolist()
+    idx = [ix0 for ix0, dx0 in enumerate(np.diff(x_in)) if dx0 >0][0]
+    x_in[:idx] *= -1.
+
+    return remap2grid(x, y, x_in)
 
 def arc_length(x, y, high_fidelity=False):
     npts = len(x)
@@ -407,30 +420,35 @@ class ReferenceBlade(object):
         AFref_n  = len(af_labels)
         AFref_xy = np.zeros((self.NPTS_AfProfile, 2, AFref_n))
 
-        for afi, af_label in enumerate(af_labels):
+        for afi, af_label in enumerate(af_labels[::-1]):
             points = np.column_stack((AFref[af_label]['coordinates']['x'], AFref[af_label]['coordinates']['y']))
-
+ 
             # check that airfoil points are declared from the TE suction side to TE pressure side
             idx_le = np.argmin(AFref[af_label]['coordinates']['x'])
             if np.mean(AFref[af_label]['coordinates']['y'][:idx_le]) > 0.:
                 points = np.flip(points, axis=0)
-                # airfoil_coordinate_warning = 'Ontology Input Error: Airfoil coordinates for "%s" should be entered from TE suction side to TE pressure side \nCorrected for and continuing. To disable future warnings, correct input file.' % AFref[af_label]['name']
-                # warnings.warn(airfoil_coordinate_warning)
 
-            af = AirfoilShape(points=points)
-            af.redistribute(self.NPTS_AfProfile, dLE=True)
+            if afi == 0:
+                af = AirfoilShape(points=points)
+                af.redistribute(self.NPTS_AfProfile, even=False, dLE=True)
+                s = af.s
+                af_points = af.points
+            else:
+                af_points = np.column_stack((AFref_xy[:,0,0], remapAirfoil(points[:,0], points[:,1], AFref_xy[:,0,0])))
 
-            af_points = af.points
             if [1,0] not in af_points.tolist():
-                af_points[:,0] -= af.LE[0]
-                af_points[:,1] -= af.LE[1]
+                af_points[:,0] -= af_points[np.argmin(af_points[:,0]), 0]
             c = max(af_points[:,0])-min(af_points[:,0])
             af_points[:,:] /= c
 
+
             AFref_xy[:,:,afi] = af_points
+
+        
+        AFref_xy = np.flip(AFref_xy, axis=2)
             
         # Spanwise thickness interpolation
-        spline = Akima1DInterpolator
+        spline = PchipInterpolator
         profile_spline = spline(af_thk, AFref_xy, axis=2)
         blade['profile'] = profile_spline(blade['pf']['rthick'])
         blade['profile_spline'] = profile_spline
@@ -796,14 +814,6 @@ class ReferenceBlade(object):
         blade['st']['layers'][idx_te]['thickness']['grid']   = self.s.tolist()
         blade['st']['layers'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s).tolist()
 
-        # print(blade['ctrl_pts']['r_in'])
-        # print(blade['ctrl_pts']['theta_in'])
-        # import matplotlib.pyplot as plt
-        # plt.plot(self.s, thk_te, label='input')
-        # plt.plot(self.s, thk_te2, label='fit')
-        # plt.legend()
-        # plt.show()
-
         return blade
 
         
@@ -1002,11 +1012,6 @@ class ReferenceBlade(object):
                 flatback = False
 
 
-            # import matplotlib.pyplot as plt
-            # plt.plot(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
-            # plt.show()
-
-
             profile[i] = Profile.initWithTEtoTEdata(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
             # profile[i] = Profile.initWithTEtoTEdata(blade['profile'][:,0,i], blade['profile'][:,1,i])
 
@@ -1126,10 +1131,11 @@ if __name__ == "__main__":
 
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_input        = "turbine_inputs/BAR00.yaml"
+    # fname_input        = "turbine_inputs/BAR00.yaml"
+    fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
     # fname_output       = "turbine_inputs/nrel5mw_mod_update_out.yaml"
     flag_write_out     = False
-    flag_write_precomp = True
+    flag_write_precomp = False
     dir_precomp_out    = "turbine_inputs/precomp"
 
     ## Load and Format Blade

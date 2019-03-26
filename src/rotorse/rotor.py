@@ -746,8 +746,8 @@ if __name__ == '__main__':
     # Turbine Ontology input
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
     # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
-    # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
-    fname_input = "turbine_inputs/BAR00.yaml"
+    fname_input = "turbine_inputs/IEAonshoreWT.yaml"
+    # fname_input = "turbine_inputs/BAR00.yaml"
     
     Analysis_Level = -1 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
 

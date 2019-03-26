@@ -2,7 +2,7 @@ from __future__ import print_function
 import sys
 import numpy as np
 from scipy.optimize import minimize
-from scipy.interpolate import pchip, Akima1DInterpolator
+from scipy.interpolate import pchip, Akima1DInterpolator, PchipInterpolator
 
 from rotorse.geometry_tools.geom_tools import calculate_length, curvature
 from rotorse.geometry_tools.cubicspline import NaturalCubicSpline
@@ -52,7 +52,7 @@ class Curve(object):
         self._splines = []
 
         for j in range(np.shape(self.points)[1]):
-            self._splines.append(NaturalCubicSpline(self.s, self.points[:, j]))
+            self._splines.append(PchipInterpolator(self.s, self.points[:, j]))
 
     def redistribute(self, dist=None, s=None):
 
@@ -135,7 +135,7 @@ class AirfoilShape(Curve):
 
         return ds1
 
-    def redistribute(self, ni, even=False, dist=None, dLE=False, dTE=-1.):
+    def redistribute(self, ni, even=False, dist=None, dLE=False, dTE=-1., s=None):
         """
         redistribute the points on the airfoil using fusedwind.lib.distfunc
 
@@ -166,7 +166,7 @@ class AirfoilShape(Curve):
         elif dLE:
             dist = [[0., dTE, 1], [self.sLE, self.leading_edge_dist(ni), ni / 2], [1., dTE, ni]]
 
-        super(AirfoilShape, self).redistribute(dist)
+        super(AirfoilShape, self).redistribute(dist, s=s)
 
         return self
 
