@@ -303,6 +303,14 @@ class ReferenceBlade(object):
                     st['layers'][idx_sec][var]['values'] = [float(val) for val in st['layers'][idx_sec][var]['values'] if val != None]
                 except:
                     pass
+        for idx_sec, sec in enumerate(st['webs']):
+            for var in st['webs'][idx_sec].keys():
+                try:
+                    _ = st['webs'][idx_sec][var].keys()
+                    st['webs'][idx_sec][var]['grid'] = [float(r) for val, r in zip(st['webs'][idx_sec][var]['values'], st['webs'][idx_sec][var]['grid']) if val != None]
+                    st['webs'][idx_sec][var]['values'] = [float(val) for val in st['webs'][idx_sec][var]['values'] if val != None]
+                except:
+                    pass
         wt_out['components']['blade']['internal_structure_2d_fem'] = st
 
         f = open(fname, "w")
@@ -1133,8 +1141,8 @@ if __name__ == "__main__":
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
     # fname_input        = "turbine_inputs/BAR00.yaml"
     fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
-    # fname_output       = "turbine_inputs/nrel5mw_mod_update_out.yaml"
-    flag_write_out     = False
+    fname_output       = "turbine_inputs/test_out.yaml"
+    flag_write_out     = True
     flag_write_precomp = False
     dir_precomp_out    = "turbine_inputs/precomp"
 
