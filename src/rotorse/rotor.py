@@ -684,6 +684,7 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
     rotor['rho']              = 1.225  # (Float, kg/m**3): density of air
     rotor['mu']               = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['wind.shearExp']    = 0.25  # (Float): shear exponent
+    rotor['shape_parameter']  = 2.0
     rotor['hub_height']       = blade['config']['hub_height']  # (Float, m): hub height
     rotor['turbine_class']    = TURBINE_CLASS[blade['config']['turbine_class'].upper()] #TURBINE_CLASS['I']  # (Enum): IEC turbine class
     rotor['turbulence_class'] = TURBULENCE_CLASS[blade['config']['turbulence_class'].upper()]  # (Enum): IEC turbulence class class
@@ -818,7 +819,7 @@ if __name__ == '__main__':
     rotor.run()
 
     print('Run Time = ', time.time()-tt)
-    print('AEP =', rotor['AEP'])
+    print('AEP =', rotor['AEP_in'])
     print('diameter =', rotor['diameter'])
     print('ratedConditions.V =', rotor['rated_V'])
     print('ratedConditions.Omega =', rotor['rated_Omega'])
