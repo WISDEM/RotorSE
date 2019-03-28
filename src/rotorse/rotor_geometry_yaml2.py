@@ -298,9 +298,19 @@ class ReferenceBlade(object):
         for idx_sec, sec in enumerate(st['layers']):
             for var in st['layers'][idx_sec].keys():
                 try:
+                    # if st['layers'][idx_sec]['name'] == 'Web_aft_skin':
+                    #     print(st['layers'][idx_sec]['name'], var)
+                    #     print(st['layers'][idx_sec][var]['grid'], type(st['layers'][idx_sec][var]['grid']))
+                    #     print(st['layers'][idx_sec][var]['values'], type(st['layers'][idx_sec][var]['values']))
+
                     _ = st['layers'][idx_sec][var].keys()
+
                     st['layers'][idx_sec][var]['grid'] = [float(r) for val, r in zip(st['layers'][idx_sec][var]['values'], st['layers'][idx_sec][var]['grid']) if val != None]
                     st['layers'][idx_sec][var]['values'] = [float(val) for val in st['layers'][idx_sec][var]['values'] if val != None]
+                    
+                    if st['layers'][idx_sec][var]['values'] == []:
+                        del st['layers'][idx_sec][var]
+                        continue
                 except:
                     pass
         for idx_sec, sec in enumerate(st['webs']):
@@ -1140,8 +1150,9 @@ if __name__ == "__main__":
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
     # fname_input        = "turbine_inputs/BAR00.yaml"
-    fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
-    fname_output       = "turbine_inputs/test_out.yaml"
+    # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
+    fname_input        = "turbine_inputs/test_out.yaml"
+    fname_output       = "turbine_inputs/test_out2.yaml"
     flag_write_out     = True
     flag_write_precomp = False
     dir_precomp_out    = "turbine_inputs/precomp"
