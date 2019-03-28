@@ -160,18 +160,19 @@ class ReferenceBlade(object):
 
         t1 = time.time()
         # Renaming and converting lists to dicts for simplicity
-        blade_ref = copy.deepcopy(self.wt_ref['components']['blade'])
+        # blade_ref = copy.deepcopy(self.wt_ref['components']['blade'])
         af_ref    = {}
         for afi in self.wt_ref['airfoils']:
             af_ref[afi['name']] = afi
 
         # build blade
-        blade = {}
+        # blade = {}
+        blade = copy.deepcopy(self.wt_ref['components']['blade'])
         blade = self.set_configuration(blade, self.wt_ref)
-        blade = self.remap_composites(blade, blade_ref)
-        blade = self.remap_planform(blade, blade_ref, af_ref)
-        blade = self.remap_profiles(blade, blade_ref, af_ref)
-        blade = self.remap_polars(blade, blade_ref, af_ref)
+        blade = self.remap_composites(blade)
+        blade = self.remap_planform(blade, af_ref)
+        blade = self.remap_profiles(blade, af_ref)
+        blade = self.remap_polars(blade, af_ref)
         blade = self.calc_composite_bounds(blade)
         blade = self.calc_control_points(blade, self.r_in)
         
@@ -278,31 +279,40 @@ class ReferenceBlade(object):
 
 
         #### Build Output dictionary
+        blade_out = copy.deepcopy(blade)
 
         # Planform
-        wt_out['components']['blade']['outer_shape_bem']['chord']['values']             = blade['pf']['chord'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['chord']['grid']               = blade['pf']['s'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['twist']['values']             = np.radians(blade['pf']['theta']).tolist()
-        wt_out['components']['blade']['outer_shape_bem']['twist']['grid']               = blade['pf']['s'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['pitch_axis']['values']        = blade['pf']['p_le'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['pitch_axis']['grid']          = blade['pf']['s'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['values']  = blade['pf']['r'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['grid']    = blade['pf']['s'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['values']  = blade['pf']['precurve'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['grid']    = blade['pf']['s'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['values']  = blade['pf']['presweep'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['grid']    = blade['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['chord']['values']             = blade_out['pf']['chord'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['chord']['grid']               = blade_out['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['twist']['values']             = np.radians(blade_out['pf']['theta']).tolist()
+        wt_out['components']['blade']['outer_shape_bem']['twist']['grid']               = blade_out['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['pitch_axis']['values']        = blade_out['pf']['p_le'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['pitch_axis']['grid']          = blade_out['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['values']  = blade_out['pf']['r'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['grid']    = blade_out['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['values']  = blade_out['pf']['precurve'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['grid']    = blade_out['pf']['s'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['values']  = blade_out['pf']['presweep'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['grid']    = blade_out['pf']['s'].tolist()
 
         # Composite layups
-        st = blade['st']
+        st = blade_out['st']
+        # for var in st['reference_axis'].keys():
+        #     try:
+        #         _ = st['reference_axis'][var].keys()
+
+        #         st['reference_axis'][var]['grid'] = [float(r) for val, r in zip(st['reference_axis'][var]['values'], st['reference_axis'][var]['grid']) if val != None]
+        #         st['reference_axis'][var]['values'] = [float(val) for val in st['reference_axis'][var]['values'] if val != None]
+        #         reference_axis
+        #         if st['reference_axis'][idx_sec][var]['values'] == []:
+        #             del st['reference_axis'][var]
+        #             continue
+        #     except:
+        #         pass
+
         for idx_sec, sec in enumerate(st['layers']):
             for var in st['layers'][idx_sec].keys():
                 try:
-                    # if st['layers'][idx_sec]['name'] == 'Web_aft_skin':
-                    #     print(st['layers'][idx_sec]['name'], var)
-                    #     print(st['layers'][idx_sec][var]['grid'], type(st['layers'][idx_sec][var]['grid']))
-                    #     print(st['layers'][idx_sec][var]['values'], type(st['layers'][idx_sec][var]['values']))
-
                     _ = st['layers'][idx_sec][var].keys()
 
                     st['layers'][idx_sec][var]['grid'] = [float(r) for val, r in zip(st['layers'][idx_sec][var]['values'], st['layers'][idx_sec][var]['grid']) if val != None]
@@ -319,6 +329,10 @@ class ReferenceBlade(object):
                     _ = st['webs'][idx_sec][var].keys()
                     st['webs'][idx_sec][var]['grid'] = [float(r) for val, r in zip(st['webs'][idx_sec][var]['values'], st['webs'][idx_sec][var]['grid']) if val != None]
                     st['webs'][idx_sec][var]['values'] = [float(val) for val in st['webs'][idx_sec][var]['values'] if val != None]
+
+                    if st['layers'][idx_sec][var]['values'] == []:
+                        del st['layers'][idx_sec][var]
+                        continue
                 except:
                     pass
         wt_out['components']['blade']['internal_structure_2d_fem'] = st
@@ -403,30 +417,30 @@ class ReferenceBlade(object):
 
         return blade
 
-    def remap_planform(self, blade, blade_ref, af_ref):
+    def remap_planform(self, blade, af_ref):
 
         blade['pf'] = {}
 
         blade['pf']['s']        = self.s
-        blade['pf']['chord']    = remap2grid(blade_ref['outer_shape_bem']['chord']['grid'], blade_ref['outer_shape_bem']['chord']['values'], self.s)
-        blade['pf']['theta']    = np.degrees(remap2grid(blade_ref['outer_shape_bem']['twist']['grid'], blade_ref['outer_shape_bem']['twist']['values'], self.s))
-        blade['pf']['p_le']     = remap2grid(blade_ref['outer_shape_bem']['pitch_axis']['grid'], blade_ref['outer_shape_bem']['pitch_axis']['values'], self.s)
-        blade['pf']['r']        = remap2grid(blade_ref['outer_shape_bem']['reference_axis']['x']['grid'], blade_ref['outer_shape_bem']['reference_axis']['x']['values'], self.s)
-        blade['pf']['precurve'] = remap2grid(blade_ref['outer_shape_bem']['reference_axis']['y']['grid'], blade_ref['outer_shape_bem']['reference_axis']['y']['values'], self.s)
-        blade['pf']['presweep'] = remap2grid(blade_ref['outer_shape_bem']['reference_axis']['z']['grid'], blade_ref['outer_shape_bem']['reference_axis']['z']['values'], self.s)
+        blade['pf']['chord']    = remap2grid(blade['outer_shape_bem']['chord']['grid'], blade['outer_shape_bem']['chord']['values'], self.s)
+        blade['pf']['theta']    = np.degrees(remap2grid(blade['outer_shape_bem']['twist']['grid'], blade['outer_shape_bem']['twist']['values'], self.s))
+        blade['pf']['p_le']     = remap2grid(blade['outer_shape_bem']['pitch_axis']['grid'], blade['outer_shape_bem']['pitch_axis']['values'], self.s)
+        blade['pf']['r']        = remap2grid(blade['outer_shape_bem']['reference_axis']['x']['grid'], blade['outer_shape_bem']['reference_axis']['x']['values'], self.s)
+        blade['pf']['precurve'] = remap2grid(blade['outer_shape_bem']['reference_axis']['y']['grid'], blade['outer_shape_bem']['reference_axis']['y']['values'], self.s)
+        blade['pf']['presweep'] = remap2grid(blade['outer_shape_bem']['reference_axis']['z']['grid'], blade['outer_shape_bem']['reference_axis']['z']['values'], self.s)
 
-        thk_ref = [af_ref[af]['relative_thickness'] for af in blade_ref['outer_shape_bem']['airfoil_position']['labels']]
-        blade['pf']['rthick']   = remap2grid(blade_ref['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
+        thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
+        blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
 
         return blade
 
-    def remap_profiles(self, blade, blade_ref, AFref, spline=PchipInterpolator):
+    def remap_profiles(self, blade, AFref, spline=PchipInterpolator):
 
         # Get airfoil thicknesses in decending order and cooresponding airfoil names
-        AFref_thk = [AFref[af]['relative_thickness'] for af in blade_ref['outer_shape_bem']['airfoil_position']['labels']]
+        AFref_thk = [AFref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
 
         af_thk_dict = {}
-        for afi in blade_ref['outer_shape_bem']['airfoil_position']['labels']:
+        for afi in blade['outer_shape_bem']['airfoil_position']['labels']:
             afi_thk = AFref[afi]['relative_thickness']
             if afi_thk not in af_thk_dict.keys():
                 af_thk_dict[afi_thk] = afi
@@ -481,17 +495,17 @@ class ReferenceBlade(object):
 
         return blade
 
-    def remap_polars(self, blade, blade_ref, AFref, spline=PchipInterpolator):
+    def remap_polars(self, blade, AFref, spline=PchipInterpolator):
         # TODO: does not support multiple polars at different Re, takes the first polar from list
 
         ## Set angle of attack grid for airfoil resampling
         # assume grid for last airfoil is sufficient
-        alpha = np.array(AFref[blade_ref['outer_shape_bem']['airfoil_position']['labels'][-1]]['polars'][0]['c_l']['grid'])
-        Re    = [AFref[blade_ref['outer_shape_bem']['airfoil_position']['labels'][-1]]['polars'][0]['re']]
+        alpha = np.array(AFref[blade['outer_shape_bem']['airfoil_position']['labels'][-1]]['polars'][0]['c_l']['grid'])
+        Re    = [AFref[blade['outer_shape_bem']['airfoil_position']['labels'][-1]]['polars'][0]['re']]
 
         # get reference airfoil polars
         af_ref = []
-        for afi in blade_ref['outer_shape_bem']['airfoil_position']['labels']:
+        for afi in blade['outer_shape_bem']['airfoil_position']['labels']:
             if afi not in af_ref:
                 af_ref.append(afi)
 
@@ -534,16 +548,23 @@ class ReferenceBlade(object):
         return blade
 
 
-    def remap_composites(self, blade, blade_ref):
+    def remap_composites(self, blade):
         # Remap composite sections to a common grid
         t = time.time()
         
-        st = copy.deepcopy(blade_ref['internal_structure_2d_fem'])
+        # st = copy.deepcopy(blade_ref['internal_structure_2d_fem'])
+        # print('remap_composites copy %f'%(time.time()-t))
+        st = blade['internal_structure_2d_fem']
         st = self.calc_spanwise_grid(st)
+
+        for var in st['reference_axis']:
+            st['reference_axis'][var]['values'] = remap2grid(st['reference_axis'][var]['grid'], st['reference_axis'][var]['values'], self.s).tolist()
+            st['reference_axis'][var]['grid'] = self.s.tolist()
 
         # remap
         for type_sec, idx_sec, sec in zip(['webs']*len(st['webs'])+['layers']*len(st['layers']), range(len(st['webs']))+range(len(st['layers'])), st['webs']+st['layers']):
             for var in sec.keys():
+                # print(sec['name'], var)
                 if type(sec[var]) not in [str, bool]:
                     if 'grid' in sec[var].keys():
                         if len(sec[var]['grid']) > 0.:
@@ -565,20 +586,6 @@ class ReferenceBlade(object):
                             else:
                                 st[type_sec][idx_sec][var]['values'] = remap2grid(sec[var]['grid'], sec[var]['values'], self.s).tolist()
                             st[type_sec][idx_sec][var]['grid'] = self.s
-
-            ## if vars not provided as inputs
-            # input_vars = st['layers'][idx_sec].keys()
-            # if 'fiber_orientation' not in input_vars:
-            #     st['layers'][idx_sec]['fiber_orientation'] = {}
-            #     st['layers'][idx_sec]['fiber_orientation']['grid'] = self.s
-            #     st['layers'][idx_sec]['fiber_orientation']['values'] = [0. if thki != None else None for thki in st['layers'][idx_sec]['thickness']['values']]
-            # if 'web_flag' not in input_vars:
-            #     st['layers'][idx_sec]['web_flag'] = False
-            # if 'full_circumference' not in input_vars:
-            #     if all(['midpoint' not in input_vars, 'width' not in input_vars, 'start_nd_arc' not in input_vars, 'end_nd_arc' not in input_vars]):
-            #         st['layers'][idx_sec]['full_circumference'] = True
-            #     else:
-            #         st['layers'][idx_sec]['full_circumference'] = False
 
         blade['st'] = st
 
@@ -629,15 +636,15 @@ class ReferenceBlade(object):
             ########
 
         # Format profile for interpolation
-        profile   = copy.copy(blade['profile'])
 
-        profile_d = copy.copy(profile)
-        profile_d[:,0,:] = profile[:,0,:] - blade['pf']['p_le'][np.newaxis, :]
+        profile_d = copy.copy(blade['profile'])
+        profile_d[:,0,:] = profile_d[:,0,:] - blade['pf']['p_le'][np.newaxis, :]
         profile_d = np.flip(profile_d*blade['pf']['chord'][np.newaxis, np.newaxis, :], axis=0)
 
         for i in range(self.NPTS):
             s_all = []
 
+            t9 = time.time()
             profile_i = copy.copy(profile_d[:,:,i])
             if list(profile_i[-1,:]) != list(profile_i[-1,:]):
                 TE = np.mean((profile_i[-1,:], profile_i[-1,:]), axis=0)
@@ -821,7 +828,7 @@ class ReferenceBlade(object):
         blade['pf']['chord']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['chord_in'], self.s)
         blade['pf']['theta']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['theta_in'], self.s)
         blade['pf']['r']        = blade['ctrl_pts']['bladeLength']*np.array(self.s)
-        blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s)
+        blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s).tolist()
         blade['pf']['presweep'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['presweep_in'], self.s)
 
         idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
@@ -995,11 +1002,13 @@ class ReferenceBlade(object):
         
             ## Profiles
             # rotate
+            
             profile_i = np.flip(copy.copy(blade['profile'][:,:,i]), axis=0)
             profile_i_rot = np.column_stack(rotate(blade['pf']['p_le'][i], 0., profile_i[:,0], profile_i[:,1], -1.*np.radians(blade['pf']['theta'][i])))
             # normalize
             profile_i_rot[:,0] -= min(profile_i_rot[:,0])
             profile_i_rot = profile_i_rot/ max(profile_i_rot[:,0])
+
 
 
             # handle rotated flat backs by connecting them to furthest aft point
@@ -1011,7 +1020,6 @@ class ReferenceBlade(object):
             # if list(profile_i[-1,:]) != list(profile_i[-1,:]):
             #     TE = np.mean((profile_i[-1,:], profile_i[-1,:]), axis=0)
             #     profile_i = np.row_stack((TE, profile_i, TE))
-
             profile_i_rot_precomp = copy.copy(profile_i_rot)
             idx_le_precomp = np.argmax(profile_i_rot_precomp[:,0])
             if idx_le_precomp != 0:
@@ -1028,7 +1036,6 @@ class ReferenceBlade(object):
                 flatback = True
             else:
                 flatback = False
-
 
             profile[i] = Profile.initWithTEtoTEdata(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
             # profile[i] = Profile.initWithTEtoTEdata(blade['profile'][:,0,i], blade['profile'][:,1,i])
@@ -1057,8 +1064,13 @@ class ReferenceBlade(object):
             web_end_nd_arc   = []
             web_idx          = []
 
+            time9 = time.time()
             # Determine spanwise composite layer elements that are non-zero at this spanwise location,
             # determine their chord-wise start and end location on the pressure and suctions side
+
+
+            spline_arc2xnd = PchipInterpolator(profile_i_arc, profile_i_rot[:,0])
+
             for idx_sec, sec in enumerate(blade['st']['layers']):
 
                 if 'web' not in sec.keys():
@@ -1067,7 +1079,7 @@ class ReferenceBlade(object):
                             ss_idx.append(idx_sec)
                             if sec['start_nd_arc']['values'][i] < loc_LE:
                                 # ss_start_nd_arc.append(sec['start_nd_arc']['values'][i])
-                                ss_end_nd_arc_temp = float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['start_nd_arc']['values'][i]))
+                                ss_end_nd_arc_temp = float(spline_arc2xnd(sec['start_nd_arc']['values'][i]))
                                 if ss_end_nd_arc_temp == profile_i_rot[0,0] and profile_i_rot[0,0] != 1.:
                                     ss_end_nd_arc_temp = 1.
                                 ss_end_nd_arc.append(ss_end_nd_arc_temp)
@@ -1075,7 +1087,7 @@ class ReferenceBlade(object):
                                 ss_end_nd_arc.append(1.)
                             # ss_end_nd_arc.append(min(sec['end_nd_arc']['values'][i], loc_LE)/loc_LE)
                             if sec['end_nd_arc']['values'][i] < loc_LE:
-                                ss_start_nd_arc.append(float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['end_nd_arc']['values'][i])))
+                                ss_start_nd_arc.append(float(spline_arc2xnd(sec['end_nd_arc']['values'][i])))
                             else:
                                 ss_start_nd_arc.append(0.)
                             
@@ -1088,14 +1100,14 @@ class ReferenceBlade(object):
                                 # ps_start_nd_arc.append(float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['start_nd_arc']['values'][i])))
                                 ps_end_nd_arc.append(1.)
                             else:
-                                ps_end_nd_arc_temp = float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['end_nd_arc']['values'][i]))
+                                ps_end_nd_arc_temp = float(spline_arc2xnd(sec['end_nd_arc']['values'][i]))
                                 if ps_end_nd_arc_temp == profile_i_rot[-1,0] and profile_i_rot[-1,0] != 1.:
                                     ps_end_nd_arc_temp = 1.
                                 ps_end_nd_arc.append(ps_end_nd_arc_temp)
                             if sec['start_nd_arc']['values'][i] < loc_LE:
                                 ps_start_nd_arc.append(0.)
                             else:
-                                ps_start_nd_arc.append(float(remap2grid(profile_i_arc, profile_i_rot[:,0], sec['start_nd_arc']['values'][i])))
+                                ps_start_nd_arc.append(float(spline_arc2xnd(sec['start_nd_arc']['values'][i])))
 
 
                 else:
@@ -1112,10 +1124,7 @@ class ReferenceBlade(object):
                         web_end_nd_arc.append(end_nd_arc)
 
 
-            # if ps_end_nd_arc[-1] != 1.:
-            #     ps_end_nd_arc[-1] = ps_end_nd_arc[-1]/profile_i_rot[-1, 0]
-            # if ss_end_nd_arc[-1] != 1.:
-            #     ss_end_nd_arc[-1] = ss_end_nd_arc[-1]/profile_i_rot[0, 0]
+            # print(i, time.time()-time9)
 
 
             # generate the Precomp composite stacks for chordwise regions
@@ -1126,7 +1135,6 @@ class ReferenceBlade(object):
             else:
                 websCS[i] = CompositeSection([], [], [], [], [], [])
 
-            
         blade['precomp']['upperCS']       = upperCS
         blade['precomp']['lowerCS']       = lowerCS
         blade['precomp']['websCS']        = websCS
@@ -1149,9 +1157,9 @@ if __name__ == "__main__":
 
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    # fname_input        = "turbine_inputs/BAR00.yaml"
+    fname_input        = "turbine_inputs/BAR02.yaml"
     # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
-    fname_input        = "turbine_inputs/test_out.yaml"
+    # fname_input        = "turbine_inputs/test_out.yaml"
     fname_output       = "turbine_inputs/test_out2.yaml"
     flag_write_out     = True
     flag_write_precomp = False
