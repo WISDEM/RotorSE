@@ -791,6 +791,8 @@ class BladeGeometry(Component):
         self.add_output('sector_idx_strain_spar', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
         self.add_output('sector_idx_strain_te', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
 
+        self.add_output('blade_out', val={}, desc='updated blade dictionary for ontology')
+
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
         self.deriv_options['form'] = 'central'
@@ -861,6 +863,8 @@ class BladeGeometry(Component):
         #   the middle region is selected with int(n_reg/2), note for an even number of regions, this rounds up
         unknowns['sector_idx_strain_spar'] = blade_out['precomp']['sector_idx_strain_spar']
         unknowns['sector_idx_strain_te']   = blade_out['precomp']['sector_idx_strain_te']
+
+        unknowns['blade_out'] = blade_out
         
 class Location(Component):
     def __init__(self):

@@ -684,7 +684,6 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
     rotor['rho']              = 1.225  # (Float, kg/m**3): density of air
     rotor['mu']               = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['wind.shearExp']    = 0.25  # (Float): shear exponent
-    rotor['shape_parameter']  = 2.0
     rotor['hub_height']       = blade['config']['hub_height']  # (Float, m): hub height
     rotor['turbine_class']    = TURBINE_CLASS[blade['config']['turbine_class'].upper()] #TURBINE_CLASS['I']  # (Enum): IEC turbine class
     rotor['turbulence_class'] = TURBULENCE_CLASS[blade['config']['turbulence_class'].upper()]  # (Enum): IEC turbulence class class
@@ -747,8 +746,10 @@ if __name__ == '__main__':
     # Turbine Ontology input
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
     # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_input = "turbine_inputs/IEAonshoreWT.yaml"
-    # fname_input = "turbine_inputs/BAR00.yaml"
+    # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
+    fname_input = "turbine_inputs/BAR02.yaml"
+
+    fname_output = "turbine_inputs/test_out.yaml"
     
     Analysis_Level = -1 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
 
@@ -811,15 +812,17 @@ if __name__ == '__main__':
     rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=False, regulation_reg_III=False, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
     #rotor.setup(check=False)
     rotor.setup()
-
     rotor = Init_RotorSE_wRefBlade(rotor, blade, fst_vt=fst_vt)
+    # rotor['chord_in'][-2] *= 4.
 
     # === run and outputs ===
     tt = time.time()
     rotor.run()
 
+    # refBlade.write_ontology(fname_output, rotor['blade_out'], refBlade.wt_ref)
+
     print('Run Time = ', time.time()-tt)
-    print('AEP =', rotor['AEP_in'])
+    print('AEP =', rotor['AEP'])
     print('diameter =', rotor['diameter'])
     print('ratedConditions.V =', rotor['rated_V'])
     print('ratedConditions.Omega =', rotor['rated_Omega'])
