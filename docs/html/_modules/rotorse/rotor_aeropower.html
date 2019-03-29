@@ -1,0 +1,1071 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>rotorse.rotor_aeropower &#8212; RotorSE 0.1.0 documentation</title>
+    <link rel="stylesheet" href="../../_static/nrel.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">RotorSE 0.1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for rotorse.rotor_aeropower</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python</span>
+<span class="c1"># encoding: utf-8</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">rotor.py</span>
+
+<span class="sd">Created by Andrew Ning on 2012-02-28.</span>
+<span class="sd">Copyright (c)  NREL. All rights reserved.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># from __future__ import print_function</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">openmdao.api</span> <span class="k">import</span> <span class="n">IndepVarComp</span><span class="p">,</span> <span class="n">Component</span><span class="p">,</span> <span class="n">Group</span><span class="p">,</span> <span class="n">Problem</span><span class="p">,</span> <span class="n">Brent</span><span class="p">,</span> <span class="n">ScipyGMRES</span>
+<span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="k">import</span> <span class="n">brentq</span>
+
+<span class="kn">from</span> <span class="nn">ccblade.ccblade_component</span> <span class="k">import</span> <span class="n">CCBladeGeometry</span><span class="p">,</span> <span class="n">CCBladePower</span>
+
+<span class="kn">from</span> <span class="nn">commonse.distribution</span> <span class="k">import</span> <span class="n">RayleighCDF</span><span class="p">,</span> <span class="n">WeibullWithMeanCDF</span>
+<span class="kn">from</span> <span class="nn">commonse.utilities</span> <span class="k">import</span> <span class="n">vstack</span><span class="p">,</span> <span class="n">trapz_deriv</span><span class="p">,</span> <span class="n">linspace_with_deriv</span><span class="p">,</span> <span class="n">smooth_min</span><span class="p">,</span> <span class="n">smooth_abs</span>
+<span class="kn">from</span> <span class="nn">commonse.environment</span> <span class="k">import</span> <span class="n">PowerWind</span>
+<span class="c1">#from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp</span>
+<span class="kn">from</span> <span class="nn">akima</span> <span class="k">import</span> <span class="n">Akima</span>
+<span class="kn">from</span> <span class="nn">rotor_geometry</span> <span class="k">import</span> <span class="n">RotorGeometry</span><span class="p">,</span> <span class="n">NREL5MW</span><span class="p">,</span> <span class="n">DTU10MW</span><span class="p">,</span> <span class="n">DRIVETRAIN_TYPE</span>
+
+<span class="kn">from</span> <span class="nn">rotorse</span> <span class="k">import</span> <span class="n">RPM2RS</span><span class="p">,</span> <span class="n">RS2RPM</span>
+
+
+<span class="c1"># ---------------------</span>
+<span class="c1"># Base Components</span>
+<span class="c1"># ---------------------</span>
+
+
+<div class="viewcode-block" id="DrivetrainLossesBase"><a class="viewcode-back" href="../../documentation.html#rotorse.rotor_aeropower.DrivetrainLossesBase">[docs]</a><span class="k">class</span> <span class="nc">DrivetrainLossesBase</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;base component for drivetrain efficiency losses&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">npower</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">DrivetrainLossesBase</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;aeroPower&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npower</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;aerodynamic power&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;aeroTorque&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npower</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N*m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;aerodynamic torque&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;aeroThrust&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npower</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;aerodynamic thrust&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;ratedPower&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rated power&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;power&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npower</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;total power after drivetrain losses&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npower</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rpm curve after drivetrain losses&#39;</span><span class="p">)</span></div>
+
+<span class="c1"># ---------------------</span>
+<span class="c1"># Components</span>
+<span class="c1"># ---------------------</span>
+
+<span class="c1"># class MaxTipSpeed(Component):</span>
+
+<span class="c1">#     R = Float(iotype=&#39;in&#39;, units=&#39;m&#39;, desc=&#39;rotor radius&#39;)</span>
+<span class="c1">#     Vtip_max = Float(iotype=&#39;in&#39;, units=&#39;m/s&#39;, desc=&#39;maximum tip speed&#39;)</span>
+
+<span class="c1">#     Omega_max = Float(iotype=&#39;out&#39;, units=&#39;rpm&#39;, desc=&#39;maximum rotation speed&#39;)</span>
+
+<span class="c1">#     def execute(self):</span>
+
+<span class="c1">#         self.Omega_max = self.Vtip_max/self.R * RS2RPM</span>
+
+
+<span class="c1">#     def list_deriv_vars(self):</span>
+
+<span class="c1">#         inputs = (&#39;R&#39;, &#39;Vtip_max&#39;)</span>
+<span class="c1">#         outputs = (&#39;Omega_max&#39;,)</span>
+
+<span class="c1">#         return inputs, outputs</span>
+
+
+<span class="c1">#     def provideJ(self):</span>
+
+<span class="c1">#         J = np.array([[-self.Vtip_max/self.R**2*RS2RPM, RS2RPM/self.R]])</span>
+
+<span class="c1">#         return J</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># This Component is now no longer used, but I&#39;ll keep it around for now in case that changes.</span>
+<span class="sd">class Coefficients(Component):</span>
+<span class="sd">    def __init__(self, npts_coarse_power_curve):</span>
+<span class="sd">        super(Coefficients, self).__init__()</span>
+<span class="sd">        &quot;&quot;&quot;convert power, thrust, torque into nondimensional coefficient form&quot;&quot;&quot;</span>
+
+<span class="sd">        # inputs</span>
+<span class="sd">        self.add_param(&#39;V&#39;, val=np.zeros(npts_coarse_power_curve), units=&#39;m/s&#39;, desc=&#39;wind speed&#39;)</span>
+<span class="sd">        self.add_param(&#39;T&#39;, val=np.zeros(npts_coarse_power_curve), units=&#39;N&#39;, desc=&#39;rotor aerodynamic thrust&#39;)</span>
+<span class="sd">        self.add_param(&#39;Q&#39;, val=np.zeros(npts_coarse_power_curve), units=&#39;N*m&#39;, desc=&#39;rotor aerodynamic torque&#39;)</span>
+<span class="sd">        self.add_param(&#39;P&#39;, val=np.zeros(npts_coarse_power_curve), units=&#39;W&#39;, desc=&#39;rotor aerodynamic power&#39;)</span>
+
+<span class="sd">        # inputs used in normalization</span>
+<span class="sd">        self.add_param(&#39;R&#39;, val=0.0, units=&#39;m&#39;, desc=&#39;rotor radius&#39;)</span>
+<span class="sd">        self.add_param(&#39;rho&#39;, val=0.0, units=&#39;kg/m**3&#39;, desc=&#39;density of fluid&#39;)</span>
+
+
+<span class="sd">        # outputs</span>
+<span class="sd">        self.add_output(&#39;CT&#39;, val=np.zeros(npts_coarse_power_curve), desc=&#39;rotor aerodynamic thrust&#39;)</span>
+<span class="sd">        self.add_output(&#39;CQ&#39;, val=np.zeros(npts_coarse_power_curve), desc=&#39;rotor aerodynamic torque&#39;)</span>
+<span class="sd">        self.add_output(&#39;CP&#39;, val=np.zeros(npts_coarse_power_curve), desc=&#39;rotor aerodynamic power&#39;)</span>
+
+<span class="sd">	self.deriv_options[&#39;form&#39;] = &#39;central&#39;</span>
+<span class="sd">        self.deriv_options[&#39;check_form&#39;] = &#39;central&#39;</span>
+<span class="sd">	self.deriv_options[&#39;step_calc&#39;] = &#39;relative&#39;</span>
+
+
+<span class="sd">    def solve_nonlinear(self, params, unknowns, resids):</span>
+
+<span class="sd">        rho = params[&#39;rho&#39;]</span>
+<span class="sd">        V = params[&#39;V&#39;]</span>
+<span class="sd">        R = params[&#39;R&#39;]</span>
+<span class="sd">        T = params[&#39;T&#39;]</span>
+<span class="sd">        Q = params[&#39;Q&#39;]</span>
+<span class="sd">        P = params[&#39;P&#39;]</span>
+
+<span class="sd">        q = 0.5 * rho * V**2</span>
+<span class="sd">        A = pi * R**2</span>
+<span class="sd">        unknowns[&#39;CP&#39;] = P / (q * A * V)</span>
+<span class="sd">        unknowns[&#39;CT&#39;] = T / (q * A)</span>
+<span class="sd">        unknowns[&#39;CQ&#39;] = Q / (q * R * A)</span>
+
+
+<span class="sd">    def list_deriv_vars(self):</span>
+
+<span class="sd">        inputs = (&#39;V&#39;, &#39;T&#39;, &#39;Q&#39;, &#39;P&#39;, &#39;R&#39;)</span>
+<span class="sd">        outputs = (&#39;CT&#39;, &#39;CQ&#39;, &#39;CP&#39;)</span>
+
+<span class="sd">        return inputs, outputs</span>
+
+
+<span class="sd">    def linearize(self, params, unknowns, resids):</span>
+<span class="sd">        J = {}</span>
+
+<span class="sd">        rho = params[&#39;rho&#39;]</span>
+<span class="sd">        V = params[&#39;V&#39;]</span>
+<span class="sd">        R = params[&#39;R&#39;]</span>
+
+<span class="sd">        n = len(V)</span>
+<span class="sd">        CP = unknowns[&#39;CP&#39;]</span>
+<span class="sd">        CT = unknowns[&#39;CT&#39;]</span>
+<span class="sd">        CQ = unknowns[&#39;CQ&#39;]</span>
+
+<span class="sd">        q = 0.5 * rho * V**2</span>
+<span class="sd">        A = pi * R**2</span>
+
+
+<span class="sd">        J[&#39;CT&#39;, &#39;V&#39;] = np.diag(-2.0*CT/V)</span>
+<span class="sd">        J[&#39;CT&#39;, &#39;T&#39;] = np.diag(1.0/(q*A))</span>
+<span class="sd">        J[&#39;CT&#39;, &#39;Q&#39;] = np.zeros((n, n))</span>
+<span class="sd">        J[&#39;CT&#39;, &#39;P&#39;] = np.zeros((n, n))</span>
+<span class="sd">        J[&#39;CT&#39;, &#39;R&#39;] = -2.0*CT/R</span>
+
+<span class="sd">        J[&#39;CQ&#39;, &#39;V&#39;] = np.diag(-2.0*CQ/V)</span>
+<span class="sd">        J[&#39;CQ&#39;, &#39;T&#39;] = np.zeros((n, n))</span>
+<span class="sd">        J[&#39;CQ&#39;, &#39;Q&#39;] = np.diag(1.0/(q*R*A))</span>
+<span class="sd">        J[&#39;CQ&#39;, &#39;P&#39;] = np.zeros((n, n))</span>
+<span class="sd">        J[&#39;CQ&#39;, &#39;R&#39;] = -3.0*CQ/R</span>
+
+<span class="sd">        J[&#39;CP&#39;, &#39;V&#39;] = np.diag(-3.0*CP/V)</span>
+<span class="sd">        J[&#39;CP&#39;, &#39;T&#39;] = np.zeros((n, n))</span>
+<span class="sd">        J[&#39;CP&#39;, &#39;Q&#39;] = np.zeros((n, n))</span>
+<span class="sd">        J[&#39;CP&#39;, &#39;P&#39;] = np.diag(1.0/(q*A*V))</span>
+<span class="sd">        J[&#39;CP&#39;, &#39;R&#39;] = -2.0*CP/R</span>
+
+<span class="sd">        return J</span>
+
+
+
+<span class="sd">class SetupRunFixedSpeed(Component):</span>
+<span class="sd">    def __init__(self, npts):</span>
+<span class="sd">        super(SetupRunFixedSpeed, self).__init__()</span>
+<span class="sd">        self.npts = npts</span>
+<span class="sd">        &quot;&quot;&quot;determines approriate conditions to run AeroBase code across the power curve&quot;&quot;&quot;</span>
+
+<span class="sd">        self.add_param(&#39;control_Vin&#39;, units=&#39;m/s&#39;, desc=&#39;cut-in wind speed&#39;)</span>
+<span class="sd">        self.add_param(&#39;control_Vout&#39;, units=&#39;m/s&#39;, desc=&#39;cut-out wind speed&#39;)</span>
+<span class="sd">        self.add_param(&#39;control_ratedPower&#39;, units=&#39;W&#39;, desc=&#39;rated power&#39;)</span>
+<span class="sd">        self.add_param(&#39;control_Omega&#39;, units=&#39;rpm&#39;, desc=&#39;fixed rotor rotation speed&#39;)</span>
+<span class="sd">        self.add_param(&#39;control_pitch&#39;, units=&#39;deg&#39;, desc=&#39;pitch angle in region 2 (and region 3 for fixed pitch machines)&#39;)</span>
+
+<span class="sd">        # outputs</span>
+<span class="sd">        self.add_output(&#39;Uhub&#39;, units=&#39;m/s&#39;, desc=&#39;freestream velocities to run&#39;)</span>
+<span class="sd">        self.add_output(&#39;Omega&#39;, units=&#39;rpm&#39;, desc=&#39;rotation speeds to run&#39;)</span>
+<span class="sd">        self.add_output(&#39;pitch&#39;, units=&#39;deg&#39;, desc=&#39;pitch angles to run&#39;)</span>
+
+<span class="sd">        self.deriv_options[&#39;type&#39;] = &#39;fd&#39;</span>
+<span class="sd">        self.deriv_options[&#39;step_calc&#39;] = &#39;relative&#39;</span>
+
+<span class="sd">    def solve_nonlinear(self, params, unknowns, resids):</span>
+<span class="sd">        # velocity sweep</span>
+<span class="sd">        V = np.linspace(ctrl.Vin, ctrl.Vout, self.npts)</span>
+
+<span class="sd">        # store values</span>
+<span class="sd">        unknowns[&#39;Uhub&#39;] = V</span>
+<span class="sd">        unknowns[&#39;Omega&#39;] = ctrl.Omega*np.ones_like(V)</span>
+<span class="sd">        unknowns[&#39;pitch&#39;] = ctrl.pitch*np.ones_like(V)</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<div class="viewcode-block" id="SetupRunVarSpeed"><a class="viewcode-back" href="../../documentation.html#rotorse.rotor_aeropower.SetupRunVarSpeed">[docs]</a><span class="k">class</span> <span class="nc">SetupRunVarSpeed</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">npts_coarse_power_curve</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SetupRunVarSpeed</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">npts</span> <span class="o">=</span> <span class="n">npts_coarse_power_curve</span>
+        <span class="sd">&quot;&quot;&quot;determines approriate conditions to run AeroBase code across the power curve&quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;cut-in wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;cut-out wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;maximum allowed rotor rotation speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;tip-speed ratio in Region 2 (should be optimized externally)&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;pitch angle in region 2 (and region 3 for fixed pitch machines)&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;R&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor radius&#39;</span><span class="p">)</span>
+
+        <span class="c1"># outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;Uhub&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;freestream velocities to run&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;Omega&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotation speeds to run&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;pitch&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;pitch angles to run&#39;</span><span class="p">)</span>
+
+
+    <span class="k">def</span> <span class="nf">solve_nonlinear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span> <span class="n">resids</span><span class="p">):</span>
+
+        <span class="n">R</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;R&#39;</span><span class="p">]</span>
+
+        <span class="c1"># # attempt to distribute points mostly before rated</span>
+        <span class="c1"># cpguess = 0.5</span>
+        <span class="c1"># Vr0 = (ctrl.ratedPower/(cpguess*0.5*rho*pi*R**2))**(1.0/3)</span>
+        <span class="c1"># Vr0 *= 1.20</span>
+
+        <span class="c1"># V1 = np.linspace(Vin, Vr0, 15)</span>
+        <span class="c1"># V2 = np.linspace(Vr0, Vout, 6)</span>
+        <span class="c1"># V = np.concatenate([V1, V2[1:]])</span>
+
+        <span class="c1"># velocity sweep</span>
+        <span class="n">V</span><span class="p">,</span> <span class="n">dV_dVin</span><span class="p">,</span> <span class="n">dV_dVout</span> <span class="o">=</span> <span class="n">linspace_with_deriv</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">npts</span><span class="p">)</span>
+        
+        <span class="c1"># corresponding rotation speed</span>
+        <span class="n">Omega_d</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">V</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span>
+        <span class="n">Omega</span><span class="p">,</span> <span class="n">dOmega_dOmegad</span><span class="p">,</span> <span class="n">dOmega_dmaxOmega</span> <span class="o">=</span> <span class="n">smooth_min</span><span class="p">(</span><span class="n">Omega_d</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">],</span> <span class="n">pct_offset</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+
+        <span class="c1"># store values</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;Uhub&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">V</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;Omega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Omega</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;pitch&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">V</span><span class="p">)</span>
+
+        <span class="c1"># gradients</span>
+        <span class="n">J</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dOmega_dOmegad</span> <span class="o">*</span> <span class="n">V</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;R&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dOmega_dOmegad</span> <span class="o">*</span> <span class="o">-</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">V</span><span class="o">/</span><span class="n">R</span><span class="o">**</span><span class="mi">2</span><span class="o">*</span><span class="n">RS2RPM</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;control_maxOmega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dOmega_dmaxOmega</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;control_Vin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dOmega_dOmegad</span> <span class="o">*</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span> <span class="o">*</span> <span class="n">dV_dVin</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;control_Vout&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dOmega_dOmegad</span> <span class="o">*</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span> <span class="o">*</span> <span class="n">dV_dVout</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;Uhub&#39;</span><span class="p">,</span> <span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">V</span><span class="p">))</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;Uhub&#39;</span><span class="p">,</span> <span class="s1">&#39;R&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">V</span><span class="p">))</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;Uhub&#39;</span><span class="p">,</span> <span class="s1">&#39;control_pitch&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">V</span><span class="p">))</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;Uhub&#39;</span><span class="p">,</span> <span class="s1">&#39;control_Vin&#39;</span><span class="p">]</span>   <span class="o">=</span> <span class="n">dV_dVin</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;Uhub&#39;</span><span class="p">,</span> <span class="s1">&#39;control_Vout&#39;</span><span class="p">]</span>   <span class="o">=</span> <span class="n">dV_dVout</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">V</span><span class="p">))</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;R&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">V</span><span class="p">))</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;control_pitch&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">V</span><span class="p">))</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;control_Vin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">V</span><span class="p">))</span>
+	<span class="n">J</span><span class="p">[</span><span class="s1">&#39;pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;control_Vout&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">V</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">J</span> <span class="o">=</span> <span class="n">J</span>
+
+    <span class="k">def</span> <span class="nf">list_deriv_vars</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="n">inputs</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">,</span> <span class="s1">&#39;R&#39;</span><span class="p">,</span> <span class="s1">&#39;control_maxOmega&#39;</span><span class="p">,</span> <span class="s1">&#39;control_Vin&#39;</span><span class="p">,</span> <span class="s1">&#39;control_Vout&#39;</span><span class="p">,</span> <span class="s1">&#39;control_pitch&#39;</span><span class="p">)</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;Uhub&#39;</span><span class="p">,</span> <span class="s1">&#39;Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;pitch&#39;</span><span class="p">,</span> <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span>
+
+    <span class="k">def</span> <span class="nf">linearize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span> <span class="n">resids</span><span class="p">):</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span></div>
+
+
+
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">class UnregulatedPowerCurve(Component):</span>
+<span class="sd">    def __init__(self, npts_coarse_power_curve, npts_spline_power_curve):</span>
+<span class="sd">        super(UnregulatedPowerCurve, self).__init__()</span>
+<span class="sd">        self.npts = npts_spline_power_curve</span>
+<span class="sd">        </span>
+<span class="sd">        # inputs</span>
+<span class="sd">        self.add_param(&#39;control_Vin&#39;, units=&#39;m/s&#39;, desc=&#39;cut-in wind speed&#39;)</span>
+<span class="sd">        self.add_param(&#39;control_Vout&#39;, units=&#39;m/s&#39;, desc=&#39;cut-out wind speed&#39;)</span>
+<span class="sd">        self.add_param(&#39;control_Omega&#39;, units=&#39;rpm&#39;, desc=&#39;fixed rotor rotation speed&#39;)</span>
+<span class="sd">        self.add_param(&#39;control_pitch&#39;, units=&#39;deg&#39;, desc=&#39;pitch angle in region 2 (and region 3 for fixed pitch machines)&#39;)</span>
+
+<span class="sd">        self.add_param(&#39;Vcoarse&#39;, val=np.zeros(npts_coarse_power_curve), units=&#39;m/s&#39;, desc=&#39;wind speeds&#39;)</span>
+<span class="sd">        self.add_param(&#39;Pcoarse&#39;, val=np.zeros(npts_coarse_power_curve), units=&#39;W&#39;, desc=&#39;unregulated power curve (but after drivetrain losses)&#39;)</span>
+<span class="sd">        self.add_param(&#39;Tcoarse&#39;, val=np.zeros(npts_coarse_power_curve), units=&#39;N&#39;, desc=&#39;unregulated thrust curve&#39;)</span>
+
+<span class="sd">        # outputs</span>
+<span class="sd">        self.add_output(&#39;V&#39;, units=&#39;m/s&#39;, desc=&#39;wind speeds&#39;)</span>
+<span class="sd">        self.add_output(&#39;P&#39;, units=&#39;W&#39;, desc=&#39;power&#39;)</span>
+
+
+<span class="sd">    def solve_nonlinear(self, params, unknowns, resids):</span>
+
+<span class="sd">        ctrl = params[&#39;control&#39;]</span>
+
+<span class="sd">        # finer power curve</span>
+<span class="sd">        V, _, _ = linspace_with_deriv(ctrl.Vin, ctrl.Vout, self.npts)</span>
+<span class="sd">        unknowns[&#39;V&#39;] = V</span>
+<span class="sd">        spline = Akima(params[&#39;Vcoarse&#39;], params[&#39;Pcoarse&#39;])</span>
+<span class="sd">        P, dP_dV, dP_dVcoarse, dP_dPcoarse = spline.interp(self.V)</span>
+<span class="sd">        unknowns[&#39;P&#39;] = P</span>
+
+<span class="sd">        J = {}</span>
+<span class="sd">        J[&#39;P&#39;, &#39;Vcoarse&#39;] = dP_dVcoarse</span>
+<span class="sd">        J[&#39;P&#39;, &#39;Pcoarse&#39;] = dP_dPcoarse</span>
+<span class="sd">        self.J = J</span>
+
+<span class="sd">    def linearize(self, params, unknowns, resids):</span>
+
+<span class="sd">        return self.J</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<div class="viewcode-block" id="RegulatedPowerCurve"><a class="viewcode-back" href="../../documentation.html#rotorse.rotor_aeropower.RegulatedPowerCurve">[docs]</a><span class="k">class</span> <span class="nc">RegulatedPowerCurve</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span> <span class="c1"># Implicit COMPONENT</span>
+
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">npts_coarse_power_curve</span><span class="p">,</span> <span class="n">npts_spline_power_curve</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">RegulatedPowerCurve</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">npts</span> <span class="o">=</span> <span class="n">npts_spline_power_curve</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eval_only</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># allows an external solver to converge this, otherwise it will converge itself to mimic an explicit comp</span>
+        <span class="sd">&quot;&quot;&quot;Fit a spline to the coarse sampled power curve (and thrust curve),</span>
+<span class="sd">        find rated speed through a residual convergence strategy,</span>
+<span class="sd">        then compute the regulated power curve and rated conditions&quot;&quot;&quot;</span>
+
+        <span class="c1"># inputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;cut-in wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;cut-out wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rated power&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_minOmega&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;minimum allowed rotor rotation speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;maximum allowed rotor rotation speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;tip-speed ratio in Region 2 (should be optimized externally)&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;pitch angle in region 2 (and region 3 for fixed pitch machines)&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;Vcoarse&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;wind speeds&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;Pcoarse&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;unregulated power curve (but after drivetrain losses)&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;Tcoarse&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;unregulated thrust curve&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;R&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor radius&#39;</span><span class="p">)</span>
+
+        <span class="c1"># state</span>
+        <span class="c1">#self.add_state(&#39;Vrated&#39;, val=11.0, units=&#39;m/s&#39;, desc=&#39;rated wind speed&#39;, lower=-1e-15, upper=1e15)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;Vrated&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">11.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rated wind speed&#39;</span><span class="p">)</span>
+
+        <span class="c1"># residual</span>
+        <span class="c1"># self.add_state(&#39;residual&#39;, val=0.0)</span>
+
+        <span class="c1"># outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;V&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;wind speeds&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;P&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;power&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_V&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rated wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor rotation speed at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_pitch&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;pitch setting at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_T&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor aerodynamic thrust at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N*m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor aerodynamic torque at rated&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;azimuth&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;azimuth load&#39;</span><span class="p">)</span>
+
+
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;step_calc&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;relative&#39;</span>
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;form&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;central&#39;</span>
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;fd&#39;</span>
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;check_step_calc&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;relative&#39;</span>
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;check_form&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;central&#39;</span>
+
+    <span class="k">def</span> <span class="nf">solve_nonlinear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span> <span class="n">resids</span><span class="p">):</span>
+        <span class="c1">#Vrated = unknowns[&#39;Vrated&#39;]</span>
+
+        <span class="c1"># residual</span>
+        <span class="n">spline</span> <span class="o">=</span> <span class="n">Akima</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;Vcoarse&#39;</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;Pcoarse&#39;</span><span class="p">])</span>
+        <span class="k">def</span> <span class="nf">myfun</span><span class="p">(</span><span class="n">myv</span><span class="p">):</span>
+            <span class="n">P</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">spline</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">myv</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">P</span> <span class="o">-</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">myfun</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">])</span> <span class="o">&gt;</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">]):</span>
+            <span class="n">Vrated</span> <span class="o">=</span> <span class="n">brentq</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">myfun</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">Vrated</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">]</span>
+        <span class="n">P</span><span class="p">,</span> <span class="n">dres_dVrated</span><span class="p">,</span> <span class="n">dres_dVcoarse</span><span class="p">,</span> <span class="n">dres_dPcoarse</span> <span class="o">=</span> <span class="n">spline</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">Vrated</span><span class="p">)</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;Vrated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Vrated</span>
+        <span class="c1"># functional</span>
+
+        <span class="c1"># place half of points in region 2, half in region 3</span>
+        <span class="c1"># even though region 3 is constant we still need lots of points there</span>
+        <span class="c1"># because we will be integrating against a discretized wind</span>
+        <span class="c1"># speed distribution</span>
+
+        <span class="c1"># region 2</span>
+        <span class="n">V2</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">dV2_dVrated</span> <span class="o">=</span> <span class="n">linspace_with_deriv</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">],</span> <span class="n">Vrated</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">npts</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">P2</span><span class="p">,</span> <span class="n">dP2_dV2</span><span class="p">,</span> <span class="n">dP2_dVcoarse</span><span class="p">,</span> <span class="n">dP2_dPcoarse</span> <span class="o">=</span> <span class="n">spline</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">V2</span><span class="p">)</span>
+
+        <span class="c1"># region 3</span>
+        <span class="n">V3</span><span class="p">,</span> <span class="n">dV3_dVrated</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">linspace_with_deriv</span><span class="p">(</span><span class="n">Vrated</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">npts</span><span class="o">/</span><span class="mi">2</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">V3</span> <span class="o">=</span> <span class="n">V3</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>  <span class="c1"># remove duplicate point</span>
+        <span class="n">dV3_dVrated</span> <span class="o">=</span> <span class="n">dV3_dVrated</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="n">P3</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">V3</span><span class="p">)</span>
+
+        <span class="c1"># concatenate</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;V&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">V2</span><span class="p">,</span> <span class="n">V3</span><span class="p">])</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">P2</span><span class="p">,</span> <span class="n">P3</span><span class="p">])</span>
+
+        <span class="n">R</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;R&#39;</span><span class="p">]</span>
+        <span class="c1"># rated speed conditions</span>
+        <span class="n">Omega_d</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">Vrated</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span>
+        <span class="n">OmegaRated</span><span class="p">,</span> <span class="n">dOmegaRated_dOmegad</span><span class="p">,</span> <span class="n">dOmegaRated_dmaxOmega</span> \
+            <span class="o">=</span> <span class="n">smooth_min</span><span class="p">(</span><span class="n">Omega_d</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">],</span> <span class="n">pct_offset</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+
+        <span class="n">splineT</span> <span class="o">=</span> <span class="n">Akima</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;Vcoarse&#39;</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;Tcoarse&#39;</span><span class="p">])</span>
+        <span class="n">Trated</span><span class="p">,</span> <span class="n">dT_dVrated</span><span class="p">,</span> <span class="n">dT_dVcoarse</span><span class="p">,</span> <span class="n">dT_dTcoarse</span> <span class="o">=</span> <span class="n">splineT</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">Vrated</span><span class="p">)</span>
+
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_V&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Vrated</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">OmegaRated</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_pitch&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_T&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Trated</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">OmegaRated</span> <span class="o">*</span> <span class="n">RPM2RS</span><span class="p">)</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;azimuth&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">180.0</span>
+
+
+        <span class="c1"># gradients</span>
+        <span class="n">ncoarse</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;Vcoarse&#39;</span><span class="p">])</span>
+
+        <span class="n">dV_dVrated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">dV2_dVrated</span><span class="p">,</span> <span class="n">dV3_dVrated</span><span class="p">])</span>
+
+        <span class="n">dP_dVcoarse</span> <span class="o">=</span> <span class="n">vstack</span><span class="p">([</span><span class="n">dP2_dVcoarse</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">npts</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">ncoarse</span><span class="p">))])</span>
+        <span class="n">dP_dPcoarse</span> <span class="o">=</span> <span class="n">vstack</span><span class="p">([</span><span class="n">dP2_dPcoarse</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">npts</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">ncoarse</span><span class="p">))])</span>
+        <span class="n">dP_dVrated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">dP2_dV2</span><span class="o">*</span><span class="n">dV2_dVrated</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">npts</span><span class="o">/</span><span class="mi">2</span><span class="p">)])</span>
+
+        <span class="n">drOmega</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="n">dOmegaRated_dOmegad</span><span class="o">*</span><span class="n">Vrated</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="n">ncoarse</span><span class="p">),</span>
+            <span class="p">[</span><span class="n">dOmegaRated_dOmegad</span><span class="o">*</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span><span class="p">,</span> <span class="o">-</span><span class="n">dOmegaRated_dOmegad</span><span class="o">*</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">Vrated</span><span class="o">/</span><span class="n">R</span><span class="o">**</span><span class="mi">2</span><span class="o">*</span><span class="n">RS2RPM</span><span class="p">,</span>
+            <span class="n">dOmegaRated_dmaxOmega</span><span class="p">]])</span>
+        <span class="n">drQ</span> <span class="o">=</span> <span class="o">-</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">OmegaRated</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">RPM2RS</span><span class="p">)</span> <span class="o">*</span> <span class="n">drOmega</span>
+
+        <span class="n">J</span> <span class="o">=</span> <span class="p">{}</span>
+
+	<span class="c1">#J[&#39;Vrated&#39;, &#39;Vcoarse&#39;] = np.reshape(dres_dVcoarse, (1, len(dres_dVcoarse)))</span>
+        <span class="c1">#J[&#39;Vrated&#39;, &#39;Pcoarse&#39;] = np.reshape(dres_dPcoarse, (1, len(dres_dPcoarse)))</span>
+        <span class="c1">#J[&#39;Vrated&#39;, &#39;Vrated&#39;] = dres_dVrated</span>
+	<span class="c1">#J[&#39;Vrated&#39;, &#39;control_ratedPower&#39;] = -1</span>
+	<span class="c1">#J[&#39;Vrated&#39;, &#39;control_tsr&#39;] = 0</span>
+	
+
+
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;V&#39;</span><span class="p">,</span> <span class="s1">&#39;Vrated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dV_dVrated</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">,</span> <span class="s1">&#39;Vrated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dP_dVrated</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">,</span> <span class="s1">&#39;Vcoarse&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dP_dVcoarse</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">,</span> <span class="s1">&#39;Pcoarse&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dP_dPcoarse</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_V&#39;</span><span class="p">,</span> <span class="s1">&#39;Vrated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dOmegaRated_dOmegad</span><span class="o">*</span><span class="n">Vrated</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;Vrated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dOmegaRated_dOmegad</span><span class="o">*</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">/</span><span class="n">R</span><span class="o">*</span><span class="n">RS2RPM</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;R&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">dOmegaRated_dOmegad</span><span class="o">*</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">Vrated</span><span class="o">/</span><span class="n">R</span><span class="o">**</span><span class="mi">2</span><span class="o">*</span><span class="n">RS2RPM</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;control_maxOmega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dOmegaRated_dmaxOmega</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_T&#39;</span><span class="p">,</span> <span class="s1">&#39;Vcoarse&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">dT_dVcoarse</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">dT_dVcoarse</span><span class="p">)))</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_T&#39;</span><span class="p">,</span> <span class="s1">&#39;Tcoarse&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">dT_dTcoarse</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">dT_dTcoarse</span><span class="p">)))</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_T&#39;</span><span class="p">,</span> <span class="s1">&#39;Vrated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dT_dVrated</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">,</span> <span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">drQ</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">,</span> <span class="s1">&#39;Vrated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">drQ</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">,</span> <span class="s1">&#39;R&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">drQ</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">,</span> <span class="s1">&#39;control_maxOmega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">drQ</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">J</span> <span class="o">=</span> <span class="n">J</span>
+
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    def linearize(self, params, unknowns, resids):</span>
+
+<span class="sd">        return self.J</span>
+
+<span class="sd">    def apply_nonlinear(self, params, unknowns, resids):</span>
+<span class="sd">        Vrated = unknowns[&#39;Vrated&#39;]</span>
+
+<span class="sd">        # residual</span>
+<span class="sd">        spline = Akima(params[&#39;Vcoarse&#39;], params[&#39;Pcoarse&#39;])</span>
+<span class="sd">        P, dres_dVrated, dres_dVcoarse, dres_dPcoarse = spline.interp(Vrated)</span>
+<span class="sd">        # resids[&#39;residual&#39;] = P - ctrl.ratedPower</span>
+<span class="sd">        resids[&#39;Vrated&#39;] = P - params[&#39;control_ratedPower&#39;]</span>
+<span class="sd">        # functional</span>
+
+<span class="sd">        # place half of points in region 2, half in region 3</span>
+<span class="sd">        # even though region 3 is constant we still need lots of points there</span>
+<span class="sd">        # because we will be integrating against a discretized wind</span>
+<span class="sd">        # speed distribution</span>
+
+<span class="sd">        # region 2</span>
+<span class="sd">        V2, _, dV2_dVrated = linspace_with_deriv(params[&#39;control_Vin&#39;], Vrated, self.npts/2)</span>
+<span class="sd">        P2, dP2_dV2, dP2_dVcoarse, dP2_dPcoarse = spline.interp(V2)</span>
+
+<span class="sd">        # region 3</span>
+<span class="sd">        V3, dV3_dVrated, _ = linspace_with_deriv(Vrated, params[&#39;control_Vout&#39;], self.npts/2+1)</span>
+<span class="sd">        V3 = V3[1:]  # remove duplicate point</span>
+<span class="sd">        dV3_dVrated = dV3_dVrated[1:]</span>
+<span class="sd">        P3 = params[&#39;control_ratedPower&#39;]*np.ones_like(V3)</span>
+
+<span class="sd">        # concatenate</span>
+<span class="sd">        unknowns[&#39;V&#39;] = np.concatenate([V2, V3])</span>
+<span class="sd">        unknowns[&#39;P&#39;] = np.concatenate([P2, P3])</span>
+
+<span class="sd">        R = params[&#39;R&#39;]</span>
+<span class="sd">        # rated speed conditions</span>
+<span class="sd">        Omega_d = params[&#39;control_tsr&#39;]*Vrated/R*RS2RPM</span>
+<span class="sd">        OmegaRated, dOmegaRated_dOmegad, dOmegaRated_dmaxOmega \</span>
+<span class="sd">            = smooth_min(Omega_d, params[&#39;control_maxOmega&#39;], pct_offset=0.01)</span>
+
+<span class="sd">        splineT = Akima(params[&#39;Vcoarse&#39;], params[&#39;Tcoarse&#39;])</span>
+<span class="sd">        Trated, dT_dVrated, dT_dVcoarse, dT_dTcoarse = splineT.interp(Vrated)</span>
+
+<span class="sd">        unknowns[&#39;rated_V&#39;] = Vrated</span>
+<span class="sd">        unknowns[&#39;rated_Omega&#39;] = OmegaRated</span>
+<span class="sd">        unknowns[&#39;rated_pitch&#39;] = params[&#39;control_pitch&#39;]</span>
+<span class="sd">        unknowns[&#39;rated_T&#39;] = Trated</span>
+<span class="sd">        unknowns[&#39;rated_Q&#39;] = params[&#39;control_ratedPower&#39;] / (OmegaRated * RPM2RS)</span>
+<span class="sd">        unknowns[&#39;azimuth&#39;] = 180.0</span>
+<span class="sd">    &#39;&#39;&#39;</span></div>
+
+    
+<span class="c1"># class RegulatedPowerCurveGroup(Group): # EMG: Remove? doesn&#39;t appear to be in use</span>
+<span class="c1">#     def __init__(self, npts_coarse_power_curve, npts_spline_power_curve):</span>
+<span class="c1">#         super(RegulatedPowerCurveGroup, self).__init__()</span>
+<span class="c1">#         self.add(&#39;powercurve_comp&#39;, RegulatedPowerCurve(npts_coarse_power_curve, npts_spline_power_curve), promotes=[&#39;*&#39;])</span>
+<span class="c1">#         self.nl_solver = Brent()</span>
+<span class="c1">#         self.ln_solver = ScipyGMRES()</span>
+<span class="c1">#         self.nl_solver.options[&#39;var_lower_bound&#39;] = &#39;Vin&#39;</span>
+<span class="c1">#         self.nl_solver.options[&#39;var_upper_bound&#39;] = &#39;Vout&#39;</span>
+<span class="c1">#         self.nl_solver.options[&#39;state_var&#39;] = &#39;Vrated&#39;</span>
+
+<span class="c1">#         self.deriv_options[&#39;form&#39;] = &#39;central&#39;</span>
+<span class="c1">#         self.deriv_options[&#39;check_form&#39;] = &#39;central&#39;</span>
+<span class="c1">#         self.deriv_options[&#39;type&#39;] = &#39;fd&#39;</span>
+<span class="c1">#         self.deriv_options[&#39;step_calc&#39;] = &#39;relative&#39;</span>
+
+<span class="c1">#     def list_deriv_vars(self):</span>
+
+<span class="c1">#         inputs = (&#39;control_tsr&#39;, &#39;Vcoarse&#39;, &#39;Pcoarse&#39;, &#39;Tcoarse&#39;, &#39;Vrated&#39;, &#39;R&#39;, &#39;control_maxOmega&#39;)</span>
+<span class="c1">#         outputs = (&#39;Vrated&#39;, &#39;V&#39;, &#39;P&#39;, &#39;rated_V&#39;, &#39;rated_Omega&#39;,</span>
+<span class="c1">#             &#39;rated_pitch&#39;, &#39;rated_T&#39;, &#39;rated_Q&#39;)</span>
+
+<span class="c1">#         return inputs, outputs</span>
+
+    
+<div class="viewcode-block" id="AEP"><a class="viewcode-back" href="../../documentation.html#rotorse.rotor_aeropower.AEP">[docs]</a><span class="k">class</span> <span class="nc">AEP</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">npts_spline_power_curve</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">AEP</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="sd">&quot;&quot;&quot;integrate to find annual energy production&quot;&quot;&quot;</span>
+
+        <span class="c1"># inputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;CDF_V&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;cumulative distribution function evaluated at each wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;P&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;power curve (power)&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;lossFactor&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;multiplicative factor for availability and other losses (soiling, array, etc.)&#39;</span><span class="p">)</span>
+
+        <span class="c1"># outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;AEP&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;kW*h&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;annual energy production&#39;</span><span class="p">)</span>
+
+	<span class="c1">#self.deriv_options[&#39;step_size&#39;] = 1.0</span>
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;form&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;central&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;check_form&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;central&#39;</span>
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;step_calc&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;relative&#39;</span>	
+
+    <span class="k">def</span> <span class="nf">solve_nonlinear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span> <span class="n">resids</span><span class="p">):</span>
+
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;lossFactor&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">trapz</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;CDF_V&#39;</span><span class="p">])</span><span class="o">/</span><span class="mf">1e3</span><span class="o">*</span><span class="mf">365.0</span><span class="o">*</span><span class="mf">24.0</span>  <span class="c1"># in kWh</span>
+
+    <span class="k">def</span> <span class="nf">list_deriv_vars</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="n">inputs</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;CDF_V&#39;</span><span class="p">,</span> <span class="s1">&#39;P&#39;</span><span class="p">,</span> <span class="s1">&#39;lossFactor&#39;</span><span class="p">)</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;AEP&#39;</span><span class="p">,)</span>
+
+        <span class="k">return</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span>
+
+
+    <span class="k">def</span> <span class="nf">linearize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span> <span class="n">resids</span><span class="p">):</span>
+
+        <span class="n">lossFactor</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;lossFactor&#39;</span><span class="p">]</span>
+        <span class="n">P</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">]</span>
+        <span class="n">factor</span> <span class="o">=</span> <span class="n">lossFactor</span><span class="o">/</span><span class="mf">1e3</span><span class="o">*</span><span class="mf">365.0</span><span class="o">*</span><span class="mf">24.0</span>
+
+        <span class="n">dAEP_dP</span><span class="p">,</span> <span class="n">dAEP_dCDF</span> <span class="o">=</span> <span class="n">trapz_deriv</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;CDF_V&#39;</span><span class="p">])</span>
+        <span class="n">dAEP_dP</span> <span class="o">*=</span> <span class="n">factor</span>
+        <span class="n">dAEP_dCDF</span> <span class="o">*=</span> <span class="n">factor</span>
+
+        <span class="n">dAEP_dlossFactor</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">]</span><span class="o">/</span><span class="n">lossFactor</span><span class="p">])</span>
+
+        <span class="n">J</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">,</span> <span class="s1">&#39;CDF_V&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">dAEP_dCDF</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">dAEP_dCDF</span><span class="p">)))</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">,</span> <span class="s1">&#39;P&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">dAEP_dP</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">dAEP_dP</span><span class="p">)))</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">,</span> <span class="s1">&#39;lossFactor&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dAEP_dlossFactor</span>
+
+        <span class="k">return</span> <span class="n">J</span></div>
+
+
+<div class="viewcode-block" id="CSMDrivetrain"><a class="viewcode-back" href="../../documentation.html#rotorse.rotor_aeropower.CSMDrivetrain">[docs]</a><span class="k">class</span> <span class="nc">CSMDrivetrain</span><span class="p">(</span><span class="n">DrivetrainLossesBase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">CSMDrivetrain</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="sd">&quot;&quot;&quot;drivetrain losses from NREL cost and scaling model&quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;drivetrainType&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">DRIVETRAIN_TYPE</span><span class="p">[</span><span class="s1">&#39;GEARED&#39;</span><span class="p">],</span> <span class="n">pass_by_obj</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;form&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;central&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;check_form&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;central&#39;</span>
+	<span class="bp">self</span><span class="o">.</span><span class="n">deriv_options</span><span class="p">[</span><span class="s1">&#39;step_calc&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;relative&#39;</span>
+
+    <span class="k">def</span> <span class="nf">solve_nonlinear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span> <span class="n">resids</span><span class="p">):</span>
+        <span class="n">drivetrainType</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;drivetrainType&#39;</span><span class="p">]</span>
+        <span class="n">aeroPower</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;aeroPower&#39;</span><span class="p">]</span>
+        <span class="n">aeroTorque</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;aeroTorque&#39;</span><span class="p">]</span>
+        <span class="n">ratedPower</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;ratedPower&#39;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">drivetrainType</span> <span class="o">==</span> <span class="n">DRIVETRAIN_TYPE</span><span class="p">[</span><span class="s1">&#39;GEARED&#39;</span><span class="p">]:</span>
+            <span class="n">constant</span> <span class="o">=</span> <span class="mf">0.01289</span>
+            <span class="n">linear</span> <span class="o">=</span> <span class="mf">0.08510</span>
+            <span class="n">quadratic</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="k">elif</span> <span class="n">drivetrainType</span> <span class="o">==</span> <span class="n">DRIVETRAIN_TYPE</span><span class="p">[</span><span class="s1">&#39;SINGLE_STAGE&#39;</span><span class="p">]:</span>
+            <span class="n">constant</span> <span class="o">=</span> <span class="mf">0.01331</span>
+            <span class="n">linear</span> <span class="o">=</span> <span class="mf">0.03655</span>
+            <span class="n">quadratic</span> <span class="o">=</span> <span class="mf">0.06107</span>
+
+        <span class="k">elif</span> <span class="n">drivetrainType</span> <span class="o">==</span> <span class="n">DRIVETRAIN_TYPE</span><span class="p">[</span><span class="s1">&#39;MULTI_DRIVE&#39;</span><span class="p">]:</span>
+            <span class="n">constant</span> <span class="o">=</span> <span class="mf">0.01547</span>
+            <span class="n">linear</span> <span class="o">=</span> <span class="mf">0.04463</span>
+            <span class="n">quadratic</span> <span class="o">=</span> <span class="mf">0.05790</span>
+
+        <span class="k">elif</span> <span class="n">drivetrainType</span> <span class="o">==</span> <span class="n">DRIVETRAIN_TYPE</span><span class="p">[</span><span class="s1">&#39;PM_DIRECT_DRIVE&#39;</span><span class="p">]:</span>
+            <span class="n">constant</span> <span class="o">=</span> <span class="mf">0.01007</span>
+            <span class="n">linear</span> <span class="o">=</span> <span class="mf">0.02000</span>
+            <span class="n">quadratic</span> <span class="o">=</span> <span class="mf">0.06899</span>
+
+
+        <span class="n">Pbar0</span> <span class="o">=</span> <span class="n">aeroPower</span> <span class="o">/</span> <span class="n">ratedPower</span>
+
+        <span class="c1"># handle negative power case (with absolute value)</span>
+        <span class="n">Pbar1</span><span class="p">,</span> <span class="n">dPbar1_dPbar0</span> <span class="o">=</span> <span class="n">smooth_abs</span><span class="p">(</span><span class="n">Pbar0</span><span class="p">,</span> <span class="n">dx</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+
+        <span class="c1"># truncate idealized power curve for purposes of efficiency calculation</span>
+        <span class="n">Pbar</span><span class="p">,</span> <span class="n">dPbar_dPbar1</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">smooth_min</span><span class="p">(</span><span class="n">Pbar1</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">pct_offset</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+
+        <span class="c1"># compute efficiency</span>
+        <span class="n">eff</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="p">(</span><span class="n">constant</span><span class="o">/</span><span class="n">Pbar</span> <span class="o">+</span> <span class="n">linear</span> <span class="o">+</span> <span class="n">quadratic</span><span class="o">*</span><span class="n">Pbar</span><span class="p">)</span>
+
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;power&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">aeroPower</span> <span class="o">*</span> <span class="n">eff</span>
+
+        <span class="c1"># gradients</span>
+        <span class="n">dPbar_dPa</span> <span class="o">=</span> <span class="n">dPbar_dPbar1</span><span class="o">*</span><span class="n">dPbar1_dPbar0</span><span class="o">/</span><span class="n">ratedPower</span>
+        <span class="n">dPbar_dPr</span> <span class="o">=</span> <span class="o">-</span><span class="n">dPbar_dPbar1</span><span class="o">*</span><span class="n">dPbar1_dPbar0</span><span class="o">*</span><span class="n">Pbar0</span><span class="o">/</span><span class="n">ratedPower</span>
+
+        <span class="n">deff_dPa</span> <span class="o">=</span> <span class="n">dPbar_dPa</span><span class="o">*</span><span class="p">(</span><span class="n">constant</span><span class="o">/</span><span class="n">Pbar</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="n">quadratic</span><span class="p">)</span>
+        <span class="n">deff_dPr</span> <span class="o">=</span> <span class="n">dPbar_dPr</span><span class="o">*</span><span class="p">(</span><span class="n">constant</span><span class="o">/</span><span class="n">Pbar</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="n">quadratic</span><span class="p">)</span>
+
+        <span class="n">dP_dPa</span> <span class="o">=</span> <span class="n">eff</span> <span class="o">+</span> <span class="n">aeroPower</span><span class="o">*</span><span class="n">deff_dPa</span>
+        <span class="n">dP_dPr</span> <span class="o">=</span> <span class="n">aeroPower</span><span class="o">*</span><span class="n">deff_dPr</span>
+        
+        <span class="n">J</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;power&#39;</span><span class="p">,</span> <span class="s1">&#39;aeroPower&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">dP_dPa</span><span class="p">)</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;power&#39;</span><span class="p">,</span> <span class="s1">&#39;ratedPower&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dP_dPr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">J</span> <span class="o">=</span> <span class="n">J</span>
+
+
+    <span class="k">def</span> <span class="nf">list_deriv_vars</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="n">inputs</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;aeroPower&#39;</span><span class="p">,</span> <span class="s1">&#39;ratedPower&#39;</span><span class="p">)</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;power&#39;</span><span class="p">,)</span>
+
+        <span class="k">return</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">outputs</span>
+
+    <span class="k">def</span> <span class="nf">linearize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span> <span class="n">resids</span><span class="p">):</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span></div>
+    
+
+<div class="viewcode-block" id="OutputsAero"><a class="viewcode-back" href="../../documentation.html#rotorse.rotor_aeropower.OutputsAero">[docs]</a><span class="k">class</span> <span class="nc">OutputsAero</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">npts_spline_power_curve</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">OutputsAero</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1"># --- outputs ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;AEP_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;kW*h&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;annual energy production&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;V_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;wind speeds (power curve)&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;P_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;power (power curve)&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;rated_V_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rated wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;rated_Omega_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor rotation speed at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;rated_pitch_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;pitch setting at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;rated_T_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor aerodynamic thrust at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;rated_Q_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N*m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor aerodynamic torque at rated&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;diameter_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor diameter&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;V_extreme_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;survival wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;T_extreme_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;thrust at survival wind condition&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;Q_extreme_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N*m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;thrust at survival wind condition&#39;</span><span class="p">)</span>
+
+        <span class="c1"># internal use outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;precurveTip_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;tip location in x_b&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_param</span><span class="p">(</span><span class="s1">&#39;presweepTip_in&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;tip location in y_b&#39;</span><span class="p">)</span>  <span class="c1"># TODO: connect later</span>
+
+        <span class="c1"># --- outputs ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;AEP&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;kW*h&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;annual energy production&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;V&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;wind speeds (power curve)&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;P&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;power (power curve)&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_V&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rated wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor rotation speed at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_pitch&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;pitch setting at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_T&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor aerodynamic thrust at rated&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N*m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor aerodynamic torque at rated&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;diameter&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rotor diameter&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;V_extreme&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;survival wind speed&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;T_extreme&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;thrust at survival wind condition&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;Q_extreme&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;N*m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;thrust at survival wind condition&#39;</span><span class="p">)</span>
+
+        <span class="c1"># internal use outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;precurveTip&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;tip location in x_b&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_output</span><span class="p">(</span><span class="s1">&#39;presweepTip&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;tip location in y_b&#39;</span><span class="p">)</span>  <span class="c1"># TODO: connect later</span>
+
+    <span class="k">def</span> <span class="nf">solve_nonlinear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span> <span class="n">resids</span><span class="p">):</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;AEP_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;V&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;V_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;P_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_V&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;rated_V_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;rated_Omega_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_pitch&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;rated_pitch_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_T&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;rated_T_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;rated_Q_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;diameter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;diameter_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;V_extreme&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;V_extreme_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;T_extreme&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;T_extreme_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;Q_extreme&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;Q_extreme_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;precurveTip&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;precurveTip_in&#39;</span><span class="p">]</span>
+        <span class="n">unknowns</span><span class="p">[</span><span class="s1">&#39;presweepTip&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;presweepTip_in&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">linearize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">unknowns</span><span class="p">,</span><span class="n">resids</span><span class="p">):</span>
+        <span class="n">J</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">,</span> <span class="s1">&#39;AEP_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;V&#39;</span><span class="p">,</span> <span class="s1">&#39;V_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;V_in&#39;</span><span class="p">])))</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">,</span> <span class="s1">&#39;P_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;P_in&#39;</span><span class="p">])))</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_V&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_V_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_Omega_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_pitch_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_T&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_T_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_Q_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;diameter&#39;</span><span class="p">,</span> <span class="s1">&#39;diameter_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;V_extreme&#39;</span><span class="p">,</span> <span class="s1">&#39;V_extreme_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;T_extreme&#39;</span><span class="p">,</span> <span class="s1">&#39;T_extreme_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;Q_extreme&#39;</span><span class="p">,</span> <span class="s1">&#39;Q_extreme_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;precurveTip&#39;</span><span class="p">,</span> <span class="s1">&#39;precurveTip_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">J</span><span class="p">[</span><span class="s1">&#39;presweepTip&#39;</span><span class="p">,</span> <span class="s1">&#39;presweepTip_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="k">return</span> <span class="n">J</span></div>
+
+<div class="viewcode-block" id="RotorAeroPower"><a class="viewcode-back" href="../../documentation.html#rotorse.rotor_aeropower.RotorAeroPower">[docs]</a><span class="k">class</span> <span class="nc">RotorAeroPower</span><span class="p">(</span><span class="n">Group</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">RefBlade</span><span class="p">,</span> <span class="n">npts_coarse_power_curve</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">npts_spline_power_curve</span><span class="o">=</span><span class="mi">200</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">RotorAeroPower</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1">#self.add(&#39;rho&#39;, IndepVarComp(&#39;rho&#39;, val=1.225), promotes=[&#39;*&#39;])</span>
+        <span class="c1">#self.add(&#39;mu&#39;, IndepVarComp(&#39;mu&#39;, val=1.81e-5), promotes=[&#39;*&#39;])</span>
+        <span class="c1">#self.add(&#39;shearExp&#39;, IndepVarComp(&#39;shearExp&#39;, val=0.2), promotes=[&#39;*&#39;])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;cdf_reference_height_wind_speed&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;cdf_reference_height_wind_speed&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;reference hub height for IEC wind speed (used in CDF calculation)&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;tiploss&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;tiploss&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">pass_by_obj</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;hubloss&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;hubloss&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">pass_by_obj</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;wakerotation&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;wakerotation&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">pass_by_obj</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;usecd&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;usecd&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">pass_by_obj</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="c1">#self.add(&#39;airfoil_files&#39;, IndepVarComp(&#39;airfoil_files&#39;, AirfoilProperties.airfoil_files, pass_by_obj=True), promotes=[&#39;*&#39;])</span>
+        
+        <span class="c1"># --- control ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;c_Vin&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;cut-in wind speed&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;c_Vout&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;m/s&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;cut-out wind speed&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;c_ratedPower&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>  <span class="n">units</span><span class="o">=</span><span class="s1">&#39;W&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;rated power&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;c_minOmega&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;control_minOmega&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;minimum allowed rotor rotation speed&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;c_maxOmega&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;rpm&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;maximum allowed rotor rotation speed&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;c_tsr&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;tip-speed ratio in Region 2 (should be optimized externally)&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;c_pitch&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;deg&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;pitch angle in region 2 (and region 3 for fixed pitch machines)&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+
+        <span class="c1"># --- drivetrain efficiency ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;drivetrainType&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;drivetrainType&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="n">DRIVETRAIN_TYPE</span><span class="p">[</span><span class="s1">&#39;GEARED&#39;</span><span class="p">],</span> <span class="n">pass_by_obj</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+
+
+        <span class="c1"># --- options ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;nSector&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;nSector&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">iotype</span><span class="o">=</span><span class="s1">&#39;in&#39;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;number of sectors to divide rotor face into in computing thrust and power&#39;</span><span class="p">,</span> <span class="n">pass_by_obj</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;AEP_loss_factor&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;AEP_loss_factor&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s1">&#39;availability and other losses (soiling, array, etc.)&#39;</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;shape_parameter&#39;</span><span class="p">,</span> <span class="n">IndepVarComp</span><span class="p">(</span><span class="s1">&#39;shape_parameter&#39;</span><span class="p">,</span> <span class="n">val</span><span class="o">=</span><span class="mf">0.0</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+
+        
+        <span class="c1"># --- Rotor Aero &amp; Power ---</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;rotorGeom&#39;</span><span class="p">,</span> <span class="n">RotorGeometry</span><span class="p">(</span><span class="n">RefBlade</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+
+        <span class="c1"># self.add(&#39;tipspeed&#39;, MaxTipSpeed())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;setup&#39;</span><span class="p">,</span> <span class="n">SetupRunVarSpeed</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;analysis&#39;</span><span class="p">,</span> <span class="n">CCBladePower</span><span class="p">(</span><span class="n">RefBlade</span><span class="o">.</span><span class="n">npts</span><span class="p">,</span> <span class="n">npts_coarse_power_curve</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;dt&#39;</span><span class="p">,</span> <span class="n">CSMDrivetrain</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;powercurve&#39;</span><span class="p">,</span> <span class="n">RegulatedPowerCurve</span><span class="p">(</span><span class="n">npts_coarse_power_curve</span><span class="p">,</span> <span class="n">npts_spline_power_curve</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;wind&#39;</span><span class="p">,</span> <span class="n">PowerWind</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="c1"># self.add(&#39;cdf&#39;, WeibullWithMeanCDF(npts_spline_power_curve))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;cdf&#39;</span><span class="p">,</span> <span class="n">RayleighCDF</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;aep&#39;</span><span class="p">,</span> <span class="n">AEP</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s1">&#39;outputs_aero&#39;</span><span class="p">,</span> <span class="n">OutputsAero</span><span class="p">(</span><span class="n">npts_spline_power_curve</span><span class="p">),</span> <span class="n">promotes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;*&#39;</span><span class="p">])</span>
+
+        <span class="c1"># # connectiosn to tipspeed</span>
+        <span class="c1"># self.connect(&#39;geom.R&#39;, &#39;tipspeed.R&#39;)</span>
+        <span class="c1"># self.connect(&#39;max_tip_speed&#39;, &#39;tipspeed.Vtip_max&#39;)</span>
+        <span class="c1"># self.connect(&#39;tipspeed.Omega_max&#39;, &#39;control_maxOmega&#39;)</span>
+
+        <span class="c1"># connections to setup</span>
+        <span class="c1"># self.connect(&#39;control&#39;, &#39;setup.control&#39;)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">,</span> <span class="s1">&#39;setup.control_Vin&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">,</span> <span class="s1">&#39;setup.control_Vout&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">,</span> <span class="s1">&#39;setup.control_maxOmega&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;setup.control_pitch&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">,</span> <span class="s1">&#39;setup.control_tsr&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;geom.R&#39;</span><span class="p">,</span> <span class="s1">&#39;setup.R&#39;</span><span class="p">)</span>
+
+        <span class="c1"># connections to analysis</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;r_pts&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.r&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;chord&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.chord&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;theta&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.theta&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;precurve&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.precurve&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;precurve_tip&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.precurveTip&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;Rhub&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.Rhub&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;Rtip&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.Rtip&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;hub_height&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.hubHt&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;precone&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.precone&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;tilt&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.tilt&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;yaw&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.yaw&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;airfoils&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.airfoils&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;nBlades&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.B&#39;</span><span class="p">)</span>
+        <span class="c1">#self.connect(&#39;rho&#39;, &#39;analysis.rho&#39;)</span>
+        <span class="c1">#self.connect(&#39;mu&#39;, &#39;analysis.mu&#39;)</span>
+        <span class="c1">#self.connect(&#39;shearExp&#39;, &#39;analysis.shearExp&#39;)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;nSector&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.nSector&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;setup.Uhub&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.Uhub&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;setup.Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.Omega&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;setup.pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.pitch&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;tiploss&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.tiploss&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;hubloss&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.hubloss&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;wakerotation&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.wakerotation&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;usecd&#39;</span><span class="p">,</span> <span class="s1">&#39;analysis.usecd&#39;</span><span class="p">)</span>
+
+        <span class="c1"># connections to drivetrain</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;analysis.P&#39;</span><span class="p">,</span> <span class="s1">&#39;dt.aeroPower&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;analysis.Q&#39;</span><span class="p">,</span> <span class="s1">&#39;dt.aeroTorque&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;analysis.T&#39;</span><span class="p">,</span> <span class="s1">&#39;dt.aeroThrust&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">,</span> <span class="s1">&#39;dt.ratedPower&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;drivetrainType&#39;</span><span class="p">,</span> <span class="s1">&#39;dt.drivetrainType&#39;</span><span class="p">)</span>
+
+        <span class="c1"># connections to powercurve</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.control_Vin&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.control_Vout&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.control_maxOmega&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_minOmega&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.control_minOmega&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.control_pitch&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.control_ratedPower&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.control_tsr&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;setup.Uhub&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.Vcoarse&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;dt.power&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.Pcoarse&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;analysis.T&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.Tcoarse&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;geom.R&#39;</span><span class="p">,</span> <span class="s1">&#39;powercurve.R&#39;</span><span class="p">)</span>
+
+        <span class="c1"># # setup Brent method to find rated speed</span>
+        <span class="c1"># self.connect(&#39;control_Vin&#39;, &#39;brent.lower_bound&#39;)</span>
+        <span class="c1"># self.connect(&#39;control_Vout&#39;, &#39;brent.upper_bound&#39;)</span>
+        <span class="c1"># self.brent.add_param(&#39;powercurve.Vrated&#39;, low=-1e-15, high=1e15)</span>
+        <span class="c1"># self.brent.add_constraint(&#39;powercurve.residual = 0&#39;)</span>
+        <span class="c1"># self.brent.invalid_bracket_return = 1.0</span>
+
+        <span class="c1"># connections to wind</span>
+        <span class="c1">#self.wind.z = np.zeros(1)</span>
+        <span class="c1">#self.wind.U = np.zeros(1)</span>
+        <span class="c1"># self.connect(&#39;cdf_reference_mean_wind_speed&#39;, &#39;wind.Uref&#39;)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;turbineclass.V_mean&#39;</span><span class="p">,</span> <span class="s1">&#39;wind.Uref&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;cdf_reference_height_wind_speed&#39;</span><span class="p">,</span> <span class="s1">&#39;wind.zref&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;wind_zvec&#39;</span><span class="p">,</span> <span class="s1">&#39;wind.z&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;analysis.shearExp&#39;</span><span class="p">,</span> <span class="s1">&#39;wind.shearExp&#39;</span><span class="p">)</span>
+
+        <span class="c1"># connections to cdf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.V&#39;</span><span class="p">,</span> <span class="s1">&#39;cdf.x&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;wind.U&#39;</span><span class="p">,</span> <span class="s1">&#39;cdf.xbar&#39;</span><span class="p">,</span> <span class="n">src_indices</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;shape_parameter&#39;</span><span class="p">,</span> <span class="s1">&#39;cdf.k&#39;</span><span class="p">)</span>
+
+        <span class="c1"># connections to aep</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;cdf.F&#39;</span><span class="p">,</span> <span class="s1">&#39;aep.CDF_V&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.P&#39;</span><span class="p">,</span> <span class="s1">&#39;aep.P&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;AEP_loss_factor&#39;</span><span class="p">,</span> <span class="s1">&#39;aep.lossFactor&#39;</span><span class="p">)</span>
+
+        <span class="c1"># connections to outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.V&#39;</span><span class="p">,</span> <span class="s1">&#39;V_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.P&#39;</span><span class="p">,</span> <span class="s1">&#39;P_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;aep.AEP&#39;</span><span class="p">,</span> <span class="s1">&#39;AEP_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.rated_V&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_V_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.rated_Omega&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_Omega_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.rated_pitch&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_pitch_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.rated_T&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_T_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;powercurve.rated_Q&#39;</span><span class="p">,</span> <span class="s1">&#39;rated_Q_in&#39;</span><span class="p">)</span>
+
+
+        <span class="c1"># connect to outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;geom.diameter&#39;</span><span class="p">,</span> <span class="s1">&#39;diameter_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;turbineclass.V_extreme&#39;</span><span class="p">,</span> <span class="s1">&#39;V_extreme_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;precurve_tip&#39;</span><span class="p">,</span> <span class="s1">&#39;precurveTip_in&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;presweep_tip&#39;</span><span class="p">,</span> <span class="s1">&#39;presweepTip_in&#39;</span><span class="p">)</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="c1"># myref = NREL5MW()</span>
+    <span class="n">myref</span> <span class="o">=</span> <span class="n">DTU10MW</span><span class="p">()</span>
+    
+    <span class="n">rotor</span> <span class="o">=</span> <span class="n">Problem</span><span class="p">()</span>
+    <span class="n">npts_coarse_power_curve</span> <span class="o">=</span> <span class="mi">20</span> <span class="c1"># (Int): number of points to evaluate aero analysis at</span>
+    <span class="n">npts_spline_power_curve</span> <span class="o">=</span> <span class="mi">200</span>  <span class="c1"># (Int): number of points to use in fitting spline to power curve</span>
+    
+    <span class="n">rotor</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">RotorAeroPower</span><span class="p">(</span><span class="n">myref</span><span class="p">,</span> <span class="n">npts_coarse_power_curve</span><span class="p">,</span> <span class="n">npts_spline_power_curve</span><span class="p">)</span>
+    
+    <span class="c1">#rotor.setup(check=False)</span>
+    <span class="n">rotor</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+    
+    <span class="c1"># === blade grid ===</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;hubFraction&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">hubFraction</span> <span class="c1">#0.025  # (Float): hub location as fraction of radius</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;bladeLength&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">bladeLength</span> <span class="c1">#61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature</span>
+    <span class="c1"># rotor[&#39;delta_bladeLength&#39;] = 0.0  # (Float, m): adjustment to blade length to account for curvature from loading</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;precone&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">precone</span> <span class="c1">#2.5  # (Float, deg): precone angle</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;tilt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">tilt</span> <span class="c1">#5.0  # (Float, deg): shaft tilt</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;yaw&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># (Float, deg): yaw error</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;nBlades&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">nBlades</span> <span class="c1">#3  # (Int): number of blades</span>
+    <span class="c1"># ------------------</span>
+    
+    <span class="c1"># === blade geometry ===</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_max_chord&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">r_max_chord</span> <span class="c1">#0.23577  # (Float): location of max chord on unit radius</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;chord_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">chord</span> <span class="c1">#np.array([3.2612, 4.5709, 3.3178, 1.4621])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;theta_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">theta</span> <span class="c1">#np.array([13.2783, 7.46036, 2.89317, -0.0878099])  # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;precurve_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">precurve</span> <span class="c1">#np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;presweep_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">presweep</span> <span class="c1">#np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)</span>
+    <span class="c1"># rotor[&#39;delta_precurve_in&#39;] = np.array([0.0, 0.0, 0.0])  # (Array, m): adjustment to precurve to account for curvature from loading</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;sparT_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">spar_thickness</span> <span class="c1">#np.array([0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;teT_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">te_thickness</span> <span class="c1">#np.array([0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters</span>
+    <span class="c1"># ------------------</span>
+    
+    <span class="c1"># === atmosphere ===</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;analysis.rho&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.225</span>  <span class="c1"># (Float, kg/m**3): density of air</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;analysis.mu&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.81206e-5</span>  <span class="c1"># (Float, kg/m/s): dynamic viscosity of air</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;hub_height&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">hub_height</span> <span class="c1">#90.0</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;analysis.shearExp&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.25</span>  <span class="c1"># (Float): shear exponent</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;turbine_class&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">turbine_class</span> <span class="c1">#TURBINE_CLASS[&#39;I&#39;]  # (Enum): IEC turbine class</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;cdf_reference_height_wind_speed&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">hub_height</span> <span class="c1">#90.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)</span>
+    <span class="c1"># ----------------------</span>
+    
+    <span class="c1"># === control ===</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_Vin</span> <span class="c1">#3.0  # (Float, m/s): cut-in wind speed</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_Vout</span> <span class="c1">#25.0  # (Float, m/s): cut-out wind speed</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_ratedPower&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">rating</span> <span class="c1">#5e6  # (Float, W): rated power</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_minOmega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_minOmega</span> <span class="c1">#0.0  # (Float, rpm): minimum allowed rotor rotation speed</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_maxOmega</span> <span class="c1">#12.0  # (Float, rpm): maximum allowed rotor rotation speed</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_tsr</span> <span class="c1">#7.55  # (Float): tip-speed ratio in Region 2 (should be optimized externally)</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_pitch</span> <span class="c1">#0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)</span>
+    <span class="c1"># ----------------------</span>
+
+    <span class="c1"># === aero and structural analysis options ===</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;nSector&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c1"># (Int): number of sectors to divide rotor face into in computing thrust and power</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;AEP_loss_factor&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># (Float): availability and other losses (soiling, array, etc.)</span>
+    <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;drivetrainType&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">drivetrain</span> <span class="c1">#DRIVETRAIN_TYPE[&#39;GEARED&#39;]  # (Enum)</span>
+    <span class="c1"># ----------------------</span>
+
+    <span class="c1"># === run and outputs ===</span>
+    <span class="n">rotor</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+    <span class="nb">print</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_pts&#39;</span><span class="p">]</span>
+
+    <span class="nb">print</span> <span class="s1">&#39;AEP =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">]</span>
+    <span class="nb">print</span> <span class="s1">&#39;diameter =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;diameter&#39;</span><span class="p">]</span>
+    <span class="nb">print</span> <span class="s1">&#39;ratedConditions.V =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_V&#39;</span><span class="p">]</span>
+    <span class="nb">print</span> <span class="s1">&#39;ratedConditions.Omega =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">]</span>
+    <span class="nb">print</span> <span class="s1">&#39;ratedConditions.pitch =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_pitch&#39;</span><span class="p">]</span>
+    <span class="nb">print</span> <span class="s1">&#39;ratedConditions.T =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_T&#39;</span><span class="p">]</span>
+    <span class="nb">print</span> <span class="s1">&#39;ratedConditions.Q =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">]</span>
+    <span class="c1">#for io in rotor.root.unknowns:</span>
+    <span class="c1">#    print(io + &#39; &#39; + str(rotor.root.unknowns[io]))</span>
+
+
+
+    <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;V&#39;</span><span class="p">],</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">]</span><span class="o">/</span><span class="mf">1e6</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;wind speed (m/s)&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;power (W)&#39;</span><span class="p">)</span>
+
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="c1"># ----------------</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    f = open(&#39;deriv_aeropower.dat&#39;,&#39;w&#39;)</span>
+<span class="sd">    #out = rotor.check_total_derivatives(f)</span>
+<span class="sd">    out = rotor.check_partial_derivatives(f, compact_print=True)</span>
+<span class="sd">    f.close()</span>
+<span class="sd">    tol = 1e-4</span>
+<span class="sd">    for comp in out.keys():</span>
+<span class="sd">        for k in out[comp].keys():</span>
+<span class="sd">            if ( (out[comp][k][&#39;rel error&#39;][0] &gt; tol) and (out[comp][k][&#39;abs error&#39;][0] &gt; tol) ):</span>
+<span class="sd">                print k</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">RotorSE 0.1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2014, NREL.
+      Last updated on Jul 05, 2018.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.7.5.
+    </div>
+  </body>
+</html>

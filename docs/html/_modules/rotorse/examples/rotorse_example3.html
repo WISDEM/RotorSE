@@ -1,0 +1,234 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>rotorse.examples.rotorse_example3 &#8212; RotorSE 0.1.0 documentation</title>
+    <link rel="stylesheet" href="../../../_static/nrel.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">RotorSE 0.1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for rotorse.examples.rotorse_example3</h1><div class="highlight"><pre>
+<span></span>
+<div class="viewcode-block" id="RotorSE_Example3"><a class="viewcode-back" href="../../../documentation.html#rotorse.examples.rotorse_example3.RotorSE_Example3">[docs]</a><span class="k">class</span> <span class="nc">RotorSE_Example3</span><span class="p">():</span>
+
+	<span class="k">def</span> <span class="nf">execute</span><span class="p">():</span>
+
+		<span class="c1"># --- Import Modules</span>
+		<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+		<span class="kn">import</span> <span class="nn">os</span>
+		<span class="kn">from</span> <span class="nn">openmdao.api</span> <span class="k">import</span> <span class="n">IndepVarComp</span><span class="p">,</span> <span class="n">Component</span><span class="p">,</span> <span class="n">Group</span><span class="p">,</span> <span class="n">Problem</span><span class="p">,</span> <span class="n">Brent</span><span class="p">,</span> <span class="n">ScipyGMRES</span><span class="p">,</span> <span class="n">ScipyOptimizer</span><span class="p">,</span> <span class="n">DumpRecorder</span>
+		<span class="kn">from</span> <span class="nn">rotorse.rotor_aeropower</span> <span class="k">import</span> <span class="n">RotorAeroPower</span>
+		<span class="kn">from</span> <span class="nn">rotorse.rotor_geometry</span> <span class="k">import</span> <span class="n">RotorGeometry</span><span class="p">,</span> <span class="n">NREL5MW</span><span class="p">,</span> <span class="n">DTU10MW</span><span class="p">,</span> <span class="n">NINPUT</span>
+		<span class="kn">from</span> <span class="nn">rotorse</span> <span class="k">import</span> <span class="n">RPM2RS</span><span class="p">,</span> <span class="n">RS2RPM</span><span class="p">,</span> <span class="n">TURBULENCE_CLASS</span><span class="p">,</span> <span class="n">DRIVETRAIN_TYPE</span>
+		<span class="kn">from</span> <span class="nn">rotorse.rotor</span> <span class="k">import</span> <span class="n">RotorSE</span>
+
+		<span class="n">myref</span> <span class="o">=</span> <span class="n">DTU10MW</span><span class="p">()</span>
+
+		<span class="n">rotor</span> <span class="o">=</span> <span class="n">Problem</span><span class="p">()</span>
+		<span class="n">npts_coarse_power_curve</span> <span class="o">=</span> <span class="mi">20</span> <span class="c1"># (Int): number of points to evaluate aero analysis at</span>
+		<span class="n">npts_spline_power_curve</span> <span class="o">=</span> <span class="mi">200</span>  <span class="c1"># (Int): number of points to use in fitting spline to power curve</span>
+
+		<span class="n">rotor</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">RotorSE</span><span class="p">(</span><span class="n">myref</span><span class="p">,</span> <span class="n">npts_coarse_power_curve</span><span class="p">,</span> <span class="n">npts_spline_power_curve</span><span class="p">)</span>
+		<span class="n">rotor</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+
+		<span class="c1"># ---</span>
+		<span class="c1"># === blade grid ===</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;hubFraction&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">hubFraction</span> <span class="c1">#0.023785  # (Float): hub location as fraction of radius</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;bladeLength&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">bladeLength</span> <span class="c1">#96.7  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;precone&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">precone</span> <span class="c1">#4.  # (Float, deg): precone angle</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;tilt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">tilt</span> <span class="c1">#6.0  # (Float, deg): shaft tilt</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;yaw&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># (Float, deg): yaw error</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;nBlades&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">nBlades</span> <span class="c1">#3  # (Int): number of blades</span>
+		<span class="c1"># ---</span>
+
+		<span class="c1"># === blade geometry ===</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_max_chord&#39;</span><span class="p">]</span> <span class="o">=</span>  <span class="n">myref</span><span class="o">.</span><span class="n">r_max_chord</span>  <span class="c1"># 0.2366 #(Float): location of max chord on unit radius</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;chord_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">chord</span> <span class="c1"># np.array([4.6, 4.869795, 5.990629, 3.00785428, 0.0962])  # (Array, m): chord at control points. defined at hub, then at linearly spaced locations from r_max_chord to tip</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;theta_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">theta</span> <span class="c1"># np.array([14.5, 12.874, 6.724, -0.03388039, -0.037]) # (Array, deg): twist at control points.  defined at linearly spaced locations from r[idx_cylinder] to tip</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;precurve_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">precurve</span> <span class="c1">#np.array([-0., -0.054497, -0.175303, -0.84976143, -6.206217])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;presweep_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">presweep</span> <span class="c1">#np.array([0., 0., 0., 0., 0.])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;sparT_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">spar_thickness</span> <span class="c1"># np.array([0.03200042 0.07038508 0.08515644 0.07777004 0.01181032])  # (Array, m): spar cap thickness parameters</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;teT_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">te_thickness</span> <span class="c1"># np.array([0.04200055 0.08807739 0.05437378 0.01610219 0.00345225])  # (Array, m): trailing-edge thickness parameters</span>
+		<span class="c1"># ---</span>
+
+		<span class="c1"># === atmosphere ===</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;analysis.rho&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.225</span>  <span class="c1"># (Float, kg/m**3): density of air</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;analysis.mu&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.81206e-5</span>  <span class="c1"># (Float, kg/m/s): dynamic viscosity of air</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;wind.shearExp&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.25</span>  <span class="c1"># (Float): shear exponent</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;hub_height&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">hub_height</span> <span class="c1">#119.0  # (Float, m): hub height</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;turbine_class&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">turbine_class</span> <span class="c1">#TURBINE_CLASS[&#39;I&#39;]  # (Enum): IEC turbine class</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;turbulence_class&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">TURBULENCE_CLASS</span><span class="p">[</span><span class="s1">&#39;B&#39;</span><span class="p">]</span>  <span class="c1"># (Enum): IEC turbulence class class</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;wind.zref&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">hub_height</span> <span class="c1">#119.0  # (Float): reference hub height for IEC wind speed (used in CDF calculation)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;gust_stddev&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>
+		<span class="c1"># ---</span>
+
+		<span class="c1"># === control ===</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_Vin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_Vin</span> <span class="c1">#4.0  # (Float, m/s): cut-in wind speed</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_Vout&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_Vout</span> <span class="c1">#25.0  # (Float, m/s): cut-out wind speed</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_minOmega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_minOmega</span> <span class="c1">#6.0  # (Float, rpm): minimum allowed rotor rotation speed</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_maxOmega&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_maxOmega</span> <span class="c1">#8.88766  # (Float, rpm): maximum allowed rotor rotation speed</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_tsr&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_tsr</span> <span class="c1">#10.58  # (Float): tip-speed ratio in Region 2 (should be optimized externally)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;control_pitch&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">control_pitch</span> <span class="c1">#0.0  # (Float, deg): pitch angle in region 2 (and region 3 for fixed pitch machines)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;machine_rating&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">rating</span> <span class="c1">#10e6  # (Float, W): rated power</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;pitch_extreme&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># (Float, deg): worst-case pitch at survival wind condition</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;azimuth_extreme&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># (Float, deg): worst-case azimuth at survival wind condition</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;VfactorPC&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.7</span>  <span class="c1"># (Float): fraction of rated speed at which the deflection is assumed to representative throughout the power curve calculation</span>
+		<span class="c1"># ---</span>
+
+		<span class="c1"># === aero and structural analysis options ===</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;nSector&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c1"># (Int): number of sectors to divide rotor face into in computing thrust and power</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;AEP_loss_factor&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># (Float): availability and other losses (soiling, array, etc.)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;drivetrainType&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">myref</span><span class="o">.</span><span class="n">drivetrain</span> <span class="c1">#DRIVETRAIN_TYPE[&#39;GEARED&#39;]  # (Enum)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;dynamic_amplication_tip_deflection&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.35</span>  <span class="c1"># (Float): a dynamic amplification factor to adjust the static deflection calculation</span>
+		<span class="c1"># ---</span>
+
+
+		<span class="c1"># === fatigue ===</span>
+		<span class="n">r_aero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.02222276</span><span class="p">,</span> <span class="mf">0.06666667</span><span class="p">,</span> <span class="mf">0.11111057</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.23333333</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.36666667</span><span class="p">,</span> <span class="mf">0.43333333</span><span class="p">,</span>
+		               <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.56666667</span><span class="p">,</span> <span class="mf">0.63333333</span><span class="p">,</span> <span class="mf">0.64</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">,</span> <span class="mf">0.83333333</span><span class="p">,</span> <span class="mf">0.88888943</span><span class="p">,</span> <span class="mf">0.93333333</span><span class="p">,</span>
+		               <span class="mf">0.97777724</span><span class="p">])</span>  <span class="c1"># (Array): new aerodynamic grid on unit radius</span>
+		<span class="n">rstar_damage</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.000</span><span class="p">,</span> <span class="mf">0.022</span><span class="p">,</span> <span class="mf">0.067</span><span class="p">,</span> <span class="mf">0.111</span><span class="p">,</span> <span class="mf">0.167</span><span class="p">,</span> <span class="mf">0.233</span><span class="p">,</span> <span class="mf">0.300</span><span class="p">,</span> <span class="mf">0.367</span><span class="p">,</span> <span class="mf">0.433</span><span class="p">,</span> <span class="mf">0.500</span><span class="p">,</span>
+		    <span class="mf">0.567</span><span class="p">,</span> <span class="mf">0.633</span><span class="p">,</span> <span class="mf">0.700</span><span class="p">,</span> <span class="mf">0.767</span><span class="p">,</span> <span class="mf">0.833</span><span class="p">,</span> <span class="mf">0.889</span><span class="p">,</span> <span class="mf">0.933</span><span class="p">,</span> <span class="mf">0.978</span><span class="p">])</span>  <span class="c1"># (Array): nondimensional radial locations of damage equivalent moments</span>
+		<span class="n">Mxb_damage</span> <span class="o">=</span> <span class="mf">1e3</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">2.3743E+003</span><span class="p">,</span> <span class="mf">2.0834E+003</span><span class="p">,</span> <span class="mf">1.8108E+003</span><span class="p">,</span> <span class="mf">1.5705E+003</span><span class="p">,</span> <span class="mf">1.3104E+003</span><span class="p">,</span>
+		    <span class="mf">1.0488E+003</span><span class="p">,</span> <span class="mf">8.2367E+002</span><span class="p">,</span> <span class="mf">6.3407E+002</span><span class="p">,</span> <span class="mf">4.7727E+002</span><span class="p">,</span> <span class="mf">3.4804E+002</span><span class="p">,</span> <span class="mf">2.4458E+002</span><span class="p">,</span> <span class="mf">1.6339E+002</span><span class="p">,</span>
+		    <span class="mf">1.0252E+002</span><span class="p">,</span> <span class="mf">5.7842E+001</span><span class="p">,</span> <span class="mf">2.7349E+001</span><span class="p">,</span> <span class="mf">1.1262E+001</span><span class="p">,</span> <span class="mf">3.8549E+000</span><span class="p">,</span> <span class="mf">4.4738E-001</span><span class="p">])</span>  <span class="c1"># (Array, N*m): damage equivalent moments about blade c.s. x-direction</span>
+		<span class="n">Myb_damage</span> <span class="o">=</span> <span class="mf">1e3</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">2.7732E+003</span><span class="p">,</span> <span class="mf">2.8155E+003</span><span class="p">,</span> <span class="mf">2.6004E+003</span><span class="p">,</span> <span class="mf">2.3933E+003</span><span class="p">,</span> <span class="mf">2.1371E+003</span><span class="p">,</span>
+		    <span class="mf">1.8459E+003</span><span class="p">,</span> <span class="mf">1.5582E+003</span><span class="p">,</span> <span class="mf">1.2896E+003</span><span class="p">,</span> <span class="mf">1.0427E+003</span><span class="p">,</span> <span class="mf">8.2015E+002</span><span class="p">,</span> <span class="mf">6.2449E+002</span><span class="p">,</span> <span class="mf">4.5229E+002</span><span class="p">,</span>
+		    <span class="mf">3.0658E+002</span><span class="p">,</span> <span class="mf">1.8746E+002</span><span class="p">,</span> <span class="mf">9.6475E+001</span><span class="p">,</span> <span class="mf">4.2677E+001</span><span class="p">,</span> <span class="mf">1.5409E+001</span><span class="p">,</span> <span class="mf">1.8426E+000</span><span class="p">])</span>  <span class="c1"># (Array, N*m): damage equivalent moments about blade c.s. y-direction</span>
+		<span class="n">xp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">r_aero</span><span class="p">]</span>
+		<span class="n">xx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">myref</span><span class="o">.</span><span class="n">r</span><span class="p">]</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rstar_damage&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">xx</span><span class="p">,</span> <span class="n">xp</span><span class="p">,</span> <span class="n">rstar_damage</span><span class="p">)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;Mxb_damage&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">xx</span><span class="p">,</span> <span class="n">xp</span><span class="p">,</span> <span class="n">Mxb_damage</span><span class="p">)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;Myb_damage&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">xx</span><span class="p">,</span> <span class="n">xp</span><span class="p">,</span> <span class="n">Myb_damage</span><span class="p">)</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;strain_ult_spar&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0e-2</span>  <span class="c1"># (Float): ultimate strain in spar cap</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;strain_ult_te&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2500</span><span class="o">*</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="mi">2</span>   <span class="c1"># (Float): uptimate strain in trailing-edge panels, note that I am putting a factor of two for the damage part only.</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;gamma_fatigue&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.755</span> <span class="c1"># (Float): safety factor for fatigue</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;gamma_f&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.35</span> <span class="c1"># (Float): safety factor for loads/stresses</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;gamma_m&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.1</span> <span class="c1"># (Float): safety factor for materials</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;gamma_freq&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.1</span> <span class="c1"># (Float): safety factor for resonant frequencies</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;m_damage&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">10.0</span>  <span class="c1"># (Float): slope of S-N curve for fatigue analysis</span>
+		<span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;struc.lifetime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">20.0</span>  <span class="c1"># (Float): number of cycles used in fatigue analysis  TODO: make function of rotation speed</span>
+		<span class="c1"># ----------------</span>
+
+		<span class="c1"># === run and outputs ===</span>
+		<span class="n">rotor</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+
+		<span class="nb">print</span> <span class="s1">&#39;AEP =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;AEP&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;diameter =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;diameter&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;rated_V =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_V&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;rated_Omega =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_Omega&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;rated_pitch =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_pitch&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;rated_T =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_T&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;rated_Q =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;rated_Q&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;mass_one_blade =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;mass_one_blade&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;mass_all_blades =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;mass_all_blades&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;I_all_blades =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;I_all_blades&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;freq =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;freq&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;tip_deflection =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;tip_deflection&#39;</span><span class="p">]</span>
+		<span class="nb">print</span> <span class="s1">&#39;root_bending_moment =&#39;</span><span class="p">,</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;root_bending_moment&#39;</span><span class="p">]</span>
+
+		<span class="n">outpath</span> <span class="o">=</span> <span class="s1">&#39;..\..\..\docs\images&#39;</span>
+		<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;V&#39;</span><span class="p">],</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;P&#39;</span><span class="p">]</span><span class="o">/</span><span class="mf">1e6</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;wind speed (m/s)&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;power (W)&#39;</span><span class="p">)</span>
+
+		<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+
+		<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_pts&#39;</span><span class="p">],</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;strainU_spar&#39;</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;suction&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_pts&#39;</span><span class="p">],</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;strainL_spar&#39;</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;pressure&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_pts&#39;</span><span class="p">],</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;eps_crit_spar&#39;</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;critical&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="o">-</span><span class="mf">6e-3</span><span class="p">,</span> <span class="mf">6e-3</span><span class="p">])</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;r&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;strain&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+		<span class="c1"># plt.savefig(os.path.abspath(os.path.join(outpath,&#39;strain_spar_dtu10mw.png&#39;)))</span>
+		<span class="c1"># plt.savefig(os.path.abspath(os.path.join(outpath,&#39;strain_spar_dtu10mw.pdf&#39;)))</span>
+
+		<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+
+		<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_pts&#39;</span><span class="p">],</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;strainU_te&#39;</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;suction&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_pts&#39;</span><span class="p">],</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;strainL_te&#39;</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;pressure&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;r_pts&#39;</span><span class="p">],</span> <span class="n">rotor</span><span class="p">[</span><span class="s1">&#39;eps_crit_te&#39;</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;critical&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="o">-</span><span class="mf">5e-3</span><span class="p">,</span> <span class="mf">5e-3</span><span class="p">])</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;r&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;strain&#39;</span><span class="p">)</span>
+		<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+		<span class="c1"># plt.savefig(os.path.abspath(os.path.join(outpath,&#39;strain_te_dtu10mw.png&#39;)))</span>
+		<span class="c1"># plt.savefig(os.path.abspath(os.path.join(outpath,&#39;strain_te_dtu10mw.pdf&#39;)))</span>
+
+		<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
+		<span class="c1"># ----------------</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+
+	<span class="n">rotor</span> <span class="o">=</span> <span class="n">RotorSE_Example3</span><span class="p">()</span>
+	<span class="n">rotor</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">RotorSE 0.1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2014, NREL.
+      Last updated on Jul 05, 2018.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.7.5.
+    </div>
+  </body>
+</html>

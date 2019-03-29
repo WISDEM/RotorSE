@@ -88,3 +88,7 @@ nosetests.xml
 Icon?
 ehthumbs.db
 Thumbs.db
+
+# PyTest Generated files #
+__pycache__
+.pytest_cache

@@ -13,7 +13,8 @@ setup(
     author_email='andrew.ning@nrel.gov',
     install_requires=['commonse', 'ccblade', 'pbeam'],
     package_dir={'': 'src'},
-    packages=['rotorse','rotorse.test','rotorse.5MW_AFFiles','rotorse.5MW_PreCompFiles'],
+    packages=['rotorse','rotorse.test','rotorse.5MW_AFFiles','rotorse.5MW_PreCompFiles','rotorse.10MW_AFFiles','rotorse.10MW_PreCompFiles','rotorse.3_35MW_AFFiles','rotorse.3_35MW_PreCompFiles','rotorse.BAR_00_AFFiles','rotorse.BAR_00_PreCompFiles'],
+    include_package_data=True,
     license='Apache License, Version 2.0',
     dependency_links=['https://github.com/WISDEM/CCBlade/tarball/master#egg=ccblade',
         'https://github.com/WISDEM/pBEAM/tarball/master#egg=pbeam',
@@ -30,27 +31,3 @@ setup(
     package_dir={'': 'src/rotorse'},
     ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2'])],
 )
-
-if platform.system() == 'Windows':
-		setup( 
-		    name='curvefem', 
-		    package_dir={'': 'src/rotorse'}, 
-		    ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], 
-		        extra_compile_args=['-O2'], 
-		        include_dirs=[''], 
-		        library_dirs=['C:/lapack'], 
-		        libraries=['lapack'] 
-		        )], 
-		) 
-elif platform.system() == 'Darwin':
-    setup(
-        name='curvefem',
-        package_dir={'': 'src/rotorse'},
-        ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], extra_compile_args=['-O2'])])
-else:
-    setup(
-        name='curvefem',
-        package_dir={'': 'src/rotorse'},
-        ext_modules=[Extension('_curvefem', ['src/rotorse/CurveFEMPy.f90'], extra_compile_args=['-O2'],
-                               libraries=['lapack'])])
-
