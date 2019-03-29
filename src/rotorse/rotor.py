@@ -36,7 +36,7 @@ except:
     pass
 
 class RotorSE(Group):
-    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True, Analysis_Level=0, FASTpref={}):
+    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True, Analysis_Level=-1, FASTpref={}):
         super(RotorSE, self).__init__()
         """rotor model"""
 
@@ -44,7 +44,7 @@ class RotorSE(Group):
         self.Analysis_Level = Analysis_Level
         self.FASTpref= FASTpref
 
-        self.add('fst_vt_in', IndepVarComp('fst_vt_in', val={}), promotes=['*'])
+        self.add('fst_vt_in', IndepVarComp('fst_vt_in', val={}, pass_by_obj=True), promotes=['*'])
         
         self.add('turbulence_class', IndepVarComp('turbulence_class', val=TURBULENCE_CLASS['A'], desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
         self.add('gust_stddev', IndepVarComp('gust_stddev', val=3, pass_by_obj=True), promotes=['*'])
@@ -549,6 +549,7 @@ class RotorSE(Group):
         self.connect('mass.I_all_blades', 'I_all_blades_in')
         self.connect('struc.freq', 'freq_in')
         self.connect('curvefem.freq', 'freq_curvefem_in')
+        self.connect('curvefem.modes_coef', 'modes_coef_curvefem_in')
         self.connect('tip.tip_deflection', 'tip_deflection_in')
         self.connect('tip.tip_position', 'tip_position_in')
         self.connect('tip.ground_clearance', 'ground_clearance_in')
