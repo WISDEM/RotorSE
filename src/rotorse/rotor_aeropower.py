@@ -263,8 +263,9 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             P = np.array([min(Pi, params['control_ratedPower']) for Pi in P])
         
         
-        # Fit spline to powercurve for higher grid density
-        spline   = PchipInterpolator(U, P)
+        # Fit spline to powercurve for higher grid density, make sure using unique values first
+        Uniq, iniq = np.unique(U, return_index=True)
+        spline   = PchipInterpolator(Uniq, P[iniq])
         V_spline = np.linspace(params['control_Vin'],params['control_Vout'], num=self.n_pc_spline)
         P_spline = spline(V_spline)
         
@@ -431,7 +432,7 @@ class OutputsAero(Component):
         unknowns['rated_pitch'] = params['rated_pitch_in']
         unknowns['rated_T'] = params['rated_T_in']
         unknowns['rated_Q'] = params['rated_Q_in']
-        # unknowns['diameter'] = params['diameter_in']
+        unknowns['diameter'] = params['diameter_in']
         unknowns['V_extreme'] = params['V_extreme_in']
         unknowns['T_extreme'] = params['T_extreme_in']
         unknowns['Q_extreme'] = params['Q_extreme_in']
