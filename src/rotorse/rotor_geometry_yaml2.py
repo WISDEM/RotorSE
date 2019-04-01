@@ -1231,6 +1231,20 @@ class ReferenceBlade(object):
         fig_name = 'init_absthick.png'
         fat.savefig(path + fig_name)
         
+        # Prebend
+        fpb, axpb  = plt.subplots(1,1,figsize=(5.3, 4))
+        axpb.plot(blade['pf']['s'], blade['pf']['precurve'])
+        axpb.set(xlabel='r/R' , ylabel='Prebend (m)')
+        fig_name = 'init_prebend.png'
+        fpb.savefig(path + fig_name)
+        
+        # Sweep
+        fsw, axsw  = plt.subplots(1,1,figsize=(5.3, 4))
+        axsw.plot(blade['pf']['s'], blade['pf']['presweep'])
+        axsw.set(xlabel='r/R' , ylabel='Presweep (m)')
+        fig_name = 'init_presweep.png'
+        fsw.savefig(path + fig_name)
+        
         idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
         idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
         
