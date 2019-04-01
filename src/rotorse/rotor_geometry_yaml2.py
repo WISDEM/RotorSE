@@ -1182,7 +1182,77 @@ class ReferenceBlade(object):
         
         return blade
 
+    def plot_design(self, blade, path, show_plots = True):
         
+        # print(blade.keys())
+        # exit()
+        # print(blade['pf']['chord']    )
+        # print(blade['pf']['theta']    )
+        # print(blade['pf']['p_le']     )
+        # print(blade['pf']['r']        )
+        # print(blade['pf']['precurve'] )
+        # print(blade['pf']['presweep'] )
+        # exit()
+        
+        import matplotlib.pyplot as plt
+
+        # Chord
+        fc, axc  = plt.subplots(1,1,figsize=(5.3, 4))
+        axc.plot(blade['pf']['s'], blade['pf']['chord'])
+        axc.set(xlabel='r/R' , ylabel='Chord (m)')
+        fig_name = 'init_chord.png'
+        fc.savefig(path + fig_name)
+        
+        # Theta
+        ft, axt  = plt.subplots(1,1,figsize=(5.3, 4))
+        axt.plot(blade['pf']['s'], blade['pf']['theta'])
+        axt.set(xlabel='r/R' , ylabel='Twist (deg)')
+        fig_name = 'init_theta.png'
+        ft.savefig(path + fig_name)
+        
+        # Pitch axis
+        fp, axp  = plt.subplots(1,1,figsize=(5.3, 4))
+        axp.plot(blade['pf']['s'], blade['pf']['p_le']*100.)
+        axp.set(xlabel='r/R' , ylabel='Pitch Axis (%)')
+        fig_name = 'init_p_le.png'
+        fp.savefig(path + fig_name)
+        
+        # Relative thickness
+        frt, axrt  = plt.subplots(1,1,figsize=(5.3, 4))
+        axrt.plot(blade['pf']['s'], blade['pf']['rthick']*100.)
+        axrt.set(xlabel='r/R' , ylabel='Relative Thickness (%)')
+        fig_name = 'init_rthick.png'
+        frt.savefig(path + fig_name)
+        
+        # Absolute thickness
+        fat, axat  = plt.subplots(1,1,figsize=(5.3, 4))
+        axat.plot(blade['pf']['s'], blade['pf']['rthick']*blade['pf']['chord'])
+        axat.set(xlabel='r/R' , ylabel='Absolute Thickness (m)')
+        fig_name = 'init_absthick.png'
+        fat.savefig(path + fig_name)
+        
+        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
+        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
+        
+        # Spar caps thickness
+        fsc, axsc  = plt.subplots(1,1,figsize=(5.3, 4))
+        axsc.plot(blade['st']['layers'][idx_spar]['thickness']['grid'], blade['st']['layers'][idx_spar]['thickness']['values'])
+        axsc.set(xlabel='r/R' , ylabel='Spar Caps Thickness (m)')
+        fig_name = 'init_sc.png'
+        fsc.savefig(path + fig_name)
+        
+        # TE reinf thickness
+        fte, axte  = plt.subplots(1,1,figsize=(5.3, 4))
+        axte.plot(blade['st']['layers'][idx_te]['thickness']['grid'], blade['st']['layers'][idx_te]['thickness']['values'])
+        axte.set(xlabel='r/R' , ylabel='TE Reinf. Thickness (m)')
+        fig_name = 'init_te.png'
+        fte.savefig(path + fig_name)
+        
+        if show_plots:
+            plt.show()
+        
+        
+        return None        
 
 if __name__ == "__main__":
 
