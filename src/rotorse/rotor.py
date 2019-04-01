@@ -747,7 +747,7 @@ if __name__ == '__main__':
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
     # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
     # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
-    fname_input = "turbine_inputs/BAR02.yaml"
+    fname_input = "turbine_inputs/BAR09.yaml"
 
     fname_output = "turbine_inputs/test_out.yaml"
     

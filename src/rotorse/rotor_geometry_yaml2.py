@@ -436,6 +436,9 @@ class ReferenceBlade(object):
 
     def remap_profiles(self, blade, AFref, spline=PchipInterpolator):
 
+        # Option to correct trailing edge for closed to flatback transition
+        trailing_edge_correction = True
+
         # Get airfoil thicknesses in decending order and cooresponding airfoil names
         AFref_thk = [AFref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
 
@@ -451,6 +454,7 @@ class ReferenceBlade(object):
         # Build array of reference airfoil coordinates, remapped
         AFref_n  = len(af_labels)
         AFref_xy = np.zeros((self.NPTS_AfProfile, 2, AFref_n))
+        AF_fb = []
 
         for afi, af_label in enumerate(af_labels[::-1]):
             points = np.column_stack((AFref[af_label]['coordinates']['x'], AFref[af_label]['coordinates']['y']))
@@ -472,13 +476,31 @@ class ReferenceBlade(object):
                 af_points[:,0] -= af_points[np.argmin(af_points[:,0]), 0]
             c = max(af_points[:,0])-min(af_points[:,0])
             af_points[:,:] /= c
-
-
             AFref_xy[:,:,afi] = af_points
+
+            # if correcting, check for flatbacks
+            if trailing_edge_correction:
+                if af_points[0,1] == af_points[-1,1]:
+                    AF_fb.append(False)
+                else:
+                    AF_fb.append(True)
 
         
         AFref_xy = np.flip(AFref_xy, axis=2)
-            
+
+        if trailing_edge_correction:
+            # closed to flat transition, find spanwise indexes where cylinder/sharp -> flatback
+            transition = False
+            for i in range(1,len(AF_fb)):
+                if AF_fb[i] and not AF_fb[i-1]:
+                    transition = True
+                    trans_thk = [AFref_thk[i-1], AFref_thk[i]]
+            if transition:
+                trans_correct_idx = [i_thk for i_thk, thk in enumerate(blade['pf']['rthick']) if thk<trans_thk[0] and thk>trans_thk[1]]
+            else:
+                trans_correct_idx = []
+
+
         # Spanwise thickness interpolation
         spline = PchipInterpolator
         profile_spline = spline(af_thk, AFref_xy, axis=2)
@@ -492,6 +514,35 @@ class ReferenceBlade(object):
             blade['profile'][:,1,i] -= af_le[1]
             c = max(blade['profile'][:,0,i]) - min(blade['profile'][:,0,i])
             blade['profile'][:,:,i] /= c
+
+
+            if trailing_edge_correction:
+                if i in trans_correct_idx:
+
+                    # Find indices on Suction and Pressure side for last 85-95% and 95-100% chordwise
+                    idx_85_95  = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.85 and xi < 0.95]
+                    idx_95_100 = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.95 and xi < 1.]
+
+                    idx_85_95_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_85_95)) if d_idx > 1][0]+1
+                    idx_85_95_SS    = idx_85_95[:idx_85_95_break]
+                    idx_85_95_PS    = idx_85_95[idx_85_95_break:]
+
+                    idx_95_100_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_95_100)) if d_idx > 1][0]+1
+                    idx_95_100_SS    = idx_95_100[:idx_95_100_break]
+                    idx_95_100_PS    = idx_95_100[idx_95_100_break:]
+
+                    # Interpolate the last 5% to the trailing edge
+                    idx_in_PS = idx_85_95_PS+[-1]
+                    x_corrected_PS = blade['profile'][idx_95_100_PS,0,i]
+                    y_corrected_PS = remap2grid(blade['profile'][idx_in_PS,0,i], blade['profile'][idx_in_PS,1,i], x_corrected_PS)
+
+                    idx_in_SS = [0]+idx_85_95_SS
+                    x_corrected_SS = blade['profile'][idx_95_100_SS,0,i]
+                    y_corrected_SS = remap2grid(blade['profile'][idx_in_SS,0,i], blade['profile'][idx_in_SS,1,i], x_corrected_SS)
+
+                    # Overwrite profile with corrected TE
+                    blade['profile'][idx_95_100_SS,1,i] = y_corrected_SS
+                    blade['profile'][idx_95_100_PS,1,i] = y_corrected_PS
 
         return blade
 
@@ -939,13 +990,6 @@ class ReferenceBlade(object):
 
             dp_out = sorted(list(set(dp)))
 
-            # print('----------------------')
-            # print('dp', dp_out)
-            # print('n_plies', n_plies)
-            # print('thk', thk)
-            # print('theta', theta)
-            # print('mat_idx', mat_idx)
-            # print('materials', materials)
             sec = CompositeSection(dp_out, n_plies, thk, theta, mat_idx, materials)
             return sec
             ##############################
@@ -998,7 +1042,9 @@ class ReferenceBlade(object):
         profile = [None]*self.NPTS
 
         ## Spanwise
+
         for i in range(self.NPTS):
+            # time0 = time.time()
         
             ## Profiles
             # rotate
@@ -1009,17 +1055,6 @@ class ReferenceBlade(object):
             profile_i_rot[:,0] -= min(profile_i_rot[:,0])
             profile_i_rot = profile_i_rot/ max(profile_i_rot[:,0])
 
-
-
-            # handle rotated flat backs by connecting them to furthest aft point
-
-            # elif profile_i_rot[0,0] < 1.:
-            #     profile_i_rot = np.row_stack((profile_i_rot[-1,:], profile_i_rot))
-
-            ### TODO: unlikely case of 0. rotation + flatback, old way of handling
-            # if list(profile_i[-1,:]) != list(profile_i[-1,:]):
-            #     TE = np.mean((profile_i[-1,:], profile_i[-1,:]), axis=0)
-            #     profile_i = np.row_stack((TE, profile_i, TE))
             profile_i_rot_precomp = copy.copy(profile_i_rot)
             idx_le_precomp = np.argmax(profile_i_rot_precomp[:,0])
             if idx_le_precomp != 0:
@@ -1038,11 +1073,7 @@ class ReferenceBlade(object):
                 flatback = False
 
             profile[i] = Profile.initWithTEtoTEdata(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
-            # profile[i] = Profile.initWithTEtoTEdata(blade['profile'][:,0,i], blade['profile'][:,1,i])
 
-            # find arc
-            ### TODO: if rotated nose down, then arc calc should start at pressure side of the flat back, which is now part of the 'sucction side'
-            # idx_te = np.argmax(profile_i[:,0])
 
             idx_le = np.argmin(profile_i_rot[:,0])
 
@@ -1064,13 +1095,12 @@ class ReferenceBlade(object):
             web_end_nd_arc   = []
             web_idx          = []
 
-            time9 = time.time()
             # Determine spanwise composite layer elements that are non-zero at this spanwise location,
             # determine their chord-wise start and end location on the pressure and suctions side
 
-
             spline_arc2xnd = PchipInterpolator(profile_i_arc, profile_i_rot[:,0])
 
+            time1 = time.time()
             for idx_sec, sec in enumerate(blade['st']['layers']):
 
                 if 'web' not in sec.keys():
@@ -1117,15 +1147,15 @@ class ReferenceBlade(object):
                     if blade['st']['webs'][target_idx]['start_nd_arc']['values'][i] != None and blade['st']['layers'][idx_sec]['thickness']['values'][i] != None:
                         web_idx.append(idx_sec)
 
-                        start_nd_arc = float(remap2grid(profile_i_arc, profile_i_rot[:,0], blade['st']['webs'][target_idx]['start_nd_arc']['values'][i]))
-                        end_nd_arc = float(remap2grid(profile_i_arc, profile_i_rot[:,0], blade['st']['webs'][target_idx]['end_nd_arc']['values'][i]))
+                        start_nd_arc = float(spline_arc2xnd(blade['st']['webs'][target_idx]['start_nd_arc']['values'][i]))
+                        end_nd_arc   = float(spline_arc2xnd(blade['st']['webs'][target_idx]['end_nd_arc']['values'][i]))
 
                         web_start_nd_arc.append(start_nd_arc)
                         web_end_nd_arc.append(end_nd_arc)
 
 
-            # print(i, time.time()-time9)
-
+            time1 = time.time() - time1
+            # print(time1)
 
             # generate the Precomp composite stacks for chordwise regions
             upperCS[i], region_loc_ss = region_stacking(i, ss_idx, ss_start_nd_arc, ss_end_nd_arc, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], region_loc_ss)
@@ -1134,6 +1164,7 @@ class ReferenceBlade(object):
                 websCS[i] = web_stacking(i, web_idx, web_start_nd_arc, web_end_nd_arc, blade, blade['precomp']['material_dict'], blade['precomp']['materials'], flatback, upperCS[i])
             else:
                 websCS[i] = CompositeSection([], [], [], [], [], [])
+
 
         blade['precomp']['upperCS']       = upperCS
         blade['precomp']['lowerCS']       = lowerCS
