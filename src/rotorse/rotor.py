@@ -684,6 +684,7 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
     rotor['rho']              = 1.225  # (Float, kg/m**3): density of air
     rotor['mu']               = 1.81206e-5  # (Float, kg/m/s): dynamic viscosity of air
     rotor['wind.shearExp']    = 0.25  # (Float): shear exponent
+    rotor['shape_parameter']  = 2.0
     rotor['hub_height']       = blade['config']['hub_height']  # (Float, m): hub height
     rotor['turbine_class']    = TURBINE_CLASS[blade['config']['turbine_class'].upper()] #TURBINE_CLASS['I']  # (Enum): IEC turbine class
     rotor['turbulence_class'] = TURBULENCE_CLASS[blade['config']['turbulence_class'].upper()]  # (Enum): IEC turbulence class class
@@ -747,7 +748,7 @@ if __name__ == '__main__':
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
     # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
     # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
-    fname_input = "turbine_inputs/BAR09.yaml"
+    fname_input = "turbine_inputs/BAR13.yaml"
 
     fname_output = "turbine_inputs/test_out.yaml"
     
