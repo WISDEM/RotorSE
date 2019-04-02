@@ -183,10 +183,10 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                     
                     
                     P_aero[i], T[i], Q[i], M[i], Cp_aero[i], _, _, _ = self.ccblade.evaluate([Uhub[i]], [Omega[i] * 30. / np.pi], [pitch[i]], coefficients=True)
-                    P, eff  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
-                    Cp      = Cp_aero*eff
+                    P[i], eff[i]  = CSMDrivetrain(P_aero[i], params['control_ratedPower'], params['drivetrainType'])
+                    Cp[i]      = Cp_aero[i]*eff[i]
 
-                    if P  [i] > params['control_ratedPower']:
+                    if P[i] > params['control_ratedPower']:
                         break
 
         
@@ -212,32 +212,33 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 
                 pitch[j]        = pitch_regionIII
                 P_aero[j], T[j], Q[j], M[j], Cp_aero[j], _, _, _ = self.ccblade.evaluate([Uhub[j]], [Omega[j] * 30. / np.pi], [pitch[j]], coefficients=True)
-                P, eff          = CSMDrivetrain(P_aero[j], params['control_ratedPower'], params['drivetrainType'])
-                Cp              = Cp_aero*eff
+                P[j], eff[j]    = CSMDrivetrain(P_aero[j], params['control_ratedPower'], params['drivetrainType'])
+                Cp[j]           = Cp_aero[j]*eff[j]
                 
+
                 if abs(P[j] - params['control_ratedPower']) > 1e+4:
                     print('The pitch in region III is not being determined correctly at wind speed ' + str(Uhub[j]) + ' m/s')
-                    P  [j]      = params['control_ratedPower']
+                    P[j]        = params['control_ratedPower']
                     T[j]        = T[j-1]
-                    Q[j]        = P  [j] / Omega[j]
+                    Q[j]        = P[j] / Omega[j]
                     M[j]        = M[j-1]
                     pitch[j]    = pitch[j-1]
-                    Cp  [j]     = P  [j] / (0.5 * params['rho'] * np.pi * params['Rtip']**2 * Uhub[i]**3)
-                    P, eff      = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
-                    Cp          = Cp_aero*eff
+                    Cp[j]       = P[j] / (0.5 * params['rho'] * np.pi * params['Rtip']**2 * Uhub[i]**3)
+                    # P[j], eff[j]= CSMDrivetrain(P_aero[j], params['control_ratedPower'], params['drivetrainType'])
+                    # Cp          = Cp_aero*eff
                 
             else:
                 P[j]        = params['control_ratedPower']
                 T[j]        = 0
-                Q[j]        = P  [j] / Omega[j]
+                Q[j]        = P[j] / Omega[j]
                 M[j]        = 0
                 pitch[j]    = 0
-                Cp  [j]     = P[j] / (0.5 * params['rho'] * np.pi * params['Rtip']**2 * Uhub[i]**3)
+                Cp[j]       = P[j] / (0.5 * params['rho'] * np.pi * params['Rtip']**2 * Uhub[i]**3)
 
         
         unknowns['T']       = T
         unknowns['Q']       = Q
-        unknowns['Omega']   = Omega * 30 / np.pi
+        unknowns['Omega']   = Omega * 30. / np.pi
         
         unknowns['P']       = P  
         unknowns['Cp']      = Cp  
@@ -255,17 +256,13 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # outputs
         idx_rated = list(Uhub).index(U_rated)
         unknowns['rated_V']     = U_rated
-        unknowns['rated_Omega'] = Omega[idx_rated]
+        unknowns['rated_Omega'] = Omega[idx_rated] * 30. / np.pi
         unknowns['rated_pitch'] = pitch[idx_rated]
-        unknowns['rated_T'   ]  = T[idx_rated]
+        unknowns['rated_T']     = T[idx_rated]
         unknowns['rated_Q']     = Q[idx_rated]
         
         unknowns['V_spline']    = V_spline
         unknowns['P_spline']    = P_spline
-        
-        
-        
-        
 
 class AEP(Component):
     def __init__(self, n_pc_spline):
