@@ -130,7 +130,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # Init BEM solver
         # chord = [2.6001099, 2.62242763, 2.67996425, 2.90085584, 3.17531587, 3.42387123, 3.64330915, 3.83052412, 3.98212681, 4.10594413, 4.19584165, 4.26048096, 4.28580291, 4.29671995, 4.27768742, 4.23738792, 4.17189564, 4.08924059, 3.98766963, 3.87233115, 3.74355951, 3.60392971, 3.45902389, 3.3113602, 3.1659319, 3.02649254, 2.89457583, 2.77070512, 2.6548174, 2.54683906, 2.44672653, 2.3545666, 2.27039966, 2.19417705, 2.12588872, 2.06554844, 2.01316757, 1.96875011, 1.93235573, 1.90390608, 1.88232097, 1.8583458, 1.82120335, 1.75844402, 1.65851675, 1.50997905, 1.30133456, 1.02070032, 0.65731181, 0.20224083]
         # self.ccblade = CCBlade(params['r'], chord, params['theta'], params['airfoils'], params['Rhub'], params['Rtip'], params['B'], params['rho'], params['mu'], params['precone'], params['tilt'], params['yaw'], params['shearExp'], params['hubHt'], params['nSector'])        
-        self.ccblade = CCBlade(params['r'], params['chord'], params['theta'], params['airfoils'], params['Rhub'], params['Rtip'], params['B'], params['rho'], params['mu'], params['precone'], params['tilt'], params['yaw'], params['shearExp'], params['hubHt'], params['nSector'])        
+        self.ccblade = CCBlade(params['r'], params['chord'], params['theta'], params['airfoils'], params['Rhub'], params['Rtip'], params['B'], params['rho'], params['mu'], params['precone'], params['tilt'], params['yaw'], params['shearExp'], params['hubHt'], params['nSector'], tiploss=params['tiploss'], hubloss=params['hubloss'], wakerotation=params['wakerotation'], usecd=params['usecd'])
 
         # BEM solver optimization/root finding wrappers
         def P_residual_U(Uhub):
@@ -636,7 +636,6 @@ if __name__ == '__main__':
     #rotor.setup(check=False)
     rotor.setup()
     rotor = Init_RotorAeropower_wRefBlade(rotor, blade)
-
 
     # === run and outputs ===
     rotor.run()

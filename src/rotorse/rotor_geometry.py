@@ -830,7 +830,7 @@ class BladeGeometry(Component):
         refBlade.NINPUT         = len(unknowns['r_in'])
         refBlade.NPTS           = len(blade['pf']['s'])
         refBlade.analysis_level = blade['analysis_level']
-        if blade['analysis_level'] == 0:
+        if blade['analysis_level'] < 3:
             refBlade.spar_var   = blade['precomp']['spar_var']
             refBlade.te_var     = blade['precomp']['te_var']
         

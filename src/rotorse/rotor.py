@@ -123,7 +123,7 @@ class RotorSE(Group):
         self.add('struc', RotorWithpBEAM(NPTS), promotes=['gamma_fatigue'])
         self.add('curvefem', CurveFEM(NPTS))
         self.add('tip', TipDeflection(), promotes=['gamma_m'])
-        if not self.Analysis_Level>0:
+        if not self.Analysis_Level>1:
             self.add('root_moment', RootMoment(NPTS))
         self.add('mass', MassProperties())
         self.add('extreme', ExtremeLoads())
@@ -144,7 +144,7 @@ class RotorSE(Group):
         # self.connect('max_tip_speed', 'tipspeed.Vtip_max')
         # self.connect('tipspeed.Omega_max', 'control_maxOmega')
 
-        if self.Analysis_Level>=0:
+        if self.Analysis_Level>=1:
             self.add('aeroelastic', FASTLoadCases(NPTS, npts_coarse_power_curve, npts_spline_power_curve, self.FASTpref))
 
             self.connect('fst_vt_in', 'aeroelastic.fst_vt_in')
@@ -226,7 +226,7 @@ class RotorSE(Group):
 
         # connections to aep
         self.connect('cdf.F', 'aep.CDF_V')
-        if self.Analysis_Level>0:
+        if self.Analysis_Level>1:
             self.connect('powercurve.V_spline', 'aeroelastic.V_out')
             self.connect('aeroelastic.P_out', 'aep.P')
         else:
@@ -410,7 +410,7 @@ class RotorSE(Group):
 
 
         # connections to loads_strain
-        if self.Analysis_Level>0:
+        if self.Analysis_Level>1:
             self.connect('aeroelastic.loads_Px', 'loads_strain.aeroloads_Px')
             self.connect('aeroelastic.loads_Py', 'loads_strain.aeroloads_Py')
             self.connect('aeroelastic.loads_Pz', 'loads_strain.aeroloads_Pz')
@@ -495,7 +495,7 @@ class RotorSE(Group):
         self.connect('presweep', 'curvefem.presweep')
 
         # connections to tip
-        if self.Analysis_Level>0:
+        if self.Analysis_Level>1:
             self.connect('aeroelastic.dx_defl', 'tip.dx')
             self.connect('aeroelastic.dy_defl', 'tip.dy')
             self.connect('aeroelastic.dz_defl', 'tip.dz')
@@ -517,7 +517,7 @@ class RotorSE(Group):
         self.connect('dynamic_amplication', 'tip.dynamicFactor')
 
         # connections to root moment
-        if not self.Analysis_Level>0:
+        if not self.Analysis_Level>1:
             self.connect('r_pts', 'root_moment.r_pts')
             self.connect('aero_rated.loads_Px', 'root_moment.aeroloads_Px')
             self.connect('aero_rated.loads_Py', 'root_moment.aeroloads_Py')
@@ -570,7 +570,7 @@ class RotorSE(Group):
         self.connect('struc.strainL_spar', 'strainL_spar_in')
         self.connect('struc.strainU_te', 'strainU_te_in')
         self.connect('struc.strainL_te', 'strainL_te_in')
-        if self.Analysis_Level>0:
+        if self.Analysis_Level>1:
             self.connect('aeroelastic.root_bending_moment', 'root_bending_moment_in')
             self.connect('aeroelastic.Mxyz', 'Mxyz_in')
         else:
@@ -655,9 +655,9 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
     Analysis_Level = rotor.root.Analysis_Level
 
     # === FAST model ===
-    if Analysis_Level >= 0:
+    if Analysis_Level >= 1:
         rotor['fst_vt_in'] = fst_vt
-    if Analysis_Level > 0:
+    if Analysis_Level > 1:
         rotor['drivetrainEff'] = fst_vt['ServoDyn']['GenEff']/100.
 
     # === blade grid ===
@@ -751,7 +751,7 @@ if __name__ == '__main__':
 
     fname_output = "turbine_inputs/test_out.yaml"
     
-    Analysis_Level = -1 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
+    Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
 
     # Initialize blade design
     refBlade = ReferenceBlade()
@@ -765,7 +765,7 @@ if __name__ == '__main__':
     blade = refBlade.initialize(fname_input)
 
     # Set FAST Inputs
-    if Analysis_Level >= 0:
+    if Analysis_Level >= 1:
         # File management
         FASTpref                        = {}
         FASTpref['Analysis_Level']      = Analysis_Level
