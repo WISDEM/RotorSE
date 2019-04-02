@@ -25,7 +25,7 @@ from akima import Akima
 
 from rotorse import RPM2RS, RS2RPM
 from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
-from rotorse.rotor_geometry_yaml2 import ReferenceBlade
+from rotorse.rotor_geometry_yaml import ReferenceBlade
 
 import time
 # ---------------------

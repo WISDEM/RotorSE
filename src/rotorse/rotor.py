@@ -17,7 +17,7 @@ from commonse.environment import PowerWind
 
 from rotorse import RPM2RS, RS2RPM
 from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection
-from rotorse.rotor_geometry_yaml2 import ReferenceBlade
+from rotorse.rotor_geometry_yaml import ReferenceBlade
 from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
 from rotorse.rotor_aeropower import RegulatedPowerCurve, AEP, OutputsAero
 from rotorse.rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, \
