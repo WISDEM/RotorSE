@@ -79,7 +79,7 @@ def remapAirfoil(x_ref, y_ref, x0):
 
     return remap2grid(x, y, x_in)
 
-def arc_length(x, y, high_fidelity=False):
+def arc_length(x, y, z=[]):
     npts = len(x)
     arc = np.array([0.]*npts)
     # if high_fidelity:
@@ -112,8 +112,12 @@ def arc_length(x, y, high_fidelity=False):
 
 
     # else:
-    for k in range(1, npts):
-        arc[k] = arc[k-1] + np.sqrt((x[k] - x[k-1])**2 + (y[k] - y[k-1])**2)
+    if len(z) == len(x):
+        for k in range(1, npts):
+            arc[k] = arc[k-1] + np.sqrt((x[k] - x[k-1])**2 + (y[k] - y[k-1])**2 + (z[k] - z[k-1])**2)
+    else:
+        for k in range(1, npts):
+            arc[k] = arc[k-1] + np.sqrt((x[k] - x[k-1])**2 + (y[k] - y[k-1])**2)
 
     return arc
 
@@ -703,7 +707,7 @@ class ReferenceBlade(object):
 
             idx_le = np.argmin(profile_i[:,0])
 
-            profile_i_arc = arc_length(profile_i[:,0], profile_i[:,1], high_fidelity=False)
+            profile_i_arc = arc_length(profile_i[:,0], profile_i[:,1])
             arc_L = profile_i_arc[-1]
             profile_i_arc /= arc_L
 
@@ -1077,7 +1081,7 @@ class ReferenceBlade(object):
 
             idx_le = np.argmin(profile_i_rot[:,0])
 
-            profile_i_arc = arc_length(profile_i_rot[:,0], profile_i_rot[:,1], high_fidelity=False)
+            profile_i_arc = arc_length(profile_i_rot[:,0], profile_i_rot[:,1])
             arc_L = profile_i_arc[-1]
             profile_i_arc /= arc_L
 
