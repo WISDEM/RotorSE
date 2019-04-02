@@ -2876,7 +2876,7 @@ class RotorStructure(Group):
 def Init_RotorStructure_wRefBlade(rotor, blade):
     # === blade grid ===
     rotor['hubFraction']      = blade['config']['hubD']/2./blade['pf']['r'][-1] #0.025  # (Float): hub location as fraction of radius
-    rotor['bladeLength']      = blade['pf']['r'][-1] #61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
+    rotor['bladeLength']      = blade['ctrl_pts']['bladeLength'] #61.5  # (Float, m): blade length (if not precurved or swept) otherwise length of blade before curvature
     rotor['precone']          = blade['config']['cone_angle'] #2.5  # (Float, deg): precone angle
     rotor['tilt']             = blade['config']['tilt_angle'] #5.0  # (Float, deg): shaft tilt
     rotor['yaw']              = 0.0  # (Float, deg): yaw error

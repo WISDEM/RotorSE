@@ -870,7 +870,7 @@ class ReferenceBlade(object):
         blade['ctrl_pts']['r_in']         = r_in
         blade['ctrl_pts']['r_cylinder']   = r_cylinder
         blade['ctrl_pts']['r_max_chord']  = r_max_chord
-        blade['ctrl_pts']['bladeLength']  = blade['pf']['r'][-1]
+        blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
 
         return blade
 
@@ -885,6 +885,8 @@ class ReferenceBlade(object):
         blade['pf']['r']        = blade['ctrl_pts']['bladeLength']*np.array(self.s)
         blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s)
         blade['pf']['presweep'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['presweep_in'], self.s)
+
+        blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
 
         idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
         idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
