@@ -1182,8 +1182,163 @@ class ReferenceBlade(object):
         
         return blade
 
+    def plot_design(self, blade, path, show_plots = True):
+        
+        import matplotlib.pyplot as plt
+
+        # Chord
+        fc, axc  = plt.subplots(1,1,figsize=(5.3, 4))
+        axc.plot(blade['pf']['s'], blade['pf']['chord'])
+        axc.set(xlabel='r/R' , ylabel='Chord (m)')
+        fig_name = 'init_chord.png'
+        fc.savefig(path + fig_name)
+        
+        # Theta
+        ft, axt  = plt.subplots(1,1,figsize=(5.3, 4))
+        axt.plot(blade['pf']['s'], blade['pf']['theta'])
+        axt.set(xlabel='r/R' , ylabel='Twist (deg)')
+        fig_name = 'init_theta.png'
+        ft.savefig(path + fig_name)
+        
+        # Pitch axis
+        fp, axp  = plt.subplots(1,1,figsize=(5.3, 4))
+        axp.plot(blade['pf']['s'], blade['pf']['p_le']*100.)
+        axp.set(xlabel='r/R' , ylabel='Pitch Axis (%)')
+        fig_name = 'init_p_le.png'
+        fp.savefig(path + fig_name)
+        
+        # Relative thickness
+        frt, axrt  = plt.subplots(1,1,figsize=(5.3, 4))
+        axrt.plot(blade['pf']['s'], blade['pf']['rthick']*100.)
+        axrt.set(xlabel='r/R' , ylabel='Relative Thickness (%)')
+        fig_name = 'init_rthick.png'
+        frt.savefig(path + fig_name)
+        
+        # Absolute thickness
+        fat, axat  = plt.subplots(1,1,figsize=(5.3, 4))
+        axat.plot(blade['pf']['s'], blade['pf']['rthick']*blade['pf']['chord'])
+        axat.set(xlabel='r/R' , ylabel='Absolute Thickness (m)')
+        fig_name = 'init_absthick.png'
+        fat.savefig(path + fig_name)
+        
+        # Prebend
+        fpb, axpb  = plt.subplots(1,1,figsize=(5.3, 4))
+        axpb.plot(blade['pf']['s'], blade['pf']['precurve'])
+        axpb.set(xlabel='r/R' , ylabel='Prebend (m)')
+        fig_name = 'init_prebend.png'
+        fpb.savefig(path + fig_name)
+        
+        # Sweep
+        fsw, axsw  = plt.subplots(1,1,figsize=(5.3, 4))
+        axsw.plot(blade['pf']['s'], blade['pf']['presweep'])
+        axsw.set(xlabel='r/R' , ylabel='Presweep (m)')
+        fig_name = 'init_presweep.png'
+        fsw.savefig(path + fig_name)
+        
+        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
+        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
+        
+        # Spar caps thickness
+        fsc, axsc  = plt.subplots(1,1,figsize=(5.3, 4))
+        axsc.plot(blade['st']['layers'][idx_spar]['thickness']['grid'], blade['st']['layers'][idx_spar]['thickness']['values'])
+        axsc.set(xlabel='r/R' , ylabel='Spar Caps Thickness (m)')
+        fig_name = 'init_sc.png'
+        fsc.savefig(path + fig_name)
+        
+        # TE reinf thickness
+        fte, axte  = plt.subplots(1,1,figsize=(5.3, 4))
+        axte.plot(blade['st']['layers'][idx_te]['thickness']['grid'], blade['st']['layers'][idx_te]['thickness']['values'])
+        axte.set(xlabel='r/R' , ylabel='TE Reinf. Thickness (m)')
+        fig_name = 'init_te.png'
+        fte.savefig(path + fig_name)
+        
+        if show_plots:
+            plt.show()
+        
+        
+        return None        
+
+        
+    def smooth_outer_shape(self, blade, path, show_plots = True):
+        
+        s               = blade['pf']['s']        
+        
+        # Absolute Thickness
+        abs_thick_init  = blade['pf']['rthick']*blade['pf']['chord']
+        s_interp_at     = np.array([0.0, 0.15, 0.4, 0.6, 0.8, 1.0 ])
+        f_interp1       = interp1d(s,abs_thick_init)
+        abs_thick_int1  = f_interp1(s_interp_at)
+        f_interp2       = PchipInterpolator(s_interp_at,abs_thick_int1)
+        abs_thick_int2  = f_interp2(s)
+        
+        import matplotlib.pyplot as plt
+        
+        
+        
+        # Chord
+        chord_init      = blade['pf']['chord']
+        s_interp_c      = np.array([0.0, 0.05, 0.2, 0.4, 0.6, 0.8, 0.9, 1.0 ])
+        f_interp1       = interp1d(s,chord_init)
+        chord_int1      = f_interp1(s_interp_c)
+        f_interp2       = PchipInterpolator(s_interp_c,chord_int1)
+        chord_int2      = f_interp2(s)
+        
+        fc, axc  = plt.subplots(1,1,figsize=(5.3, 4))
+        axc.plot(s, chord_init, c='k', label='Initial')
+        axc.plot(s_interp_c, chord_int1, 'ko', label='Interp Points')
+        axc.plot(s, chord_int2, c='b', label='PCHIP')
+        axc.set(xlabel='r/R' , ylabel='Chord (m)')
+        fig_name = 'interp_chord.png'
+        axc.legend()
+        fc.savefig(path + fig_name)
         
 
+        # Relative thickness
+        r_thick_interp = abs_thick_int2 / chord_int2
+        r_thick_airfoils = np.array([0.18, 0.211, 0.241, 0.301, 0.36 , 0.50, 1.00])
+        f_interp1        = interp1d(r_thick_interp,s)
+        s_interp_rt      = f_interp1(r_thick_airfoils)
+        f_interp2        = PchipInterpolator(np.flip(s_interp_rt),np.flip(r_thick_airfoils))
+        r_thick_int2     = f_interp2(s)
+        
+        
+        frt, axrt  = plt.subplots(1,1,figsize=(5.3, 4))
+        axrt.plot(blade['pf']['s'], blade['pf']['rthick']*100., c='k', label='Initial')
+        axrt.plot(blade['pf']['s'], r_thick_interp * 100., c='b', label='Interp')
+        axrt.plot(s_interp_rt, r_thick_airfoils * 100., 'og', label='Airfoils')
+        axrt.plot(blade['pf']['s'], r_thick_int2 * 100., c='g', label='Reconstructed')
+        axrt.set(xlabel='r/R' , ylabel='Relative Thickness (%)')
+        fig_name = 'interp_rthick.png'
+        axrt.legend()
+        frt.savefig(path + fig_name)
+
+        
+        fat, axat  = plt.subplots(1,1,figsize=(5.3, 4))
+        axat.plot(s, abs_thick_init, c='k', label='Initial')
+        axat.plot(s_interp_at, abs_thick_int1, 'ko', label='Interp Points')
+        axat.plot(s, abs_thick_int2, c='b', label='PCHIP')
+        axat.plot(s, r_thick_int2 * chord_int2, c='g', label='Reconstructed')
+        axat.set(xlabel='r/R' , ylabel='Absolute Thickness (m)')
+        fig_name = 'interp_abs_thick.png'
+        axat.legend()
+        fat.savefig(path + fig_name)
+        
+        
+        
+        
+        if show_plots:
+            plt.show()
+        
+        
+        print(chord_int2)
+        print(s_interp_rt)
+        exit()
+        
+        
+        return None
+        
+        
+        
 if __name__ == "__main__":
 
     ## File managment
