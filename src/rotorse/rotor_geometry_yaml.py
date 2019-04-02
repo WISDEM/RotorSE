@@ -1191,7 +1191,7 @@ class ReferenceBlade(object):
     def plot_design(self, blade, path, show_plots = True):
         
         import matplotlib.pyplot as plt
-
+        
         # Chord
         fc, axc  = plt.subplots(1,1,figsize=(5.3, 4))
         axc.plot(blade['pf']['s'], blade['pf']['chord'])
@@ -1212,6 +1212,21 @@ class ReferenceBlade(object):
         axp.set(xlabel='r/R' , ylabel='Pitch Axis (%)')
         fig_name = 'init_p_le.png'
         fp.savefig(path + fig_name)
+        
+        
+        # Planform
+        le = blade['pf']['p_le']*blade['pf']['chord']
+        te = (1. - blade['pf']['p_le'])*blade['pf']['chord']
+
+        fpl, axpl  = plt.subplots(1,1,figsize=(5.3, 4))
+        axpl.plot(blade['pf']['s'], -le)
+        axpl.plot(blade['pf']['s'], te)
+        axpl.set(xlabel='r/R' , ylabel='Planform (m)')
+        axpl.legend()
+        fig_name = 'init_planform.png'
+        fpl.savefig(path + fig_name)
+        
+        
         
         # Relative thickness
         frt, axrt  = plt.subplots(1,1,figsize=(5.3, 4))
@@ -1239,16 +1254,19 @@ class ReferenceBlade(object):
         axsw.plot(blade['pf']['s'], blade['pf']['presweep'])
         axsw.set(xlabel='r/R' , ylabel='Presweep (m)')
         fig_name = 'init_presweep.png'
+        plt.subplots_adjust(left = 0.14)
         fsw.savefig(path + fig_name)
         
         idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
         idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
+        idx_skin  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()=='shell_skin'][0]
         
         # Spar caps thickness
         fsc, axsc  = plt.subplots(1,1,figsize=(5.3, 4))
         axsc.plot(blade['st']['layers'][idx_spar]['thickness']['grid'], blade['st']['layers'][idx_spar]['thickness']['values'])
         axsc.set(xlabel='r/R' , ylabel='Spar Caps Thickness (m)')
         fig_name = 'init_sc.png'
+        plt.subplots_adjust(left = 0.14)
         fsc.savefig(path + fig_name)
         
         # TE reinf thickness
@@ -1256,7 +1274,16 @@ class ReferenceBlade(object):
         axte.plot(blade['st']['layers'][idx_te]['thickness']['grid'], blade['st']['layers'][idx_te]['thickness']['values'])
         axte.set(xlabel='r/R' , ylabel='TE Reinf. Thickness (m)')
         fig_name = 'init_te.png'
+        plt.subplots_adjust(left = 0.14)
         fte.savefig(path + fig_name)
+        
+        # Skin
+        fsk, axsk  = plt.subplots(1,1,figsize=(5.3, 4))
+        axsk.plot(blade['st']['layers'][idx_skin]['thickness']['grid'], blade['st']['layers'][idx_skin]['thickness']['values'])
+        axsk.set(xlabel='r/R' , ylabel='Shell Skin Thickness (m)')
+        fig_name = 'init_skin.png'
+        fsk.savefig(path + fig_name)
+        
         
         if show_plots:
             plt.show()
@@ -1329,6 +1356,30 @@ class ReferenceBlade(object):
         axat.legend()
         fat.savefig(path + fig_name)
         
+        
+        
+        # Planform
+        le_init = blade['pf']['p_le']*blade['pf']['chord']
+        te_init = (1. - blade['pf']['p_le'])*blade['pf']['chord']
+        
+        s_interp_le     = np.array([0.0, 0.5, 0.8, 0.9, 1.0])
+        f_interp1       = interp1d(s,le_init)
+        le_int1         = f_interp1(s_interp_le)
+        f_interp2       = PchipInterpolator(s_interp_le,le_int1)
+        le_int2         = f_interp2(s)
+        
+        fpl, axpl  = plt.subplots(1,1,figsize=(5.3, 4))
+        axpl.plot(blade['pf']['s'], -le_init, c='k', label='LE init')
+        axpl.plot(blade['pf']['s'], -le_int2, c='b', label='LE smooth')
+        axpl.plot(blade['pf']['s'], te_init, c='g', label='TE init')
+        axpl.plot(blade['pf']['s'], blade['pf']['chord'] - le_int2, c='r', label='TE smooth')
+        axpl.set(xlabel='r/R' , ylabel='Planform (m)')
+        axpl.legend()
+        fig_name = 'interp_planform.png'
+        fpl.savefig(path + fig_name)
+        
+        
+        print(le_int2/blade['pf']['chord'])
         
         
         
