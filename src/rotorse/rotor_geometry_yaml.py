@@ -430,7 +430,7 @@ class ReferenceBlade(object):
         blade['pf']['theta']    = np.degrees(remap2grid(blade['outer_shape_bem']['twist']['grid'], blade['outer_shape_bem']['twist']['values'], self.s))
         blade['pf']['p_le']     = remap2grid(blade['outer_shape_bem']['pitch_axis']['grid'], blade['outer_shape_bem']['pitch_axis']['values'], self.s)
         blade['pf']['r']        = remap2grid(blade['outer_shape_bem']['reference_axis']['z']['grid'], blade['outer_shape_bem']['reference_axis']['z']['values'], self.s)
-        blade['pf']['precurve'] = remap2grid(blade['outer_shape_bem']['reference_axis']['x']['grgit id'], -1.*blade['outer_shape_bem']['reference_axis']['x']['values'], self.s)
+        blade['pf']['precurve'] = -1.*remap2grid(blade['outer_shape_bem']['reference_axis']['x']['grid'], blade['outer_shape_bem']['reference_axis']['x']['values'], self.s)
         blade['pf']['presweep'] = remap2grid(blade['outer_shape_bem']['reference_axis']['y']['grid'], blade['outer_shape_bem']['reference_axis']['y']['values'], self.s)
 
         thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
@@ -1347,7 +1347,7 @@ if __name__ == "__main__":
 
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_input        = "turbine_inputs/BAR02.yaml"
+    fname_input        = "turbine_inputs/BAR13.yaml"
     # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
     # fname_input        = "turbine_inputs/test_out.yaml"
     fname_output       = "turbine_inputs/test_out2.yaml"
