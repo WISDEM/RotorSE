@@ -288,11 +288,11 @@ class ReferenceBlade(object):
         wt_out['components']['blade']['outer_shape_bem']['twist']['grid']               = blade_out['pf']['s'].tolist()
         wt_out['components']['blade']['outer_shape_bem']['pitch_axis']['values']        = blade_out['pf']['p_le'].tolist()
         wt_out['components']['blade']['outer_shape_bem']['pitch_axis']['grid']          = blade_out['pf']['s'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['values']  = blade_out['pf']['r'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['values']  = (-1*blade_out['pf']['precurve']).tolist()
         wt_out['components']['blade']['outer_shape_bem']['reference_axis']['x']['grid']    = blade_out['pf']['s'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['values']  = blade_out['pf']['precurve'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['values']  = blade_out['pf']['presweep'].tolist()
         wt_out['components']['blade']['outer_shape_bem']['reference_axis']['y']['grid']    = blade_out['pf']['s'].tolist()
-        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['values']  = blade_out['pf']['presweep'].tolist()
+        wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['values']  = blade_out['pf']['r'].tolist()
         wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['grid']    = blade_out['pf']['s'].tolist()
 
         # Composite layups
@@ -425,9 +425,9 @@ class ReferenceBlade(object):
         blade['pf']['chord']    = remap2grid(blade['outer_shape_bem']['chord']['grid'], blade['outer_shape_bem']['chord']['values'], self.s)
         blade['pf']['theta']    = np.degrees(remap2grid(blade['outer_shape_bem']['twist']['grid'], blade['outer_shape_bem']['twist']['values'], self.s))
         blade['pf']['p_le']     = remap2grid(blade['outer_shape_bem']['pitch_axis']['grid'], blade['outer_shape_bem']['pitch_axis']['values'], self.s)
-        blade['pf']['r']        = remap2grid(blade['outer_shape_bem']['reference_axis']['x']['grid'], blade['outer_shape_bem']['reference_axis']['x']['values'], self.s)
-        blade['pf']['precurve'] = remap2grid(blade['outer_shape_bem']['reference_axis']['y']['grid'], blade['outer_shape_bem']['reference_axis']['y']['values'], self.s)
-        blade['pf']['presweep'] = remap2grid(blade['outer_shape_bem']['reference_axis']['z']['grid'], blade['outer_shape_bem']['reference_axis']['z']['values'], self.s)
+        blade['pf']['r']        = remap2grid(blade['outer_shape_bem']['reference_axis']['z']['grid'], blade['outer_shape_bem']['reference_axis']['z']['values'], self.s)
+        blade['pf']['precurve'] = remap2grid(blade['outer_shape_bem']['reference_axis']['x']['grgit id'], -1.*blade['outer_shape_bem']['reference_axis']['x']['values'], self.s)
+        blade['pf']['presweep'] = remap2grid(blade['outer_shape_bem']['reference_axis']['y']['grid'], blade['outer_shape_bem']['reference_axis']['y']['values'], self.s)
 
         thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
         blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
