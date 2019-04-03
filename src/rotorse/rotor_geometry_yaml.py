@@ -458,7 +458,7 @@ class ReferenceBlade(object):
         # Build array of reference airfoil coordinates, remapped
         AFref_n  = len(af_labels)
         AFref_xy = np.zeros((self.NPTS_AfProfile, 2, AFref_n))
-        AF_fb = []
+        AF_fb = {}
 
         for afi, af_label in enumerate(af_labels[::-1]):
             points = np.column_stack((AFref[af_label]['coordinates']['x'], AFref[af_label]['coordinates']['y']))
@@ -485,9 +485,9 @@ class ReferenceBlade(object):
             # if correcting, check for flatbacks
             if trailing_edge_correction:
                 if af_points[0,1] == af_points[-1,1]:
-                    AF_fb.append(False)
+                    AF_fb[af_label] = False
                 else:
-                    AF_fb.append(True)
+                    AF_fb[af_label] = True
 
         
         AFref_xy = np.flip(AFref_xy, axis=2)
@@ -495,10 +495,12 @@ class ReferenceBlade(object):
         if trailing_edge_correction:
             # closed to flat transition, find spanwise indexes where cylinder/sharp -> flatback
             transition = False
-            for i in range(1,len(AF_fb)):
-                if AF_fb[i] and not AF_fb[i-1]:
+            for i in range(1,len(blade['outer_shape_bem']['airfoil_position']['labels'])):
+                afi1 = blade['outer_shape_bem']['airfoil_position']['labels'][i]
+                afi0 = blade['outer_shape_bem']['airfoil_position']['labels'][i-1]
+                if AF_fb[afi1] and not AF_fb[afi0]:
                     transition = True
-                    trans_thk = [AFref_thk[i-1], AFref_thk[i]]
+                    trans_thk = [AFref[afi0]['relative_thickness'], AFref[afi1]['relative_thickness']]
             if transition:
                 trans_correct_idx = [i_thk for i_thk, thk in enumerate(blade['pf']['rthick']) if thk<trans_thk[0] and thk>trans_thk[1]]
             else:
@@ -650,7 +652,7 @@ class ReferenceBlade(object):
     def calc_composite_bounds(self, blade):
 
         #######
-        def calc_axis_intersection(rotation, offset, p_le_d, side):
+        def calc_axis_intersection(rotation, offset, p_le_d, side, thk=0.):
             # dimentional analysis that takes a rotation and offset from the pitch axis and calculates the airfoil intersection
             # rotation
             
@@ -666,6 +668,18 @@ class ReferenceBlade(object):
             # intersection between airfoil surface and the line perpendicular to the rotated/offset axis
             y_intersection = np.polyval(plane_intersection, profile_i[:,0])
             idx_inter      = np.argwhere(np.diff(np.sign(profile_i[:,1] - y_intersection))).flatten() # find closest airfoil surface points to intersection 
+
+            # if len(idx_inter) == 0:
+            #     print(blade['pf']['s'][i], blade['pf']['r'][i], blade['pf']['chord'][i], thk)
+            #     import matplotlib.pyplot as plt
+            #     plt.plot(profile_i[:,0], profile_i[:,1])
+            #     plt.axis('equal')
+            #     ymin, ymax = plt.gca().get_ylim()
+            #     xmin, xmax = plt.gca().get_xlim()
+            #     plt.plot(profile_i[:,0], y_intersection)
+            #     plt.plot(p_le_d[0], p_le_d[1], '.')
+            #     plt.axis([xmin, xmax, ymin, ymax])
+            #     plt.show()
 
             midpoint_arc = []
             for sidei in side:
@@ -688,7 +702,7 @@ class ReferenceBlade(object):
                 midpoint_arc.append(remap2grid(x_half, arc_half, midpoint_x))#, spline=interp1d))
 
             return midpoint_arc
-            ########
+        ########
 
         # Format profile for interpolation
 
@@ -726,6 +740,13 @@ class ReferenceBlade(object):
                         blade['st'][type_sec][idx_sec]['end_nd_arc'] = {}
                         blade['st'][type_sec][idx_sec]['end_nd_arc']['grid'] = self.s
                         blade['st'][type_sec][idx_sec]['end_nd_arc']['values'] = np.full(self.NPTS, 1.).tolist()
+                    if 'width' in blade['st'][type_sec][idx_sec].keys():
+                        blade['st'][type_sec][idx_sec]['start_nd_arc'] = {}
+                        blade['st'][type_sec][idx_sec]['start_nd_arc']['grid'] = self.s
+                        blade['st'][type_sec][idx_sec]['start_nd_arc']['values'] = np.full(self.NPTS, None).tolist()
+                        blade['st'][type_sec][idx_sec]['end_nd_arc'] = {}
+                        blade['st'][type_sec][idx_sec]['end_nd_arc']['grid'] = self.s
+                        blade['st'][type_sec][idx_sec]['end_nd_arc']['values'] = np.full(self.NPTS, None).tolist()
                     if 'start_nd_arc' not in blade['st'][type_sec][idx_sec].keys():
                         blade['st'][type_sec][idx_sec]['start_nd_arc'] = {}
                         blade['st'][type_sec][idx_sec]['start_nd_arc']['grid'] = self.s
@@ -734,19 +755,29 @@ class ReferenceBlade(object):
                         blade['st'][type_sec][idx_sec]['end_nd_arc'] = {}
                         blade['st'][type_sec][idx_sec]['end_nd_arc']['grid'] = self.s
                         blade['st'][type_sec][idx_sec]['end_nd_arc']['values'] = np.full(self.NPTS, None).tolist()
-                    if 'fiber_orientation' not in blade['st'][type_sec][idx_sec].keys():
+                    if 'fiber_orientation' not in blade['st'][type_sec][idx_sec].keys() and type_sec != 'webs':
                         blade['st'][type_sec][idx_sec]['fiber_orientation'] = {}
                         blade['st'][type_sec][idx_sec]['fiber_orientation']['grid'] = self.s
-                        blade['st'][type_sec][idx_sec]['fiber_orientation']['values'] = np.zeros(self.NPTS).tolist()                        
+                        blade['st'][type_sec][idx_sec]['fiber_orientation']['values'] = np.zeros(self.NPTS).tolist() 
+                    if 'rotation' in blade['st'][type_sec][idx_sec].keys():
+                        if 'fixed' in blade['st'][type_sec][idx_sec]['rotation'].keys():
+                            if blade['st'][type_sec][idx_sec]['rotation']['fixed'] == 'twist':
+                                blade['st'][type_sec][idx_sec]['rotation']['grid'] = blade['pf']['s']
+                                blade['st'][type_sec][idx_sec]['rotation']['values'] = np.radians(blade['pf']['theta'])
+                            else:
+                                warning_invalid_fixed_rotation_reference = 'Invalid fixed reference given for layer = "%s" rotation. Currently supported options: "twist".'%(sec['name'])
+                                warnings.warn(warning_invalid_fixed_rotation_reference)
+
 
                 # If non-dimensional coordinates are given, ignore other methods
                 calc_bounds = True
-                if 'values' in blade['st'][type_sec][idx_sec]['start_nd_arc'].keys() and 'values' in blade['st'][type_sec][idx_sec]['end_nd_arc'].keys():
-                    if blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] != None and blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i] != None:
-                        calc_bounds = False
+                # if 'values' in blade['st'][type_sec][idx_sec]['start_nd_arc'].keys() and 'values' in blade['st'][type_sec][idx_sec]['end_nd_arc'].keys():
+                #     if blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] != None and blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i] != None:
+                #         calc_bounds = False
 
                 if calc_bounds:
-                    if 'rotation' in blade['st'][type_sec][idx_sec].keys() and 'width' in blade['st'][type_sec][idx_sec].keys() and 'side' in blade['st'][type_sec][idx_sec].keys():
+                    if 'rotation' in blade['st'][type_sec][idx_sec].keys() and 'width' in blade['st'][type_sec][idx_sec].keys() and 'side' in blade['st'][type_sec][idx_sec].keys() and blade['st'][type_sec][idx_sec]['thickness']['values'][i] not in [None, 0., 0]:
+
                         # layer midpoint definied with a rotation and offset about the pitch axis
                         rotation   = sec['rotation']['values'][i] # radians
                         width      = sec['width']['values'][i]    # meters
@@ -758,25 +789,28 @@ class ReferenceBlade(object):
                             offset = 0.
 
                         if rotation == None:
-                            rotation = 0
+                            rotation = 0.
                         if width == None:
-                            width = 0
+                            width = 0.
                         if side == None:
-                            side = 0
+                            side = 0.
                         if offset == None:
-                            offset = 0
+                            offset = 0.
 
                         if side.lower() != 'suction' and side.lower() != 'pressure':
                             warning_invalid_side_value = 'Invalid airfoil value give: side = "%s" for layer = "%s" at r[%d] = %f. Must be set to "suction" or "pressure".'%(side, sec['name'], i, blade['pf']['r'][i])
                             warnings.warn(warning_invalid_side_value)
 
-                        midpoint = calc_axis_intersection(rotation, offset, p_le_d, [side])[0]
+                        midpoint = calc_axis_intersection(rotation, offset, p_le_d, [side], thk=sec['thickness']['values'][i])[0]
                         
                         blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] = midpoint-width/arc_L/2.
                         blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]   = midpoint+width/arc_L/2.
 
                     elif 'rotation' in blade['st'][type_sec][idx_sec].keys():
                         # web defined with a rotatio and offset about the pitch axis
+                        # if 'fixed' in sec['rotation'].keys():
+                        #     sec['rotation']['values']
+
                         rotation   = sec['rotation']['values'][i] # radians
                         p_le_d     = [0., 0.]                     # pitch axis for dimentional profile
                         if 'offset_x_pa' in blade['st'][type_sec][idx_sec].keys():
@@ -1080,6 +1114,10 @@ class ReferenceBlade(object):
 
             profile[i] = Profile.initWithTEtoTEdata(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
 
+            # import matplotlib.pyplot as plt
+            # plt.plot(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
+            # plt.axis('equal')
+            # plt.show()
 
             idx_le = np.argmin(profile_i_rot[:,0])
 
@@ -1336,9 +1374,9 @@ class ReferenceBlade(object):
             plt.show()
         
         
-        print(chord_int2)
-        print(s_interp_rt)
-        exit()
+        # print(chord_int2)
+        # print(s_interp_rt)
+        # exit()
         
         
         return None
@@ -1349,10 +1387,10 @@ if __name__ == "__main__":
 
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_input        = "turbine_inputs/BAR13.yaml"
+    fname_input        = "turbine_inputs/BAR15_clean.yaml"
     # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
     # fname_input        = "turbine_inputs/test_out.yaml"
-    fname_output       = "turbine_inputs/test_out2.yaml"
+    fname_output       = "turbine_inputs/test_out_BAR.yaml"
     flag_write_out     = True
     flag_write_precomp = False
     dir_precomp_out    = "turbine_inputs/precomp"
@@ -1364,7 +1402,7 @@ if __name__ == "__main__":
     refBlade.spar_var = 'Spar_cap_ss'
     refBlade.te_var   = 'TE_reinforcement'
     refBlade.NPTS     = 50
-    refBlade.validate = True
+    refBlade.validate = False
     refBlade.fname_schema = "turbine_inputs/IEAontology_schema.yaml"
 
     blade = refBlade.initialize(fname_input)
