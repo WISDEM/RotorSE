@@ -748,7 +748,7 @@ if __name__ == '__main__':
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
     # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
     # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
-    fname_input = "turbine_inputs/BAR13.yaml"
+    fname_input = "turbine_inputs/BAR15_clean_emg.yaml"
 
     fname_output = "turbine_inputs/test_out.yaml"
     
@@ -757,11 +757,11 @@ if __name__ == '__main__':
     # Initialize blade design
     refBlade = ReferenceBlade()
     refBlade.verbose      = True
-    refBlade.NINPUT       = 5
+    refBlade.NINPUT       = 10
     refBlade.NPITS        = 100
-    refBlade.spar_var     = 'Spar_Cap_SS'
+    refBlade.spar_var     = ['Spar_Cap_SS', 'Spar_Cap_PS']
     refBlade.te_var       = 'TE_reinforcement'
-    refBlade.validate     = True
+    refBlade.validate     = False
     refBlade.fname_schema = fname_schema
     blade = refBlade.initialize(fname_input)
 
@@ -814,13 +814,13 @@ if __name__ == '__main__':
     #rotor.setup(check=False)
     rotor.setup()
     rotor = Init_RotorSE_wRefBlade(rotor, blade, fst_vt=fst_vt)
-    # rotor['chord_in'][-2] *= 4.
+    # rotor['theta_in'][0] *= 1
 
     # === run and outputs ===
     tt = time.time()
     rotor.run()
 
-    # refBlade.write_ontology(fname_output, rotor['blade_out'], refBlade.wt_ref)
+    refBlade.write_ontology(fname_output, rotor['blade_out'], refBlade.wt_ref)
 
     print('Run Time = ', time.time()-tt)
     print('AEP =', rotor['AEP'])

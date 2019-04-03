@@ -2960,7 +2960,7 @@ if __name__ == '__main__':
     refBlade.verbose = True
     refBlade.NINPUT  = 5
     refBlade.NPTS    = 50
-    refBlade.spar_var = 'Spar_Cap_SS'
+    refBlade.spar_var = ['Spar_Cap_SS', 'Spar_Cap_PS']
     refBlade.te_var   = 'TE_reinforcement'
 
     blade = refBlade.initialize(fname_input)

@@ -148,7 +148,7 @@ class ReferenceBlade(object):
         self.verbose         = False
 
         # Precomp analyis
-        self.spar_var        = ''          # name of composite layer for RotorSE spar cap buckling analysis
+        self.spar_var        = ['']          # name of composite layer for RotorSE spar cap buckling analysis
         self.te_var          = ''          # name of composite layer for RotorSE trailing edge buckling analysis
 
 
@@ -891,7 +891,7 @@ class ReferenceBlade(object):
         # Fit control points to composite thickness variables variables 
         #   Note: entering 0 thickness for areas where composite section does not extend to, however the precomp region selection vars 
         #   sector_idx_strain_spar, sector_idx_strain_te) will still be None over these ranges
-        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
+        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var[0].lower()][0]
         idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
         grid_spar = blade['st']['layers'][idx_spar]['thickness']['grid']
         grid_te   = blade['st']['layers'][idx_te]['thickness']['grid']
@@ -922,11 +922,12 @@ class ReferenceBlade(object):
 
         blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
 
-        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
-        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
+        for var in self.spar_var:
+            idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==var.lower()][0]
+            blade['st']['layers'][idx_spar]['thickness']['grid']   = self.s.tolist()
+            blade['st']['layers'][idx_spar]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['sparT_in'], self.s).tolist()
 
-        blade['st']['layers'][idx_spar]['thickness']['grid']   = self.s.tolist()
-        blade['st']['layers'][idx_spar]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['sparT_in'], self.s).tolist()
+        idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
         blade['st']['layers'][idx_te]['thickness']['grid']   = self.s.tolist()
         blade['st']['layers'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s).tolist()
 
@@ -1038,7 +1039,7 @@ class ReferenceBlade(object):
         if 'precomp' not in blade.keys():
             blade['precomp'] = {}
 
-        region_loc_vars = [self.te_var, self.spar_var]
+        region_loc_vars = [self.te_var] + self.spar_var
         region_loc_ss = {} # track precomp regions for user selected composite layers
         region_loc_ps = {}
         for var in region_loc_vars:
@@ -1219,7 +1220,7 @@ class ReferenceBlade(object):
         # - pressure and suction side regions are the same (i.e. spar cap is the Nth region on both side)
         # - if the composite layer is divided into multiple regions (i.e. if the spar cap is split into 3 regions due to the web locations),
         #   the middle region is selected with int(n_reg/2), note for an even number of regions, this rounds up
-        blade['precomp']['sector_idx_strain_spar'] = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.spar_var]]
+        blade['precomp']['sector_idx_strain_spar'] = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.spar_var[0]]]
         blade['precomp']['sector_idx_strain_te']   = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.te_var]]
         blade['precomp']['spar_var'] = self.spar_var
         blade['precomp']['te_var']   = self.te_var
@@ -1295,7 +1296,7 @@ class ReferenceBlade(object):
         plt.subplots_adjust(left = 0.14)
         fsw.savefig(path + fig_name)
         
-        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var.lower()][0]
+        idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.spar_var[0].lower()][0]
         idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
         idx_skin  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()=='shell_skin'][0]
         
@@ -1450,7 +1451,7 @@ if __name__ == "__main__":
     tt = time.time()
     refBlade = ReferenceBlade()
     refBlade.verbose  = True
-    refBlade.spar_var = 'Spar_cap_ss'
+    refBlade.spar_var = ['Spar_cap_ss', 'Spar_cap_ps']
     refBlade.te_var   = 'TE_reinforcement'
     refBlade.NPTS     = 50
     refBlade.validate = False

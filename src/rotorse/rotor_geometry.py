@@ -997,7 +997,7 @@ if __name__ == "__main__":
     refBlade.NINPUT  = NINPUT
     refBlade.NPITS   = 50
 
-    refBlade.spar_var = 'Spar_Cap_SS'
+    refBlade.spar_var = ['Spar_Cap_SS', 'Spar_Cap_PS']
     refBlade.te_var   = 'TE_reinforcement'
 
     blade = refBlade.initialize(fname_input)
