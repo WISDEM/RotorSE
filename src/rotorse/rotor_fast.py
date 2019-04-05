@@ -423,7 +423,7 @@ class FASTLoadCases(Component):
             unknowns['loads_pitch'] = data['BldPitch1'][idx_max_strain]
             unknowns['loads_azimuth'] = data['Azimuth'][idx_max_strain]
 
-        def post_AEP(data):
+        def post_AEP_fit(data):
             def my_cubic(f, x):
                 return np.array([f[3]+ f[2]*xi + f[1]*xi**2. + f[0]*xi**3. for xi in x])
 
@@ -440,6 +440,19 @@ class FASTLoadCases(Component):
             # plt.plot(params['V_out'], unknowns['P_out'])            
             # plt.show()
 
+        def post_AEP(data):
+            U = np.array([np.mean(datai['Wind1VelX']) for datai in data])
+            P = np.array([np.mean(datai['GenPwr']) for datai in data])*1000.
+            P_spline = PchipInterpolator(U, P)
+
+            P_out = P_spline(params['V_out'])
+            np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
+            unknowns['P_out'] = P_out
+
+            # import matplotlib.pyplot as plt
+            # plt.plot(U, P, 'o')
+            # plt.plot(params['V_out'], unknowns['P_out'])            
+            # plt.show()
 
         ############
 
