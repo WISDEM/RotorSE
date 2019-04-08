@@ -35,12 +35,14 @@ components:
             reference_axis: *ref_axis
             webs:
                 - name: Web_fore
-                  rotation: *id006
+                  rotation:
+                    fixed: twist
                   offset_x_pa:
                     grid: [0., 1.]
                     values: [-0.3, -0.3]
                 - name: Web_aft
-                  rotation: *id006
+                  rotation:
+                    fixed: twist
                   offset_x_pa:
                     grid: [0., 1.]
                     values: [0.3, 0.3]
@@ -69,7 +71,7 @@ components:
                     values: [0., 0.00047, 0.00705, 0.00705, 0.00047, 0.]
                   width:
                     grid: [0., 0.024390243902439025, 0.731707317, 1.]
-                    values: [0.1, 1., 1., 0.1]
+                    values: [0.1, 0.9, 0.9, 0.1]
                 - name: TE_foam_PS
                   material: FOAM
                   thickness:
@@ -97,7 +99,8 @@ components:
                   width:
                     grid: [0.0, 1.0]
                     values: [0.75, 0.75]
-                  rotation: *id006
+                  rotation:
+                    fixed: twist
                   offset_x_pa:
                     grid: [0., 1.]
                     values: [0., 0.]
@@ -110,7 +113,8 @@ components:
                   width:
                     grid: [0.0, 1.0]
                     values: [0.75, 0.75]
-                  rotation: *id006
+                  rotation:
+                    fixed: twist
                   offset_x_pa:
                     grid: [0., 1.]
                     values: [0., 0.]

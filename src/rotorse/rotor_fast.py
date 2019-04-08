@@ -423,7 +423,7 @@ class FASTLoadCases(Component):
             unknowns['loads_pitch'] = data['BldPitch1'][idx_max_strain]
             unknowns['loads_azimuth'] = data['Azimuth'][idx_max_strain]
 
-        def post_AEP(data):
+        def post_AEP_fit(data):
             def my_cubic(f, x):
                 return np.array([f[3]+ f[2]*xi + f[1]*xi**2. + f[0]*xi**3. for xi in x])
 
