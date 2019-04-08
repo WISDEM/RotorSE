@@ -748,6 +748,8 @@ class BladeGeometry(Component):
         NINPUT = len(self.refBlade['ctrl_pts']['r_in'])
 
         # variables
+        self.add_param('blade_in_overwrite', val={}, desc='optional input blade that can be used to overwrite RefBlade from initialization, first intended for the inner loop of a nested optimization')
+
         self.add_param('bladeLength', val=0.0, units='m', desc='blade length (if not precurved or swept) otherwise length of blade before curvature')
         self.add_param('r_max_chord', val=0.0, desc='location of max chord on unit radius')
         self.add_param('chord_in', val=np.zeros(NINPUT), units='m', desc='chord at control points')  # defined at hub, then at linearly spaced locations from r_max_chord to tip
@@ -800,7 +802,10 @@ class BladeGeometry(Component):
         self.deriv_options['step_size'] = 1e-5
         
     def solve_nonlinear(self, params, unknowns, resids):
-        blade = copy.deepcopy(self.refBlade)
+        if params['blade_in_overwrite'] != {}:
+            blade = copy.deepcopy(params['blade_in_overwrite'])
+        else:
+            blade = copy.deepcopy(self.refBlade)
 
         NINPUT = len(blade['ctrl_pts']['r_in'])
 
@@ -924,6 +929,8 @@ class RotorGeometry(Group):
         super(RotorGeometry, self).__init__()
         """rotor model"""
         NINPUT = len(RefBlade['ctrl_pts']['r_in'])
+
+        self.add('blade_in_overwrite', IndepVarComp('blade_in_overwrite', {}), promotes=['*'])
 
         self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])

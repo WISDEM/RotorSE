@@ -24,7 +24,7 @@ try:
     from AeroelasticSE.FAST_wrapper import FastWrapper
     from AeroelasticSE.runFAST_pywrapper import runFAST_pywrapper, runFAST_pywrapper_batch
     # from AeroelasticSE.CaseGen_IEC import CaseGen_IEC
-    from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve_fit
+    from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve_fit, power_curve
     from AeroelasticSE.FAST_post import return_timeseries
 except:
     pass
@@ -440,6 +440,19 @@ class FASTLoadCases(Component):
             # plt.plot(params['V_out'], unknowns['P_out'])            
             # plt.show()
 
+        def post_AEP(data):
+            U = np.array([np.mean(datai['Wind1VelX']) for datai in data])
+            P = np.array([np.mean(datai['GenPwr']) for datai in data])*1000.
+            P_spline = PchipInterpolator(U, P)
+
+            P_out = P_spline(params['V_out'])
+            np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
+            unknowns['P_out'] = P_out
+
+            # import matplotlib.pyplot as plt
+            # plt.plot(U, P, 'o')
+            # plt.plot(params['V_out'], unknowns['P_out'])            
+            # plt.show()
 
         ############
 

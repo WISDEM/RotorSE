@@ -715,9 +715,15 @@ class ReferenceBlade(object):
 
             t9 = time.time()
             profile_i = copy.copy(profile_d[:,:,i])
-            if list(profile_i[-1,:]) != list(profile_i[-1,:]):
-                TE = np.mean((profile_i[-1,:], profile_i[-1,:]), axis=0)
+            if list(profile_i[-1,:]) != list(profile_i[0,:]):
+                TE = np.mean((profile_i[-1,:], profile_i[0,:]), axis=0)
                 profile_i = np.row_stack((TE, profile_i, TE))
+                # import matplotlib.pyplot as plt
+                # plt.plot(profile_i[:,0], profile_i[:,1])
+                # plt.plot(TE[0], TE[1], 'o')
+                # plt.axis('equal')
+                # plt.title(i)
+                # plt.show()
 
             idx_le = np.argmin(profile_i[:,0])
 
@@ -1396,6 +1402,51 @@ class ReferenceBlade(object):
         fat.savefig(path + fig_name)
         
         
+        # Pitch axis location
+        pc_max_rt = np.zeros_like(s)
+        for i in range(np.shape(blade['profile'])[2]):        
+            x        = np.linspace(0.05,0.95,100)
+            le       = np.argmin(blade['profile'][:,0,i])
+            x_ss_raw = blade['profile'][le:,0,i]
+            y_ss_raw = blade['profile'][le:,1,i]
+            x_ps_raw = np.flip(blade['profile'][:le,0,i])
+            y_ps_raw = np.flip(blade['profile'][:le,1,i])
+            f_ss     = interp1d(x_ss_raw,y_ss_raw)
+            y_ss     = f_ss(x)
+            f_ps     = interp1d(x_ps_raw,y_ps_raw)
+            y_ps     = f_ps(x)
+            
+            
+            i_max_rt = np.argmax(y_ss-y_ps)
+            pc_max_rt[i] = x[i_max_rt]
+            
+            # fpa, axpa  = plt.subplots(1,1,figsize=(5.3, 4))
+            # axpa.plot(x_ss_raw, y_ss_raw, c='k', label='ss')
+            # axpa.plot(x_ps_raw, y_ps_raw, c='b', label='ps')
+            # axpa.plot(pc_max_rt[i], 0, 'ob', label='max rt')                   
+            # plt.axis('equal')
+            # plt.show()
+            
+            
+        s_interp_pa     = np.array([0.0, 0.25, 0.4, 0.6, 0.8, 1.0])
+        f_interp1       = interp1d(s,pc_max_rt)
+        pa_int1         = f_interp1(s_interp_pa)    
+        f_interp2       = PchipInterpolator(s_interp_pa,pa_int1)
+        pa_int2         = f_interp2(s)
+        
+        fpa, axpa  = plt.subplots(1,1,figsize=(5.3, 4))
+        axpa.plot(blade['pf']['s'], blade['pf']['p_le'], c='k', label='PA')
+        axpa.plot(blade['pf']['s'], pc_max_rt, c='b', label='max rt')
+        axpa.plot(s_interp_pa, pa_int1, 'og', label='ctrl max rt')
+        axpa.plot(blade['pf']['s'], pa_int2, c='g', label='interp max rt')
+        axpa.set(xlabel='r/R' , ylabel='Pitch Axis (-)')
+        axpa.legend()
+        fig_name = 'pitch_axis.png'
+        fpa.savefig(path + fig_name)
+        
+        
+        print(pa_int2)
+
         
         # Planform
         le_init = blade['pf']['p_le']*blade['pf']['chord']
@@ -1409,9 +1460,11 @@ class ReferenceBlade(object):
         
         fpl, axpl  = plt.subplots(1,1,figsize=(5.3, 4))
         axpl.plot(blade['pf']['s'], -le_init, c='k', label='LE init')
-        axpl.plot(blade['pf']['s'], -le_int2, c='b', label='LE smooth')
-        axpl.plot(blade['pf']['s'], te_init, c='g', label='TE init')
-        axpl.plot(blade['pf']['s'], blade['pf']['chord'] - le_int2, c='r', label='TE smooth')
+        axpl.plot(blade['pf']['s'], -le_int2, c='b', label='LE smooth old pa')
+        axpl.plot(blade['pf']['s'], -pa_int2 * blade['pf']['chord'], c='g', label='LE smooth new pa')
+        axpl.plot(blade['pf']['s'], te_init, c='k', label='TE init')
+        axpl.plot(blade['pf']['s'], blade['pf']['chord'] - le_int2, c='b', label='TE smooth old pa')
+        axpl.plot(blade['pf']['s'], (1. - pa_int2) * blade['pf']['chord'], c='g', label='TE smooth new pa')
         axpl.set(xlabel='r/R' , ylabel='Planform (m)')
         axpl.legend()
         fig_name = 'interp_planform.png'
@@ -1424,11 +1477,7 @@ class ReferenceBlade(object):
         
         if show_plots:
             plt.show()
-        
-        
-        # print(chord_int2)
-        # print(s_interp_rt)
-        # exit()
+
         
         
         return None

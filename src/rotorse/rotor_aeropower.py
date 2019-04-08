@@ -611,7 +611,7 @@ if __name__ == '__main__':
 
     # Turbine Ontology input
     fname_input  = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_output = "turbine_inputs/nrel5mw_mod_out.yaml"
+    # fname_output = "turbine_inputs/nrel5mw_mod_out.yaml"
     fname_schema = "turbine_inputs/IEAontology_schema.yaml"
     
     # Initialize blade design
@@ -621,7 +621,7 @@ if __name__ == '__main__':
     refBlade.NPTS    = 50
     refBlade.spar_var = ['Spar_Cap_SS', 'Spar_Cap_PS']
     refBlade.te_var   = 'TE_reinforcement'
-    refBlade.validate     = True
+    refBlade.validate     = False
     refBlade.fname_schema = fname_schema
     
     blade = refBlade.initialize(fname_input)
