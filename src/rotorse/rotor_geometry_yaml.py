@@ -107,7 +107,7 @@ def arc_length(x, y, z=[]):
     #         a = x[k-1]
     #         b = x[k]
     #         tz = np.linspace(a, b, num=10)
-    #         f = spline(t2)
+    #         f = spline(tz)
     #         arc[k] = arc[k-1] + arc_length(tz, f)[-1]
 
 
@@ -655,7 +655,6 @@ class ReferenceBlade(object):
         def calc_axis_intersection(rotation, offset, p_le_d, side, thk=0.):
             # dimentional analysis that takes a rotation and offset from the pitch axis and calculates the airfoil intersection
             # rotation
-            
             offset_x   = offset*np.cos(rotation) + p_le_d[0]
             offset_y   = offset*np.sin(rotation) + p_le_d[1]
 
@@ -664,22 +663,10 @@ class ReferenceBlade(object):
 
             m_intersection     = np.sin(rotation+np.pi/2.)/np.cos(rotation+np.pi/2.)   # slope perpendicular to rotated axis
             plane_intersection = [m_intersection, -1*m_intersection*offset_x+offset_y] # coefficients for line perpendicular to rotated axis line at the offset: a1*x + a0
-
+            
             # intersection between airfoil surface and the line perpendicular to the rotated/offset axis
             y_intersection = np.polyval(plane_intersection, profile_i[:,0])
             idx_inter      = np.argwhere(np.diff(np.sign(profile_i[:,1] - y_intersection))).flatten() # find closest airfoil surface points to intersection 
-
-            # if len(idx_inter) == 0:
-            #     print(blade['pf']['s'][i], blade['pf']['r'][i], blade['pf']['chord'][i], thk)
-            #     import matplotlib.pyplot as plt
-            #     plt.plot(profile_i[:,0], profile_i[:,1])
-            #     plt.axis('equal')
-            #     ymin, ymax = plt.gca().get_ylim()
-            #     xmin, xmax = plt.gca().get_xlim()
-            #     plt.plot(profile_i[:,0], y_intersection)
-            #     plt.plot(p_le_d[0], p_le_d[1], '.')
-            #     plt.axis([xmin, xmax, ymin, ymax])
-            #     plt.show()
 
             midpoint_arc = []
             for sidei in side:
@@ -699,13 +686,24 @@ class ReferenceBlade(object):
                     x_half = profile_i[idx_le:,0]
                     arc_half = profile_i_arc[idx_le:]
 
-                midpoint_arc.append(remap2grid(x_half, arc_half, midpoint_x))#, spline=interp1d))
+                midpoint_arc.append(remap2grid(x_half, arc_half, midpoint_x, spline=interp1d))
+
+            # if len(idx_inter) == 0:
+            # print(blade['pf']['s'][i], blade['pf']['r'][i], blade['pf']['chord'][i], thk)
+            # import matplotlib.pyplot as plt
+            # plt.plot(profile_i[:,0], profile_i[:,1])
+            # plt.axis('equal')
+            # ymin, ymax = plt.gca().get_ylim()
+            # xmin, xmax = plt.gca().get_xlim()
+            # plt.plot(profile_i[:,0], y_intersection)
+            # plt.plot(p_le_d[0], p_le_d[1], '.')
+            # plt.axis([xmin, xmax, ymin, ymax])
+            # plt.show()
 
             return midpoint_arc
         ########
 
         # Format profile for interpolation
-
         profile_d = copy.copy(blade['profile'])
         profile_d[:,0,:] = profile_d[:,0,:] - blade['pf']['p_le'][np.newaxis, :]
         profile_d = np.flip(profile_d*blade['pf']['chord'][np.newaxis, np.newaxis, :], axis=0)
@@ -713,7 +711,6 @@ class ReferenceBlade(object):
         for i in range(self.NPTS):
             s_all = []
 
-            t9 = time.time()
             profile_i = copy.copy(profile_d[:,:,i])
             if list(profile_i[-1,:]) != list(profile_i[0,:]):
                 TE = np.mean((profile_i[-1,:], profile_i[0,:]), axis=0)
@@ -730,7 +727,6 @@ class ReferenceBlade(object):
             profile_i_arc = arc_length(profile_i[:,0], profile_i[:,1])
             arc_L = profile_i_arc[-1]
             profile_i_arc /= arc_L
-
             
             # loop through composite layups
             for type_sec, idx_sec, sec in zip(['webs']*len(blade['st']['webs'])+['layers']*len(blade['st']['layers']), range(len(blade['st']['webs']))+range(len(blade['st']['layers'])), blade['st']['webs']+blade['st']['layers']):
@@ -816,7 +812,6 @@ class ReferenceBlade(object):
                         # web defined with a rotatio and offset about the pitch axis
                         # if 'fixed' in sec['rotation'].keys():
                         #     sec['rotation']['values']
-
                         rotation   = sec['rotation']['values'][i] # radians
                         p_le_d     = [0., 0.]                     # pitch axis for dimentional profile
                         if 'offset_x_pa' in blade['st'][type_sec][idx_sec].keys():
@@ -850,7 +845,6 @@ class ReferenceBlade(object):
                         if blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i] > 1.:
                             blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i] -= 1.
                     
-
         # Set any end points that are fixed to other sections, loop through composites again
         for idx_sec, sec in enumerate(blade['st']['layers']):
             if 'fixed' in blade['st']['layers'][idx_sec]['start_nd_arc'].keys() and 'fixed' in blade['st']['layers'][idx_sec]['end_nd_arc'].keys():
@@ -863,7 +857,6 @@ class ReferenceBlade(object):
                 target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
                 blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = blade['st']['layers'][target_idx]['start_nd_arc']['grid'].tolist()
                 blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = blade['st']['layers'][target_idx]['start_nd_arc']['values']
-
 
         return blade
 
@@ -1488,10 +1481,10 @@ if __name__ == "__main__":
 
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_input        = "turbine_inputs/BAR15_clean.yaml"
+    fname_input        = "turbine_inputs/BAR22.yaml"
     # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
     # fname_input        = "turbine_inputs/test_out.yaml"
-    fname_output       = "turbine_inputs/test_out_BAR.yaml"
+    fname_output       = "turbine_inputs/testing_twist.yaml"
     flag_write_out     = True
     flag_write_precomp = False
     dir_precomp_out    = "turbine_inputs/precomp"
