@@ -203,6 +203,10 @@ class ReferenceBlade(object):
 
     def update(self, blade):
         # 
+        print(blade['ctrl_pts']['chord_in'])
+        print(blade['ctrl_pts']['theta_in'])
+        print(blade['ctrl_pts']['sparT_in'])
+
         t1 = time.time()
         blade['st'] = self.calc_spanwise_grid(blade['st'])
 
@@ -666,7 +670,21 @@ class ReferenceBlade(object):
             
             # intersection between airfoil surface and the line perpendicular to the rotated/offset axis
             y_intersection = np.polyval(plane_intersection, profile_i[:,0])
-            idx_inter      = np.argwhere(np.diff(np.sign(profile_i[:,1] - y_intersection))).flatten() # find closest airfoil surface points to intersection 
+            
+            
+            try:
+                idx_inter      = np.argwhere(np.diff(np.sign(profile_i[:,1] - y_intersection))).flatten() # find closest airfoil surface points to intersection 
+            except:
+                for xi,yi in zip(profile_i[:,0], profile_i[:,1]):
+                    print(xi, yi)
+                print(rotation, offset, p_le_d, side)
+                print('chord', blade['pf']['chord'][i])
+                import matplotlib.pyplot as plt
+                plt.plot(profile_i[:,0], profile_i[:,1])
+                plt.plot(profile_i[:,0], y_intersection)
+                plt.show()
+
+                idx_inter      = np.argwhere(np.diff(np.sign(profile_i[:,1] - y_intersection))).flatten() # find closest airfoil surface points to intersection 
 
             midpoint_arc = []
             for sidei in side:
