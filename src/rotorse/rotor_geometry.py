@@ -795,6 +795,8 @@ class BladeGeometry(Component):
 
         self.add_output('blade_out', val={}, desc='updated blade dictionary for ontology')
 
+        self.add_output('sparT_in_out', val=np.zeros(NINPUT), units='m', desc='thickness values of spar cap that linearly vary from non-cylinder position to tip, pass through for nested optimization')
+
         self.deriv_options['type'] = 'fd'
         self.deriv_options['step_calc'] = 'relative'
         self.deriv_options['form'] = 'central'
@@ -870,6 +872,7 @@ class BladeGeometry(Component):
         unknowns['sector_idx_strain_te']   = blade_out['precomp']['sector_idx_strain_te']
 
         unknowns['blade_out'] = blade_out
+        unknowns['sparT_in_out'] = params['sparT_in']
         
 class Location(Component):
     def __init__(self):
