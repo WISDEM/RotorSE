@@ -1323,8 +1323,7 @@ class TipDeflection(Component):
 
         # outputs
         self.add_output('tip_deflection', val=0.0, units='m', desc='deflection at tip in yaw x-direction')
-        self.add_output('tip_position', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
-        self.add_output('ground_clearance', val=0.0, units='m', desc='distance between blade tip and ground')
+
 
 	#self.deriv_options['form'] = 'central'
         #self.deriv_options['check_form'] = 'central'
@@ -1356,17 +1355,6 @@ class TipDeflection(Component):
 
         unknowns['tip_deflection'] = self.tip_deflection
 
-        # coordinates of blade tip in yaw c.s.
-        # TODO: Combine intelligently with other Direction Vector
-        dR = DirectionVector(self.precurve, self.presweep, self.rtip)
-        blade_yaw = dR.bladeToAzimuth(self.totalConeTip).azimuthToHub(self.azimuth).hubToYaw(self.tilt)
-
-        # find corresponding radius of tower
-        coeff = 1.0 if upwind else -1.0
-        z_pos = params['hub_height'] + blade_yaw.z
-        x_pos = coeff*blade_yaw.x + params['gamma_m'] * self.tip_deflection
-        unknowns['tip_position'] = np.array([x_pos, 0.0, z_pos])
-        unknowns['ground_clearance'] = z_pos
         
 
     def list_deriv_vars(self):
@@ -2221,8 +2209,6 @@ class OutputsStructures(Component):
         self.add_param('freq_curvefem_in', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_param('modes_coef_curvefem_in', val=np.zeros((3, 5)), desc='mode shapes as 6th order polynomials, in the format accepted by ElastoDyn, [[c_x2, c_],..]')
         self.add_param('tip_deflection_in', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
-        self.add_param('tip_position_in', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
-        self.add_param('ground_clearance_in', val=0.0, units='m', desc='distance between blade tip and ground')
         self.add_param('strainU_spar_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_param('strainL_spar_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_param('strainU_te_in', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -2262,8 +2248,6 @@ class OutputsStructures(Component):
         self.add_output('freq_curvefem', val=np.zeros(NFREQ), units='Hz', desc='1st nF natural frequencies')
         self.add_output('modes_coef_curvefem', val=np.zeros((3, 5)), desc='mode shapes as 6th order polynomials, in the format accepted by ElastoDyn, [[c_x2, c_],..]')
         self.add_output('tip_deflection', val=0.0, units='m', desc='blade tip deflection in +x_y direction')
-        self.add_output('tip_position', val=np.zeros(3), units='m', desc='Position coordinates of deflected tip in yaw c.s.')
-        self.add_output('ground_clearance', val=0.0, units='m', desc='distance between blade tip and ground')
         self.add_output('strainU_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_output('strainL_spar', val=np.zeros(NPTS), desc='axial strain and specified locations')
         self.add_output('strainU_te', val=np.zeros(NPTS), desc='axial strain and specified locations')
@@ -2305,8 +2289,6 @@ class OutputsStructures(Component):
         unknowns['freq_curvefem'] = params['freq_curvefem_in']
         unknowns['modes_coef_curvefem'] = params['modes_coef_curvefem_in']
         unknowns['tip_deflection'] = params['tip_deflection_in']
-        unknowns['tip_position'] = params['tip_position_in']
-        unknowns['ground_clearance'] = params['ground_clearance_in']
         unknowns['strainU_spar'] = params['strainU_spar_in']
         unknowns['strainL_spar'] = params['strainL_spar_in']
         unknowns['strainU_te'] = params['strainU_te_in']
@@ -2379,8 +2361,6 @@ class OutputsStructures(Component):
         J['freq', 'freq_in'] = np.diag(np.ones(len(params['freq_in'])))
         J['freq_curvefem', 'freq_curvefem_in'] = np.diag(np.ones(len(params['freq_curvefem_in'])))
         J['tip_deflection', 'tip_deflection_in'] = 1
-        J['tip_position', 'tip_position_in']  = np.diag(np.ones(len(params['tip_position_in'])))
-        J['ground_clearance', 'ground_clearance_in'] = 1
         J['strainU_spar', 'strainU_spar_in'] = np.diag(np.ones(len(params['strainU_spar_in'])))
         J['strainL_spar', 'strainL_spar_in'] = np.diag(np.ones(len(params['strainL_spar_in'])))
         J['strainU_te', 'strainU_te_in'] = np.diag(np.ones(len(params['strainU_te_in'])))
@@ -2796,8 +2776,6 @@ class RotorStructure(Group):
         self.connect('curvefem.freq', 'freq_curvefem_in')
         self.connect('curvefem.modes_coef', 'modes_coef_curvefem_in')
         self.connect('tip.tip_deflection', 'tip_deflection_in')
-        self.connect('tip.tip_position', 'tip_position_in')
-        self.connect('tip.ground_clearance', 'ground_clearance_in')
         self.connect('struc.strainU_spar', 'strainU_spar_in')
         self.connect('struc.strainL_spar', 'strainL_spar_in')
         self.connect('struc.strainU_te', 'strainU_te_in')

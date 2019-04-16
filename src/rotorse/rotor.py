@@ -564,8 +564,6 @@ class RotorSE(Group):
         self.connect('struc.freq', 'freq_in')
         self.connect('curvefem.freq', 'freq_curvefem_in')
         self.connect('tip.tip_deflection', 'tip_deflection_in')
-        self.connect('tip.tip_position', 'tip_position_in')
-        self.connect('tip.ground_clearance', 'ground_clearance_in')
         self.connect('struc.strainU_spar', 'strainU_spar_in')
         self.connect('struc.strainL_spar', 'strainL_spar_in')
         self.connect('struc.strainU_te', 'strainU_te_in')
