@@ -202,10 +202,6 @@ class ReferenceBlade(object):
         return blade
 
     def update(self, blade):
-        # 
-        print(blade['ctrl_pts']['chord_in'])
-        print(blade['ctrl_pts']['theta_in'])
-        print(blade['ctrl_pts']['sparT_in'])
 
         t1 = time.time()
         blade['st'] = self.calc_spanwise_grid(blade['st'])
