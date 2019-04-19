@@ -341,12 +341,20 @@ class ReferenceBlade(object):
                     pass
         wt_out['components']['blade']['internal_structure_2d_fem'] = st
 
-        f = open(fname, "w")
-        yaml=YAML()
-        yaml.default_flow_style = None
-        yaml.width = float("inf")
-        yaml.indent(mapping=4, sequence=6, offset=3)
-        yaml.dump(wt_out, f)
+
+        try:
+            f = open(fname, "w")
+            yaml=YAML()
+            yaml.default_flow_style = None
+            yaml.width = float("inf")
+            yaml.indent(mapping=4, sequence=6, offset=3)
+            yaml.dump(wt_out, f)
+        except:
+            ontology_out_warning = "WARNING! Ontology output write with ruamel.yaml failed.\n Attemping to write with pyyaml.  All file formatting will be lost (comments and dictionary ordering)."
+            warning.warn(ontology_out_warning)
+            import yaml
+            f = open(fname, "w")
+            yaml.dump(wt_out, f)
 
     def calc_spanwise_grid(self, st):
         ### Spanwise grid
