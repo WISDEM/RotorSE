@@ -22,7 +22,7 @@ from scipy.interpolate import PchipInterpolator
 NINPUT = 5
 TURBULENCE_CLASS = commonse.enum.Enum('A B C')
 TURBINE_CLASS = commonse.enum.Enum('I II III')
-DRIVETRAIN_TYPE = commonse.enum.Enum('geared single_stage multi_drive pm_direct_drive')
+DRIVETRAIN_TYPE = commonse.enum.Enum('geared single_stage multi_drive pm_direct_drive constant_eff')
 
 from rotorse.rotor_geometry_yaml import ReferenceBlade
 
