@@ -89,6 +89,8 @@ class RotorSE(Group):
         self.add('AEP_loss_factor', IndepVarComp('AEP_loss_factor', val=1.0, desc='availability and other losses (soiling, array, etc.)'), promotes=['*'])
         self.add('dynamic_amplication', IndepVarComp('dynamic_amplication', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation'), promotes=['*'])
         self.add('shape_parameter', IndepVarComp('shape_parameter', val=0.0), promotes=['*'])
+
+        self.add('fst_vt_out', IndepVarComp('fst_vt_out', val={}), pass_by_obj=True, promotes=['*'])
         
         # --- Rotor Aero & Power ---
         self.add('rotorGeometry', RotorGeometry(refBlade), promotes=['*'])
@@ -99,8 +101,6 @@ class RotorSE(Group):
         self.add('cdf', WeibullWithMeanCDF(npts_spline_power_curve))
         # self.add('cdf', RayleighCDF(npts_spline_power_curve))
         self.add('aep', AEP(npts_spline_power_curve))
-
-        self.add('outputs_aero', OutputsAero(npts_coarse_power_curve), promotes=['*'])
 
 
         # --- add structures ---
@@ -138,6 +138,8 @@ class RotorSE(Group):
 
         self.add('output_struc', OutputsStructures(NPTS, NINPUT), promotes=['*'])
         self.add('constraints', ConstraintsStructures(NPTS), promotes=['*'])
+
+        self.add_param('nBlades', val=3, desc='Number of blades on rotor', pass_by_obj=True)
 
         # # connectiosn to tipspeed
         # self.connect('geom.R', 'tipspeed.R')
@@ -644,6 +646,8 @@ class RotorSE(Group):
 
         # Connections to constraints not accounted for by promotes=*
         self.connect('aero_rated.Omega_load', 'Omega')
+
+        self.connect('aeroelastic.fst_vt_out', 'fst_vt_out')
 
         self.add('obj_cmp', ExecComp('obj = -AEP', AEP=1000000.0), promotes=['*'])
 

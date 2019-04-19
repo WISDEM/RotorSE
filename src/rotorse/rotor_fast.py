@@ -32,7 +32,7 @@ except:
 class FASTLoadCases(Component):
     def __init__(self, NPTS, npts_coarse_power_curve, npts_spline_power_curve, FASTpref):
         super(FASTLoadCases, self).__init__()
-        self.add_param('fst_vt_in', val={})
+        self.add_param('fst_vt_in', val={}, pass_by_obj=True)
 
         # ElastoDyn Inputs
         # Assuming the blade modal damping to be unchanged. Cannot directly solve from the Rayleigh Damping without making assumptions. J.Jonkman recommends 2-3% https://wind.nrel.gov/forum/wind/viewtopic.php?t=522
@@ -116,6 +116,8 @@ class FASTLoadCases(Component):
 
         self.add_output('P_out', val=np.zeros(npts_spline_power_curve), units='W', desc='electrical power from rotor')
 
+        self.add_output('fst_vt_out', val={})
+
     def solve_nonlinear(self, params, unknowns, resids):
 
         fst_vt, R_out = self.update_FAST_model(params)
@@ -129,6 +131,8 @@ class FASTLoadCases(Component):
         elif self.Analysis_Level == 0:
             # Write FAST files, do not run
             self.write_FAST(fst_vt, unknowns)
+
+        unknowns['fst_vt_out'] = fst_vt
 
 
     def update_FAST_model(self, params):
