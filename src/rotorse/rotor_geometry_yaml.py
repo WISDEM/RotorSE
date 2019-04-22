@@ -566,6 +566,10 @@ class ReferenceBlade(object):
         ## Set angle of attack grid for airfoil resampling
         # assume grid for last airfoil is sufficient
         alpha = np.array(AFref[blade['outer_shape_bem']['airfoil_position']['labels'][-1]]['polars'][0]['c_l']['grid'])
+        if alpha[0] != np.radians(-180.):
+            alpha[0] = np.radians(-180.)
+        if alpha[-1] != np.radians(180.):
+            alpha[-1] = np.radians(180.)
         Re    = [AFref[blade['outer_shape_bem']['airfoil_position']['labels'][-1]]['polars'][0]['re']]
 
         # get reference airfoil polars
@@ -592,7 +596,6 @@ class ReferenceBlade(object):
         # error handling for spanwise thickness greater/less than the max/min airfoil thicknesses
         np.place(thk_span, thk_span>max(thk_afref), max(thk_afref))
         np.place(thk_span, thk_span<min(thk_afref), min(thk_afref))
-
         # interpolate
         spline_cl = spline(thk_afref, cl_ref, axis=1)
         spline_cd = spline(thk_afref, cd_ref, axis=1)
@@ -603,10 +606,20 @@ class ReferenceBlade(object):
 
         # CCBlade airfoil class instances
         airfoils = [None]*n_span
+        alpha_out = np.degrees(alpha)
+        if alpha[0] != -180.:
+            alpha[0] = -180.
+        if alpha[-1] != 180.:
+            alpha[-1] = 180.
         for i in range(n_span):
-                        
-            airfoils[i] = CCAirfoil(np.degrees(alpha), Re, cl[:,i], cd[:,i], cm[:,i])
-            airfoils[i].eval_unsteady(np.degrees(alpha), cl[:,i], cd[:,i], cm[:,i])
+            if cl[0,i] != cl[-1,i]:
+                cl[0,i] = cl[-1,i]
+            if cd[0,i] != cd[-1,i]:
+                cd[0,i] = cd[-1,i]
+            if cm[0,i] != cm[-1,i]:
+                cm[0,i] = cm[-1,i]
+            airfoils[i] = CCAirfoil(alpha_out, Re, cl[:,i], cd[:,i], cm[:,i])
+            airfoils[i].eval_unsteady(alpha_out, cl[:,i], cd[:,i], cm[:,i])
 
         blade['airfoils'] = airfoils
 
@@ -1460,9 +1473,7 @@ class ReferenceBlade(object):
         fpa.savefig(path + fig_name)
         
         
-        print(pa_int2)
-
-        
+       
         # Planform
         le_init = blade['pf']['p_le']*blade['pf']['chord']
         te_init = (1. - blade['pf']['p_le'])*blade['pf']['chord']
@@ -1485,8 +1496,6 @@ class ReferenceBlade(object):
         fig_name = 'interp_planform.png'
         fpl.savefig(path + fig_name)
         
-        
-        print(le_int2/blade['pf']['chord'])
         
         
         

@@ -18,16 +18,16 @@ import _bem  # TODO: move to rotoraero
 
 from rotorse import RPM2RS, RS2RPM
 
-try:
-    from AeroelasticSE.FAST_reader import InputReader_Common, InputReader_OpenFAST, InputReader_FAST7
-    from AeroelasticSE.FAST_writer import InputWriter_Common, InputWriter_OpenFAST, InputWriter_FAST7
-    from AeroelasticSE.FAST_wrapper import FastWrapper
-    from AeroelasticSE.runFAST_pywrapper import runFAST_pywrapper, runFAST_pywrapper_batch
-    # from AeroelasticSE.CaseGen_IEC import CaseGen_IEC
-    from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve_fit, power_curve
-    from AeroelasticSE.FAST_post import return_timeseries
-except:
-    pass
+# try:
+from AeroelasticSE.FAST_reader import InputReader_Common, InputReader_OpenFAST, InputReader_FAST7
+from AeroelasticSE.FAST_writer import InputWriter_Common, InputWriter_OpenFAST, InputWriter_FAST7
+from AeroelasticSE.FAST_wrapper import FastWrapper
+from AeroelasticSE.runFAST_pywrapper import runFAST_pywrapper, runFAST_pywrapper_batch
+# from AeroelasticSE.CaseGen_IEC import CaseGen_IEC
+from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve_fit, power_curve
+from AeroelasticSE.FAST_post import return_timeseries
+# except:
+#     pass
 
 class FASTLoadCases(Component):
     def __init__(self, NPTS, npts_coarse_power_curve, npts_spline_power_curve, FASTpref):
@@ -122,13 +122,13 @@ class FASTLoadCases(Component):
 
         fst_vt, R_out = self.update_FAST_model(params)
 
-        if self.Analysis_Level == 1:
+        if self.Analysis_Level == 2:
             # Run FAST with ElastoDyn
             list_cases, list_casenames, required_channels, case_keys = self.DLC_creation(params, fst_vt)
             FAST_Output = self.run_FAST(fst_vt, list_cases, list_casenames, required_channels)
             self.post_process(FAST_Output, case_keys, R_out, params, unknowns)
 
-        elif self.Analysis_Level == 0:
+        elif self.Analysis_Level == 1:
             # Write FAST files, do not run
             self.write_FAST(fst_vt, unknowns)
 
@@ -187,9 +187,12 @@ class FASTLoadCases(Component):
 
         # Update AeroDyn15 Airfoile Input Files
         airfoils = params['airfoils']
-        fst_vt['AeroDyn15']['af_data'] = [{}]*len(airfoils)
+        fst_vt['AeroDyn15']['NumAFfiles'] = len(airfoils)
+        # fst_vt['AeroDyn15']['af_data'] = [{}]*len(airfoils)
+        fst_vt['AeroDyn15']['af_data'] = []
         for i in range(len(airfoils)):
             af = airfoils[i]
+            fst_vt['AeroDyn15']['af_data'].append({})
             fst_vt['AeroDyn15']['af_data'][i]['InterpOrd'] = "DEFAULT"
             fst_vt['AeroDyn15']['af_data'][i]['NonDimArea']= 1
             fst_vt['AeroDyn15']['af_data'][i]['NumCoords'] = 0          # TODO: link the airfoil profiles to this component and write the coordinate files (no need as of yet)
@@ -230,10 +233,10 @@ class FASTLoadCases(Component):
             fst_vt['AeroDyn15']['af_data'][i]['UACutout']  = af.unsteady['UACutout']
             fst_vt['AeroDyn15']['af_data'][i]['filtCutOff']= af.unsteady['filtCutOff']
             fst_vt['AeroDyn15']['af_data'][i]['NumAlf']    = len(af.unsteady['Alpha'])
-            fst_vt['AeroDyn15']['af_data'][i]['Alpha']     = af.unsteady['Alpha']
-            fst_vt['AeroDyn15']['af_data'][i]['Cl']        = af.unsteady['Cl']
-            fst_vt['AeroDyn15']['af_data'][i]['Cd']        = af.unsteady['Cd']
-            fst_vt['AeroDyn15']['af_data'][i]['Cm']        = af.unsteady['Cm']
+            fst_vt['AeroDyn15']['af_data'][i]['Alpha']     = np.array(af.unsteady['Alpha'])
+            fst_vt['AeroDyn15']['af_data'][i]['Cl']        = np.array(af.unsteady['Cl'])
+            fst_vt['AeroDyn15']['af_data'][i]['Cd']        = np.array(af.unsteady['Cd'])
+            fst_vt['AeroDyn15']['af_data'][i]['Cm']        = np.array(af.unsteady['Cm'])
             fst_vt['AeroDyn15']['af_data'][i]['Cpmin']     = np.zeros_like(af.unsteady['Cm'])
 
         # AeroDyn spanwise output positions
