@@ -210,7 +210,7 @@ class ReferenceBlade(object):
         blade = self.calc_composite_bounds(blade)
 
         if self.verbose:
-            prin('Complete: Geometry Update: \t%f s'%(time.time()-t1))
+            print('Complete: Geometry Update: \t%f s'%(time.time()-t1))
 
         # Conversion
         if self.analysis_level < 3:
@@ -812,6 +812,8 @@ class ReferenceBlade(object):
                 #     if blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i] != None and blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i] != None:
                 #         calc_bounds = False
 
+                chord = blade['pf']['chord'][i]
+
                 if calc_bounds:
                     if 'rotation' in blade['st'][type_sec][idx_sec].keys() and 'width' in blade['st'][type_sec][idx_sec].keys() and 'side' in blade['st'][type_sec][idx_sec].keys() and blade['st'][type_sec][idx_sec]['thickness']['values'][i] not in [None, 0., 0]:
 
@@ -833,6 +835,16 @@ class ReferenceBlade(object):
                             side = 0.
                         if offset == None:
                             offset = 0.
+
+                        # geometry checks
+                        ratio_SCmax = 0.7
+                        if width > chord*ratio_SCmax:
+                            width_old = copy.deepcopy(width)
+                            width = chord*ratio_SCmax
+                            blade['st'][type_sec][idx_sec]['width']['values'][i] = width
+                            layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], width_old, width, blade['pf']['r'][i], i)
+                            warnings.warn(layer_resize_warning)
+
 
                         if side.lower() != 'suction' and side.lower() != 'pressure':
                             warning_invalid_side_value = 'Invalid airfoil value give: side = "%s" for layer = "%s" at r[%d] = %f. Must be set to "suction" or "pressure".'%(side, sec['name'], i, blade['pf']['r'][i])
@@ -858,6 +870,15 @@ class ReferenceBlade(object):
                             rotation = 0
                         if offset == None:
                             offset = 0
+
+                        # geometry checks
+                        ratio_SCmax = 0.7
+                        if np.abs(offset) > chord*ratio_SCmax/2:
+                            offset_old = copy.deepcopy(offset)
+                            offset *= (chord*ratio_SCmax/2)/np.abs(offset)
+                            blade['st'][type_sec][idx_sec]['offset_x_pa']['values'][i] = offset
+                            layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "offset_x_pa" changed from %f to %f at R=%f (i=%d)'%(sec['name'], offset_old, offset, blade['pf']['r'][i], i)
+                            warnings.warn(layer_resize_warning)
                         
                         [blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i], blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]] = sorted(calc_axis_intersection(rotation, offset, p_le_d, ['suction', 'pressure']))
 
@@ -1511,12 +1532,12 @@ class ReferenceBlade(object):
 if __name__ == "__main__":
 
     ## File managment
-    # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_input        = "turbine_inputs/BAR22.yaml"
+    fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
+    # fname_input        = "turbine_inputs/BAR22.yaml"
     # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
     # fname_input        = "turbine_inputs/test_out.yaml"
     fname_output       = "turbine_inputs/testing_twist.yaml"
-    flag_write_out     = True
+    flag_write_out     = False
     flag_write_precomp = False
     dir_precomp_out    = "turbine_inputs/precomp"
 
@@ -1531,6 +1552,22 @@ if __name__ == "__main__":
     refBlade.fname_schema = "turbine_inputs/IEAontology_schema.yaml"
 
     blade = refBlade.initialize(fname_input)
+    idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==refBlade.spar_var[0].lower()][0]
+    
+    print(blade['pf']['chord'])
+    print(blade['st']['layers'][idx_spar]['width']['values'])
+    print(blade['st']['webs'][0]['offset_x_pa']['values'])
+
+    blade['ctrl_pts']['chord_in'][-1] *= 0.5
+    blade = refBlade.update(blade)
+    
+    print(blade['pf']['chord'])
+    print(blade['st']['layers'][idx_spar]['width']['values'])
+    print(blade['st']['webs'][0]['offset_x_pa']['values'])
+
+    
+    
+
 
     ## save output yaml
     if flag_write_out:
