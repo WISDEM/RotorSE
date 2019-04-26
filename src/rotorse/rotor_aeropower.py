@@ -355,7 +355,10 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         P, eff  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
         Cp      = Cp_aero*eff
 
-        
+        # print(Uhub)
+        # print(P)
+        # print(Omega * 30. / np.pi)
+
         for i in range(len(Uhub)):
             if P  [i] > params['control_ratedPower']:
                 regionIIhalf = False
@@ -363,9 +366,10 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             if Omega[i] * params['Rtip'] > params['control_maxTS']:
                 regionIIhalf = True
                 break
-
+        # print(regionIIhalf)
         
         def maxPregionIIhalf(pitch, Uhub, Omega):
+            print(Uhub, '<---')
             Uhub_i  = Uhub
             Omega_i = Omega
             pitch   = pitch
@@ -463,6 +467,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['rated_V']     = U_rated
         unknowns['rated_Omega'] = Omega[idx_rated] * 30. / np.pi
         unknowns['rated_pitch'] = pitch[idx_rated]
+        # print(T)
         unknowns['rated_T']     = T[idx_rated]
         unknowns['rated_Q']     = Q[idx_rated]
         

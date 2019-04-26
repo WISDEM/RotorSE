@@ -31,7 +31,7 @@ from AeroelasticSE.FAST_writer import InputWriter_Common, InputWriter_OpenFAST, 
 from AeroelasticSE.FAST_wrapper import FastWrapper
 from AeroelasticSE.runFAST_pywrapper import runFAST_pywrapper, runFAST_pywrapper_batch
 from AeroelasticSE.CaseGen_IEC import CaseGen_IEC
-from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve_fit
+from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve
 # except:
 #     pass
 
@@ -226,23 +226,32 @@ class RotorSE(Group):
         # connections to aep
         self.connect('cdf.F', 'aep.CDF_V')
         if self.Analysis_Level>1:
+            self.connect('powercurve.V', 'aeroelastic.V')
             self.connect('powercurve.V_spline', 'aeroelastic.V_out')
             self.connect('aeroelastic.P_out', 'aep.P')
+            self.connect('aeroelastic.Cp', 'Cp_in')
+            self.connect('aeroelastic.rated_V', 'rated_V_in')
+            self.connect('aeroelastic.rated_Omega', 'rated_Omega_in')
+            self.connect('aeroelastic.rated_pitch', 'rated_pitch_in')
+            self.connect('aeroelastic.rated_T', 'rated_T_in')
+            self.connect('aeroelastic.rated_Q', 'rated_Q_in')
+            self.connect('aeroelastic.P', 'P_in')
+
         else:
             self.connect('powercurve.P_spline', 'aep.P')
+            self.connect('powercurve.Cp', 'Cp_in')
+            self.connect('powercurve.rated_V', 'rated_V_in')
+            self.connect('powercurve.rated_Omega', 'rated_Omega_in')
+            self.connect('powercurve.rated_pitch', 'rated_pitch_in')
+            self.connect('powercurve.rated_T', 'rated_T_in')
+            self.connect('powercurve.rated_Q', 'rated_Q_in')
+            self.connect('powercurve.P', 'P_in')
+
         self.connect('AEP_loss_factor', 'aep.lossFactor')
+        self.connect('powercurve.V', 'V_in')
 
         # connections to outputs
-        self.connect('powercurve.V', 'V_in')
-        self.connect('powercurve.P', 'P_in')
         self.connect('aep.AEP', 'AEP_in')
-        self.connect('powercurve.Cp', 'Cp_in')
-        self.connect('powercurve.rated_V', 'rated_V_in')
-        self.connect('powercurve.rated_Omega', 'rated_Omega_in')
-        self.connect('powercurve.rated_pitch', 'rated_pitch_in')
-        self.connect('powercurve.rated_T', 'rated_T_in')
-        self.connect('powercurve.rated_Q', 'rated_Q_in')
-        # self.connect('geom.diameter', 'diameter_in')
         self.connect('presweep_tip', 'presweepTip_in')
 
         
@@ -793,7 +802,7 @@ if __name__ == '__main__':
         # FASTpref['DLC_extrm']           = RotorSE_DLC_7_1_Steady      # Max strain        ### Not in place yet
         FASTpref['DLC_turbulent']       = None
         # FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb      # Alternate turbulent case, replacing rated and extreme DLCs for calculating max deflection and strain
-        FASTpref['DLC_powercurve']      = power_curve_fit      # AEP
+        FASTpref['DLC_powercurve']      = power_curve      # AEP
         # FASTpref['DLC_powercurve']      = None      # AEP
 
         # Initialize, read initial FAST files to avoid doing it iteratively
@@ -807,7 +816,7 @@ if __name__ == '__main__':
         fst_vt = {}
 
     rotor = Problem()
-    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=False, regulation_reg_III=False, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
+    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
     #rotor.setup(check=False)
     rotor.setup()
     rotor = Init_RotorSE_wRefBlade(rotor, blade, fst_vt=fst_vt)

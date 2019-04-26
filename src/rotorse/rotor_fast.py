@@ -24,7 +24,7 @@ from AeroelasticSE.FAST_writer import InputWriter_Common, InputWriter_OpenFAST, 
 from AeroelasticSE.FAST_wrapper import FastWrapper
 from AeroelasticSE.runFAST_pywrapper import runFAST_pywrapper, runFAST_pywrapper_batch
 # from AeroelasticSE.CaseGen_IEC import CaseGen_IEC
-from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve_fit, power_curve
+from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, RotorSE_DLC_7_1_Steady, RotorSE_DLC_1_1_Turb, power_curve
 from AeroelasticSE.FAST_post import return_timeseries
 # except:
 #     pass
@@ -67,6 +67,8 @@ class FASTLoadCases(Component):
         self.add_param('Omega_init', val=np.zeros(npts_coarse_power_curve), units='rpm', desc='rotation speeds to run')
         self.add_param('pitch_init', val=np.zeros(npts_coarse_power_curve), units='deg', desc='pitch angles to run')
         self.add_param('V_out', val=np.zeros(npts_spline_power_curve), units='m/s', desc='wind speeds to output powercurve')
+        self.add_param('V',        val=np.zeros(npts_coarse_power_curve), units='m/s',  desc='wind vector')
+
 
         # Environmental conditions 
         self.add_param('Vrated', val=11.0, units='m/s', desc='rated wind speed')
@@ -115,6 +117,13 @@ class FASTLoadCases(Component):
         self.add_output('model_updated', val=False, desc='boolean, Analysis Level 0: fast model written, but not run')
 
         self.add_output('P_out', val=np.zeros(npts_spline_power_curve), units='W', desc='electrical power from rotor')
+        self.add_output('P',        val=np.zeros(npts_coarse_power_curve), units='W',    desc='rotor electrical power')
+        self.add_output('Cp',       val=np.zeros(npts_coarse_power_curve),               desc='rotor electrical power coefficient')
+        self.add_output('rated_V',     val=0.0, units='m/s', desc='rated wind speed')
+        self.add_output('rated_Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
+        self.add_output('rated_pitch', val=0.0, units='deg', desc='pitch setting at rated')
+        self.add_output('rated_T',     val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
+        self.add_output('rated_Q',     val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
 
         self.add_output('fst_vt_out', val={})
 
@@ -324,6 +333,8 @@ class FASTLoadCases(Component):
         else:
             FAST_Output = fastBatch.run_multi(self.cores)
 
+        self.fst_vt = fst_vt
+
         return FAST_Output
 
     def write_FAST(self, fst_vt, unknowns):
@@ -430,31 +441,82 @@ class FASTLoadCases(Component):
             unknowns['loads_pitch'] = data['BldPitch1'][idx_max_strain]
             unknowns['loads_azimuth'] = data['Azimuth'][idx_max_strain]
 
-        def post_AEP_fit(data):
+        # def post_AEP_fit(data):
+        #     def my_cubic(f, x):
+        #         return np.array([f[3]+ f[2]*xi + f[1]*xi**2. + f[0]*xi**3. for xi in x])
+
+        #     U = np.array([np.mean(datai['Wind1VelX']) for datai in data])
+        #     P = np.array([np.mean(datai['GenPwr']) for datai in data])*1000.
+        #     P_coef = np.polyfit(U, P, 3)
+
+        #     P_out = my_cubic(P_coef, params['V_out'])
+        #     np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
+        #     unknowns['P_out'] = P_out
+
+        #     # import matplotlib.pyplot as plt
+        #     # plt.plot(U, P, 'o')
+        #     # plt.plot(params['V_out'], unknowns['P_out'])            
+        #     # plt.show()
+
+        def post_AEP(data):
+            U = np.array([4., 6., 7., 8., 9., 10., 10.5, 11., 11.5, 12., 14., 19., 24.])
+            U_fit = np.array([4.,8.,9.,10.])
+
+            ## Find rated 
             def my_cubic(f, x):
                 return np.array([f[3]+ f[2]*xi + f[1]*xi**2. + f[0]*xi**3. for xi in x])
 
-            U = np.array([np.mean(datai['Wind1VelX']) for datai in data])
-            P = np.array([np.mean(datai['GenPwr']) for datai in data])*1000.
-            P_coef = np.polyfit(U, P, 3)
+            idx_fit = [U.tolist().index(Ui) for Ui in U_fit]
+            P_fit = np.array([np.mean(data[i]['GenPwr']) for i in idx_fit])
+            P_coef = np.polyfit(U_fit, P_fit, 3)
 
-            P_out = my_cubic(P_coef, params['V_out'])
-            np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
-            unknowns['P_out'] = P_out
+            P_find_rated = my_cubic(P_coef, params['V_out'])
+            np.place(P_find_rated, P_find_rated>params['control_ratedPower'], params['control_ratedPower'])
+            idx_rated = min([i for i, Pi in enumerate(P_find_rated) if Pi*1000 >= params['control_ratedPower']])
+            unknowns['rated_V'] = params['V_out'][idx_rated]
 
-            # import matplotlib.pyplot as plt
-            # plt.plot(U, P, 'o')
-            # plt.plot(params['V_out'], unknowns['P_out'])            
-            # plt.show()
+            if unknowns['rated_V'] not in U:
+                ## Run Rated
+                TMax = 99999.
+                turbulence_class = TURBULENCE_CLASS[params['turbulence_class']]
+                turbine_class    = TURBINE_CLASS[params['turbine_class']]
+                list_cases_rated, list_casenames_rated, requited_channels_rated = RotorSE_rated(self.fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, unknowns['rated_V'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'])
+                requited_channels_rated = sorted(list(set(requited_channels_rated)))
+                channels_out = {}
+                for var in requited_channels_rated:
+                    channels_out[var] = True
+                data_rated = self.run_FAST(self.fst_vt, list_cases_rated, list_casenames_rated, channels_out)[0]
 
-        def post_AEP(data):
-            U = np.array([np.mean(datai['Wind1VelX']) for datai in data])
-            P = np.array([np.mean(datai['GenPwr']) for datai in data])*1000.
-            P_spline = PchipInterpolator(U, P)
+                ## Sort in Rated Power
+                U_wR = []
+                data_wR = []
+                U_added = False
+                for i in range(len(U)):
+                    if unknowns['rated_V']<U[i] and U_added == False:
+                        U_wR.append(unknowns['rated_V'])
+                        data_wR.append(data_rated)
+                        U_added = True
+                    U_wR.append(U[i])
+                    data_wR.append(data[i])
+
+            P_fast = np.array([np.mean(datai['GenPwr']) for datai in data_wR])*1000.
+            P_spline = PchipInterpolator(U_wR, P_fast)
 
             P_out = P_spline(params['V_out'])
-            np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
+            # np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
             unknowns['P_out'] = P_out
+
+            P = P_spline(params['V'])
+            # np.place(P, P>params['control_ratedPower'], params['control_ratedPower'])
+            unknowns['P'] = P
+
+
+            unknowns['Cp']          = np.mean(data_rated["RtAeroCp"])
+            unknowns['rated_V']     = np.mean(data_rated["Wind1VelX"])
+            unknowns['rated_Omega'] = np.mean(data_rated["RotSpeed"])
+            unknowns['rated_pitch'] = np.mean(data_rated["BldPitch1"])
+            unknowns['rated_T']     = np.mean(data_rated["RotThrust"])*1000
+            unknowns['rated_Q']     = np.mean(data_rated["RotTorq"])*1000
 
             # import matplotlib.pyplot as plt
             # plt.plot(U, P, 'o')
