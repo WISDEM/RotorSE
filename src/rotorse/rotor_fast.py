@@ -168,7 +168,8 @@ class FASTLoadCases(Component):
         fst_vt['ElastoDynBlade']['BlFract'][0] = 0.
         fst_vt['ElastoDynBlade']['BlFract'][-1]= 1.
         fst_vt['ElastoDynBlade']['PitchAxis']  = params['le_location']
-        fst_vt['ElastoDynBlade']['StrcTwst']   = params['beam:Tw_iner']
+        # fst_vt['ElastoDynBlade']['StrcTwst']   = params['beam:Tw_iner']
+        fst_vt['ElastoDynBlade']['StrcTwst']   = params['theta'] # to do: structural twist is not nessessarily (nor likely to be) the same as aero twist
         fst_vt['ElastoDynBlade']['BMassDen']   = params['beam:rhoA']
         fst_vt['ElastoDynBlade']['FlpStff']    = params['beam:EIyy']
         fst_vt['ElastoDynBlade']['EdgStff']    = params['beam:EIxx']
