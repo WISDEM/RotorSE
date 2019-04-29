@@ -364,7 +364,7 @@ class ReferenceBlade(object):
         n = self.NPTS
         # Find unique composite start and end points
         r_points = copy.copy(self.r_in)
-        for type_sec, idx_sec, sec in zip(['webs']*len(st['webs'])+['layers']*len(st['layers']), range(len(st['webs']))+range(len(st['layers'])), st['webs']+st['layers']):
+        for type_sec, idx_sec, sec in zip(['webs']*len(st['webs'])+['layers']*len(st['layers']), list(range(len(st['webs'])))+list(range(len(st['layers']))), st['webs']+st['layers']):
             for var in sec.keys():
                 if type(sec[var]) not in [str, bool]:
                     if 'grid' in sec[var].keys():
