@@ -764,7 +764,7 @@ class ReferenceBlade(object):
             profile_i_arc /= arc_L
             
             # loop through composite layups
-            for type_sec, idx_sec, sec in zip(['webs']*len(blade['st']['webs'])+['layers']*len(blade['st']['layers']), range(len(blade['st']['webs']))+range(len(blade['st']['layers'])), blade['st']['webs']+blade['st']['layers']):
+            for type_sec, idx_sec, sec in zip(['webs']*len(blade['st']['webs'])+['layers']*len(blade['st']['layers']), list(range(len(blade['st']['webs'])))+list(range(len(blade['st']['layers']))), blade['st']['webs']+blade['st']['layers']):
                 # for idx_sec, sec in enumerate(blade['st'][type_sec]):
 
                 # initialize chord wise start end points
