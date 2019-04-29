@@ -9,7 +9,7 @@ from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometr
 from commonse import gravity, NFREQ
 from commonse.csystem import DirectionVector
 from commonse.utilities import trapz_deriv, interp_with_deriv
-from precomp import _precomp
+import _precomp
 from akima import Akima, akima_interp_with_derivs
 from rotor_geometry import RotorGeometry, NINPUT, TURBULENCE_CLASS, TURBINE_CLASS
 import _pBEAM
