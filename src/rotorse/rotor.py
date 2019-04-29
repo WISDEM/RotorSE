@@ -758,7 +758,7 @@ if __name__ == '__main__':
 
     fname_output = "turbine_inputs/test_out.yaml"
     
-    Analysis_Level = 2 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
+    Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
 
     # Initialize blade design
     refBlade = ReferenceBlade()

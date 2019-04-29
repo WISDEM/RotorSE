@@ -346,6 +346,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         M       = np.zeros_like(Uhub)
         Omega   = np.zeros_like(Uhub)
         pitch   = np.zeros_like(Uhub) + params['control_pitch']
+
+        Omega_max = min([params['control_maxTS'] / params['Rtip'], params['control_maxOmega']*np.pi/30.])
         
         # Region II
         for i in range(len(Uhub)):
@@ -360,16 +362,16 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # print(Omega * 30. / np.pi)
 
         for i in range(len(Uhub)):
+            if Omega[i] * params['Rtip'] > params['control_maxTS'] or Omega[i]>Omega_max:
+                regionIIhalf = True
+                break
             if P  [i] > params['control_ratedPower']:
                 regionIIhalf = False
-                break
-            if Omega[i] * params['Rtip'] > params['control_maxTS']:
-                regionIIhalf = True
                 break
         # print(regionIIhalf)
         
         def maxPregionIIhalf(pitch, Uhub, Omega):
-            print(Uhub, '<---')
+            # print(Uhub, '<---')
             Uhub_i  = Uhub
             Omega_i = Omega
             pitch   = pitch
@@ -382,7 +384,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             for i in range(len(Uhub)):
                 if Omega[i] * params['Rtip'] > params['control_maxTS']:
                     
-                    Omega[i] = params['control_maxTS'] / params['Rtip']
+                    Omega[i] = Omega_max
                     pitch0 = pitch[i-1]
                     
                     options['disp']     = False
@@ -454,8 +456,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['V']       = Uhub
         unknowns['M']       = M
         unknowns['pitch']   = pitch
-        
-        
+
         # Fit spline to powercurve for higher grid density
         spline   = PchipInterpolator(Uhub, P)
         V_spline = np.linspace(params['control_Vin'],params['control_Vout'], num=self.n_pc_spline)
