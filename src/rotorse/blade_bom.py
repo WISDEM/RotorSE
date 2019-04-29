@@ -36,7 +36,7 @@ class blade_bom(object):
         
         
         # Sandwich fillers
-        filler_names = ['(Balsa)', 'BalsaCore', 'FOAM', 'Foam','(Foam)', 'Balsa', 'medium_density_foam']
+        filler_names = ['(Balsa)', 'BalsaCore', 'FOAM', 'Foam','(Foam)', 'Balsa', 'medium_density_foam','balsa','foam']
         for name in filler_names:
             material_dict[name]                = {}
             material_dict[name]['component']   = [1]       # Flag to specify where the material is used. 0 - coating, 1 - sandwich filler , 2 - shell skin, 3 - shear webs, 4 - spar caps, 5 - TE reinf.
@@ -50,7 +50,7 @@ class blade_bom(object):
         material_dict['(Resin)']['ply_t']       = 0.0025 # [m] 
         
         # Triaxial fabrics
-        triax_names = ['(TriaxFabric)', 'TriaxSkin', 'glassTri', 'glass_triax','(SNLTriax)']
+        triax_names = ['(TriaxFabric)', 'TriaxSkin', 'glassTri', 'glass_triax','(SNLTriax)','triax']
         for name in triax_names:
             material_dict[name]                      = {}
             material_dict[name]['component']         = [2]      # Flag to specify where the material is used. 0 - coating, 1 - sandwich filler , 2 - shell skin, 3 - shear webs, 4 - spar caps, 5 - TE reinf.
@@ -61,7 +61,7 @@ class blade_bom(object):
         
         
         # Uniaxial fabrics spar caps
-        uniax_names = ['(SparCapMix)', 'UniaxSC', 'glassUD', 'glass_uni','(ELT5500EP3(Uni))']
+        uniax_names = ['(SparCapMix)', 'UniaxSC', 'glassUD', 'glass_uni','(ELT5500EP3(Uni))','uniax','ud']
         for name in uniax_names:
             material_dict[name]                       = {}
             material_dict[name]['component']          = [4]# Flag to specify where the material is used. 0 - coating, 1 - sandwich filler , 2 - shell skin, 3 - shear webs, 4 - spar caps, 5 - TE reinf.
@@ -90,7 +90,7 @@ class blade_bom(object):
         
         
         # Biaxial fabrics
-        biax_names = ['(RandomMat)', 'BiaxWebs', 'glassDB','glass_biax','(SaertexEP3(DB))']
+        biax_names = ['(RandomMat)', 'BiaxWebs', 'glassDB','glass_biax','(SaertexEP3(DB))','biax']
         for name in biax_names:
             material_dict[name]                        = {}
             material_dict[name]['component']           = [3]      # Flag to specify where the material is used. 0 - coating, 1 - sandwich filler , 2 - shell skin, 3 - shear webs, 4 - spar caps, 5 - TE reinf.

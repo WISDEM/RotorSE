@@ -837,7 +837,7 @@ class ReferenceBlade(object):
                             offset = 0.
 
                         # geometry checks
-                        ratio_SCmax = 0.7
+                        ratio_SCmax = 0.8
                         if width > chord*ratio_SCmax:
                             width_old = copy.deepcopy(width)
                             width = chord*ratio_SCmax
@@ -1419,7 +1419,27 @@ class ReferenceBlade(object):
         axc.legend()
         fc.savefig(path + fig_name)
         
-
+        
+        
+        # Twist
+        theta_init      = blade['pf']['theta']
+        s_interp_t      = np.array([0.0, 0.05, 0.2, 0.4, 0.6, 0.8, 1.0 ])
+        f_interp1       = interp1d(s,theta_init)
+        theta_int1      = f_interp1(s_interp_t)
+        theta_int1[-1]  = -1.
+        f_interp2       = PchipInterpolator(s_interp_t,theta_int1)
+        theta_int2      = f_interp2(s)
+        
+        fc, axc  = plt.subplots(1,1,figsize=(5.3, 4))
+        axc.plot(s, theta_init, c='k', label='Initial')
+        axc.plot(s_interp_t, theta_int1, 'ko', label='Interp Points')
+        axc.plot(s, theta_int2, c='b', label='PCHIP')
+        axc.set(xlabel='r/R' , ylabel='Twist (deg)')
+        fig_name = 'interp_twist.png'
+        axc.legend()
+        fc.savefig(path + fig_name)
+        
+        
         # Relative thickness
         r_thick_interp = abs_thick_int2 / chord_int2
         r_thick_airfoils = np.array([0.18, 0.211, 0.241, 0.301, 0.36 , 0.50, 1.00])
