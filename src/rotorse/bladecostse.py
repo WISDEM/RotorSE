@@ -1,6 +1,6 @@
-from blade_bom        import blade_bom
-from blade_labor_ct   import blade_labor_ct
-from virtual_factory  import virtual_factory
+from rotorse.blade_bom        import blade_bom
+from rotorse.blade_labor_ct   import blade_labor_ct
+from rotorse.virtual_factory  import virtual_factory
 from rotorse.precomp import Profile, CompositeSection, Orthotropic2DMaterial
 import rotorse
 import matplotlib.pyplot    as plt

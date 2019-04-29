@@ -1,6 +1,6 @@
 import numpy as np
 from openmdao.api import Component
-from bladecostse import blade_cost_model
+from rotorse.bladecostse import blade_cost_model
 
 
 # Class to initiate the blade cost model
