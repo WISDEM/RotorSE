@@ -11,7 +11,7 @@ from commonse.csystem import DirectionVector
 from commonse.utilities import trapz_deriv, interp_with_deriv
 import _precomp
 from akima import Akima, akima_interp_with_derivs
-from rotor_geometry import RotorGeometry, NINPUT, TURBULENCE_CLASS, TURBINE_CLASS
+from rotorse.rotor_geometry import RotorGeometry, NINPUT, TURBULENCE_CLASS, TURBINE_CLASS
 import _pBEAM
 # import ccblade._bem as _bem  # TODO: move to rotoraero
 import _bem  # TODO: move to rotoraero
