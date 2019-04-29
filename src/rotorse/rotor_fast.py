@@ -3,7 +3,7 @@ from __future__ import print_function
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.interpolate import PchipInterpolator
-import os, copy
+import os, copy, warnings
 from openmdao.api import IndepVarComp, Component, Group, Problem
 from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometry
 from commonse import gravity, NFREQ
@@ -263,8 +263,8 @@ class FASTLoadCases(Component):
     def DLC_creation(self, params, fst_vt):
         # Case Generations
 
-        TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        # TMax = 5.
+        # TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
+        TMax = 30.
 
         list_cases        = []
         list_casenames    = []
@@ -478,7 +478,8 @@ class FASTLoadCases(Component):
 
             if unknowns['rated_V'] not in U:
                 ## Run Rated
-                TMax = 99999.
+                # TMax = 99999.
+                TMax = 30.
                 turbulence_class = TURBULENCE_CLASS[params['turbulence_class']]
                 turbine_class    = TURBINE_CLASS[params['turbine_class']]
                 list_cases_rated, list_casenames_rated, requited_channels_rated = RotorSE_rated(self.fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, unknowns['rated_V'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'])
@@ -499,8 +500,18 @@ class FASTLoadCases(Component):
                         U_added = True
                     U_wR.append(U[i])
                     data_wR.append(data[i])
+            else:
+                U_wR = U
 
             P_fast = np.array([np.mean(datai['GenPwr']) for datai in data_wR])*1000.
+            for i, (Pi, Vi) in enumerate(zip(P_fast, U_wR)):
+                if Vi > unknowns['rated_V']:
+                    if np.abs((Pi-params['control_ratedPower'])/params['control_ratedPower']) > 0.2:
+                        P_fast[i] = params['control_ratedPower']
+                        above_rate_power_warning = "FAST instability expected at U=%f m/s, abs(outputted power) > +/-20%% of rated power.  Replaceing %f with %f"%(Ui, Pi, params['control_ratedPower'])
+                        warnings.warn(above_rate_power_warning)
+
+            
             P_spline = PchipInterpolator(U_wR, P_fast)
 
             P_out = P_spline(params['V_out'])
@@ -523,6 +534,9 @@ class FASTLoadCases(Component):
             # plt.plot(U, P, 'o')
             # plt.plot(params['V_out'], unknowns['P_out'])            
             # plt.show()
+
+            print(U_wR)
+            print(P_fast)
 
         ############
 
