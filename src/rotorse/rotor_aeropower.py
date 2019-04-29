@@ -265,7 +265,7 @@ import time
 
 class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
-    def __init__(self, naero, n_pc, n_pc_spline, regulation_reg_II5 = False, regulation_reg_III = False):
+    def __init__(self, naero, n_pc, n_pc_spline, regulation_reg_II5 = True, regulation_reg_III = False):
         super(RegulatedPowerCurve, self).__init__()
 
         # parameters
