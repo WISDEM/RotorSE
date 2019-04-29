@@ -640,7 +640,7 @@ class ReferenceBlade(object):
             st['reference_axis'][var]['grid'] = self.s.tolist()
 
         # remap
-        for type_sec, idx_sec, sec in zip(['webs']*len(st['webs'])+['layers']*len(st['layers']), range(len(st['webs']))+range(len(st['layers'])), st['webs']+st['layers']):
+        for type_sec, idx_sec, sec in zip(['webs']*len(st['webs'])+['layers']*len(st['layers']), list(range(len(st['webs'])))+list(range(len(st['layers']))), st['webs']+st['layers']):
             for var in sec.keys():
                 # print(sec['name'], var)
                 if type(sec[var]) not in [str, bool]:
