@@ -263,8 +263,8 @@ class FASTLoadCases(Component):
     def DLC_creation(self, params, fst_vt):
         # Case Generations
 
-        # TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        TMax = 30.
+        TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
+        # TMax = 30.
 
         list_cases        = []
         list_casenames    = []
@@ -468,10 +468,6 @@ class FASTLoadCases(Component):
                 return np.array([f[3]+ f[2]*xi + f[1]*xi**2. + f[0]*xi**3. for xi in x])
 
             idx_fit = [U.tolist().index(Ui) for Ui in U_fit]
-            print(idx_fit)
-            print(type(data))
-            print(len(data))
-            print(data[0])
             P_fit = np.array([np.mean(data[i]['GenPwr']) for i in idx_fit])
             P_coef = np.polyfit(U_fit, P_fit, 3)
 
@@ -482,8 +478,8 @@ class FASTLoadCases(Component):
 
             if unknowns['rated_V'] not in U:
                 ## Run Rated
-                # TMax = 99999.
-                TMax = 30.
+                TMax = 99999.
+                # TMax = 30.
                 turbulence_class = TURBULENCE_CLASS[params['turbulence_class']]
                 turbine_class    = TURBINE_CLASS[params['turbine_class']]
                 list_cases_rated, list_casenames_rated, requited_channels_rated = RotorSE_rated(self.fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, unknowns['rated_V'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'])
@@ -512,7 +508,7 @@ class FASTLoadCases(Component):
                 if Vi > unknowns['rated_V']:
                     if np.abs((Pi-params['control_ratedPower'])/params['control_ratedPower']) > 0.2:
                         P_fast[i] = params['control_ratedPower']
-                        above_rate_power_warning = "FAST instability expected at U=%f m/s, abs(outputted power) > +/-20%% of rated power.  Replaceing %f with %f"%(Ui, Pi, params['control_ratedPower'])
+                        above_rate_power_warning = "FAST instability expected at U=%f m/s, abs(outputted power) > +/-20%% of rated power.  Replaceing %f with %f"%(Vi, Pi, params['control_ratedPower'])
                         warnings.warn(above_rate_power_warning)
 
             
