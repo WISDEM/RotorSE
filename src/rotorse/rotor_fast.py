@@ -468,6 +468,10 @@ class FASTLoadCases(Component):
                 return np.array([f[3]+ f[2]*xi + f[1]*xi**2. + f[0]*xi**3. for xi in x])
 
             idx_fit = [U.tolist().index(Ui) for Ui in U_fit]
+            print(idx_fit)
+            print(type(data))
+            print(len(data))
+            print(data[0])
             P_fit = np.array([np.mean(data[i]['GenPwr']) for i in idx_fit])
             P_coef = np.polyfit(U_fit, P_fit, 3)
 
