@@ -180,6 +180,8 @@ class RotorSE(Group):
 
             self.connect('drivetrainEff', 'powercurve.drivetrainEff')
             self.connect('machine_rating',  'aeroelastic.control_ratedPower')
+            self.connect('control_maxTS',   'aeroelastic.control_maxTS')
+            self.connect('control_maxOmega','aeroelastic.control_maxOmega')
 
         # connections to powercurve
         self.connect('r_pts',           'powercurve.r')

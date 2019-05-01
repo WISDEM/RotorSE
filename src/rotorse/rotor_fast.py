@@ -61,6 +61,8 @@ class FASTLoadCases(Component):
         self.add_param('turbulence_class', val=TURBULENCE_CLASS['A'], desc='IEC turbulence class', pass_by_obj=True)
         self.add_param('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbulence class', pass_by_obj=True)
         self.add_param('control_ratedPower', val=0., desc='machine power rating')
+        self.add_param('control_maxOmega',   val=0.0, units='rpm',  desc='maximum allowed rotor rotation speed')
+        self.add_param('control_maxTS',      val=0.0, units='m/s',  desc='maximum allowed blade tip speed')
 
         # Initial conditions
         self.add_param('U_init', val=np.zeros(npts_coarse_power_curve), units='m/s', desc='wind speeds')
@@ -275,7 +277,16 @@ class FASTLoadCases(Component):
         turbine_class    = TURBINE_CLASS[params['turbine_class']]
 
         if self.DLC_powercurve != None:
-            list_cases_PwrCrv, list_casenames_PwrCrv, requited_channels_PwrCrv = self.DLC_powercurve(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'])
+            U_init     = copy.deepcopy(params['U_init'])
+            Omega_init = copy.deepcopy(params['Omega_init'])
+            pitch_init = copy.deepcopy(params['pitch_init'])
+            max_omega  = min([params['control_maxTS'] / params['Rtip'], params['control_maxOmega']*np.pi/30.])*30/np.pi
+            print(max_omega, '<----')
+            for i, (Ui, Omegai, pitchi) in enumerate(zip(U_init, Omega_init, pitch_init)):
+                if pitchi > 0. and Omegai < max_omega*0.99:
+                    pitch_init[i] = 0.
+
+            list_cases_PwrCrv, list_casenames_PwrCrv, requited_channels_PwrCrv = self.DLC_powercurve(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=U_init, Omega_init=Omega_init, pitch_init=pitch_init)
             list_cases        += list_cases_PwrCrv
             list_casenames    += list_casenames_PwrCrv
             required_channels += requited_channels_PwrCrv
