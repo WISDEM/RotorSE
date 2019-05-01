@@ -281,7 +281,7 @@ class FASTLoadCases(Component):
             self.Omega_init = copy.deepcopy(params['Omega_init'])
             self.pitch_init = copy.deepcopy(params['pitch_init'])
             self.max_omega  = min([params['control_maxTS'] / params['Rtip'], params['control_maxOmega']*np.pi/30.])*30/np.pi
-            print(se;f.max_omega, '<----')
+            print(self.max_omega, '<----')
             for i, (Ui, Omegai, pitchi) in enumerate(zip(self.U_init, self.Omega_init, self.pitch_init)):
                 if pitchi > 0. and Omegai < self.max_omega*0.99:
                     self.pitch_init[i] = 0.
