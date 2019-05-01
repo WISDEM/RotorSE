@@ -300,7 +300,9 @@ class ReferenceBlade(object):
         wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['grid']    = blade_out['pf']['s'].tolist()
 
         # Composite layups
-        st = copy.deepcopy(blade['st'])
+        # st = copy.deepcopy(blade['st'])
+        st = blade_out['st']
+
         # for var in st['reference_axis'].keys():
         #     try:
         #         _ = st['reference_axis'][var].keys()
@@ -315,7 +317,8 @@ class ReferenceBlade(object):
         #         pass
 
         for idx_sec, sec in enumerate(st['layers']):
-            for var in st['layers'][idx_sec].keys():
+            layer_vars = copy.deepcopy(list(st['layers'][idx_sec].keys()))
+            for var in layer_vars:
                 try:
                     _ = st['layers'][idx_sec][var].keys()
 
@@ -328,7 +331,8 @@ class ReferenceBlade(object):
                 except:
                     pass
         for idx_sec, sec in enumerate(st['webs']):
-            for var in st['webs'][idx_sec].keys():
+            web_vars = copy.deepcopy(list(st['webs'][idx_sec].keys()))
+            for var in web_vars:
                 try:
                     _ = st['webs'][idx_sec][var].keys()
                     st['webs'][idx_sec][var]['grid'] = [float(r) for val, r in zip(st['webs'][idx_sec][var]['values'], st['webs'][idx_sec][var]['grid']) if val != None]
