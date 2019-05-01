@@ -283,7 +283,7 @@ class ReferenceBlade(object):
 
 
         #### Build Output dictionary
-        blade_out = copy.deepcopy(blade)
+        # blade_out = copy.deepcopy(blade)
 
         # Planform
         wt_out['components']['blade']['outer_shape_bem']['chord']['values']             = blade_out['pf']['chord'].tolist()
@@ -300,7 +300,7 @@ class ReferenceBlade(object):
         wt_out['components']['blade']['outer_shape_bem']['reference_axis']['z']['grid']    = blade_out['pf']['s'].tolist()
 
         # Composite layups
-        st = blade_out['st']
+        st = copy.deepcopy(blade['st'])
         # for var in st['reference_axis'].keys():
         #     try:
         #         _ = st['reference_axis'][var].keys()
