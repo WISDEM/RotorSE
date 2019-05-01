@@ -283,7 +283,7 @@ class ReferenceBlade(object):
 
 
         #### Build Output dictionary
-        # blade_out = copy.deepcopy(blade)
+        blade_out = copy.deepcopy(blade)
 
         # Planform
         wt_out['components']['blade']['outer_shape_bem']['chord']['values']             = blade_out['pf']['chord'].tolist()
