@@ -280,16 +280,16 @@ class FASTLoadCases(Component):
             self.U_init     = copy.deepcopy(params['U_init'])
             self.Omega_init = copy.deepcopy(params['Omega_init'])
             self.pitch_init = copy.deepcopy(params['pitch_init'])
-            self.max_omega  = min([params['control_maxTS'] / params['Rtip'], params['control_maxOmega']*np.pi/30.])*30/np.pi
-            print('U_init    ', self.U_init    )
-            print('Omega_init', self.Omega_init)
-            print('pitch_init', self.pitch_init)
-            for i, (Ui, Omegai, pitchi) in enumerate(zip(self.U_init, self.Omega_init, self.pitch_init)):
-                if pitchi > 0. and Omegai < self.max_omega*0.99:
-                    self.pitch_init[i] = 0.
-            print('U_init    ', self.U_init    )
-            print('Omega_init', self.Omega_init)
-            print('pitch_init', self.pitch_init)
+            # self.max_omega  = min([params['control_maxTS'] / params['Rtip'], params['control_maxOmega']*np.pi/30.])*30/np.pi
+            # print('U_init    ', self.U_init    )
+            # print('Omega_init', self.Omega_init)
+            # print('pitch_init', self.pitch_init)
+            # for i, (Ui, Omegai, pitchi) in enumerate(zip(self.U_init, self.Omega_init, self.pitch_init)):
+            #     if pitchi > 0. and Omegai < self.max_omega*0.99:
+            #         self.pitch_init[i] = 0.
+            # print('U_init    ', self.U_init    )
+            # print('Omega_init', self.Omega_init)
+            # print('pitch_init', self.pitch_init)
 
             list_cases_PwrCrv, list_casenames_PwrCrv, requited_channels_PwrCrv = self.DLC_powercurve(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=self.U_init, Omega_init=self.Omega_init, pitch_init=self.pitch_init)
             list_cases        += list_cases_PwrCrv
