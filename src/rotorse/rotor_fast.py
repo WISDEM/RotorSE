@@ -277,16 +277,16 @@ class FASTLoadCases(Component):
         turbine_class    = TURBINE_CLASS[params['turbine_class']]
 
         if self.DLC_powercurve != None:
-            U_init     = copy.deepcopy(params['U_init'])
-            Omega_init = copy.deepcopy(params['Omega_init'])
-            pitch_init = copy.deepcopy(params['pitch_init'])
-            max_omega  = min([params['control_maxTS'] / params['Rtip'], params['control_maxOmega']*np.pi/30.])*30/np.pi
-            print(max_omega, '<----')
-            for i, (Ui, Omegai, pitchi) in enumerate(zip(U_init, Omega_init, pitch_init)):
-                if pitchi > 0. and Omegai < max_omega*0.99:
-                    pitch_init[i] = 0.
+            self.U_init     = copy.deepcopy(params['U_init'])
+            self.Omega_init = copy.deepcopy(params['Omega_init'])
+            self.pitch_init = copy.deepcopy(params['pitch_init'])
+            self.max_omega  = min([params['control_maxTS'] / params['Rtip'], params['control_maxOmega']*np.pi/30.])*30/np.pi
+            print(se;f.max_omega, '<----')
+            for i, (Ui, Omegai, pitchi) in enumerate(zip(self.U_init, self.Omega_init, self.pitch_init)):
+                if pitchi > 0. and Omegai < self.max_omega*0.99:
+                    self.pitch_init[i] = 0.
 
-            list_cases_PwrCrv, list_casenames_PwrCrv, requited_channels_PwrCrv = self.DLC_powercurve(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=U_init, Omega_init=Omega_init, pitch_init=pitch_init)
+            list_cases_PwrCrv, list_casenames_PwrCrv, requited_channels_PwrCrv = self.DLC_powercurve(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=self.U_init, Omega_init=self.Omega_init, pitch_init=self.pitch_init)
             list_cases        += list_cases_PwrCrv
             list_casenames    += list_casenames_PwrCrv
             required_channels += requited_channels_PwrCrv
@@ -493,7 +493,7 @@ class FASTLoadCases(Component):
                 # TMax = 30.
                 turbulence_class = TURBULENCE_CLASS[params['turbulence_class']]
                 turbine_class    = TURBINE_CLASS[params['turbine_class']]
-                list_cases_rated, list_casenames_rated, requited_channels_rated = RotorSE_rated(self.fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, unknowns['rated_V'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'])
+                list_cases_rated, list_casenames_rated, requited_channels_rated = RotorSE_rated(self.fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, unknowns['rated_V'], U_init=self.U_init, Omega_init=self.Omega_init, pitch_init=np.zeros_like(self.Omega_init))
                 requited_channels_rated = sorted(list(set(requited_channels_rated)))
                 channels_out = {}
                 for var in requited_channels_rated:
