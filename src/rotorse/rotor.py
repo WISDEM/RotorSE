@@ -765,7 +765,7 @@ if __name__ == '__main__':
     # Initialize blade design
     refBlade = ReferenceBlade()
     refBlade.verbose      = True
-    refBlade.NINPUT       = 10
+    refBlade.NINPUT       = 8
     refBlade.NPITS        = 100
     refBlade.spar_var     = ['Spar_Cap_SS', 'Spar_Cap_PS']
     refBlade.te_var       = 'TE_reinforcement'
@@ -822,7 +822,11 @@ if __name__ == '__main__':
     #rotor.setup(check=False)
     rotor.setup()
     rotor = Init_RotorSE_wRefBlade(rotor, blade, fst_vt=fst_vt)
-    # rotor['theta_in'][0] *= 1
+    
+    # rotor['chord_in'] = np.array([3.542, 3.54451799, 2.42342374, 2.44521374, 4.69032208, 6.3306303, 4.41245811, 1.419])
+    # rotor['theta_in'] = np.array([13.30800018, 13.30800018, 0.92624531, 10.41054813, 11.48955724, -0.60858835, -1.41595352, 4.89747605])
+    # rotor['sparT_in'] = np.array([0.00047, 0.00059925, 0.07363709, 0.13907431, 0.19551095, 0.03357394, 0.12021584, 0.00047])
+    # rotor['r_in']     = np.array([0., 0.02565783, 0.23892874, 0.39114299, 0.54335725, 0.6955715, 0.84778575, 1.])
 
     # === run and outputs ===
     tt = time.time()
