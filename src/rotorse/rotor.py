@@ -226,8 +226,14 @@ class RotorSE(Group):
         self.connect('shape_parameter', 'cdf.k')
 
         # connections to aep
-        self.connect('cdf.F', 'aep.CDF_V')
+        fast_for_aep = False
         if self.Analysis_Level>1:
+            if 'DLC_powercurve' in FASTpref.keys():
+                if FASTpref['DLC_powercurve'] != None
+                    fast_for_aep = True
+
+        self.connect('cdf.F', 'aep.CDF_V')
+        if fast_for_aep:
             self.connect('powercurve.V', 'aeroelastic.V')
             self.connect('powercurve.V_spline', 'aeroelastic.V_out')
             self.connect('aeroelastic.P_out', 'aep.P')
@@ -238,7 +244,6 @@ class RotorSE(Group):
             self.connect('aeroelastic.rated_T', 'rated_T_in')
             self.connect('aeroelastic.rated_Q', 'rated_Q_in')
             self.connect('aeroelastic.P', 'P_in')
-
         else:
             self.connect('powercurve.P_spline', 'aep.P')
             self.connect('powercurve.Cp', 'Cp_in')
