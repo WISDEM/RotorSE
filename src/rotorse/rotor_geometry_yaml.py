@@ -316,7 +316,8 @@ class ReferenceBlade(object):
         #     except:
         #         pass
 
-        for idx_sec, sec in enumerate(st['layers']):
+        idx_sec_all = list(range(len(st['layers'])))
+        for idx_sec in idx_sec_all:
             layer_vars = copy.deepcopy(list(st['layers'][idx_sec].keys()))
             for var in layer_vars:
                 try:
@@ -330,7 +331,9 @@ class ReferenceBlade(object):
                         continue
                 except:
                     pass
-        for idx_sec, sec in enumerate(st['webs']):
+
+        idx_sec_all = list(range(len(st['webs'])))
+        for idx_sec in idx_sec_all:
             web_vars = copy.deepcopy(list(st['webs'][idx_sec].keys()))
             for var in web_vars:
                 try:
