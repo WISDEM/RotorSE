@@ -229,7 +229,7 @@ class RotorSE(Group):
         fast_for_aep = False
         if self.Analysis_Level>1:
             if 'DLC_powercurve' in FASTpref.keys():
-                if FASTpref['DLC_powercurve'] != None
+                if FASTpref['DLC_powercurve'] != None:
                     fast_for_aep = True
 
         self.connect('cdf.F', 'aep.CDF_V')
