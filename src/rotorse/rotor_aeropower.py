@@ -358,10 +358,10 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         Cp      = Cp_aero*eff
         
 
+        # search for Region 2.5 bounds
         for i in range(len(Uhub)):
         
             if Omega[i] > Omega_max:
-                
                 Omega[i]        = Omega_max
                 Uhub[i]         = Omega[i] * params['Rtip'] / params['control_tsr']
                 P_aero[i], T[i], Q[i], M[i], Cp_aero[i], _, _, _ = self.ccblade.evaluate([Uhub[i]], [Omega[i] * 30. / np.pi], [pitch[i]], coefficients=True)
@@ -369,6 +369,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 Cp[i]           = Cp_aero[i]*eff
                 regionIIhalf    = True
                 i_IIhalf_start  = i
+
+
                 break
 
 
@@ -379,7 +381,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         
         def maxPregionIIhalf(pitch, Uhub, Omega):
-            # print(Uhub, '<---')
             Uhub_i  = Uhub
             Omega_i = Omega
             pitch   = pitch
@@ -387,6 +388,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             P, _, _, _ = self.ccblade.evaluate([Uhub_i], [Omega_i * 30. / np.pi], [pitch], coefficients=False)
             return -P
         
+        # Solve for regoin 2.5 pitch ## ??? this is solving the pitch for max Power 2 m/s higher than the start of Region 2.5, well into Region 3
         options             = {}
         if regionIIhalf == True:
             for i in range(i_IIhalf_start + 1, len(Uhub)):   
@@ -395,7 +397,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 
                 options['disp']     = False
                 bnds        = [pitch0 - 10., pitch0 + 10.]
-                pitch_regionIIhalf = minimize_scalar(lambda x: maxPregionIIhalf(x, Uhub[i], Omega[i]), bounds=bnds, method='bounded', options=options)['x']
+                pitch_regionIIhalf = minimize_scalar(lambda x: maxPregionIIhalf(x, Uhub[i], Omega[i]), bounds=bnds, method='bounded', tol = 1.e-2, options=options)['x']
                 pitch[i]    = pitch_regionIIhalf
                 
                 P_aero[i], T[i], Q[i], M[i], Cp_aero[i], _, _, _ = self.ccblade.evaluate([Uhub[i]], [Omega[i] * 30. / np.pi], [pitch[i]], coefficients=True)
@@ -424,7 +426,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 return min_params[1]
                 
             def get_Uhub_rated_II12(min_params):
-                
+
                 Uhub_i  = min_params[1]
                 Omega_i = Omega_max
                 pitch   = min_params[0]           
@@ -437,16 +439,18 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             const           = {}
             const['type']   = 'eq'
             const['fun']    = get_Uhub_rated_II12
-            params_rated    = minimize(min_Uhub_rated_II12, x0, method='SLSQP', tol = 1.e2, bounds=bnds, constraints=const)
+            params_rated    = minimize(min_Uhub_rated_II12, x0, method='SLSQP', tol = 1.e-2, bounds=bnds, constraints=const)
             U_rated         = params_rated.x[1]
             Uhub[i]         = U_rated
             
             Omega[i]        = Omega_max
             pitch0          = params_rated.x[0]
-            
+            pitch[i]        = pitch0
+
             P_aero[i], T[i], Q[i], M[i], Cp_aero[i], _, _, _ = self.ccblade.evaluate([Uhub[i]], [Omega[i] * 30. / np.pi], [pitch0], coefficients=True)
-            P[i], eff    = CSMDrivetrain(P_aero[i], params['control_ratedPower'], params['drivetrainType'])
-            Cp[i]        = Cp_aero[i]*eff
+            P_i, eff        = CSMDrivetrain(P_aero[i], params['control_ratedPower'], params['drivetrainType'])
+            Cp[i]           = Cp_aero[i]*eff
+            P[i]            = params['control_ratedPower']
             
             
         else:
@@ -460,7 +464,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 return abs(P_i - params['control_ratedPower'])
             
             bnds     = [Uhub[i-1], Uhub[i+1]]
-            U_rated  = minimize_scalar(lambda x: get_Uhub_rated_noII12(pitch[i], x), bounds=bnds, method='bounded', options=options)['x']
+            U_rated  = minimize_scalar(lambda x: get_Uhub_rated_noII12(pitch[i], x), bounds=bnds, tol = 1.e-2, method='bounded', options=options)['x']
             Uhub[i]  = U_rated
             
             Omega[i] = min([Uhub[i] * params['control_tsr'] / params['Rtip'], Omega_max])
@@ -494,6 +498,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                     M[j]        = M[j-1]
                     pitch[j]    = pitch[j-1]
                     Cp[j]       = P[j] / (0.5 * params['rho'] * np.pi * params['Rtip']**2 * Uhub[i]**3)
+
+                P[j] = params['control_ratedPower']
                 
             else:
                 P[j]        = params['control_ratedPower']
@@ -507,7 +513,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['T']       = T
         unknowns['Q']       = Q
         unknowns['Omega']   = Omega * 30. / np.pi
-        
+
+
         unknowns['P']       = P  
         unknowns['Cp']      = Cp  
         unknowns['V']       = Uhub
@@ -518,7 +525,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         spline   = PchipInterpolator(Uhub, P)
         V_spline = np.linspace(params['control_Vin'],params['control_Vout'], num=self.n_pc_spline)
         P_spline = spline(V_spline)
-        
         
         # outputs
         idx_rated = list(Uhub).index(U_rated)
@@ -531,6 +537,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         
         unknowns['V_spline']    = V_spline
         unknowns['P_spline']    = P_spline
+        # print(Uhub)
+        # print(P)
 
 class AEP(Component):
     def __init__(self, n_pc_spline):
@@ -900,8 +908,8 @@ if __name__ == '__main__':
     rotor = Problem()
     npts_coarse_power_curve = 20 # (Int): number of points to evaluate aero analysis at
     npts_spline_power_curve = 2000  # (Int): number of points to use in fitting spline to power curve
-    regulation_reg_II5 = False # calculate Region 2.5 pitch schedule, False will not maximize power in region 2.5
-    regulation_reg_III = False # calculate Region 3 pitch schedule, False will return erroneous Thrust, Torque, and Moment for above rated
+    regulation_reg_II5 = True # calculate Region 2.5 pitch schedule, False will not maximize power in region 2.5
+    regulation_reg_III = True # calculate Region 3 pitch schedule, False will return erroneous Thrust, Torque, and Moment for above rated
     
     rotor.root = RotorAeroPower(blade, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5, regulation_reg_III)
     
