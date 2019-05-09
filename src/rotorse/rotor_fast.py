@@ -143,9 +143,9 @@ class FASTLoadCases(Component):
 
         fst_vt, R_out = self.update_FAST_model(params)
 
-        if MPI:
-            rank = int(PETSc.COMM_WORLD.getRank())
-            self.FAST_namingOut = self.FAST_namingOut + '_%00d'%rank
+        # if MPI:
+            # rank = int(PETSc.COMM_WORLD.getRank())
+            # self.FAST_namingOut = self.FAST_namingOut + '_%00d'%rank
 
         if self.Analysis_Level == 2:
             # Run FAST with ElastoDyn
