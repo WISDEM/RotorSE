@@ -326,7 +326,7 @@ class FASTLoadCases(Component):
             case_keys         += [3]*len(list_cases_rated)
 
         if self.DLC_turbulent != None:
-            list_cases_turb, list_casenames_turb, requited_channels_turb = self.DLC_turbulent(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'], Turbsim_exe=self.Turbsim_exe, debug_level=self.debug_level)
+            list_cases_turb, list_casenames_turb, requited_channels_turb = self.DLC_turbulent(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'], Turbsim_exe=self.Turbsim_exe, debug_level=self.debug_level, cores=self.cores)
             list_cases        += list_cases_turb
             list_casenames    += list_casenames_turb
             required_channels += requited_channels_turb
