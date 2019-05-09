@@ -5,6 +5,7 @@ from scipy.optimize import curve_fit
 from scipy.interpolate import PchipInterpolator
 import os, copy, warnings
 from openmdao.api import IndepVarComp, Component, Group, Problem
+from openmdao.core.mpi_wrap import MPI
 from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometry
 from commonse import gravity, NFREQ
 from commonse.csystem import DirectionVector
@@ -28,6 +29,14 @@ from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, Roto
 from AeroelasticSE.FAST_post import return_timeseries
 # except:
 #     pass
+
+if MPI:
+    from openmdao.api import PetscImpl as impl
+    from mpi4py import MPI
+    from petsc4py import PETSc
+else:
+    from openmdao.api import BasicImpl as impl
+
 
 class FASTLoadCases(Component):
     def __init__(self, NPTS, npts_coarse_power_curve, npts_spline_power_curve, FASTpref):
@@ -133,6 +142,10 @@ class FASTLoadCases(Component):
     def solve_nonlinear(self, params, unknowns, resids):
 
         fst_vt, R_out = self.update_FAST_model(params)
+
+        if MPI:
+            rank = int(PETSc.COMM_WORLD.getRank())
+            self.FAST_namingOut = self.FAST_namingOut + '_%00d'%rank
 
         if self.Analysis_Level == 2:
             # Run FAST with ElastoDyn
@@ -267,7 +280,7 @@ class FASTLoadCases(Component):
         # Case Generations
 
         TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        # TMax = 30.
+        # TMax = 10.
 
         list_cases        = []
         list_casenames    = []
