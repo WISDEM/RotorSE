@@ -267,7 +267,7 @@ class FASTLoadCases(Component):
         # Case Generations
 
         TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        # TMax = 10.
+        # TMax = 30.
 
         list_cases        = []
         list_casenames    = []
@@ -484,12 +484,13 @@ class FASTLoadCases(Component):
             U = np.array(U)
 
             U_below = [Vi for Vi in U if Vi <= params['Vrated']]
-            P_below = [np.mean(datai['GenPwr']) for datai in data]
+            P_below = [np.mean(datai['GenPwr'])*1000. for datai in data]
+            np.place(P_below, P_below>params['control_ratedPower'], params['control_ratedPower'])
 
             U_rated = [Vi for Vi in U if Vi > params['Vrated']]
             P_rated = [params['control_ratedPower']]*len(U_rated)
 
-            if len(U_rated) > 0:
+            if len(U_below) < len(U):
                 P_fast = np.array(P_below + P_rated)
             else:
                 P_fast = P_below
