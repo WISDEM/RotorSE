@@ -2110,15 +2110,20 @@ class ConstraintsStructures(Component):
         unknowns['Pn_margin_cfem'] = (params['nBlades']*omega*gamma_freq) / params['freq_curvefem']
         unknowns['P1_margin_cfem'] = (                  omega*gamma_freq) / params['freq_curvefem']
 
-        unknowns['rotor_strain_sparU'] = params['strainU_spar'] * gamma_strain / strain_ult_spar
-        unknowns['rotor_strain_sparL'] = params['strainL_spar'] * gamma_strain / strain_ult_spar
-        unknowns['rotor_strain_teU']   = params['strainU_te'] * gamma_strain / strain_ult_te
-        unknowns['rotor_strain_teL']   = params['strainL_te'] * gamma_strain / strain_ult_te
+        if strain_ult_spar != 0.:
+            unknowns['rotor_strain_sparU'] = params['strainU_spar'] * gamma_strain / strain_ult_spar
+            unknowns['rotor_strain_sparL'] = params['strainL_spar'] * gamma_strain / strain_ult_spar
+            unknowns['rotor_strain_teU']   = params['strainU_te'] * gamma_strain / strain_ult_te
+            unknowns['rotor_strain_teL']   = params['strainL_te'] * gamma_strain / strain_ult_te
 
-        unknowns['rotor_buckling_sparU'] = params['strainU_spar'] * gamma_f / eps_crit_spar
-        unknowns['rotor_buckling_sparL'] = params['strainL_spar'] * gamma_f / eps_crit_spar
-        unknowns['rotor_buckling_teU']   = params['strainU_te'] * gamma_f / eps_crit_te
-        unknowns['rotor_buckling_teL']   = params['strainL_te'] * gamma_f / eps_crit_te
+        unknowns['rotor_buckling_sparU'] = np.array([straini*gamma_f/criti if criti!=0 else 0. for straini, criti in zip(params['strainU_spar'], eps_crit_spar)])
+        unknowns['rotor_buckling_sparL'] = np.array([straini*gamma_f/criti if criti!=0 else 0. for straini, criti in zip(params['strainL_spar'], eps_crit_spar)])
+        unknowns['rotor_buckling_teU']   = np.array([straini*gamma_f/criti if criti!=0 else 0. for straini, criti in zip(params['strainU_te'], eps_crit_te)])
+        unknowns['rotor_buckling_teL']   = np.array([straini*gamma_f/criti if criti!=0 else 0. for straini, criti in zip(params['strainL_te'], eps_crit_te)])
+        # unknowns['rotor_buckling_sparU'] = params['strainU_spar'] * gamma_f / eps_crit_spar
+        # unknowns['rotor_buckling_sparL'] = params['strainL_spar'] * gamma_f / eps_crit_spar
+        # unknowns['rotor_buckling_teU']   = params['strainU_te'] * gamma_f / eps_crit_te
+        # unknowns['rotor_buckling_teL']   = params['strainL_te'] * gamma_f / eps_crit_te
 
         unknowns['rotor_damage_sparU'] = params['damageU_spar']
         unknowns['rotor_damage_sparL'] = params['damageL_spar']

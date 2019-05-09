@@ -748,7 +748,7 @@ class BladeGeometry(Component):
         NINPUT = len(self.refBlade['ctrl_pts']['r_in'])
 
         # variables
-        self.add_param('blade_in_overwrite', val={}, desc='optional input blade that can be used to overwrite RefBlade from initialization, first intended for the inner loop of a nested optimization')
+        self.add_param('blade_in_overwrite', val={}, desc='optional input blade that can be used to overwrite RefBlade from initialization, first intended for the inner loop of a nested optimization', pass_by_obj=True)
 
         self.add_param('bladeLength', val=0.0, units='m', desc='blade length (if not precurved or swept) otherwise length of blade before curvature')
         self.add_param('r_max_chord', val=0.0, desc='location of max chord on unit radius')
@@ -793,7 +793,7 @@ class BladeGeometry(Component):
         self.add_output('sector_idx_strain_spar', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
         self.add_output('sector_idx_strain_te', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
 
-        self.add_output('blade_out', val={}, desc='updated blade dictionary for ontology')
+        self.add_output('blade_out', val={}, desc='updated blade dictionary for ontology', pass_by_obj=True)
 
         self.add_output('sparT_in_out', val=np.zeros(NINPUT), units='m', desc='thickness values of spar cap that linearly vary from non-cylinder position to tip, pass through for nested optimization')
 
@@ -933,7 +933,7 @@ class RotorGeometry(Group):
         """rotor model"""
         NINPUT = len(RefBlade['ctrl_pts']['r_in'])
 
-        self.add('blade_in_overwrite', IndepVarComp('blade_in_overwrite', {}), promotes=['*'])
+        self.add('blade_in_overwrite', IndepVarComp('blade_in_overwrite', {}, pass_by_obj=True), promotes=['*'])
 
         self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])

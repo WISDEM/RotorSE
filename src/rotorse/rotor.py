@@ -45,7 +45,7 @@ class RotorSE(Group):
         self.Analysis_Level = Analysis_Level
         self.FASTpref= FASTpref
 
-        self.add('fst_vt_in', IndepVarComp('fst_vt_in', val={}), promotes=['*'])
+        self.add('fst_vt_in', IndepVarComp('fst_vt_in', val={}, pass_by_obj=True), promotes=['*'])
         
         self.add('turbulence_class', IndepVarComp('turbulence_class', val=TURBULENCE_CLASS['A'], desc='IEC turbulence class class', pass_by_obj=True), promotes=['*'])
         self.add('gust_stddev', IndepVarComp('gust_stddev', val=3, pass_by_obj=True), promotes=['*'])
@@ -171,6 +171,7 @@ class RotorSE(Group):
             self.connect('powercurve.Omega', 'aeroelastic.Omega_init')
             self.connect('powercurve.pitch', 'aeroelastic.pitch_init')
             self.connect('powercurve.rated_V', 'aeroelastic.Vrated')
+            self.connect('powercurve.V_R25', 'aeroelastic.V_R25')
             self.connect('gust.V_gust', 'aeroelastic.Vgust')
             self.connect('turbineclass.V_extreme1', 'aeroelastic.Vextreme')
 

@@ -316,6 +316,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('V_spline', val=np.zeros(n_pc_spline), units='m/s',  desc='wind vector')
         self.add_output('P_spline', val=np.zeros(n_pc_spline), units='W',    desc='rotor electrical power')
         
+        self.add_output('V_R25',     val=0.0, units='m/s', desc='region 2.5 transition wind speed')
+
         self.add_output('rated_V',     val=0.0, units='m/s', desc='rated wind speed')
         self.add_output('rated_Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
         self.add_output('rated_pitch', val=0.0, units='deg', desc='pitch setting at rated')
@@ -370,7 +372,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 regionIIhalf    = True
                 i_IIhalf_start  = i
 
-
+                unknowns['V_R25'] = Uhub[i]
                 break
 
 
@@ -390,14 +392,15 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         
         # Solve for regoin 2.5 pitch ## ??? this is solving the pitch for max Power 2 m/s higher than the start of Region 2.5, well into Region 3
         options             = {}
+        options['disp']     = False
+        options['xatol']    = 1.e-2
         if regionIIhalf == True:
             for i in range(i_IIhalf_start + 1, len(Uhub)):   
                 Omega[i]    = Omega_max
                 pitch0      = pitch[i-1]
                 
-                options['disp']     = False
                 bnds        = [pitch0 - 10., pitch0 + 10.]
-                pitch_regionIIhalf = minimize_scalar(lambda x: maxPregionIIhalf(x, Uhub[i], Omega[i]), bounds=bnds, method='bounded', tol = 1.e-2, options=options)['x']
+                pitch_regionIIhalf = minimize_scalar(lambda x: maxPregionIIhalf(x, Uhub[i], Omega[i]), bounds=bnds, method='bounded', options=options)['x']
                 pitch[i]    = pitch_regionIIhalf
                 
                 P_aero[i], T[i], Q[i], M[i], Cp_aero[i], _, _, _ = self.ccblade.evaluate([Uhub[i]], [Omega[i] * 30. / np.pi], [pitch[i]], coefficients=True)
@@ -408,7 +411,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 if P[i] > params['control_ratedPower']:    
                     break    
                         
-        
+        options             = {}
+        options['disp']     = False
         def constantPregionIII(pitch, Uhub, Omega):
             Uhub_i  = Uhub
             Omega_i = Omega
@@ -481,7 +485,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 
                 pitch0   = pitch[j-1]
                 bnds     = [pitch0, pitch0 + 15.]
-                
                 pitch_regionIII = minimize_scalar(lambda x: constantPregionIII(x, Uhub[j], Omega[j]), bounds=bnds, method='bounded', options=options)['x']
                 pitch[j]        = pitch_regionIII
                 

@@ -74,6 +74,7 @@ class FASTLoadCases(Component):
 
         # Environmental conditions 
         self.add_param('Vrated', val=11.0, units='m/s', desc='rated wind speed')
+        self.add_param('V_R25', val=0.0, units='m/s', desc='region 2.5 transition wind speed')
         self.add_param('Vgust', val=11.0, units='m/s', desc='gust wind speed')
         self.add_param('Vextreme', val=11.0, units='m/s', desc='IEC extreme wind speed at hub height')
         self.add_param('rho',       val=0.0,        units='kg/m**3',    desc='density of air')
@@ -265,8 +266,8 @@ class FASTLoadCases(Component):
     def DLC_creation(self, params, fst_vt):
         # Case Generations
 
-        TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        # TMax = 10.
+        # TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
+        TMax = 10.
 
         list_cases        = []
         list_casenames    = []
@@ -291,7 +292,7 @@ class FASTLoadCases(Component):
             # print('Omega_init', self.Omega_init)
             # print('pitch_init', self.pitch_init)
 
-            list_cases_PwrCrv, list_casenames_PwrCrv, requited_channels_PwrCrv = self.DLC_powercurve(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=self.U_init, Omega_init=self.Omega_init, pitch_init=self.pitch_init)
+            list_cases_PwrCrv, list_casenames_PwrCrv, requited_channels_PwrCrv = self.DLC_powercurve(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=self.U_init, Omega_init=self.Omega_init, pitch_init=self.pitch_init, V_R25=params['V_R25'])
             list_cases        += list_cases_PwrCrv
             list_casenames    += list_casenames_PwrCrv
             required_channels += requited_channels_PwrCrv
@@ -476,7 +477,11 @@ class FASTLoadCases(Component):
         #     # plt.show()
 
         def post_AEP(data):
-            U = np.array(sorted([4., 6., 7., 8., 9., 10., 10.5, 11., 11.5, 12., 14., 19., 25., params['Vrated']]))
+            U = list(sorted([4., 6., 8., 9., 10., 10.5, 11., 11.5, 12., 14., 19., 25., params['Vrated']]))
+            if params['V_R25'] != 0.:
+                U.append(params['V_R25'])
+                U = list(sorted(U))
+            U = np.array(U)
 
             U_below = [Vi for Vi in U if Vi <= params['Vrated']]
             P_below = [np.mean(datai['GenPwr']) for datai in data]
