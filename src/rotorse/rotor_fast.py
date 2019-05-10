@@ -120,7 +120,7 @@ class FASTLoadCases(Component):
         self.DLC_turbulent       = FASTpref['DLC_turbulent']
 
         self.clean_FAST_directory = False
-        if clean_FAST_directory in FASTpref.keys():
+        if 'clean_FAST_directory' in FASTpref.keys():
             self.clean_FAST_directory = FASTpref['clean_FAST_directory']
 
         
