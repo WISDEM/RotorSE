@@ -855,8 +855,11 @@ class RotorWithpBEAM(StrucBase):
         #damageU = N/NfU
         #damageL = N/NfL
 
-        damageU = np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainU)))
-        damageL = np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainL)))
+        # damageU = np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainU)))
+        # damageL = np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainL)))
+
+        damageU = np.array([np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainU_i))) if strainU_i != 0. else 0. for strainU_i in strainU])
+        damageL = np.array([np.log(N) - m*(np.log(emax) - np.log(eta) - np.log(np.abs(strainL_i))) if strainL_i != 0. else 0. for strainL_i in strainL])
 
         return damageU, damageL
 
