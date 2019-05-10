@@ -99,7 +99,10 @@ class FASTLoadCases(Component):
         self.debug_level         = FASTpref['debug_level']
         self.FAST_runDirectory   = FASTpref['FAST_runDirectory']
         self.FAST_InputFile      = FASTpref['FAST_InputFile']
-        self.FAST_namingOut      = FASTpref['FAST_namingOut']
+        if MPI:
+            self.FAST_namingOut  = FASTpref['FAST_namingOut']+'_%00d'%impl.world_comm().rank
+        else:
+            self.FAST_namingOut  = FASTpref['FAST_namingOut']
         self.dev_branch          = FASTpref['dev_branch']
         self.cores               = FASTpref['cores']
         self.case                = {}
