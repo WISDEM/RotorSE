@@ -101,11 +101,11 @@ class FASTLoadCases(Component):
         if MPI:
             self.FAST_runDirectory = os.path.join(FASTpref['FAST_runDirectory'],'rank_%00d'%impl.world_comm().rank)
             self.FAST_namingOut  = FASTpref['FAST_namingOut']+'_%00d'%impl.world_comm().rank
-            try:
-                if not os.path.exists(directory):
-                    os.makedirs(self.FAST_runDirectory)
-            except:
-                pass
+            # try:
+            #     if not os.path.exists(directory):
+            #         os.makedirs(self.FAST_runDirectory)
+            # except:
+            #     pass
         else:
             self.FAST_runDirectory = FASTpref['FAST_runDirectory']
             self.FAST_namingOut  = FASTpref['FAST_namingOut']
