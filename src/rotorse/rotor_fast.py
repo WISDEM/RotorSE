@@ -97,11 +97,16 @@ class FASTLoadCases(Component):
         self.FAST_directory      = os.path.abspath(FASTpref['FAST_directory'])
         self.Turbsim_exe         = os.path.abspath(FASTpref['Turbsim_exe'])
         self.debug_level         = FASTpref['debug_level']
-        self.FAST_runDirectory   = FASTpref['FAST_runDirectory']
         self.FAST_InputFile      = FASTpref['FAST_InputFile']
         if MPI:
+            self.FAST_runDirectory = os.path.join(FASTpref['FAST_runDirectory'],'rank_%00d'%impl.world_comm().rank)
             self.FAST_namingOut  = FASTpref['FAST_namingOut']+'_%00d'%impl.world_comm().rank
+            try:
+                os.makedirs(folder_output)
+            except:
+                pass
         else:
+            self.FAST_runDirectory = FASTpref['FAST_runDirectory']
             self.FAST_namingOut  = FASTpref['FAST_namingOut']
         self.dev_branch          = FASTpref['dev_branch']
         self.cores               = FASTpref['cores']
@@ -113,6 +118,10 @@ class FASTLoadCases(Component):
         self.DLC_gust            = FASTpref['DLC_gust']
         self.DLC_extrm           = FASTpref['DLC_extrm']
         self.DLC_turbulent       = FASTpref['DLC_turbulent']
+
+        self.clean_FAST_directory = False
+        if clean_FAST_directory in FASTpref.keys():
+            self.clean_FAST_directory = FASTpref['clean_FAST_directory']
 
         
         self.add_output('dx_defl', val=0., desc='deflection of blade section in airfoil x-direction under max deflection loading')
@@ -161,6 +170,14 @@ class FASTLoadCases(Component):
             self.write_FAST(fst_vt, unknowns)
 
         unknowns['fst_vt_out'] = fst_vt
+
+        # delete run directory. not recommended for most cases, use for large parallelization problems where disk storage will otherwise fill up
+        if self.clean_FAST_directory:
+            try:
+                shutil.rmtree(FASTpref['FAST_runDirectory'])
+            except:
+                print('Failed to delete directory: %s'%FASTpref['FAST_runDirectory'])
+
 
 
     def update_FAST_model(self, params):
