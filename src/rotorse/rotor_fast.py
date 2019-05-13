@@ -3,7 +3,7 @@ from __future__ import print_function
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.interpolate import PchipInterpolator
-import os, copy, warnings
+import os, copy, warnings, shutil
 from openmdao.api import IndepVarComp, Component, Group, Problem
 from openmdao.core.mpi_wrap import MPI
 from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometry
@@ -300,8 +300,8 @@ class FASTLoadCases(Component):
     def DLC_creation(self, params, fst_vt):
         # Case Generations
 
-        TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        # TMax = 10.
+        # TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
+        TMax = 10.
 
         list_cases        = []
         list_casenames    = []
