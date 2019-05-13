@@ -518,7 +518,7 @@ class FASTLoadCases(Component):
             U = np.array(U)
 
             U_below = [Vi for Vi in U if Vi <= params['Vrated']]
-            P_below = [np.mean(datai['GenPwr'])*1000. for datai in data]
+            P_below = np.array([np.mean(datai['GenPwr'])*1000. for datai in data])
             np.place(P_below, P_below>params['control_ratedPower'], params['control_ratedPower'])
 
             U_rated = [Vi for Vi in U if Vi > params['Vrated']]
