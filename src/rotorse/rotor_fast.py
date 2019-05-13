@@ -99,8 +99,8 @@ class FASTLoadCases(Component):
         self.debug_level         = FASTpref['debug_level']
         self.FAST_InputFile      = FASTpref['FAST_InputFile']
         if MPI:
-            self.FAST_runDirectory = os.path.join(FASTpref['FAST_runDirectory'],'rank_%000d'%impl.world_comm().rank)
-            self.FAST_namingOut  = FASTpref['FAST_namingOut']+'_%000d'%impl.world_comm().rank
+            self.FAST_runDirectory = os.path.join(FASTpref['FAST_runDirectory'],'rank_%000d'%int(impl.world_comm().rank))
+            self.FAST_namingOut  = FASTpref['FAST_namingOut']+'_%000d'%int(impl.world_comm().rank)
             # try:
             #     if not os.path.exists(directory):
             #         os.makedirs(self.FAST_runDirectory)
