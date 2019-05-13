@@ -175,9 +175,9 @@ class FASTLoadCases(Component):
         # delete run directory. not recommended for most cases, use for large parallelization problems where disk storage will otherwise fill up
         if self.clean_FAST_directory:
             try:
-                shutil.rmtree(self.FASTpref['FAST_runDirectory'])
+                shutil.rmtree(self.FAST_runDirectory)
             except:
-                print('Failed to delete directory: %s'%self.FASTpref['FAST_runDirectory'])
+                print('Failed to delete directory: %s'%self.FAST_runDirectory)
 
 
 
