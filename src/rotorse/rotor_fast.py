@@ -525,7 +525,7 @@ class FASTLoadCases(Component):
             P_rated = [params['control_ratedPower']]*len(U_rated)
 
             if len(U_below) < len(U):
-                P_fast = np.array(P_below + P_rated)
+                P_fast = np.array(P_below.tolist() + P_rated)
             else:
                 P_fast = P_below
 
