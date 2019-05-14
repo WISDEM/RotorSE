@@ -390,8 +390,10 @@ class FASTLoadCases(Component):
             comm    = MPI.COMM_WORLD
             rank    = comm.Get_rank()
             color_set = set(self.mpi_color)
-            color_i = self.mpi_color[rank]
+            color_i = self.mpi_color[rank+1]
             comm_i  = MPI.COMM_WORLD.Split(color_i, 1)
+
+            print(comm.Get_size(),rank,self.mpi_fd_rank,color_i,self.mpi_color, '<--------------------------------------------')
             if color_i == self.mpi_fd_rank:
                 FAST_Output = fastBatch.run_mpi(comm=comm_i)
         else:
