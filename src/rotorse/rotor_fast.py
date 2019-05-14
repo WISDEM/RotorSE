@@ -124,6 +124,12 @@ class FASTLoadCases(Component):
         if 'clean_FAST_directory' in FASTpref.keys():
             self.clean_FAST_directory = FASTpref['clean_FAST_directory']
 
+        self.mpi_run             = False
+        if 'mpi_comm' in FASTpref.keys():
+            self.mpi_run         = FASTpref['mpi_run']
+            if self.mpi_run:
+                self.mpi_color   = FASTpref['mpi_color']
+                self.mpi_fd_rank = FASTpref['mpi_fd_rank']
         
         self.add_output('dx_defl', val=0., desc='deflection of blade section in airfoil x-direction under max deflection loading')
         self.add_output('dy_defl', val=0., desc='deflection of blade section in airfoil y-direction under max deflection loading')
@@ -380,10 +386,19 @@ class FASTLoadCases(Component):
         fastBatch.channels          = channels
 
         # Run FAST
-        if self.cores == 1:
-            FAST_Output = fastBatch.run_serial()
+        if self.mpi_run:
+            comm    = MPI.COMM_WORLD
+            rank    = comm.Get_rank()
+            color_set = set(self.mpi_color)
+            color_i = self.mpi_color[rank]
+            comm_i  = MPI.COMM_WORLD.Split(color_i, 1)
+            if color_i == self.mpi_fd_rank:
+                FAST_Output = fastBatch.run_mpi(comm=comm_i)
         else:
-            FAST_Output = fastBatch.run_multi(self.cores)
+            if self.cores == 1:
+                FAST_Output = fastBatch.run_serial()
+            else:
+                FAST_Output = fastBatch.run_multi(self.cores)
 
         self.fst_vt = fst_vt
 
