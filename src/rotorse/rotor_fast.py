@@ -125,7 +125,7 @@ class FASTLoadCases(Component):
             self.clean_FAST_directory = FASTpref['clean_FAST_directory']
 
         self.mpi_run             = False
-        if 'mpi_comm' in FASTpref.keys():
+        if 'mpi_run' in FASTpref.keys():
             self.mpi_run         = FASTpref['mpi_run']
             if self.mpi_run:
                 self.mpi_color   = FASTpref['mpi_color']
