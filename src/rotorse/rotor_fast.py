@@ -353,6 +353,7 @@ class FASTLoadCases(Component):
             case_keys         += [3]*len(list_cases_rated)
 
         if self.DLC_turbulent != None:
+            print('mpi_run, rotor_fast', self.mpi_run)
             if self.mpi_run:
                 list_cases_turb, list_casenames_turb, requited_channels_turb = self.DLC_turbulent(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'], Turbsim_exe=self.Turbsim_exe, debug_level=self.debug_level, cores=self.cores, mpi_run=self.mpi_run, mpi_color=self.mpi_color, mpi_fd_rank=self.mpi_fd_rank)
             else:
