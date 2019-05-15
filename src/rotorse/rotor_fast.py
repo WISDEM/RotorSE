@@ -159,7 +159,7 @@ class FASTLoadCases(Component):
         self.add_output('fst_vt_out', val={}, pass_by_obj=True)
 
     def solve_nonlinear(self, params, unknowns, resids):
-        print(impl.world_comm().rank, 'Rotor_fast','start')
+        #print(impl.world_comm().rank, 'Rotor_fast','start')
 
         fst_vt, R_out = self.update_FAST_model(params)
 
@@ -186,7 +186,7 @@ class FASTLoadCases(Component):
             except:
                 print('Failed to delete directory: %s'%self.FAST_runDirectory)
 
-        print(impl.world_comm().rank, 'Rotor_fast','end')
+        #print(impl.world_comm().rank, 'Rotor_fast','end')
 
 
     def update_FAST_model(self, params):
@@ -308,8 +308,8 @@ class FASTLoadCases(Component):
     def DLC_creation(self, params, fst_vt):
         # Case Generations
 
-        # TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        TMax = 20.
+        TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
+        #TMax = 20.
 
         list_cases        = []
         list_casenames    = []
