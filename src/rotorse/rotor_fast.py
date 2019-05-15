@@ -353,7 +353,6 @@ class FASTLoadCases(Component):
             case_keys         += [3]*len(list_cases_rated)
 
         if self.DLC_turbulent != None:
-            print('mpi_run, rotor_fast', self.mpi_run)
             if self.mpi_run:
                 list_cases_turb, list_casenames_turb, requited_channels_turb = self.DLC_turbulent(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'], Turbsim_exe=self.Turbsim_exe, debug_level=self.debug_level, cores=self.cores, mpi_run=self.mpi_run, mpi_color=self.mpi_color, mpi_fd_rank=self.mpi_fd_rank)
             else:
@@ -393,10 +392,8 @@ class FASTLoadCases(Component):
         if self.mpi_run:
             comm    = MPI.COMM_WORLD
             rank    = comm.Get_rank()
-            # color_set = set(self.mpi_color)
             color_i = self.mpi_color[rank+1]
 
-            print(comm.Get_size(),rank,self.mpi_fd_rank,color_i,self.mpi_color, '<--------------------------------------------')
             FAST_Output = fastBatch.run_mpi(self.mpi_color)
         else:
             if self.cores == 1:
