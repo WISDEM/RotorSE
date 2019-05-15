@@ -397,8 +397,7 @@ class FASTLoadCases(Component):
             color_i = self.mpi_color[rank+1]
 
             print(comm.Get_size(),rank,self.mpi_fd_rank,color_i,self.mpi_color, '<--------------------------------------------')
-            if color_i == self.mpi_fd_rank:
-                FAST_Output = fastBatch.run_mpi(self.mpi_color)
+            FAST_Output = fastBatch.run_mpi(self.mpi_color)
         else:
             if self.cores == 1:
                 FAST_Output = fastBatch.run_serial()
