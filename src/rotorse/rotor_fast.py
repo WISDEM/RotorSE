@@ -145,7 +145,7 @@ class FASTLoadCases(Component):
         self.add_output('loads_Omega', val=0.0, units='rpm', desc='rotor rotation speed')
         self.add_output('loads_pitch', val=0.0, units='deg', desc='pitch angle')
         self.add_output('loads_azimuth', val=0.0, units='deg', desc='azimuthal angle')
-        self.add_output('model_updated', val=False, desc='boolean, Analysis Level 0: fast model written, but not run')
+        self.add_output('model_updated', val=False, desc='boolean, Analysis Level 0: fast model written, but not run', pass_by_obj=True)
 
         self.add_output('P_out', val=np.zeros(npts_spline_power_curve), units='W', desc='electrical power from rotor')
         self.add_output('P',        val=np.zeros(npts_coarse_power_curve), units='W',    desc='rotor electrical power')
@@ -156,7 +156,7 @@ class FASTLoadCases(Component):
         self.add_output('rated_T',     val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
         self.add_output('rated_Q',     val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
 
-        self.add_output('fst_vt_out', val={})
+        self.add_output('fst_vt_out', val={}, pass_by_obj=True)
 
     def solve_nonlinear(self, params, unknowns, resids):
         print(impl.world_comm().rank, 'Rotor_fast','start')
@@ -308,8 +308,8 @@ class FASTLoadCases(Component):
     def DLC_creation(self, params, fst_vt):
         # Case Generations
 
-        TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        #TMax = 10.
+        # TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
+        TMax = 20.
 
         list_cases        = []
         list_casenames    = []
