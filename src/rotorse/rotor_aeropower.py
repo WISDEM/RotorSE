@@ -438,14 +438,19 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 P_i,eff          = CSMDrivetrain(P_aero_i, params['control_ratedPower'], params['drivetrainType'])
                 return abs(P_i - params['control_ratedPower'])
 
-            x0              = [pitch[i] , Uhub[i]]
+            x0              = [pitch[i] + 2. , Uhub[i]]
             bnds            = [(pitch0, pitch0 + 10.),(Uhub[i-1],Uhub[i+1])]
             const           = {}
             const['type']   = 'eq'
             const['fun']    = get_Uhub_rated_II12
             params_rated    = minimize(min_Uhub_rated_II12, x0, method='SLSQP', tol = 1.e-2, bounds=bnds, constraints=const)
             U_rated         = params_rated.x[1]
-            Uhub[i]         = U_rated
+            
+            if not np.isnan(Uhub[i]):
+                Uhub[i]         = U_rated
+            else:
+                print('Regulation trajectory is struggling to find a solution. Check rotor_aeropower.py')
+            
             
             Omega[i]        = Omega_max
             pitch0          = params_rated.x[0]
