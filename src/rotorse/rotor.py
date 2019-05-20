@@ -174,6 +174,7 @@ class RotorSE(Group):
             self.connect('powercurve.V_R25', 'aeroelastic.V_R25')
             self.connect('gust.V_gust', 'aeroelastic.Vgust')
             self.connect('turbineclass.V_extreme1', 'aeroelastic.Vextreme')
+            self.connect('turbineclass.V_mean', 'aeroelastic.V_mean_iec')
 
             self.connect('rho', 'aeroelastic.rho')
             self.connect('mu', 'aeroelastic.mu')
