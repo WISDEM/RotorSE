@@ -390,7 +390,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             P, _, _, _ = self.ccblade.evaluate([Uhub_i], [Omega_i * 30. / np.pi], [pitch], coefficients=False)
             return -P
         
-        # Solve for region 2.5 pitch
+        # Solve for regoin 2.5 pitch ## ??? this is solving the pitch for max Power 2 m/s higher than the start of Region 2.5, well into Region 3
         options             = {}
         options['disp']     = False
         options['xatol']    = 1.e-2
@@ -410,7 +410,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
                 if P[i] > params['control_ratedPower']:    
                     break    
-        
+                        
         options             = {}
         options['disp']     = False
         def constantPregionIII(pitch, Uhub, Omega):
@@ -420,6 +420,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             P_aero, _, _, _ = self.ccblade.evaluate([Uhub_i], [Omega_i * 30. / np.pi], [pitch], coefficients=False)
             P, eff          = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
             return abs(P - params['control_ratedPower'])
+            
 
         
         if regionIIhalf == True:
@@ -435,23 +436,16 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 pitch   = min_params[0]           
                 P_aero_i, _, _, _ = self.ccblade.evaluate([Uhub_i], [Omega_i * 30. / np.pi], [pitch], coefficients=False)
                 P_i,eff          = CSMDrivetrain(P_aero_i, params['control_ratedPower'], params['drivetrainType'])
-                
                 return abs(P_i - params['control_ratedPower'])
 
-            x0              = [pitch[i] + 2., Uhub[i]]
+            x0              = [pitch[i] , Uhub[i]]
             bnds            = [(pitch0, pitch0 + 10.),(Uhub[i-1],Uhub[i+1])]
             const           = {}
             const['type']   = 'eq'
             const['fun']    = get_Uhub_rated_II12
-            
-            
             params_rated    = minimize(min_Uhub_rated_II12, x0, method='SLSQP', tol = 1.e-2, bounds=bnds, constraints=const)
             U_rated         = params_rated.x[1]
-            
-            if not np.isnan(Uhub[i]):
-                Uhub[i]         = U_rated
-            else:
-                print('Regulation trajectory is struggling to find a solution. Check rotor_aeropower.py')
+            Uhub[i]         = U_rated
             
             Omega[i]        = Omega_max
             pitch0          = params_rated.x[0]
@@ -483,7 +477,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             P_aero[i], T[i], Q[i], M[i], Cp_aero[i], _, _, _ = self.ccblade.evaluate([Uhub[i]], [Omega[i] * 30. / np.pi], [pitch0], coefficients=True)
             P[i], eff    = CSMDrivetrain(P_aero[i], params['control_ratedPower'], params['drivetrainType'])
             Cp[i]        = Cp_aero[i]*eff
-            
+        
+        
         for j in range(i + 1,len(Uhub)):
             Omega[j] = Omega[i]
             if self.regulation_reg_III == True:
@@ -539,11 +534,14 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['rated_V']     = U_rated
         unknowns['rated_Omega'] = Omega[idx_rated] * 30. / np.pi
         unknowns['rated_pitch'] = pitch[idx_rated]
+        # print(T)
         unknowns['rated_T']     = T[idx_rated]
         unknowns['rated_Q']     = Q[idx_rated]
         
         unknowns['V_spline']    = V_spline
         unknowns['P_spline']    = P_spline
+        # print(Uhub)
+        # print(P)
 
 class AEP(Component):
     def __init__(self, n_pc_spline):
