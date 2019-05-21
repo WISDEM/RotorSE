@@ -446,16 +446,13 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             params_rated    = minimize(min_Uhub_rated_II12, x0, method='SLSQP', tol = 1.e-2, bounds=bnds, constraints=const)
             U_rated         = params_rated.x[1]
             
-            if not np.isnan(Uhub[i]):
+            if not np.isnan(U_rated):
                 Uhub[i]         = U_rated
+                pitch[i]        = params_rated.x[0]
             else:
-                print('Regulation trajectory is struggling to find a solution. Check rotor_aeropower.py')
-            
+                print('Regulation trajectory is struggling to find a solution for rated wind speed. Check rotor_aeropower.py')
             
             Omega[i]        = Omega_max
-            pitch0          = params_rated.x[0]
-            pitch[i]        = pitch0
-
             P_aero[i], T[i], Q[i], M[i], Cp_aero[i], _, _, _ = self.ccblade.evaluate([Uhub[i]], [Omega[i] * 30. / np.pi], [pitch0], coefficients=True)
             P_i, eff        = CSMDrivetrain(P_aero[i], params['control_ratedPower'], params['drivetrainType'])
             Cp[i]           = Cp_aero[i]*eff
@@ -474,7 +471,15 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             
             bnds     = [Uhub[i-1], Uhub[i+1]]
             U_rated  = minimize_scalar(lambda x: get_Uhub_rated_noII12(pitch[i], x), bounds=bnds, tol = 1.e-2, method='bounded', options=options)['x']
-            Uhub[i]  = U_rated
+            
+            if not np.isnan(U_rated):
+                Uhub[i]         = U_rated
+            else:
+                print('Regulation trajectory is struggling to find a solution for rated wind speed. Check rotor_aeropower.py')
+            
+            
+            
+            
             
             Omega[i] = min([Uhub[i] * params['control_tsr'] / params['Rtip'], Omega_max])
             pitch0   = pitch[i]
