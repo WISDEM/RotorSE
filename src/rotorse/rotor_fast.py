@@ -530,7 +530,7 @@ class FASTLoadCases(Component):
         #     # plt.show()
 
         def post_AEP(data):
-            U = list(sorted([4., 6., 8., 9., 10., 10.5, 11., 11.5, 11.75, 12., 12.5, 13., 14., 19., 25., params['Vrated']]))
+            U = list(sorted([4., 6., 8., 9., 10., 10.5, 11., 11.5, 12., 14., 19., 25., params['Vrated']]))
             if params['V_R25'] != 0.:
                 U.append(params['V_R25'])
                 U = list(sorted(U))
@@ -550,11 +550,66 @@ class FASTLoadCases(Component):
 
             data_rated = data[-1]
 
+            # U_fit = np.array([4.,8.,9.,10.])
+
+            ## Find rated 
+            # def my_cubic(f, x):
+                # return np.array([f[3]+ f[2]*xi + f[1]*xi**2. + f[0]*xi**3. for xi in x])
+
+            # idx_fit = [U.tolist().index(Ui) for Ui in U_fit]
+            # P_fit = np.array([np.mean(data[i]['GenPwr']) for i in idx_fit])
+            # P_coef = np.polyfit(U_fit, P_fit, 3)
+
+            # P_find_rated = my_cubic(P_coef, params['V_out'])
+            # np.place(P_find_rated, P_find_rated>params['control_ratedPower'], params['control_ratedPower'])
+            # idx_rated = min([i for i, Pi in enumerate(P_find_rated) if Pi*1000 >= params['control_ratedPower']])
+            # unknowns['rated_V'] = params['V_out'][idx_rated]
+
+            # if unknowns['rated_V'] not in U:
+            #     ## Run Rated
+            #     TMax = 99999.
+            #     # TMax = 10.
+            #     turbulence_class = TURBULENCE_CLASS[params['turbulence_class']]
+            #     turbine_class    = TURBINE_CLASS[params['turbine_class']]
+            #     list_cases_rated, list_casenames_rated, requited_channels_rated = RotorSE_rated(self.fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, unknowns['rated_V'], U_init=self.U_init, Omega_init=self.Omega_init, pitch_init=np.zeros_like(self.Omega_init))
+            #     requited_channels_rated = sorted(list(set(requited_channels_rated)))
+            #     channels_out = {}
+            #     for var in requited_channels_rated:
+            #         channels_out[var] = True
+            #     data_rated = self.run_FAST(self.fst_vt, list_cases_rated, list_casenames_rated, channels_out)[0]
+
+            #     ## Sort in Rated Power
+            #     U_wR = []
+            #     data_wR = []
+            #     U_added = False
+            #     for i in range(len(U)):
+            #         if unknowns['rated_V']<U[i] and U_added == False:
+            #             U_wR.append(unknowns['rated_V'])
+            #             data_wR.append(data_rated)
+            #             U_added = True
+            #         U_wR.append(U[i])
+            #         data_wR.append(data[i])
+            # else:
+            #     U_wR = U
+
+            # P_fast = np.array([np.mean(datai['GenPwr']) for datai in data_wR])*1000.
+            # for i, (Pi, Vi) in enumerate(zip(P_fast, U_wR)):
+            #     if Vi > unknowns['rated_V']:
+            #         if np.abs((Pi-params['control_ratedPower'])/params['control_ratedPower']) > 0.2:
+            #             P_fast[i] = params['control_ratedPower']
+            #             above_rate_power_warning = "FAST instability expected at U=%f m/s, abs(outputted power) > +/-20%% of rated power.  Replaceing %f with %f"%(Vi, Pi, params['control_ratedPower'])
+            #             warnings.warn(above_rate_power_warning)
+
+            # P_spline = PchipInterpolator(U_wR, P_fast)
+
             P_spline = PchipInterpolator(U, P_fast)
+
             P_out = P_spline(params['V_out'])
+            # np.place(P_out, P_out>params['control_ratedPower'], params['control_ratedPower'])
             unknowns['P_out'] = P_out
 
             P = P_spline(params['V'])
+            # np.place(P, P>params['control_ratedPower'], params['control_ratedPower'])
             unknowns['P'] = P
 
 
