@@ -390,7 +390,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
             P, _, _, _ = self.ccblade.evaluate([Uhub_i], [Omega_i * 30. / np.pi], [pitch], coefficients=False)
             return -P
         
-        # Solve for regoin 2.5 pitch ## ??? this is solving the pitch for max Power 2 m/s higher than the start of Region 2.5, well into Region 3
+        # Solve for regoin 2.5 pitch
         options             = {}
         options['disp']     = False
         options['xatol']    = 1.e-2

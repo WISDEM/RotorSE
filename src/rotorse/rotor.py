@@ -36,7 +36,7 @@ from AeroelasticSE.CaseLibrary import RotorSE_rated, RotorSE_DLC_1_4_Rated, Roto
 #     pass
 
 class RotorSE(Group):
-    def __init__(self, refBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True,  Analysis_Level=0, FASTpref={}):
+    def __init__(self, refBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True,  Analysis_Level=0, FASTpref={}, flag_nd_opt = False):
         super(RotorSE, self).__init__()
         """rotor model"""
 
@@ -91,7 +91,7 @@ class RotorSE(Group):
         self.add('shape_parameter', IndepVarComp('shape_parameter', val=0.0), promotes=['*'])
 
         # --- Rotor Aero & Power ---
-        self.add('rotorGeometry', RotorGeometry(refBlade), promotes=['*'])
+        self.add('rotorGeometry', RotorGeometry(refBlade, flag_nd_opt), promotes=['*'])
 
         # self.add('tipspeed', MaxTipSpeed())
         self.add('powercurve', RegulatedPowerCurve(NPTS, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5=regulation_reg_II5, regulation_reg_III=regulation_reg_III))

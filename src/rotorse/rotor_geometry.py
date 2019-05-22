@@ -928,18 +928,20 @@ class TurbineClass(Component):
 
 
 class RotorGeometry(Group):
-    def __init__(self, RefBlade):
+    def __init__(self, RefBlade, flag_nd_opt = False):
         super(RotorGeometry, self).__init__()
         """rotor model"""
         NINPUT = len(RefBlade['ctrl_pts']['r_in'])
-
+        if flag_nd_opt == False:
+            self.add('chord_in', IndepVarComp('chord_in', np.zeros(NINPUT), units='m'),   promotes=['*'])
+            self.add('theta_in', IndepVarComp('theta_in', np.zeros(NINPUT), units='deg'), promotes=['*'])
+            self.add('sparT_in', IndepVarComp('sparT_in', np.zeros(NINPUT), units='m', desc='spar cap thickness parameters'), promotes=['*'])
+        
         self.add('blade_in_overwrite', IndepVarComp('blade_in_overwrite', {}, pass_by_obj=True), promotes=['*'])
-
         self.add('bladeLength', IndepVarComp('bladeLength', 0.0, units='m'), promotes=['*'])
         self.add('hubFraction', IndepVarComp('hubFraction', 0.0), promotes=['*'])
         self.add('r_max_chord', IndepVarComp('r_max_chord', 0.0), promotes=['*'])
-        self.add('chord_in', IndepVarComp('chord_in', np.zeros(NINPUT),units='m'), promotes=['*'])
-        self.add('theta_in', IndepVarComp('theta_in', np.zeros(NINPUT), units='deg'), promotes=['*'])
+        
         self.add('precurve_in', IndepVarComp('precurve_in', np.zeros(NINPUT), units='m'), promotes=['*'])
         self.add('precurve_tip', IndepVarComp('precurve_tip', 0.0, units='m'), promotes=['*'])
         self.add('presweep_in', IndepVarComp('presweep_in', np.zeros(NINPUT), units='m'), promotes=['*'])
@@ -954,7 +956,7 @@ class RotorGeometry(Group):
 
         
         # --- composite sections ---
-        self.add('sparT_in', IndepVarComp('sparT_in', val=np.zeros(NINPUT), units='m', desc='spar cap thickness parameters'), promotes=['*'])
+        
         self.add('teT_in', IndepVarComp('teT_in', val=np.zeros(NINPUT), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
         
         # --- Rotor Definition ---
