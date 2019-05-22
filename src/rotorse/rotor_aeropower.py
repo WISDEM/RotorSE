@@ -304,25 +304,25 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_param('usecd',     val=True,                           desc='use drag coefficient in computing induction factors', pass_by_obj=True)
 
         # outputs
-        self.add_output('V',        val=np.zeros(n_pc), units='m/s',  desc='wind vector')
-        self.add_output('Omega',    val=np.zeros(n_pc), units='rpm',  desc='rotor rotational speed')
-        self.add_output('pitch',    val=np.zeros(n_pc), units='deg',  desc='rotor pitch schedule')
-        self.add_output('P',        val=np.zeros(n_pc), units='W',    desc='rotor electrical power')
-        self.add_output('T',        val=np.zeros(n_pc), units='N',    desc='rotor aerodynamic thrust')
-        self.add_output('Q',        val=np.zeros(n_pc), units='N*m',  desc='rotor aerodynamic torque')
-        self.add_output('M',        val=np.zeros(n_pc), units='N*m',  desc='blade root moment')
-        self.add_output('Cp',       val=np.zeros(n_pc),               desc='rotor electrical power coefficient')
-
+        self.add_output('V',        val=np.zeros(n_pc), units='m/s',    desc='wind vector')
+        self.add_output('Omega',    val=np.zeros(n_pc), units='rpm',    desc='rotor rotational speed')
+        self.add_output('pitch',    val=np.zeros(n_pc), units='deg',    desc='rotor pitch schedule')
+        self.add_output('P',        val=np.zeros(n_pc), units='W',      desc='rotor electrical power')
+        self.add_output('T',        val=np.zeros(n_pc), units='N',      desc='rotor aerodynamic thrust')
+        self.add_output('Q',        val=np.zeros(n_pc), units='N*m',    desc='rotor aerodynamic torque')
+        self.add_output('M',        val=np.zeros(n_pc), units='N*m',    desc='blade root moment')
+        self.add_output('Cp',       val=np.zeros(n_pc),                 desc='rotor electrical power coefficient')
         self.add_output('V_spline', val=np.zeros(n_pc_spline), units='m/s',  desc='wind vector')
         self.add_output('P_spline', val=np.zeros(n_pc_spline), units='W',    desc='rotor electrical power')
-        
-        self.add_output('V_R25',     val=0.0, units='m/s', desc='region 2.5 transition wind speed')
-
+        self.add_output('V_R25',       val=0.0, units='m/s', desc='region 2.5 transition wind speed')
         self.add_output('rated_V',     val=0.0, units='m/s', desc='rated wind speed')
         self.add_output('rated_Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
         self.add_output('rated_pitch', val=0.0, units='deg', desc='pitch setting at rated')
-        self.add_output('rated_T',     val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
+        self.add_output('rated_T',     val=0.0, units='N',   desc='rotor aerodynamic thrust at rated')
         self.add_output('rated_Q',     val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
+        self.add_output('ax_induct_cutin',   val=np.zeros(naero), desc='rotor axial induction at cut-in wind speed along blade span')
+        self.add_output('tang_induct_cutin', val=np.zeros(naero), desc='rotor tangential induction at cut-in wind speed along blade span')
+        self.add_output('aoa_cutin',         val=np.zeros(naero), desc='angle of attack distribution along blade span at cut-in wind speed')
 
         self.naero                      = naero
         self.n_pc                       = n_pc
@@ -359,7 +359,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         P, eff  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
         Cp      = Cp_aero*eff
         
-
+        
+        
         # search for Region 2.5 bounds
         for i in range(len(Uhub)):
         
@@ -533,7 +534,11 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['V']       = Uhub
         unknowns['M']       = M
         unknowns['pitch']   = pitch
-
+        
+        
+        self.ccblade.induction_inflow = True
+        a_regII, ap_regII, alpha_regII = self.ccblade.distributedAeroLoads(Uhub[0], Omega[0] * 30. / np.pi, pitch[0], 0.0)
+        
         # Fit spline to powercurve for higher grid density
         spline   = PchipInterpolator(Uhub, P)
         V_spline = np.linspace(params['control_Vin'],params['control_Vout'], num=self.n_pc_spline)
@@ -544,14 +549,13 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['rated_V']     = U_rated
         unknowns['rated_Omega'] = Omega[idx_rated] * 30. / np.pi
         unknowns['rated_pitch'] = pitch[idx_rated]
-        # print(T)
         unknowns['rated_T']     = T[idx_rated]
         unknowns['rated_Q']     = Q[idx_rated]
-        
         unknowns['V_spline']    = V_spline
         unknowns['P_spline']    = P_spline
-        # print(Uhub)
-        # print(P)
+        unknowns['ax_induct_cutin']   = a_regII
+        unknowns['tang_induct_cutin'] = ap_regII
+        unknowns['aoa_cutin']         = alpha_regII
 
 class AEP(Component):
     def __init__(self, n_pc_spline):
@@ -575,6 +579,7 @@ class AEP(Component):
 
         unknowns['AEP'] = params['lossFactor']*np.trapz(params['P'], params['CDF_V'])/1e3*365.0*24.0  # in kWh
 
+        
     def list_deriv_vars(self):
 
         inputs = ('CDF_V', 'P', 'lossFactor')

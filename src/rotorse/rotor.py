@@ -55,12 +55,15 @@ class RotorSE(Group):
         self.add('mu', IndepVarComp('mu', val=1.81e-5), promotes=['*'])
 
         # --- control ---
+        # if flag_nd_opt == False:
+        self.add('c_tsr', IndepVarComp('control_tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
+        
         self.add('c_Vin', IndepVarComp('control_Vin', val=0.0, units='m/s', desc='cut-in wind speed'), promotes=['*'])
         self.add('c_Vout', IndepVarComp('control_Vout', val=0.0, units='m/s', desc='cut-out wind speed'), promotes=['*'])
         self.add('machine_rating', IndepVarComp('machine_rating', val=0.0,  units='W', desc='rated power'), promotes=['*'])
         self.add('c_minOmega', IndepVarComp('control_minOmega', val=0.0, units='rpm', desc='minimum allowed rotor rotation speed'), promotes=['*'])
         self.add('c_maxOmega', IndepVarComp('control_maxOmega', val=0.0, units='rpm', desc='maximum allowed rotor rotation speed'), promotes=['*'])
-        self.add('c_tsr', IndepVarComp('control_tsr', val=0.0, desc='tip-speed ratio in Region 2 (should be optimized externally)'), promotes=['*'])
+        
         self.add('c_pitch', IndepVarComp('control_pitch', val=0.0, units='deg', desc='pitch angle in region 2 (and region 3 for fixed pitch machines)'), promotes=['*'])
         self.add('c_maxTS', IndepVarComp('control_maxTS', val=0.0, units='m/s', desc='max blade tip speed'), promotes=['*'])
         self.add('pitch_extreme', IndepVarComp('pitch_extreme', val=0.0, units='deg', desc='worst-case pitch at survival wind condition'), promotes=['*'])
