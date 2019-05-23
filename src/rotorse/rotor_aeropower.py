@@ -364,7 +364,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         # search for Region 2.5 bounds
         for i in range(len(Uhub)):
         
-            if Omega[i] > Omega_max:
+            if Omega[i] > Omega_max and P[i] < params['control_ratedPower']:
                 Omega[i]        = Omega_max
                 Uhub[i]         = Omega[i] * params['Rtip'] / params['control_tsr']
                 P_aero[i], T[i], Q[i], M[i], Cp_aero[i], _, _, _ = self.ccblade.evaluate([Uhub[i]], [Omega[i] * 30. / np.pi], [pitch[i]], coefficients=True)
