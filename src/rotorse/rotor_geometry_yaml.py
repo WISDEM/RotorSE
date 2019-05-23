@@ -822,6 +822,8 @@ class ReferenceBlade(object):
                 chord = blade['pf']['chord'][i]
 
                 if calc_bounds:
+                    ratio_SCmax = 0.8
+                    p_le_i      = blade['pf']['p_le'][i]
                     if 'rotation' in blade['st'][type_sec][idx_sec].keys() and 'width' in blade['st'][type_sec][idx_sec].keys() and 'side' in blade['st'][type_sec][idx_sec].keys() and blade['st'][type_sec][idx_sec]['thickness']['values'][i] not in [None, 0., 0]:
 
                         # layer midpoint definied with a rotation and offset about the pitch axis
@@ -844,10 +846,9 @@ class ReferenceBlade(object):
                             offset = 0.
 
                         # geometry checks
-                        ratio_SCmax = 0.8
-                        if width > chord*ratio_SCmax:
+                        if offset < ratio_SCmax * (- chord * p_le_i) or offset > ratio_SCmax * (chord * (1. - p_le_i)):
                             width_old = copy.deepcopy(width)
-                            width = chord*ratio_SCmax
+                            width = 2. * min([ratio_SCmax * (chord * p_le_i) , ratio_SCmax * (chord * (1. - p_le_i))])
                             blade['st'][type_sec][idx_sec]['width']['values'][i] = width
                             layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], width_old, width, blade['pf']['r'][i], i)
                             warnings.warn(layer_resize_warning)
@@ -863,7 +864,7 @@ class ReferenceBlade(object):
                         blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]   = midpoint+width/arc_L/2.
 
                     elif 'rotation' in blade['st'][type_sec][idx_sec].keys():
-                        # web defined with a rotatio and offset about the pitch axis
+                        # web defined with a rotation and offset about the pitch axis
                         # if 'fixed' in sec['rotation'].keys():
                         #     sec['rotation']['values']
                         rotation   = sec['rotation']['values'][i] # radians
@@ -878,15 +879,16 @@ class ReferenceBlade(object):
                         if offset == None:
                             offset = 0
 
-                        # geometry checks
-                        ratio_SCmax = 0.7
-                        if np.abs(offset) > chord*ratio_SCmax/2:
+                        # geometry checks                        
+                        if offset < ratio_SCmax * (- chord * p_le_i) or offset > ratio_SCmax * (chord * (1. - p_le_i)):
                             offset_old = copy.deepcopy(offset)
-                            offset *= (chord*ratio_SCmax/2)/np.abs(offset)
+                            if offset_old <= 0.:
+                                offset = ratio_SCmax * (- chord * p_le_i)
+                            else:
+                                offset = ratio_SCmax * (chord * (1. - p_le_i))
                             blade['st'][type_sec][idx_sec]['offset_x_pa']['values'][i] = offset
                             layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "offset_x_pa" changed from %f to %f at R=%f (i=%d)'%(sec['name'], offset_old, offset, blade['pf']['r'][i], i)
                             warnings.warn(layer_resize_warning)
-                        
                         [blade['st'][type_sec][idx_sec]['start_nd_arc']['values'][i], blade['st'][type_sec][idx_sec]['end_nd_arc']['values'][i]] = sorted(calc_axis_intersection(rotation, offset, p_le_d, ['suction', 'pressure']))
 
                     elif 'midpoint_nd_arc' in blade['st'][type_sec][idx_sec].keys():
@@ -1445,6 +1447,24 @@ class ReferenceBlade(object):
         fig_name = 'interp_twist.png'
         axc.legend()
         fc.savefig(path + fig_name)
+
+	# Prebend
+        pb_init         = blade['pf']['precurve']
+        s_interp_pb     = np.array([0.0, 0.05, 0.3,  1.0 ])
+        f_interp1       = interp1d(s,pb_init)
+        pb_int1      = f_interp1(s_interp_pb)
+        pb_int1[-1] = 4
+        f_interp2       = PchipInterpolator(s_interp_pb,pb_int1)
+        pb_int2      = f_interp2(s)
+        
+        fpb, axpb  = plt.subplots(1,1,figsize=(5.3, 4))
+        axpb.plot(s, pb_init, c='k', label='Initial')
+        axpb.plot(s_interp_pb, pb_int1, 'ko', label='Interp Points')
+        axpb.plot(s, pb_int2, c='b', label='PCHIP')
+        axpb.set(xlabel='r/R' , ylabel='Prebend (m)')
+        fig_name = 'interp_pb.png'
+        axpb.legend()
+        fpb.savefig(path + fig_name)
         
         
         # Relative thickness
