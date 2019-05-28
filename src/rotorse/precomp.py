@@ -17,7 +17,7 @@ import os
 # from rotorstruc import SectionStrucInterface
 # from wisdem.common import sind, cosd
 # from external._precomp import precomp as _precomp
-from _precomp import precomp as _precomp
+#from _precomp import precomp as _precomp
 
 
 

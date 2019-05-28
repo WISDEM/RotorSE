@@ -14,7 +14,7 @@ from akima import Akima, akima_interp_with_derivs
 from ccblade.ccblade_component import CCBladeGeometry
 from ccblade import CCAirfoil
 from airfoilprep import Airfoil
-from precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp
+from precomp import Profile, Orthotropic2DMaterial, CompositeSection
 
 from scipy.interpolate import PchipInterpolator
 

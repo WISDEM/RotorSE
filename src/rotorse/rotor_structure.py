@@ -8,7 +8,7 @@ from ccblade.ccblade_component import CCBladePower, CCBladeLoads, CCBladeGeometr
 from commonse import gravity, NFREQ
 from commonse.csystem import DirectionVector
 from commonse.utilities import trapz_deriv, interp_with_deriv
-from precomp import _precomp
+import _precomp
 from akima import Akima, akima_interp_with_derivs
 from rotor_geometry import RotorGeometry, NREL5MW, DTU10MW, TUM3_35MW, NINPUT, TURBULENCE_CLASS
 import _pBEAM
@@ -386,14 +386,13 @@ class PreCompSections(BeamPropertiesBase):
                 thetaW = [0]
                 mat_idxW = [0]
 
-
+            laminatesU = _precomp.LaminateProperties(locU, n_laminaU, n_pliesU, tU, thetaU, np.array(mat_idxU, dtype=np.int32))
+            laminatesL = _precomp.LaminateProperties(locL, n_laminaL, n_pliesL, tL, thetaL, np.array(mat_idxL, dtype=np.int32))
+            laminatesW = _precomp.LaminateProperties(locW, n_laminaW, n_pliesW, tW, thetaW, np.array(mat_idxW, dtype=np.int32))
             results = _precomp.properties(chord[i], theta[i],
-                th_prime[i], leLoc[i],
-                xnode, ynode, E1, E2, G12, nu12, rho,
-                locU, n_laminaU, n_pliesU, tU, thetaU, mat_idxU,
-                locL, n_laminaL, n_pliesL, tL, thetaL, mat_idxL,
-                nwebs, locW, n_laminaW, n_pliesW, tW, thetaW, mat_idxW)
-
+                                          th_prime[i], leLoc[i],
+                                          xnode, ynode, E1, E2, G12, nu12, rho,
+                                          laminatesU, laminatesL, laminatesW)
 
             beam_EIxx[i] = results[1]  # EIedge
             beam_EIyy[i] = results[0]  # EIflat

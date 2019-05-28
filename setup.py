@@ -25,8 +25,16 @@ setup(
 
 
 from numpy.distutils.core import setup, Extension
+import os
+
+if platform.system() == 'Windows':
+    # Note: must use mingw compiler on windows or a Visual C++ compiler version that supports std=c++11
+    arglist = ['-O3','-std=gnu++11','-fPIC']
+else:
+    arglist = ['-O3','-std=c++11','-fPIC']
+
 setup(
     name='precomp',
     package_dir={'': 'src/rotorse'},
-    ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2'])],
+    ext_modules=[Extension('_precomp', sources=[os.path.join('src','rotorse','PreCompPy.cpp')], extra_compile_args=arglist, include_dirs=[os.path.join('src','include')])]
 )
