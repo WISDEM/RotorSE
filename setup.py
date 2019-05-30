@@ -28,5 +28,5 @@ from numpy.distutils.core import setup, Extension
 setup(
     name='precomp',
     package_dir={'': 'src/rotorse'},
-    ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2'])],
+    ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2','-fPIC','-shared'], extra_link_args=['-shared'])],
 )
