@@ -79,7 +79,7 @@ class blade_bom(object):
             material_dict[name]['waste']              = 5.       # [%] Waste of the material during production
             material_dict[name]['unit_cost']          = 1.87     # [$/kg]
         
-        uniax_names_CF = ['(Newport307)', 'CarbonUD'] # 50oz Carbon Uni for the spar caps
+        uniax_names_CF = ['(Newport307)', 'CarbonUD','carbon_uni'] # 50oz Carbon Uni for the spar caps
         for name in uniax_names_CF:
             material_dict[name]                       = {}
             material_dict[name]['component']          = [4]      # Flag to specify where the material is used. 0 - coating, 1 - sandwich filler , 2 - shell skin, 3 - shear webs, 4 - spar caps, 5 - TE reinf.
