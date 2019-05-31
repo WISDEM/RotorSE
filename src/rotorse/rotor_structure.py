@@ -386,9 +386,9 @@ class PreCompSections(BeamPropertiesBase):
                 thetaW = [0]
                 mat_idxW = [0]
 
-            laminatesU = _precomp.LaminateProperties(locU, n_laminaU, n_pliesU, tU, thetaU, np.array(mat_idxU, dtype=np.int32))
-            laminatesL = _precomp.LaminateProperties(locL, n_laminaL, n_pliesL, tL, thetaL, np.array(mat_idxL, dtype=np.int32))
-            laminatesW = _precomp.LaminateProperties(locW, n_laminaW, n_pliesW, tW, thetaW, np.array(mat_idxW, dtype=np.int32))
+            laminatesU = _precomp.LaminateProperties(locU, n_laminaU, n_pliesU, tU, thetaU, np.array(mat_idxU, dtype=np.int32)-1)
+            laminatesL = _precomp.LaminateProperties(locL, n_laminaL, n_pliesL, tL, thetaL, np.array(mat_idxL, dtype=np.int32)-1)
+            laminatesW = _precomp.LaminateProperties(locW, n_laminaW, n_pliesW, tW, thetaW, np.array(mat_idxW, dtype=np.int32)-1)
             results = _precomp.properties(chord[i], theta[i],
                                           th_prime[i], leLoc[i],
                                           xnode, ynode, E1, E2, G12, nu12, rho,
