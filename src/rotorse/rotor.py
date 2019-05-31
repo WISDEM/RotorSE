@@ -36,7 +36,7 @@ except:
     pass
 
 class RotorSE(Group):
-    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True, Analysis_Level=-1, FASTpref={}):
+    def __init__(self, RefBlade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True, Analysis_Level=0, FASTpref={}):
         super(RotorSE, self).__init__()
         """rotor model"""
 
@@ -144,7 +144,7 @@ class RotorSE(Group):
         # self.connect('max_tip_speed', 'tipspeed.Vtip_max')
         # self.connect('tipspeed.Omega_max', 'control_maxOmega')
 
-        if self.Analysis_Level>=0:
+        if self.Analysis_Level>=1:
             self.add('aeroelastic', FASTLoadCases(NPTS, npts_coarse_power_curve, self.FASTpref))
 
             self.connect('fst_vt_in', 'aeroelastic.fst_vt_in')
@@ -643,10 +643,10 @@ if __name__ == '__main__':
     # myref = DTU10MW()
     # myref = TUM3_35MW()
 
-    Analysis_Level = 0 # <0: Run CCBlade; 0: Update FAST model at each iteration but do not run; 1: Run FAST w/ ElastoDyn; 2: (Not implemented) Run FAST w/ BeamDyn
+    Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
 
     # Set FAST Inputs
-    if Analysis_Level >= 0:
+    if Analysis_Level >= 1:
         # File management
         FASTpref                        = {}
         FASTpref['Analysis_Level']      = Analysis_Level
@@ -691,9 +691,9 @@ if __name__ == '__main__':
     rotor.setup()
 
     # === FAST model ===
-    if Analysis_Level >= 0:
+    if Analysis_Level >= 1:
         rotor['fst_vt_in'] = fast.fst_vt
-    if Analysis_Level > 0:
+    if Analysis_Level > 1:
         rotor['drivetrainEff'] = fast.fst_vt['ServoDyn']['GenEff']/100.
 
     # === blade grid ===
@@ -746,7 +746,7 @@ if __name__ == '__main__':
     rotor['nSector'] = 4  # (Int): number of sectors to divide rotor face into in computing thrust and power
     rotor['AEP_loss_factor'] = 1.0  # (Float): availability and other losses (soiling, array, etc.)
     rotor['drivetrainType'] = myref.drivetrain #DRIVETRAIN_TYPE['GEARED']  # (Enum)
-    if Analysis_Level > 0:
+    if Analysis_Level > 1:
         rotor['dynamic_amplication_tip_deflection'] = 1.
     else:
         rotor['dynamic_amplication_tip_deflection'] = 1.35  # (Float): a dynamic amplification factor to adjust the static deflection calculation
