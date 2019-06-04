@@ -1017,7 +1017,6 @@ class ReferenceBlade(object):
 
             # region end points
             dp = sorted(list(set(start_nd_arc+end_nd_arc)))
-            print(i, dp)
 
             #initialize
             n_plies = []
@@ -1443,7 +1442,6 @@ class ReferenceBlade(object):
         s_interp_t      = np.array([0.0, 0.05, 0.2, 0.4, 0.6, 0.8, 1.0 ])
         f_interp1       = interp1d(s,theta_init)
         theta_int1      = f_interp1(s_interp_t)
-        theta_int1[-1]  = -1.
         f_interp2       = PchipInterpolator(s_interp_t,theta_int1)
         theta_int2      = f_interp2(s)
         
@@ -1461,7 +1459,6 @@ class ReferenceBlade(object):
         s_interp_pb     = np.array([0.0, 0.05, 0.3,  1.0 ])
         f_interp1       = interp1d(s,pb_init)
         pb_int1      = f_interp1(s_interp_pb)
-        pb_int1[-1] = 4
         f_interp2       = PchipInterpolator(s_interp_pb,pb_int1)
         pb_int2      = f_interp2(s)
         

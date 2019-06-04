@@ -249,7 +249,6 @@ class PreCompSections(BeamPropertiesBase):
         yln = np.zeros(NPTS)
 
         for i in range(NPTS):
-            print(i)
             csU = upperCS[i]
             csL = lowerCS[i]
             pf  = profile[i]
