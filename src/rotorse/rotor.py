@@ -286,8 +286,10 @@ class RotorSE(Group):
         # self.connect('chord_ref', 'resize.chord_ref')
         # self.connect('sector_idx_strain_spar', ['resize.sector_idx_strain_spar','beam.sector_idx_strain_spar'])
         # self.connect('sector_idx_strain_te', ['resize.sector_idx_strain_te','beam.sector_idx_strain_te'])
-        self.connect('sector_idx_strain_spar', 'beam.sector_idx_strain_spar')
-        self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
+        self.connect('sector_idx_strain_spar_ss', 'beam.sector_idx_strain_spar_ss')
+        self.connect('sector_idx_strain_spar_ps', 'beam.sector_idx_strain_spar_ps')
+        self.connect('sector_idx_strain_te_ss', 'beam.sector_idx_strain_te_ss')
+        self.connect('sector_idx_strain_te_ps', 'beam.sector_idx_strain_te_ps')
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')
@@ -765,8 +767,9 @@ if __name__ == '__main__':
 
     # Turbine Ontology input
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
-    fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
+    # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
     # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
+    fname_input = "C:/Users/egaertne/WISDEM/BAR_design/Baseline/turbine_inputs/BAR004i.yaml"
 
     fname_output = "turbine_inputs/test_out.yaml"
     
@@ -777,7 +780,7 @@ if __name__ == '__main__':
     refBlade.verbose      = True
     refBlade.NINPUT       = 8
     refBlade.NPITS        = 100
-    refBlade.spar_var     = ['Spar_Cap_SS', 'Spar_Cap_PS']
+    refBlade.spar_var     = ['Spar_Cap_SS', 'Spar_Cap_PS'] # SS, then PS
     refBlade.te_var       = 'TE_reinforcement'
     refBlade.validate     = False
     refBlade.fname_schema = fname_schema

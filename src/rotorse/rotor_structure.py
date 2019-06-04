@@ -134,8 +134,10 @@ class ResizeCompositeSection(Component):
         self.add_param('lowerCS_in', val=np.zeros(NPTS), desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True)
         self.add_param('websCS_in', val=np.zeros(NPTS), desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
         self.add_param('chord_ref', val=np.zeros(NPTS), desc='Chord distribution for reference section, thickness of structural layup scaled with reference thickness (fixed t/c)')
-        self.add_param('sector_idx_strain_spar', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
-        self.add_param('sector_idx_strain_te', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_spar_ss', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_spar_ps', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_te_ss', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_te_ps', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
 
         # out
         self.add_output('upperCS', val=np.zeros(NPTS), desc='list of CompositeSection objections defining the properties for upper surface', pass_by_obj=True)
@@ -156,8 +158,10 @@ class ResizeCompositeSection(Component):
         upperCS = params['upperCS_in']
         lowerCS = params['lowerCS_in']
         websCS  = params['websCS_in']
-        strain_idx_spar = params['sector_idx_strain_spar']
-        strain_idx_te = params['sector_idx_strain_te']
+        strain_idx_spar_ss = params['sector_idx_strain_spar_ss']
+        strain_idx_spar_ps = params['sector_idx_strain_spar_ps']
+        strain_idx_te_ss = params['sector_idx_strain_te_ss']
+        strain_idx_te_ps = params['sector_idx_strain_te_ps']
 
         # scale all thicknesses with airfoil thickness
         # TODO: remove fixed t/c assumption
@@ -169,18 +173,22 @@ class ResizeCompositeSection(Component):
             lowerCS[i].t = [m*factor[i] for m in lowerCS[i].t]
             websCS[i].t  = [m*factor[i] for m in websCS[i].t]
 
-            idx_spar = strain_idx_spar[i]
-            idx_te = strain_idx_te[i]
+            idx_spar_ss = strain_idx_spar_ss[i]
+            idx_te_ss   = strain_idx_te_ss[i]
+            idx_spar_ps = strain_idx_spar_ps[i]
+            idx_te_ps   = strain_idx_te_ps[i]
 
             # upper and lower have same thickness for this design
-            tspar = np.sum(upperCS[i].t[idx_spar])
-            tte = np.sum(upperCS[i].t[idx_te])
+            tspar_ss = np.sum(upperCS[i].t[idx_spar_ss])
+            tte_ss = np.sum(upperCS[i].t[idx_te_ss])
+            tspar_ps = np.sum(upperCS[i].t[idx_spar_ps])
+            tte_ps = np.sum(upperCS[i].t[idx_te_ps])
 
-            upperCS[i].t[idx_spar] *= sparT[i]/tspar
-            lowerCS[i].t[idx_spar] *= sparT[i]/tspar
+            upperCS[i].t[idx_spar_ss] *= sparT[i]/tspar_ss
+            lowerCS[i].t[idx_spar_ps] *= sparT[i]/tspar_ps
 
-            upperCS[i].t[idx_te] *= teT[i]/tte
-            lowerCS[i].t[idx_te] *= teT[i]/tte
+            upperCS[i].t[idx_te_ss] *= teT[i]/tte_ss
+            lowerCS[i].t[idx_te_ps] *= teT[i]/tte_ps
 
         unknowns['upperCS'] = upperCS
         unknowns['lowerCS'] = lowerCS
@@ -203,8 +211,10 @@ class PreCompSections(BeamPropertiesBase):
         self.add_param('lowerCS', val=np.zeros(NPTS), desc='list of CompositeSection objections defining the properties for lower surface', pass_by_obj=True)
         self.add_param('websCS', val=np.zeros(NPTS), desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
         self.add_param('profile', val=np.zeros(NPTS), desc='list of CompositeSection profiles', pass_by_obj=True)
-        self.add_param('sector_idx_strain_spar', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
-        self.add_param('sector_idx_strain_te', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_spar_ps', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_spar_ss', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_te_ps', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
+        self.add_param('sector_idx_strain_te_ss', val=np.zeros(NPTS, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
 
         self.add_output('eps_crit_spar', val=np.zeros(NPTS), desc='critical strain in spar from panel buckling calculation')
         self.add_output('eps_crit_te', val=np.zeros(NPTS), desc='critical strain in trailing-edge panels from panel buckling calculation')
@@ -224,7 +234,7 @@ class PreCompSections(BeamPropertiesBase):
         self.deriv_options['step_size'] = 1e-5
 
 
-    def criticalStrainLocations(self, params, sector_idx_strain, x_ec_nose, y_ec_nose):
+    def criticalStrainLocations(self, params, sector_idx_strain_ss, sector_idx_strain_ps, x_ec_nose, y_ec_nose):
 
         chord   = params['chord']
         upperCS = params['upperCS']
@@ -239,19 +249,21 @@ class PreCompSections(BeamPropertiesBase):
         yln = np.zeros(NPTS)
 
         for i in range(NPTS):
+            print(i)
             csU = upperCS[i]
             csL = lowerCS[i]
             pf  = profile[i]
-            idx = sector_idx_strain[i]
+            idx_ss = sector_idx_strain_ss[i]
+            idx_ps = sector_idx_strain_ps[i]
 
-            if idx == None:
+            if idx_ss == None:
                 xun[i] = 0.
                 xln[i] = 0.
                 yun[i] = 0.
                 yln[i] = 0.
             else:
-                xun[i] = 0.5*(csU.loc[idx] + csU.loc[idx+1])
-                xln[i] = 0.5*(csL.loc[idx] + csL.loc[idx+1])
+                xun[i] = 0.5*(csU.loc[idx_ss] + csU.loc[idx_ss+1])
+                xln[i] = 0.5*(csL.loc[idx_ps] + csL.loc[idx_ps+1])
                 yun[i] = np.interp(xun[i], pf.x, pf.yu)
                 yln[i] = np.interp(xln[i], pf.x, pf.yl)
 
@@ -269,7 +281,7 @@ class PreCompSections(BeamPropertiesBase):
         return xu, xl, yu, yl
 
 
-    def panelBucklingStrain(self, params, sector_idx_strain):
+    def panelBucklingStrain(self, params, sector_idx_strain_ss):
         """
         see chapter on Structural Component Design Techniques from Alastair Johnson
         section 6.2: Design of composite panels
@@ -289,7 +301,7 @@ class PreCompSections(BeamPropertiesBase):
         for i in range(nsec):
 
             cs = CS_list[i]
-            sector_idx = sector_idx_strain[i]
+            sector_idx = sector_idx_strain_ss[i]
             
             if sector_idx == None:
                 eps_crit[i] = 0.
@@ -325,8 +337,10 @@ class PreCompSections(BeamPropertiesBase):
         profile = params['profile']
         theta   = params['theta']
 
-        strain_idx_spar = params['sector_idx_strain_spar']
-        strain_idx_te   = params['sector_idx_strain_te']
+        strain_idx_spar_ss = params['sector_idx_strain_spar_ss']
+        strain_idx_spar_ps = params['sector_idx_strain_spar_ps']
+        strain_idx_te_ss   = params['sector_idx_strain_te_ss']
+        strain_idx_te_ps   = params['sector_idx_strain_te_ps']
         
         # radial discretization
         nsec = len(r)
@@ -493,11 +507,11 @@ class PreCompSections(BeamPropertiesBase):
         unknowns['beam:Tw_iner'] = beam_Tw_iner
         unknowns['beam:flap_iner'] = beam_flap_iner
         unknowns['beam:edge_iner'] = beam_edge_iner
-        unknowns['eps_crit_spar'] = self.panelBucklingStrain(params, strain_idx_spar)
-        unknowns['eps_crit_te'] = self.panelBucklingStrain(params, strain_idx_te)
+        unknowns['eps_crit_spar'] = self.panelBucklingStrain(params, strain_idx_spar_ss)
+        unknowns['eps_crit_te'] = self.panelBucklingStrain(params, strain_idx_te_ss)
 
-        xu_strain_spar, xl_strain_spar, yu_strain_spar, yl_strain_spar = self.criticalStrainLocations(params, strain_idx_spar, x_ec_nose, y_ec_nose)
-        xu_strain_te, xl_strain_te, yu_strain_te, yl_strain_te = self.criticalStrainLocations(params, strain_idx_te, x_ec_nose, y_ec_nose)
+        xu_strain_spar, xl_strain_spar, yu_strain_spar, yl_strain_spar = self.criticalStrainLocations(params, strain_idx_spar_ss, strain_idx_spar_ps, x_ec_nose, y_ec_nose)
+        xu_strain_te, xl_strain_te, yu_strain_te, yl_strain_te = self.criticalStrainLocations(params, strain_idx_te_ss, strain_idx_te_ps, x_ec_nose, y_ec_nose)
 
         unknowns['xu_strain_spar'] = xu_strain_spar
         unknowns['xl_strain_spar'] = xl_strain_spar
@@ -2498,8 +2512,10 @@ class RotorStructure(Group):
         # self.connect('chord_ref', 'resize.chord_ref')
         # self.connect('sector_idx_strain_spar', ['resize.sector_idx_strain_spar','beam.sector_idx_strain_spar'])
         # self.connect('sector_idx_strain_te', ['resize.sector_idx_strain_te','beam.sector_idx_strain_te'])
-        self.connect('sector_idx_strain_spar', 'beam.sector_idx_strain_spar')
-        self.connect('sector_idx_strain_te', 'beam.sector_idx_strain_te')
+        self.connect('sector_idx_strain_spar_ss', 'beam.sector_idx_strain_spar_ss')
+        self.connect('sector_idx_strain_spar_ps', 'beam.sector_idx_strain_spar_ps')
+        self.connect('sector_idx_strain_te_ss', 'beam.sector_idx_strain_te_ss')
+        self.connect('sector_idx_strain_te_ps', 'beam.sector_idx_strain_te_ps')
 
         # connections to gust
         self.connect('turbulence_class', 'gust.turbulence_class')

@@ -681,10 +681,10 @@ class OutputsAero(Component):
         self.add_output('Cp', val=np.zeros(npts_coarse_power_curve), units='W', desc='power (power curve)')
 
         self.add_output('rated_V', val=0.0, units='m/s', desc='rated wind speed')
+        self.add_output('rated_Q', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
         self.add_output('rated_Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
         self.add_output('rated_pitch', val=0.0, units='deg', desc='pitch setting at rated')
         self.add_output('rated_T', val=0.0, units='N', desc='rotor aerodynamic thrust at rated')
-        self.add_output('rated_Q', val=0.0, units='N*m', desc='rotor aerodynamic torque at rated')
 
         # self.add_output('diameter', val=0.0, units='m', desc='rotor diameter')
         self.add_output('V_extreme', val=0.0, units='m/s', desc='survival wind speed')

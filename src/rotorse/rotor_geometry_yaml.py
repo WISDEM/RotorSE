@@ -148,7 +148,7 @@ class ReferenceBlade(object):
         self.verbose         = False
 
         # Precomp analyis
-        self.spar_var        = ['']          # name of composite layer for RotorSE spar cap buckling analysis
+        self.spar_var        = ['']          # name of composite layer for RotorSE spar cap buckling analysis <---- SS first, then PS
         self.te_var          = ''          # name of composite layer for RotorSE trailing edge buckling analysis
 
 
@@ -490,6 +490,10 @@ class ReferenceBlade(object):
                 af_points = af.points
             else:
                 af_points = np.column_stack((AFref_xy[:,0,0], remapAirfoil(points[:,0], points[:,1], AFref_xy[:,0,0])))
+
+            # import matplotlib.pyplot as plt
+            # plt.plot(af_points[:,0], af_points[:,1])
+            # plt.show()
 
             if [1,0] not in af_points.tolist():
                 af_points[:,0] -= af_points[np.argmin(af_points[:,0]), 0]
@@ -1013,6 +1017,7 @@ class ReferenceBlade(object):
 
             # region end points
             dp = sorted(list(set(start_nd_arc+end_nd_arc)))
+            print(i, dp)
 
             #initialize
             n_plies = []
@@ -1182,6 +1187,7 @@ class ReferenceBlade(object):
             # import matplotlib.pyplot as plt
             # plt.plot(profile_i_rot_precomp[:,0], profile_i_rot_precomp[:,1])
             # plt.axis('equal')
+            # plt.title(i)
             # plt.show()
 
             idx_le = np.argmin(profile_i_rot[:,0])
@@ -1284,8 +1290,10 @@ class ReferenceBlade(object):
         # - pressure and suction side regions are the same (i.e. spar cap is the Nth region on both side)
         # - if the composite layer is divided into multiple regions (i.e. if the spar cap is split into 3 regions due to the web locations),
         #   the middle region is selected with int(n_reg/2), note for an even number of regions, this rounds up
-        blade['precomp']['sector_idx_strain_spar'] = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.spar_var[0]]]
-        blade['precomp']['sector_idx_strain_te']   = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.te_var]]
+        blade['precomp']['sector_idx_strain_spar_ss'] = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.spar_var[0]]]
+        blade['precomp']['sector_idx_strain_spar_ps'] = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ps[self.spar_var[1]]]
+        blade['precomp']['sector_idx_strain_te_ss']   = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ss[self.te_var]]
+        blade['precomp']['sector_idx_strain_te_ps']   = [None if regs==None else regs[int(len(regs)/2)] for regs in region_loc_ps[self.te_var]]
         blade['precomp']['spar_var'] = self.spar_var
         blade['precomp']['te_var']   = self.te_var
         
@@ -1579,7 +1587,8 @@ class ReferenceBlade(object):
 if __name__ == "__main__":
 
     ## File managment
-    fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
+    # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
+    fname_input = "C:/Users/egaertne/WISDEM/BAR_design/Baseline/turbine_inputs/BAR004i.yaml"
     # fname_input        = "turbine_inputs/BAR22.yaml"
     # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
     # fname_input        = "turbine_inputs/test_out.yaml"

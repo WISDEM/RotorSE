@@ -790,8 +790,10 @@ class BladeGeometry(Component):
         self.add_output('websCS', val=np.zeros(npts), desc='list of CompositeSection objections defining the properties for shear webs', pass_by_obj=True)
         self.add_output('profile', val=np.zeros(npts), desc='list of CompositeSection profiles', pass_by_obj=True)
         
-        self.add_output('sector_idx_strain_spar', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
-        self.add_output('sector_idx_strain_te', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
+        self.add_output('sector_idx_strain_spar_ss', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
+        self.add_output('sector_idx_strain_spar_ps', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for spar (PreComp definition of sector)', pass_by_obj=True)
+        self.add_output('sector_idx_strain_te_ss', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
+        self.add_output('sector_idx_strain_te_ps', val=np.zeros(npts, dtype=np.int_), desc='Index of sector for trailing edge (PreComp definition of sector)', pass_by_obj=True)
 
         self.add_output('blade_out', val={}, desc='updated blade dictionary for ontology', pass_by_obj=True)
 
@@ -868,8 +870,10 @@ class BladeGeometry(Component):
         # - pressure and suction side regions are the same (i.e. spar cap is the Nth region on both side)
         # - if the composite layer is divided into multiple regions (i.e. if the spar cap is split into 3 regions due to the web locations),
         #   the middle region is selected with int(n_reg/2), note for an even number of regions, this rounds up
-        unknowns['sector_idx_strain_spar'] = blade_out['precomp']['sector_idx_strain_spar']
-        unknowns['sector_idx_strain_te']   = blade_out['precomp']['sector_idx_strain_te']
+        unknowns['sector_idx_strain_spar_ss'] = blade_out['precomp']['sector_idx_strain_spar_ss']
+        unknowns['sector_idx_strain_spar_ps'] = blade_out['precomp']['sector_idx_strain_spar_ps']
+        unknowns['sector_idx_strain_te_ss']   = blade_out['precomp']['sector_idx_strain_te_ss']
+        unknowns['sector_idx_strain_te_ps']   = blade_out['precomp']['sector_idx_strain_te_ps']
 
         unknowns['blade_out'] = blade_out
         unknowns['sparT_in_out'] = params['sparT_in']
