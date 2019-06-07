@@ -92,6 +92,7 @@ class FASTLoadCases(Component):
         self.add_param('shearExp',  val=0.0,                            desc='shear exponent')
 
         # FAST run preferences
+        self.FASTpref            = FASTpref 
         self.Analysis_Level      = FASTpref['Analysis_Level']
         self.FAST_ver            = FASTpref['FAST_ver']
         self.FAST_exe            = os.path.abspath(FASTpref['FAST_exe'])
@@ -129,8 +130,7 @@ class FASTLoadCases(Component):
         if 'mpi_run' in FASTpref.keys():
             self.mpi_run         = FASTpref['mpi_run']
             if self.mpi_run:
-                self.mpi_color   = FASTpref['mpi_color']
-                self.mpi_fd_rank = FASTpref['mpi_fd_rank']
+                self.mpi_comm_map_down   = FASTpref['mpi_comm_map_down']
         
         self.add_output('dx_defl', val=0., desc='deflection of blade section in airfoil x-direction under max deflection loading')
         self.add_output('dy_defl', val=0., desc='deflection of blade section in airfoil y-direction under max deflection loading')
@@ -147,6 +147,7 @@ class FASTLoadCases(Component):
         self.add_output('loads_pitch', val=0.0, units='deg', desc='pitch angle')
         self.add_output('loads_azimuth', val=0.0, units='deg', desc='azimuthal angle')
         self.add_output('model_updated', val=False, desc='boolean, Analysis Level 0: fast model written, but not run', pass_by_obj=True)
+        self.add_output('FASTpref_updated', val={}, desc='updated fast preference dictionary', pass_by_obj=True)
 
         self.add_output('P_out', val=np.zeros(npts_spline_power_curve), units='W', desc='electrical power from rotor')
         self.add_output('P',        val=np.zeros(npts_coarse_power_curve), units='W',    desc='rotor electrical power')
@@ -310,7 +311,7 @@ class FASTLoadCases(Component):
         # Case Generations
 
         TMax = 99999. # Overwrite runtime if TMax is less than predefined DLC length (primarily for debugging purposes)
-        #TMax = 20.
+        # TMax = 5.
 
         list_cases        = []
         list_casenames    = []
@@ -357,7 +358,7 @@ class FASTLoadCases(Component):
 
         if self.DLC_turbulent != None:
             if self.mpi_run:
-                list_cases_turb, list_casenames_turb, requited_channels_turb = self.DLC_turbulent(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'], Turbsim_exe=self.Turbsim_exe, debug_level=self.debug_level, cores=self.cores, mpi_run=self.mpi_run, mpi_color=self.mpi_color, mpi_fd_rank=self.mpi_fd_rank)
+                list_cases_turb, list_casenames_turb, requited_channels_turb = self.DLC_turbulent(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'], Turbsim_exe=self.Turbsim_exe, debug_level=self.debug_level, cores=self.cores, mpi_run=self.mpi_run, mpi_comm_map_down=self.mpi_comm_map_down)
             else:
                 list_cases_turb, list_casenames_turb, requited_channels_turb = self.DLC_turbulent(fst_vt, self.FAST_runDirectory, self.FAST_namingOut, TMax, turbine_class, turbulence_class, params['Vrated'], U_init=params['U_init'], Omega_init=params['Omega_init'], pitch_init=params['pitch_init'], Turbsim_exe=self.Turbsim_exe, debug_level=self.debug_level, cores=self.cores)
             list_cases        += list_cases_turb
@@ -393,11 +394,7 @@ class FASTLoadCases(Component):
 
         # Run FAST
         if self.mpi_run:
-            comm    = MPI.COMM_WORLD
-            rank    = comm.Get_rank()
-            color_i = self.mpi_color[rank+1]
-
-            FAST_Output = fastBatch.run_mpi(self.mpi_color)
+            FAST_Output = fastBatch.run_mpi(self.mpi_comm_map_down)
         else:
             if self.cores == 1:
                 FAST_Output = fastBatch.run_serial()
@@ -415,6 +412,11 @@ class FASTLoadCases(Component):
         writer.FAST_namingOut    = self.FAST_namingOut
         writer.dev_branch        = self.dev_branch
         writer.execute()
+
+        unknowns['FASTpref_updated'] = copy.deepcopy(self.FASTpref)
+        unknowns['FASTpref_updated']['FAST_runDirectory'] = self.FAST_runDirectory
+        unknowns['FASTpref_updated']['FAST_directory']    = self.FAST_runDirectory
+        unknowns['FASTpref_updated']['FAST_InputFile']    = os.path.split(writer.FAST_InputFileOut)[-1]
 
         unknowns['model_updated'] = True
         if self.debug_level > 0:

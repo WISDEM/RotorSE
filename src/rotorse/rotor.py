@@ -147,7 +147,7 @@ class RotorSE(Group):
         # self.connect('tipspeed.Omega_max', 'control_maxOmega')
 
         if self.Analysis_Level>=1:
-            self.add('aeroelastic', FASTLoadCases(NPTS, npts_coarse_power_curve, npts_spline_power_curve, self.FASTpref), promotes=['fst_vt_out'])
+            self.add('aeroelastic', FASTLoadCases(NPTS, npts_coarse_power_curve, npts_spline_power_curve, self.FASTpref), promotes=['fst_vt_out', 'FASTpref_updated'])
 
             self.connect('fst_vt_in', 'aeroelastic.fst_vt_in')
             self.connect('r_pts', 'aeroelastic.r')
@@ -779,7 +779,7 @@ if __name__ == '__main__':
     refBlade = ReferenceBlade()
     refBlade.verbose      = True
     refBlade.NINPUT       = 8
-    refBlade.NPITS        = 100
+    refBlade.NPTS         = 50
     refBlade.spar_var     = ['Spar_Cap_SS', 'Spar_Cap_PS'] # SS, then PS
     refBlade.te_var       = 'TE_reinforcement'
     refBlade.validate     = False
