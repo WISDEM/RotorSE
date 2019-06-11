@@ -323,6 +323,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('ax_induct_cutin',   val=np.zeros(naero), desc='rotor axial induction at cut-in wind speed along blade span')
         self.add_output('tang_induct_cutin', val=np.zeros(naero), desc='rotor tangential induction at cut-in wind speed along blade span')
         self.add_output('aoa_cutin',         val=np.zeros(naero), desc='angle of attack distribution along blade span at cut-in wind speed')
+        self.add_output('cl_cutin',          val=np.zeros(naero), desc='lift coefficient distribution along blade span at cut-in wind speed')
+        self.add_output('cd_cutin',          val=np.zeros(naero), desc='drag coefficient distribution along blade span at cut-in wind speed')
 
         self.naero                      = naero
         self.n_pc                       = n_pc
@@ -358,8 +360,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         P_aero, T, Q, M, Cp_aero, _, _, _ = self.ccblade.evaluate(Uhub, Omega * 30. / np.pi, pitch, coefficients=True)
         P, eff  = CSMDrivetrain(P_aero, params['control_ratedPower'], params['drivetrainType'])
         Cp      = Cp_aero*eff
-        
-        
         
         # search for Region 2.5 bounds
         for i in range(len(Uhub)):
@@ -539,7 +539,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         
         
         self.ccblade.induction_inflow = True
-        a_regII, ap_regII, alpha_regII = self.ccblade.distributedAeroLoads(Uhub[0], Omega[0] * 30. / np.pi, pitch[0], 0.0)
+        a_regII, ap_regII, alpha_regII, cl_regII, cd_regII = self.ccblade.distributedAeroLoads(Uhub[0], Omega[0] * 30. / np.pi, pitch[0], 0.0)
         
         # Fit spline to powercurve for higher grid density
         spline   = PchipInterpolator(Uhub, P)
@@ -558,6 +558,8 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         unknowns['ax_induct_cutin']   = a_regII
         unknowns['tang_induct_cutin'] = ap_regII
         unknowns['aoa_cutin']         = alpha_regII
+        unknowns['cl_cutin']         = cl_regII
+        unknowns['cd_cutin']         = cd_regII
 
 class AEP(Component):
     def __init__(self, n_pc_spline):
