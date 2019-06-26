@@ -212,10 +212,13 @@ class blade_labor_ct(object):
         
         def min_ct_lp_skin(team_size):
             _, ct = labor_ct_lp_skin(team_size)
-            
             return ct - (23.9999 - skin_mold_gating_ct[8 + self.n_webs]) * 0.7    
-        
-        team_size = brentq(lambda x: min_ct_lp_skin(x), 0.01, 100., xtol=1e-4)
+
+        try:        
+            team_size = brentq(lambda x: min_ct_lp_skin(x), 0.01, 100., xtol=1e-4)
+        except:
+            team_size = brentq(lambda x: min_ct_lp_skin(x), 0.01, 250., xtol=1e-4)
+
         if self.options['discrete']:
             team_size = round(team_size)
         labor[5 + self.n_webs] , skin_mold_gating_ct[5 + self.n_webs] = labor_ct_lp_skin(team_size)
@@ -234,7 +237,11 @@ class blade_labor_ct(object):
             
             return ct - (23.9999 - skin_mold_gating_ct[8 + self.n_webs]) * 0.7     
         
-        team_size = brentq(lambda x: min_ct_hp_skin(x), 0.01, 100., xtol=1e-4)
+        try:        
+            team_size = brentq(lambda x: min_ct_hp_skin(x), 0.01, 100., xtol=1e-4)
+        except:
+            team_size = brentq(lambda x: min_ct_hp_skin(x), 0.01, 250., xtol=1e-4)
+
         if self.options['discrete']:
             team_size = round(team_size)
         labor[6 + self.n_webs] , non_gating_ct[6 + self.n_webs] = labor_ct_hp_skin(team_size)
@@ -253,7 +260,10 @@ class blade_labor_ct(object):
                         
             return ct - (23.9999 - skin_mold_gating_ct[5 + self.n_webs] - skin_mold_gating_ct[8 + self.n_webs])      
         
-        team_size = brentq(lambda x: min_ct_assembly(x), 0.01, 100., xtol=1e-4)
+        try:        
+            team_size = brentq(lambda x: min_ct_assembly(x), 0.01, 100., xtol=1e-4)
+        except:
+            team_size = brentq(lambda x: min_ct_assembly(x), 0.01, 250., xtol=1e-4)
         if self.options['discrete']:
             team_size = round(team_size)
         labor[7 + self.n_webs] , skin_mold_gating_ct[7 + self.n_webs] = labor_ct_assembly(team_size)
