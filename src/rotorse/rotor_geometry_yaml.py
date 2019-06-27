@@ -22,6 +22,7 @@ from airfoilprep.airfoilprep import Airfoil, Polar
 from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp, PreCompWriter
 from rotorse.geometry_tools.geometry import AirfoilShape, Curve
 
+# import matplotlib.pyplot as plt
 
 TURBULENCE_CLASS = commonse.enum.Enum('A B C')
 TURBINE_CLASS = commonse.enum.Enum('I II III')
@@ -202,7 +203,7 @@ class ReferenceBlade(object):
     def update(self, blade):
 
         t1 = time.time()
-        blade['st'] = self.calc_spanwise_grid(blade['st'])
+        blade = self.calc_spanwise_grid(blade)
 
         blade = self.update_planform(blade)
         blade = self.remap_profiles(blade, blade['AFref']) # <- added to 'update' in rthick update
@@ -366,14 +367,20 @@ class ReferenceBlade(object):
         #     f = open(fname, "w")
         #     yaml.dump(wt_out, f)
 
-    def calc_spanwise_grid(self, st):
+    def calc_spanwise_grid(self, blade):
         ### Spanwise grid
         # Finds the start and end points of all composite layers, which are required points in the new grid
         # Attempts to roughly evenly space points between the required start/end points to output the user specified grid size
 
+        if 'st' in list(blade):
+            st = blade['st']
+        else:
+            st = blade['internal_structure_2d_fem']
+
         n = self.NPTS
         # Find unique composite start and end points
-        r_points = copy.copy(self.r_in)
+        r_points = list(set(list(copy.copy(self.r_in)) + list(blade['outer_shape_bem']['airfoil_position']['grid'])))
+        # r_points = list(copy.copy(self.r_in))
         for type_sec, idx_sec, sec in zip(['webs']*len(st['webs'])+['layers']*len(st['layers']), list(range(len(st['webs'])))+list(range(len(st['layers']))), st['webs']+st['layers']):
             for var in sec.keys():
                 if type(sec[var]) not in [str, bool]:
@@ -395,6 +402,7 @@ class ReferenceBlade(object):
                             else:
                                 r_points.append(r1)
 
+
         # Check for large enough grid size
         r_points = sorted(r_points)
         n_pts = len(r_points)
@@ -402,29 +410,63 @@ class ReferenceBlade(object):
             grid_size_warning = "A grid size of %d was specified, but %d unique composite layer start/end points were found.  It is highly recommended to increase the grid size to >= %d to avoid errors or unrealistic results "%(n, n_pts, n_pts)
             warnings.warn(grid_size_warning)
 
-        # estimate length of the linspaces between required start/end points
-        r_points_idx = [int(n*i) for i in r_points]
-        lengths = []
-        for i in range(1,len(r_points_idx)):
-            len_i = max([r_points_idx[i] - r_points_idx[i-1] + 2, 2])
-            lengths.append(len_i)
+        #######################################
+        # Create grid that includes required points, with as equal as possible spacing between them to reach the grid size 
+        # finds the number of points to fill inbeween and error handling for n_pts > n
 
-        # Correct lengths down to the total number of requested points
-        n_estimate = sum(lengths)-len(r_points_idx)+2
-        n_diff = n_estimate - n
-        if n_diff > 0:
-            lengths[np.argmax(lengths)] -= n_diff
+        # equal grid spacing size
+        dr = np.diff(np.linspace(r_points[0], r_points[-1], num=n)[0:2])[0]
 
-        # Build grid as concatenation of linspaces between required points
+        # Get initial spacing by placing filler points bases on the linspace step size
+        fill = np.zeros(n_pts-1)
+        dri = np.zeros(n_pts-1)
+        for i in range(1, n_pts):
+            fill[i-1] += int((r_points[i] - r_points[i-1]) / dr)
+            dri[i-1]   = (r_points[i] - r_points[i-1]) / (fill[i-1] + 1.)
+
+        # Correct initial spacing if there are too many or too few points
+        n_out = sum(fill)+n_pts
+        while int(n_out) != int(n):
+            # Too many points, iteratively remove a point from the range with the smallest spacing
+            if n_out > n:
+                # find range with the smallest step size where fill > 0, if possible
+                if sum(fill) > 0:
+                    check      = (fill > 0.)
+                    subset_idx = np.argmin(dri[check])
+                    idx        = np.arange(n_pts-1)[check][subset_idx]
+                # If the number of required points is greater than the grid size, remove points with the smallest step size
+                ### there is a warning further up if this is going to occur
+                else:
+                    idx        = np.argmin(dri)
+                # remove a point
+                fill[idx] += -1.
+
+            # Too few points, iteratively add a point from the range with the largest spacing
+            if n_out < n:
+                # find range with the largest step size
+                idx        = np.argmax(dri)
+                # add a point
+                fill[idx] += 1.
+
+            dri[idx] = (r_points[idx+1] - r_points[idx]) / (fill[idx] + 1.)
+            n_out = sum(fill)+n_pts
+
+        # Build grid as concatenation of linspaces between required points with respective number of filler points
         grid_out = []
         for i in range(1,n_pts):
             if i == n_pts-1:
-                grid_out.append(np.linspace(r_points[i-1], r_points[i], lengths[i-1]))
+                grid_out.append(np.linspace(r_points[i-1], r_points[i], fill[i-1]+2))
             else:
-                grid_out.append(np.linspace(r_points[i-1], r_points[i], lengths[i-1])[:-1])
+                grid_out.append(np.linspace(r_points[i-1], r_points[i], fill[i-1]+2)[:-1])
+
         self.s = np.concatenate(grid_out)
 
-        return st
+        if 'st' in list(blade):
+            blade['st'] = st
+        else:
+            blade['internal_structure_2d_fem'] = st
+
+        return blade
 
     
     def set_configuration(self, blade, wt_ref):
@@ -452,7 +494,12 @@ class ReferenceBlade(object):
         blade['pf']['presweep'] = remap2grid(blade['outer_shape_bem']['reference_axis']['y']['grid'], blade['outer_shape_bem']['reference_axis']['y']['values'], self.s)
 
         thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
+        
         blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
+        
+        # plt.plot(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, 'o')
+        # plt.plot(self.s, blade['pf']['rthick'])
+        # plt.plot(self.s, blade['pf']['rthick'], '.')
 
         return blade
 
@@ -646,8 +693,8 @@ class ReferenceBlade(object):
         
         # st = copy.deepcopy(blade_ref['internal_structure_2d_fem'])
         # print('remap_composites copy %f'%(time.time()-t))
+        blade = self.calc_spanwise_grid(blade)
         st = blade['internal_structure_2d_fem']
-        st = self.calc_spanwise_grid(st)
 
         for var in st['reference_axis']:
             st['reference_axis'][var]['values'] = remap2grid(st['reference_axis'][var]['grid'], st['reference_axis'][var]['values'], self.s).tolist()
@@ -942,15 +989,20 @@ class ReferenceBlade(object):
             r_max_chord = blade['pf']['s'][np.argmax(blade['pf']['chord'])]
 
         # solve for end of cylinder radius by interpolating relative thickness
-        cyl_thk_min = 0.999
-        idx_s       = np.argmax(blade['pf']['rthick']<1)
-        idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
-        r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-1:-1], blade['pf']['s'][idx_e:idx_s-1:-1], cyl_thk_min)
+        idx = max([i for i, thk in enumerate(blade['pf']['rthick']) if thk == 1.])
+        if idx > 0:
+            r_cylinder  = blade['pf']['s'][idx]
+        else:
+            cyl_thk_min = 0.9999
+            idx_s       = np.argmax(blade['pf']['rthick']<1)
+            idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
+            r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-2:-1], blade['pf']['s'][idx_e:idx_s-2:-1], cyl_thk_min)
 
         # Build Control Point Grid, if not provided with key word arg
         if len(r_in)==0:
             # control point grid
-            r_in = np.array(sorted(np.r_[[0.], [r_cylinder], np.linspace(r_max_chord, 1., self.NINPUT-2)]))
+            # r_in = np.array(sorted(np.r_[[0.], [r_cylinder], np.linspace(r_max_chord, 1., self.NINPUT-2)]))
+            r_in = np.concatenate([[0.], np.linspace(r_cylinder, r_max_chord, num=3)[:-1], np.linspace(r_max_chord, 1., self.NINPUT-3)])
 
         # Fit control points to planform variables
         blade['ctrl_pts']['theta_in']     = remap2grid(blade['pf']['s'], blade['pf']['theta'], r_in)
@@ -977,12 +1029,16 @@ class ReferenceBlade(object):
         blade['ctrl_pts']['r_max_chord']  = r_max_chord
         blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
 
+        # plt.plot(r_in, blade['ctrl_pts']['thickness_in'], 'x')
+        # plt.show()
+
         return blade
 
     def update_planform(self, blade):
 
-        if blade['ctrl_pts']['r_in'][2] != blade['ctrl_pts']['r_max_chord']:
-            blade['ctrl_pts']['r_in'] = np.r_[[0.], [blade['ctrl_pts']['r_cylinder']], np.linspace(blade['ctrl_pts']['r_max_chord'], 1., self.NINPUT-2)]
+        if blade['ctrl_pts']['r_in'][3] != blade['ctrl_pts']['r_max_chord']:
+            # blade['ctrl_pts']['r_in'] = np.r_[[0.], [blade['ctrl_pts']['r_cylinder']], np.linspace(blade['ctrl_pts']['r_max_chord'], 1., self.NINPUT-2)]
+            blade['ctrl_pts']['r_in'] = np.concatenate([[0.], np.linspace(blade['ctrl_pts']['r_cylinder'], blade['ctrl_pts']['r_max_chord'], num=3)[:-1], np.linspace(blade['ctrl_pts']['r_max_chord'], 1., self.NINPUT-3)])
 
         self.s                  = blade['pf']['s'] # TODO: assumes the start and end points of composite sections does not change
         blade['pf']['chord']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['chord_in'], self.s)
@@ -1011,15 +1067,24 @@ class ReferenceBlade(object):
         blade['pf']['af_pos']      = []
         blade['pf']['af_pos_name'] = []
         # find iterpolated spanwise position for anywhere a reference airfoil occures, i.e. the spanwise relative thickness crosses a reference airfoil relative thickness
-        for i in range(1,len(self.s)):
+        for i in range(0,len(self.s)):
             for j in range(len(af_name_ref)):
-                if (blade['pf']['rthick'][i-1] <= af_thk_ref[j] <= blade['pf']['rthick'][i]) or (blade['pf']['rthick'][i-1] >= af_thk_ref[j] >= blade['pf']['rthick'][i]):
-                    i_min = max(i-2, 0)
-                    i_max = max(i+2, len(self.s))
-                    r_j   = remap2grid(blade['pf']['rthick'][i_min:i_max], self.s[i_min:i_max], af_thk_ref[j])
-
-                    blade['pf']['af_pos'].append(float(r_j))
+                if af_thk_ref[j] == blade['pf']['rthick'][i]:
+                    blade['pf']['af_pos'].append(float(self.s[i]))
                     blade['pf']['af_pos_name'].append(af_name_ref[j])
+                elif i > 0:
+                    if (blade['pf']['rthick'][i-1] <= af_thk_ref[j] <= blade['pf']['rthick'][i]) or (blade['pf']['rthick'][i-1] >= af_thk_ref[j] >= blade['pf']['rthick'][i]):
+                        i_min = max(i-1, 0)
+                        i_max = max(i+1, len(self.s))
+                        r_j   = remap2grid(blade['pf']['rthick'][i_min:i_max], self.s[i_min:i_max], af_thk_ref[j])
+                        blade['pf']['af_pos'].append(float(r_j))
+                        blade['pf']['af_pos_name'].append(af_name_ref[j])
+        # remove interior duplicates where an airfoil is listed more than 2 times in a row
+        x = blade['pf']['af_pos']
+        y = blade['pf']['af_pos_name']
+        blade['pf']['af_pos']      = [x[0]] + [x[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [x[-1]]
+        blade['pf']['af_pos_name'] = [y[0]] + [y[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [y[-1]]
+
 
         return blade
 
@@ -1320,7 +1385,7 @@ class ReferenceBlade(object):
 
     def plot_design(self, blade, path, show_plots = True):
         
-        import matplotlib.pyplot as plt
+        # import matplotlib.pyplot as plt
         
         # Chord
         fc, axc  = plt.subplots(1,1,figsize=(5.3, 4))
@@ -1605,10 +1670,10 @@ if __name__ == "__main__":
 
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    fname_input = "C:/Users/egaertne/WISDEM/BAR_design/Baseline/turbine_inputs/BAR004i.yaml"
     # fname_input        = "turbine_inputs/BAR22.yaml"
     # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
     # fname_input        = "turbine_inputs/test_out.yaml"
+    fname_input        = "/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/turbine_inputs/NREL15MW_opt_v00.yaml"
     fname_output       = "turbine_inputs/testing_twist.yaml"
     flag_write_out     = False
     flag_write_precomp = False
@@ -1620,26 +1685,24 @@ if __name__ == "__main__":
     refBlade.verbose  = True
     refBlade.spar_var = ['Spar_cap_ss', 'Spar_cap_ps']
     refBlade.te_var   = 'TE_reinforcement'
-    refBlade.NPTS     = 50
+    refBlade.NINPUT       = 7
+    refBlade.NPITS        = 40
     refBlade.validate = False
     refBlade.fname_schema = "turbine_inputs/IEAontology_schema.yaml"
 
     blade = refBlade.initialize(fname_input)
     idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==refBlade.spar_var[0].lower()][0]
     
-    print(blade['pf']['chord'])
-    print(blade['st']['layers'][idx_spar]['width']['values'])
-    print(blade['st']['webs'][0]['offset_x_pa']['values'])
+    # print(blade['pf']['chord'])
+    # print(blade['st']['layers'][idx_spar]['width']['values'])
+    # print(blade['st']['webs'][0]['offset_x_pa']['values'])
 
-    blade['ctrl_pts']['chord_in'][-1] *= 0.5
-    blade = refBlade.update(blade)
+    # blade['ctrl_pts']['chord_in'][-1] *= 0.5
+    # blade = refBlade.update(blade)
     
-    print(blade['pf']['chord'])
-    print(blade['st']['layers'][idx_spar]['width']['values'])
-    print(blade['st']['webs'][0]['offset_x_pa']['values'])
-
-    
-    
+    # print(blade['pf']['chord'])
+    # print(blade['st']['layers'][idx_spar]['width']['values'])
+    # print(blade['st']['webs'][0]['offset_x_pa']['values'])
 
 
     ## save output yaml
