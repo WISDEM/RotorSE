@@ -1006,7 +1006,7 @@ class ReferenceBlade(object):
 
         # update airfoil positions
         # this only gets used in ontology file outputting
-        af_name_ref = list(blade['AFref'].keys())
+        af_name_ref = list(blade['AFref'])
         af_thk_ref  = [blade['AFref'][name]['relative_thickness'] for name in af_name_ref]
         blade['pf']['af_pos']      = []
         blade['pf']['af_pos_name'] = []
