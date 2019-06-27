@@ -699,6 +699,7 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
     rotor['presweep_in']      = np.array(blade['ctrl_pts']['presweep_in']) #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
     rotor['sparT_in']         = np.array(blade['ctrl_pts']['sparT_in']) # np.array([0.0, 0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
     rotor['teT_in']           = np.array(blade['ctrl_pts']['teT_in']) # np.array([0.0, 0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+    rotor['thickness_in']     = np.array(blade['ctrl_pts']['thickness_in'])
     # ------------------
 
     # === atmosphere ===
@@ -769,7 +770,7 @@ if __name__ == '__main__':
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
     # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
     # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
-    fname_input = "C:/Users/egaertne/WISDEM/BAR_design/Baseline/turbine_inputs/BAR004i.yaml"
+    fname_input = "turbine_inputs/NREL15MW_opt_v01.yaml"
 
     fname_output = "turbine_inputs/test_out.yaml"
     
@@ -831,7 +832,7 @@ if __name__ == '__main__':
         fst_vt = {}
 
     rotor = Problem()
-    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=True, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
+    rotor.root = RotorSE(blade, npts_coarse_power_curve=20, npts_spline_power_curve=200, regulation_reg_II5=True, regulation_reg_III=False, Analysis_Level=Analysis_Level, FASTpref=FASTpref)
     #rotor.setup(check=False)
     rotor.setup()
     rotor = Init_RotorSE_wRefBlade(rotor, blade, fst_vt=fst_vt)
@@ -916,6 +917,12 @@ if __name__ == '__main__':
     plt.legend()
     # plt.savefig('/Users/sning/Desktop/strain_te.pdf')
     # plt.savefig('/Users/sning/Desktop/strain_te.png')
+
+    plt.figure()
+    plt.plot(rotor['r_pts'], rotor['rthick'], label='airfoil relative thickness')
+    plt.xlabel('r')
+    plt.ylabel('rthick')
+    plt.legend()
 
     plt.show()
     # ----------------

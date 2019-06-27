@@ -163,15 +163,13 @@ class ReferenceBlade(object):
         self.wt_ref = self.load_ontology(self.fname_input, validate=self.validate, fname_schema=self.fname_schema)
 
         t1 = time.time()
-        # Renaming and converting lists to dicts for simplicity
-        # blade_ref = copy.deepcopy(self.wt_ref['components']['blade'])
+        # build blade
+        blade = copy.deepcopy(self.wt_ref['components']['blade'])
         af_ref    = {}
         for afi in self.wt_ref['airfoils']:
-            af_ref[afi['name']] = afi
+            if afi['name'] in blade['outer_shape_bem']['airfoil_position']['labels']:
+                af_ref[afi['name']] = afi
 
-        # build blade
-        # blade = {}
-        blade = copy.deepcopy(self.wt_ref['components']['blade'])
         blade = self.set_configuration(blade, self.wt_ref)
         blade = self.remap_composites(blade)
         blade = self.remap_planform(blade, af_ref)
@@ -207,6 +205,8 @@ class ReferenceBlade(object):
         blade['st'] = self.calc_spanwise_grid(blade['st'])
 
         blade = self.update_planform(blade)
+        blade = self.remap_profiles(blade, blade['AFref']) # <- added to 'update' in rthick update
+        blade = self.remap_polars(blade, blade['AFref']) # <- added to 'update' in rthick update
         blade = self.calc_composite_bounds(blade)
 
         if self.verbose:
@@ -286,6 +286,9 @@ class ReferenceBlade(object):
         blade_out = copy.deepcopy(blade)
 
         # Planform
+        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['labels']  = blade_out['pf']['af_pos_name']
+        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['grid']    = blade_out['pf']['af_pos']
+
         wt_out['components']['blade']['outer_shape_bem']['chord']['values']             = blade_out['pf']['chord'].tolist()
         wt_out['components']['blade']['outer_shape_bem']['chord']['grid']               = blade_out['pf']['s'].tolist()
         wt_out['components']['blade']['outer_shape_bem']['twist']['values']             = np.radians(blade_out['pf']['theta']).tolist()
@@ -349,19 +352,19 @@ class ReferenceBlade(object):
         wt_out['components']['blade']['internal_structure_2d_fem'] = st
 
 
-        try:
-            f = open(fname, "w")
-            yaml=YAML()
-            yaml.default_flow_style = None
-            yaml.width = float("inf")
-            yaml.indent(mapping=4, sequence=6, offset=3)
-            yaml.dump(wt_out, f)
-        except:
-            ontology_out_warning = "WARNING! Ontology output write with ruamel.yaml failed.\n Attemping to write with pyyaml.  All file formatting will be lost (comments and dictionary ordering)."
-            warning.warn(ontology_out_warning)
-            import yaml
-            f = open(fname, "w")
-            yaml.dump(wt_out, f)
+        # try:
+        f = open(fname, "w")
+        yaml=YAML()
+        yaml.default_flow_style = None
+        yaml.width = float("inf")
+        yaml.indent(mapping=4, sequence=6, offset=3)
+        yaml.dump(wt_out, f)
+        # except:
+        #     ontology_out_warning = "WARNING! Ontology output write with ruamel.yaml failed.\n Attemping to write with pyyaml.  All file formatting will be lost (comments and dictionary ordering)."
+        #     warnings.warn(ontology_out_warning)
+        #     import yaml
+        #     f = open(fname, "w")
+        #     yaml.dump(wt_out, f)
 
     def calc_spanwise_grid(self, st):
         ### Spanwise grid
@@ -531,7 +534,7 @@ class ReferenceBlade(object):
         profile_spline = spline(af_thk, AFref_xy, axis=2)
         blade['profile'] = profile_spline(blade['pf']['rthick'])
         blade['profile_spline'] = profile_spline
-
+        blade['AFref'] = AFref
 
         for i in range(self.NPTS):
             af_le = blade['profile'][np.argmin(blade['profile'][:,0,i]),:,i]
@@ -988,6 +991,8 @@ class ReferenceBlade(object):
         blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s)
         blade['pf']['presweep'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['presweep_in'], self.s)
 
+        blade['pf']['rthick']   = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['thickness_in'], self.s)
+
         blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
 
         for var in self.spar_var:
@@ -998,6 +1003,23 @@ class ReferenceBlade(object):
         idx_te    = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==self.te_var.lower()][0]
         blade['st']['layers'][idx_te]['thickness']['grid']   = self.s.tolist()
         blade['st']['layers'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s).tolist()
+
+        # update airfoil positions
+        # this only gets used in ontology file outputting
+        af_name_ref = blade['AFref'].keys()
+        af_thk_ref  = [blade['AFref'][name]['relative_thickness'] for name in af_name_ref]
+        blade['pf']['af_pos']      = []
+        blade['pf']['af_pos_name'] = []
+        # find iterpolated spanwise position for anywhere a reference airfoil occures, i.e. the spanwise relative thickness crosses a reference airfoil relative thickness
+        for i in range(1,len(self.s)):
+            for j in range(len(af_name_ref)):
+                if (blade['pf']['rthick'][i-1] <= af_thk_ref[j] <= blade['pf']['rthick'][i]) or (blade['pf']['rthick'][i-1] >= af_thk_ref[j] >= blade['pf']['rthick'][i]):
+                    i_min = max(i-2, 0)
+                    i_max = max(i+2, len(self.s))
+                    r_j   = remap2grid(blade['pf']['rthick'][i_min:i_max], self.s[i_min:i_max], af_thk_ref[j])
+
+                    blade['pf']['af_pos'].append(float(r_j))
+                    blade['pf']['af_pos_name'].append(af_name_ref[j])
 
         return blade
 
@@ -1151,13 +1173,11 @@ class ReferenceBlade(object):
         profile = [None]*self.NPTS
 
         ## Spanwise
-
         for i in range(self.NPTS):
             # time0 = time.time()
         
             ## Profiles
-            # rotate
-            
+            # rotate            
             profile_i = np.flip(copy.copy(blade['profile'][:,:,i]), axis=0)
             profile_i_rot = np.column_stack(rotate(blade['pf']['p_le'][i], 0., profile_i[:,0], profile_i[:,1], -1.*np.radians(blade['pf']['theta'][i])))
             # normalize

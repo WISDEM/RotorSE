@@ -758,6 +758,7 @@ class BladeGeometry(Component):
         self.add_param('presweep_in', val=np.zeros(NINPUT), units='m', desc='precurve at control points')  # defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
         self.add_param('sparT_in', val=np.zeros(NINPUT), units='m', desc='thickness values of spar cap that linearly vary from non-cylinder position to tip')
         self.add_param('teT_in', val=np.zeros(NINPUT), units='m', desc='thickness values of trailing edge panels that linearly vary from non-cylinder position to tip')
+        self.add_param('thickness_in', val=np.zeros(NINPUT), desc='relative thickness of airfoil distribution control points')
 
         # parameters
         self.add_param('hubFraction', val=0.0, desc='hub location as fraction of radius')
@@ -774,6 +775,7 @@ class BladeGeometry(Component):
         self.add_output('presweep', val=np.zeros(npts), units='m', desc='presweep at structural locations')
         # self.add_output('sparT', val=np.zeros(npts), units='m', desc='dimensional spar cap thickness distribution')
         # self.add_output('teT', val=np.zeros(npts), units='m', desc='dimensional trailing-edge panel thickness distribution')
+        self.add_output('rthick', val=np.zeros(npts), units='%', desc='relative thickness of airfoil distribution')
 
         self.add_output('hub_diameter', val=0.0, units='m')
         self.add_output('diameter', val=0.0, units='m')
@@ -823,15 +825,16 @@ class BladeGeometry(Component):
         # r_in                 = blade['ctrl_pts']['r_in']
         # unknowns['r_in']     = Rhub + (Rtip-Rhub)*np.array(r_in)
 
-        blade['ctrl_pts']['bladeLength'] = params['bladeLength']
-        blade['ctrl_pts']['r_in']        = r_in
-        blade['ctrl_pts']['chord_in']    = params['chord_in']
-        blade['ctrl_pts']['theta_in']    = params['theta_in']
-        blade['ctrl_pts']['precurve_in'] = params['precurve_in']
-        blade['ctrl_pts']['presweep_in'] = params['presweep_in']
-        blade['ctrl_pts']['sparT_in']    = params['sparT_in']
-        blade['ctrl_pts']['teT_in']      = params['teT_in']
-        blade['ctrl_pts']['r_max_chord'] = params['r_max_chord']
+        blade['ctrl_pts']['bladeLength']  = params['bladeLength']
+        blade['ctrl_pts']['r_in']         = r_in
+        blade['ctrl_pts']['chord_in']     = params['chord_in']
+        blade['ctrl_pts']['theta_in']     = params['theta_in']
+        blade['ctrl_pts']['precurve_in']  = params['precurve_in']
+        blade['ctrl_pts']['presweep_in']  = params['presweep_in']
+        blade['ctrl_pts']['sparT_in']     = params['sparT_in']
+        blade['ctrl_pts']['teT_in']       = params['teT_in']
+        blade['ctrl_pts']['r_max_chord']  = params['r_max_chord']
+        blade['ctrl_pts']['thickness_in'] = params['thickness_in']
 
         # Update
         refBlade = ReferenceBlade()
@@ -856,6 +859,7 @@ class BladeGeometry(Component):
         unknowns['theta']                  = blade_out['pf']['theta']
         unknowns['precurve']               = blade_out['pf']['precurve']
         unknowns['presweep']               = blade_out['pf']['presweep']
+        unknowns['rthick']                 = blade_out['pf']['rthick']
 
         unknowns['airfoils']               = blade_out['airfoils']
         unknowns['le_location']            = blade_out['pf']['p_le']
@@ -957,8 +961,8 @@ class RotorGeometry(Group):
         self.add('downwind', IndepVarComp('downwind', False, pass_by_obj=True), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         self.add('V_mean_overwrite', IndepVarComp('V_mean_overwrite', val=0., desc='optional overwrite value for mean velocity for using user defined CDFs'), promotes=['*'])
+        self.add('thickness_in', IndepVarComp('thickness_in', np.zeros(NINPUT), units='m'), promotes=['*'])
 
-        
         # --- composite sections ---
         
         self.add('teT_in', IndepVarComp('teT_in', val=np.zeros(NINPUT), units='m', desc='trailing-edge thickness parameters'), promotes=['*'])
