@@ -452,7 +452,8 @@ class PreCompSections(BeamPropertiesBase):
                 import matplotlib.pyplot as plt
                 plt.plot(xnode,ynode)
                 plt.axis('equal')
-                plt.show()
+                plt.savefig('debugging_%d.png'%i)
+                # plt.show()
 
                 results = _precomp.properties(chord[i], theta[i],
                     th_prime[i], leLoc[i],
