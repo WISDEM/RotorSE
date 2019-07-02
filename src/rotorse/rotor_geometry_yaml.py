@@ -590,34 +590,42 @@ class ReferenceBlade(object):
             c = max(blade['profile'][:,0,i]) - min(blade['profile'][:,0,i])
             blade['profile'][:,:,i] /= c
 
+            # temp = copy.deepcopy(blade['profile'])
 
             if trailing_edge_correction:
-                if i in trans_correct_idx:
+                # if i in trans_correct_idx:
 
-                    # Find indices on Suction and Pressure side for last 85-95% and 95-100% chordwise
-                    idx_85_95  = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.85 and xi < 0.95]
-                    idx_95_100 = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.95 and xi < 1.]
+                # Find indices on Suction and Pressure side for last 85-95% and 95-100% chordwise
+                idx_85_95  = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.925 and xi < 0.975]
+                idx_95_100 = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.975 and xi < 1.]
 
-                    idx_85_95_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_85_95)) if d_idx > 1][0]+1
-                    idx_85_95_SS    = idx_85_95[:idx_85_95_break]
-                    idx_85_95_PS    = idx_85_95[idx_85_95_break:]
+                idx_85_95_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_85_95)) if d_idx > 1][0]+1
+                idx_85_95_SS    = idx_85_95[:idx_85_95_break]
+                idx_85_95_PS    = idx_85_95[idx_85_95_break:]
 
-                    idx_95_100_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_95_100)) if d_idx > 1][0]+1
-                    idx_95_100_SS    = idx_95_100[:idx_95_100_break]
-                    idx_95_100_PS    = idx_95_100[idx_95_100_break:]
+                idx_95_100_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_95_100)) if d_idx > 1][0]+1
+                idx_95_100_SS    = idx_95_100[:idx_95_100_break]
+                idx_95_100_PS    = idx_95_100[idx_95_100_break:]
 
-                    # Interpolate the last 5% to the trailing edge
-                    idx_in_PS = idx_85_95_PS+[-1]
-                    x_corrected_PS = blade['profile'][idx_95_100_PS,0,i]
-                    y_corrected_PS = remap2grid(blade['profile'][idx_in_PS,0,i], blade['profile'][idx_in_PS,1,i], x_corrected_PS)
+                # Interpolate the last 5% to the trailing edge
+                idx_in_PS = idx_85_95_PS+[-1]
+                x_corrected_PS = blade['profile'][idx_95_100_PS,0,i]
+                y_corrected_PS = remap2grid(blade['profile'][idx_in_PS,0,i], blade['profile'][idx_in_PS,1,i], x_corrected_PS)
 
-                    idx_in_SS = [0]+idx_85_95_SS
-                    x_corrected_SS = blade['profile'][idx_95_100_SS,0,i]
-                    y_corrected_SS = remap2grid(blade['profile'][idx_in_SS,0,i], blade['profile'][idx_in_SS,1,i], x_corrected_SS)
+                idx_in_SS = [0]+idx_85_95_SS
+                x_corrected_SS = blade['profile'][idx_95_100_SS,0,i]
+                y_corrected_SS = remap2grid(blade['profile'][idx_in_SS,0,i], blade['profile'][idx_in_SS,1,i], x_corrected_SS)
 
-                    # Overwrite profile with corrected TE
-                    blade['profile'][idx_95_100_SS,1,i] = y_corrected_SS
-                    blade['profile'][idx_95_100_PS,1,i] = y_corrected_PS
+                # Overwrite profile with corrected TE
+                blade['profile'][idx_95_100_SS,1,i] = y_corrected_SS
+                blade['profile'][idx_95_100_PS,1,i] = y_corrected_PS
+
+            # import matplotlib.pyplot as plt
+            # plt.plot(temp[:,0,i], temp[:,1,i], 'b')
+            # plt.plot(blade['profile'][:,0,i], blade['profile'][:,1,i], 'k')
+            # plt.axis('equal')
+            # plt.title(i)
+            # plt.show()
 
         return blade
 
@@ -1256,6 +1264,10 @@ class ReferenceBlade(object):
                      idx_s = 1
                 profile_i_rot_precomp = np.row_stack((profile_i_rot_precomp[idx_le_precomp:], profile_i_rot_precomp[idx_s:idx_le_precomp,:]))
             profile_i_rot_precomp[:,1] -= profile_i_rot_precomp[np.argmin(profile_i_rot_precomp[:,0]),1]
+
+            # # renormalize
+            # profile_i_rot_precomp[:,0] -= min(profile_i_rot_precomp[:,0])
+            # profile_i_rot_precomp = profile_i_rot_precomp/ max(profile_i_rot_precomp[:,0])
 
             if profile_i_rot_precomp[-1,0] != 1.:
                 profile_i_rot_precomp = np.row_stack((profile_i_rot_precomp, profile_i_rot_precomp[0,:]))
