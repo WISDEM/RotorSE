@@ -496,6 +496,11 @@ class ReferenceBlade(object):
         thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
         
         blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
+
+        # Smooth oscillation caused by interpolation after min thickness is reached
+        idx_min = [i for i, thk in enumerate(blade['pf']['rthick']) if thk == min(thk_ref)]
+        if len(idx_min) > 0:
+            blade['pf']['rthick']   = np.array([min(thk_ref) if i > idx_min[0] else thk for i, thk in enumerate(blade['pf']['rthick'])])
         
         # plt.plot(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, 'o')
         # plt.plot(self.s, blade['pf']['rthick'])
@@ -1083,7 +1088,7 @@ class ReferenceBlade(object):
                 elif i > 0:
                     if (blade['pf']['rthick'][i-1] <= af_thk_ref[j] <= blade['pf']['rthick'][i]) or (blade['pf']['rthick'][i-1] >= af_thk_ref[j] >= blade['pf']['rthick'][i]):
                         i_min = max(i-1, 0)
-                        i_max = max(i+1, len(self.s))
+                        i_max = max(i+1, np.argmin(blade['pf']['rthick']))
                         r_j   = remap2grid(blade['pf']['rthick'][i_min:i_max], self.s[i_min:i_max], af_thk_ref[j])
                         blade['pf']['af_pos'].append(float(r_j))
                         blade['pf']['af_pos_name'].append(af_name_ref[j])
