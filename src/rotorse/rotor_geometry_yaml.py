@@ -596,8 +596,8 @@ class ReferenceBlade(object):
                 # if i in trans_correct_idx:
 
                 # Find indices on Suction and Pressure side for last 85-95% and 95-100% chordwise
-                idx_85_95  = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.925 and xi < 0.975]
-                idx_95_100 = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.975 and xi < 1.]
+                idx_85_95  = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.85 and xi < 0.95]
+                idx_95_100 = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.95 and xi < 1.]
 
                 idx_85_95_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_85_95)) if d_idx > 1][0]+1
                 idx_85_95_SS    = idx_85_95[:idx_85_95_break]
@@ -1266,8 +1266,8 @@ class ReferenceBlade(object):
             profile_i_rot_precomp[:,1] -= profile_i_rot_precomp[np.argmin(profile_i_rot_precomp[:,0]),1]
 
             # # renormalize
-            # profile_i_rot_precomp[:,0] -= min(profile_i_rot_precomp[:,0])
-            # profile_i_rot_precomp = profile_i_rot_precomp/ max(profile_i_rot_precomp[:,0])
+            profile_i_rot_precomp[:,0] -= min(profile_i_rot_precomp[:,0])
+            profile_i_rot_precomp = profile_i_rot_precomp/ max(profile_i_rot_precomp[:,0])
 
             if profile_i_rot_precomp[-1,0] != 1.:
                 profile_i_rot_precomp = np.row_stack((profile_i_rot_precomp, profile_i_rot_precomp[0,:]))
