@@ -768,10 +768,9 @@ if __name__ == '__main__':
 
     # Turbine Ontology input
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
-    # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
-    # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
     fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
 
+    
     fname_output = "turbine_inputs/test_out.yaml"
     
     Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
@@ -783,6 +782,7 @@ if __name__ == '__main__':
     refBlade.NPTS         = 50
     refBlade.spar_var     = ['Spar_Cap_SS', 'Spar_Cap_PS'] # SS, then PS
     refBlade.te_var       = 'TE_reinforcement'
+    # refBlade.te_var       = 'TE_Cap_SS'
     refBlade.validate     = False
     refBlade.fname_schema = fname_schema
     blade = refBlade.initialize(fname_input)

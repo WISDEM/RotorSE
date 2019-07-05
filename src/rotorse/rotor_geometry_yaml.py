@@ -816,7 +816,22 @@ class ReferenceBlade(object):
         profile_d = copy.copy(blade['profile'])
         profile_d[:,0,:] = profile_d[:,0,:] - blade['pf']['p_le'][np.newaxis, :]
         profile_d = np.flip(profile_d*blade['pf']['chord'][np.newaxis, np.newaxis, :], axis=0)
+        
+        LE_loc = np.zeros(self.NPTS)
+        for i in range(self.NPTS):
+            profile_i = copy.copy(profile_d[:,:,i])
+            if list(profile_i[-1,:]) != list(profile_i[0,:]):
+                TE = np.mean((profile_i[-1,:], profile_i[0,:]), axis=0)
+                profile_i = np.row_stack((TE, profile_i, TE))
+            idx_le = np.argmin(profile_i[:,0])
+            profile_i_arc = arc_length(profile_i[:,0], profile_i[:,1])
+            arc_L = profile_i_arc[-1]
+            profile_i_arc /= arc_L
+            LE_loc[i] = profile_i_arc[idx_le]
+            
 
+
+        
         for i in range(self.NPTS):
             s_all = []
 
@@ -961,9 +976,9 @@ class ReferenceBlade(object):
                     elif 'midpoint_nd_arc' in blade['st'][type_sec][idx_sec].keys():
                         # fixed to LE or TE
                         width      = sec['width']['values'][i]    # meters
-                        if blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'te':
+                        if blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'te' or blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'TE':
                             midpoint = 1.
-                        elif blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'le':
+                        elif blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'le' or blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'LE':
                             midpoint = profile_i_arc[idx_le]
                         else:
                             warning_invalid_side_value = 'Invalid fixed midpoint give: midpoint_nd_arc[fixed] = "%s" for layer = "%s" at r[%d] = %f. Must be set to "LE" or "TE".'%(blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'], sec['name'], i, blade['pf']['r'][i])
@@ -979,17 +994,33 @@ class ReferenceBlade(object):
                     
         # Set any end points that are fixed to other sections, loop through composites again
         for idx_sec, sec in enumerate(blade['st']['layers']):
-            if 'fixed' in blade['st']['layers'][idx_sec]['start_nd_arc'].keys() and 'fixed' in blade['st']['layers'][idx_sec]['end_nd_arc'].keys():
+            if 'fixed' in blade['st']['layers'][idx_sec]['start_nd_arc'].keys():
+                blade['st']['layers'][idx_sec]['start_nd_arc']['grid']   = self.s
                 target_name  = blade['st']['layers'][idx_sec]['start_nd_arc']['fixed']
-                target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
-                blade['st']['layers'][idx_sec]['start_nd_arc']['grid']   = blade['st']['layers'][target_idx]['end_nd_arc']['grid'].tolist()
-                blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = blade['st']['layers'][target_idx]['end_nd_arc']['values']
-
+                if target_name == 'te' or target_name == 'TE' :
+                    blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = np.zeros(self.NPTS)
+                elif target_name == 'le' or target_name == 'LE':
+                    blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = LE_loc
+                else:
+                    target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
+                    blade['st']['layers'][idx_sec]['start_nd_arc']['grid']   = blade['st']['layers'][target_idx]['end_nd_arc']['grid'].tolist()
+                    blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = blade['st']['layers'][target_idx]['end_nd_arc']['values']
+                
+                
+            if 'fixed' in blade['st']['layers'][idx_sec]['end_nd_arc'].keys():
+                blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = self.s
                 target_name  = blade['st']['layers'][idx_sec]['end_nd_arc']['fixed']
-                target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
-                blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = blade['st']['layers'][target_idx]['start_nd_arc']['grid'].tolist()
-                blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = blade['st']['layers'][target_idx]['start_nd_arc']['values']
-
+                if target_name == 'te' or target_name == 'TE':
+                    blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = np.ones(self.NPTS)
+                elif target_name == 'le' or target_name == 'LE':
+                    blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = LE_loc
+                else:
+                    target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
+                    blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = blade['st']['layers'][target_idx]['start_nd_arc']['grid'].tolist()
+                    blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = blade['st']['layers'][target_idx]['start_nd_arc']['values']
+                
+        
+        
         return blade
 
     def calc_control_points(self, blade, r_in=[], r_max_chord=0.):
@@ -1006,7 +1037,7 @@ class ReferenceBlade(object):
         if idx > 0:
             r_cylinder  = blade['pf']['s'][idx]
         else:
-            cyl_thk_min = 0.9999
+            cyl_thk_min = 0.98
             idx_s       = np.argmax(blade['pf']['rthick']<1)
             idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
             r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-2:-1], blade['pf']['s'][idx_e:idx_s-2:-1], cyl_thk_min)
@@ -1263,8 +1294,10 @@ class ReferenceBlade(object):
             profile_i_rot = profile_i_rot/ max(profile_i_rot[:,0])
 
             profile_i_rot_precomp = copy.copy(profile_i_rot)
+            idx_s = 0
             idx_le_precomp = np.argmax(profile_i_rot_precomp[:,0])
             if idx_le_precomp != 0:
+                
                 if profile_i_rot_precomp[0,0] == profile_i_rot_precomp[-1,0]:
                      idx_s = 1
                 profile_i_rot_precomp = np.row_stack((profile_i_rot_precomp[idx_le_precomp:], profile_i_rot_precomp[idx_s:idx_le_precomp,:]))
@@ -1368,7 +1401,6 @@ class ReferenceBlade(object):
 
                         web_start_nd_arc.append(start_nd_arc)
                         web_end_nd_arc.append(end_nd_arc)
-
 
             time1 = time.time() - time1
             # print(time1)
