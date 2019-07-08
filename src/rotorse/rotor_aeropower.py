@@ -252,9 +252,6 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
                 U_rated         = Uhub[i]
             
             
-            
-            
-            
             Omega[i] = min([Uhub[i] * params['control_tsr'] / params['Rtip'], Omega_max])
             pitch0   = pitch[i]
             

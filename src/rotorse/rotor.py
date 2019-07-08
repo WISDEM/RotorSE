@@ -9,7 +9,7 @@ Copyright (c)  NREL. All rights reserved.
 
 from __future__ import print_function
 import numpy as np
-import os, time
+import os, time, shutil
 from openmdao.api import IndepVarComp, Component, Group, Problem, ExecComp
 from ccblade.ccblade_component import CCBladeGeometry, CCBladePower, CCBladeLoads
 from commonse.distribution import RayleighCDF, WeibullWithMeanCDF
@@ -769,7 +769,7 @@ if __name__ == '__main__':
 
     # Turbine Ontology input
     fname_schema  = "turbine_inputs/IEAontology_schema.yaml"
-    fname_input   = "turbine_inputs/nrel5mw_mod_update.yaml"
+    fname_input   = "turbine_inputs/BAR005a.yaml"
     # fname_input = "turbine_inputs/BAR005a.yaml"
     # fname_input = "turbine_inputs/aerospan_formatted_pb.yaml"
     output_folder = "/mnt/c/Material/Projects/Optimization/BAR_design/Baseline/outputs/debug_rotorse/"
@@ -779,7 +779,7 @@ if __name__ == '__main__':
         shutil.rmtree(output_folder)
     os.mkdir(output_folder)
     
-    Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
+    Analysis_Level = 2 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
 
     # Initialize blade design
     refBlade = ReferenceBlade()
@@ -800,12 +800,12 @@ if __name__ == '__main__':
         FASTpref['Analysis_Level']      = Analysis_Level
         FASTpref['FAST_ver']            = 'OpenFAST'
         FASTpref['dev_branch']          = True
-        FASTpref['FAST_exe']            = 'C:/Users/egaertne/WT_Codes/openfast-dev/build/glue-codes/openfast/openfast'
-        FASTpref['FAST_directory']      = 'C:/Users/egaertne/WT_Codes/models/openfast-dev/r-test/glue-codes/openfast/5MW_OC3Spar_DLL_WTurb_WavesIrr'   # Path to fst directory files
-        FASTpref['FAST_InputFile']      = '5MW_OC3Spar_DLL_WTurb_WavesIrr.fst' # FAST input file (ext=.fst)
+        FASTpref['FAST_exe']            = '/mnt/c/Material/Programs/openfast/build/glue-codes/openfast/openfast'
+        FASTpref['FAST_directory']      = '/mnt/c/Material/Projects/RefTurbines/BAR/RotorSE_FAST_BAR_005a'   # Path to fst directory files
+        FASTpref['FAST_InputFile']      = 'RotorSE_FAST_BAR_005a.fst' # FAST input file (ext=.fst)
         # FASTpref['FAST_directory']      = 'C:/Users/egaertne/WT_Codes/models/openfast-dev/r-test/glue-codes/openfast/5MW_Land_DLL_WTurb'   # Path to fst directory files
         # FASTpref['FAST_InputFile']      = '5MW_Land_DLL_WTurb.fst' # FAST input file (ext=.fst)
-        FASTpref['Turbsim_exe']         = "C:/Users/egaertne/WT_Codes/Turbsim_v2.00.07/bin/TurbSim_x64.exe"
+        FASTpref['Turbsim_exe']         = "/mnt/c/Material/Programs/TurbSim/TurbSim_glin64"
         # FASTpref['FAST_exe']            = '/mnt/c/linux/WT_Codes/openfast_dev/build/glue-codes/openfast/openfast'
         # FASTpref['FAST_directory']      = '/mnt/c/linux/IS/xloads_tc/templates/openfast/5MW_Land_DLL_WTurb-NoAero'   # Path to fst directory files
         # FASTpref['FAST_InputFile']      = '5MW_Land_DLL_WTurb.fst' # FAST input file (ext=.fst)
@@ -822,7 +822,7 @@ if __name__ == '__main__':
         # FASTpref['DLC_gust']            = RotorSE_DLC_1_4_Rated       # Max deflection    ### Not in place yet
         FASTpref['DLC_extrm']           = None      # Max strain
         # FASTpref['DLC_extrm']           = RotorSE_DLC_7_1_Steady      # Max strain        ### Not in place yet
-        FASTpref['DLC_turbulent']       = None
+        FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb
         # FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb      # Alternate turbulent case, replacing rated and extreme DLCs for calculating max deflection and strain
         FASTpref['DLC_powercurve']      = power_curve      # AEP
         # FASTpref['DLC_powercurve']      = None      # AEP
