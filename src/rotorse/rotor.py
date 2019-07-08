@@ -19,7 +19,7 @@ from rotorse import RPM2RS, RS2RPM
 from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection
 from rotorse.rotor_geometry_yaml import ReferenceBlade
 from rotorse.rotor_geometry import RotorGeometry, TURBULENCE_CLASS, TURBINE_CLASS, DRIVETRAIN_TYPE
-from rotorse.rotor_aeropower import RegulatedPowerCurve, AEP, OutputsAero
+from rotorse.rotor_aeropower import RegulatedPowerCurve, AEP, OutputsAero, Cp_Ct_Cq_Tables
 from rotorse.rotor_structure import ResizeCompositeSection, BladeCurvature, CurveFEM, DamageLoads, TotalLoads, TipDeflection, \
     BladeDeflection, RootMoment, MassProperties, ExtremeLoads, GustETM, SetupPCModVarSpeed, OutputsStructures, \
     PreCompSections, RotorWithpBEAM, ConstraintsStructures
@@ -98,6 +98,7 @@ class RotorSE(Group):
 
         # self.add('tipspeed', MaxTipSpeed())
         self.add('powercurve', RegulatedPowerCurve(NPTS, npts_coarse_power_curve, npts_spline_power_curve, regulation_reg_II5=regulation_reg_II5, regulation_reg_III=regulation_reg_III))
+        self.add('cpctcq_tables', Cp_Ct_Cq_Tables(NPTS))
         self.add('wind', PowerWind(1))
         self.add('cdf', WeibullWithMeanCDF(npts_spline_power_curve))
         # self.add('cdf', RayleighCDF(npts_spline_power_curve))
@@ -188,24 +189,24 @@ class RotorSE(Group):
             self.connect('control_maxTS',   'aeroelastic.control_maxTS')
             self.connect('control_maxOmega','aeroelastic.control_maxOmega')
 
-        # connections to powercurve
-        self.connect('r_pts',           'powercurve.r')
-        self.connect('chord',           'powercurve.chord')
-        self.connect('theta',           'powercurve.theta')
-        self.connect('precurve',        'powercurve.precurve')
-        self.connect('precurve_tip',    'powercurve.precurveTip')
-        self.connect('Rhub',            'powercurve.Rhub')
-        self.connect('Rtip',            'powercurve.Rtip')
-        self.connect('precone',         'powercurve.precone')
-        self.connect('tilt',            'powercurve.tilt')
-        self.connect('yaw',             'powercurve.yaw')
-        self.connect('airfoils',        'powercurve.airfoils')
-        self.connect('nBlades',         'powercurve.B')
-        self.connect('nSector',         'powercurve.nSector')
-
+        # connections to powercurve and cp_ct_Cq tables
+        self.connect('r_pts',           ['powercurve.r', 'cpctcq_tables.r'])
+        self.connect('chord',           ['powercurve.chord', 'cpctcq_tables.chord'])
+        self.connect('theta',           ['powercurve.theta', 'cpctcq_tables.theta'])
+        self.connect('precurve',        ['powercurve.precurve', 'cpctcq_tables.precurve'])
+        self.connect('precurve_tip',    ['powercurve.precurveTip', 'cpctcq_tables.precurveTip'])
+        self.connect('Rhub',            ['powercurve.Rhub', 'cpctcq_tables.Rhub'])
+        self.connect('Rtip',            ['powercurve.Rtip', 'cpctcq_tables.Rtip'])
+        self.connect('precone',         ['powercurve.precone', 'cpctcq_tables.precone'])
+        self.connect('tilt',            ['powercurve.tilt', 'cpctcq_tables.tilt'])
+        self.connect('yaw',             ['powercurve.yaw', 'cpctcq_tables.yaw'])
+        self.connect('airfoils',        ['powercurve.airfoils', 'cpctcq_tables.airfoils'])
+        self.connect('nBlades',         ['powercurve.B', 'cpctcq_tables.B'])
+        self.connect('nSector',         ['powercurve.nSector', 'cpctcq_tables.nSector'])
+                                        
         self.connect('drivetrainType',  'powercurve.drivetrainType')
-        self.connect('control_Vin',     'powercurve.control_Vin')
-        self.connect('control_Vout',    'powercurve.control_Vout')
+        self.connect('control_Vin',     ['powercurve.control_Vin', 'cpctcq_tables.control_Vin'])
+        self.connect('control_Vout',    ['powercurve.control_Vout', 'cpctcq_tables.control_Vout'])
         self.connect('control_maxTS',   'powercurve.control_maxTS')
         self.connect('control_maxOmega','powercurve.control_maxOmega')
         self.connect('control_minOmega','powercurve.control_minOmega')
@@ -214,10 +215,10 @@ class RotorSE(Group):
         self.connect('control_tsr',     'powercurve.control_tsr')
 
         # Connections from external modules
-        self.connect('hub_height',      ['powercurve.hubHt','aero_0.hubHt','aero_120.hubHt','aero_240.hubHt','aero_defl_powercurve.hubHt','aero_extrm_forces.hubHt','aero_extrm.hubHt','aero_rated.hubHt'])
-        self.connect('rho',             ['powercurve.rho', 'aero_0.rho','aero_120.rho','aero_240.rho','aero_defl_powercurve.rho','aero_extrm_forces.rho','aero_extrm.rho','aero_rated.rho'])
-        self.connect('mu',              ['powercurve.mu', 'aero_0.mu','aero_120.mu','aero_240.mu','aero_defl_powercurve.mu','aero_extrm_forces.mu','aero_extrm.mu','aero_rated.mu'])
-        self.connect('wind.shearExp',   ['powercurve.shearExp', 'aero_0.shearExp','aero_120.shearExp','aero_240.shearExp','aero_defl_powercurve.shearExp','aero_extrm_forces.shearExp','aero_extrm.shearExp','aero_rated.shearExp'])
+        self.connect('hub_height',      ['powercurve.hubHt', 'cpctcq_tables.hubHt','aero_0.hubHt','aero_120.hubHt','aero_240.hubHt','aero_defl_powercurve.hubHt','aero_extrm_forces.hubHt','aero_extrm.hubHt','aero_rated.hubHt'])
+        self.connect('rho',             ['powercurve.rho', 'cpctcq_tables.rho', 'aero_0.rho','aero_120.rho','aero_240.rho','aero_defl_powercurve.rho','aero_extrm_forces.rho','aero_extrm.rho','aero_rated.rho'])
+        self.connect('mu',              ['powercurve.mu', 'cpctcq_tables.mu', 'aero_0.mu','aero_120.mu','aero_240.mu','aero_defl_powercurve.mu','aero_extrm_forces.mu','aero_extrm.mu','aero_rated.mu'])
+        self.connect('wind.shearExp',   ['powercurve.shearExp', 'cpctcq_tables.shearExp', 'aero_0.shearExp','aero_120.shearExp','aero_240.shearExp','aero_defl_powercurve.shearExp','aero_extrm_forces.shearExp','aero_extrm.shearExp','aero_rated.shearExp'])
 
         # connections to wind
         # self.connect('cdf_reference_mean_wind_speed', 'wind.Uref')
@@ -767,22 +768,27 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
 if __name__ == '__main__':
 
     # Turbine Ontology input
-    fname_schema= "turbine_inputs/IEAontology_schema.yaml"
-    fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
-
+    fname_schema  = "turbine_inputs/IEAontology_schema.yaml"
+    fname_input   = "turbine_inputs/nrel5mw_mod_update.yaml"
+    # fname_input = "turbine_inputs/BAR005a.yaml"
+    # fname_input = "turbine_inputs/aerospan_formatted_pb.yaml"
+    output_folder = "/mnt/c/Material/Projects/Optimization/BAR_design/Baseline/outputs/debug_rotorse/"
+    fname_output  = output_folder + 'test_out.yaml'
     
-    fname_output = "turbine_inputs/test_out.yaml"
+    if os.path.isdir(output_folder):
+        shutil.rmtree(output_folder)
+    os.mkdir(output_folder)
     
     Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
 
     # Initialize blade design
     refBlade = ReferenceBlade()
     refBlade.verbose      = True
-    refBlade.NINPUT       = 8
+    refBlade.NINPUT       = 15
     refBlade.NPTS         = 50
     refBlade.spar_var     = ['Spar_Cap_SS', 'Spar_Cap_PS'] # SS, then PS
     refBlade.te_var       = 'TE_reinforcement'
-    # refBlade.te_var       = 'TE_Cap_SS'
+    # refBlade.te_var       = 'TE_gluelip_lam1_2AX-1200-0660'
     refBlade.validate     = False
     refBlade.fname_schema = fname_schema
     blade = refBlade.initialize(fname_input)
@@ -903,8 +909,8 @@ if __name__ == '__main__':
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()
-    # plt.savefig('/Users/sning/Desktop/strain_spar.pdf')
-    # plt.savefig('/Users/sning/Desktop/strain_spar.png')
+    plt.savefig(output_folder + 'strain_spar.pdf')
+    plt.savefig(output_folder + 'strain_spar.png')
 
     plt.figure()
 
@@ -915,14 +921,109 @@ if __name__ == '__main__':
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()
-    # plt.savefig('/Users/sning/Desktop/strain_te.pdf')
-    # plt.savefig('/Users/sning/Desktop/strain_te.png')
+    plt.savefig(output_folder + 'strain_te.pdf')
+    plt.savefig(output_folder + 'strain_te.png')
 
     plt.figure()
     plt.plot(rotor['r_pts'], rotor['rthick'], label='airfoil relative thickness')
     plt.xlabel('r')
     plt.ylabel('rthick')
     plt.legend()
-
+    
     plt.show()
+    
+    
+    n_pitch = len(rotor['cpctcq_tables.pitch_vector'])
+    n_tsr   = len(rotor['cpctcq_tables.tsr_vector'])
+    n_U     = len(rotor['cpctcq_tables.U_vector'])
+    
+    file = open(output_folder + 'Cp_Ct_Cq.txt','w')
+    file.write('# Pitch angle vector - x axis (matrix columns) (deg)\n')
+    for i in range(n_pitch):
+        file.write('%.2f   ' % rotor['cpctcq_tables.pitch_vector'][i])
+    file.write('\n# TSR vector - y axis (matrix rows) (-)\n')
+    for i in range(n_tsr):
+        file.write('%.2f   ' % rotor['cpctcq_tables.tsr_vector'][i])
+    file.write('\n# Wind speed vector - z axis (m/s)\n')
+    for i in range(n_U):
+        file.write('%.2f   ' % rotor['cpctcq_tables.U_vector'][i])
+    file.write('\n')
+    
+    file.write('\n# Power coefficient\n\n')
+    
+    
+    
+    for i in range(n_U):
+        for j in range(n_tsr):
+            for k in range(n_pitch):
+                file.write('%.5f   ' % rotor['cpctcq_tables.Cp_aero_table'][j,k,i])
+            file.write('\n')
+        file.write('\n')
+    
+    file.write('\n#  Thrust coefficient\n\n')
+    for i in range(n_U):
+        for j in range(n_tsr):
+            for k in range(n_pitch):
+                file.write('%.5f   ' % rotor['cpctcq_tables.Ct_aero_table'][j,k,i])
+            file.write('\n')
+        file.write('\n')
+    
+    file.write('\n# Torque coefficient\n\n')
+    for i in range(n_U):
+        for j in range(n_tsr):
+            for k in range(n_pitch):
+                file.write('%.5f   ' % rotor['cpctcq_tables.Cq_aero_table'][j,k,i])
+            file.write('\n')
+        file.write('\n')
+        
+    file.close()
+    
+
+    for i in range(n_U):
+        fig0, ax0 = plt.subplots()
+        CS0 = ax0.contour(rotor['cpctcq_tables.pitch_vector'], rotor['cpctcq_tables.tsr_vector'], rotor['cpctcq_tables.Cp_aero_table'][:, :, i], levels=[0.0, 0.3, 0.40, 0.42, 0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.50 ])
+        ax0.clabel(CS0, inline=1, fontsize=12)
+        plt.title('Power Coefficient', fontsize=14, fontweight='bold')
+        plt.xlabel('Pitch Angle [deg]', fontsize=14, fontweight='bold')
+        plt.ylabel('TSR [-]', fontsize=14, fontweight='bold')
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.grid(color=[0.8,0.8,0.8], linestyle='--')
+        plt.subplots_adjust(bottom = 0.15, left = 0.15)
+        fig_name = 'contour_Cp.png'
+        plt.savefig(output_folder + fig_name)
+        
+        fig0, ax0 = plt.subplots()
+        CS0 = ax0.contour(rotor['cpctcq_tables.pitch_vector'], rotor['cpctcq_tables.tsr_vector'], rotor['cpctcq_tables.Ct_aero_table'][:, :, i])
+        ax0.clabel(CS0, inline=1, fontsize=12)
+        plt.title('Thrust Coefficient', fontsize=14, fontweight='bold')
+        plt.xlabel('Pitch Angle [deg]', fontsize=14, fontweight='bold')
+        plt.ylabel('TSR [-]', fontsize=14, fontweight='bold')
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.grid(color=[0.8,0.8,0.8], linestyle='--')
+        plt.subplots_adjust(bottom = 0.15, left = 0.15)
+        fig_name = 'contour_Ct.png'
+        plt.savefig(output_folder + fig_name)
+        
+        fig0, ax0 = plt.subplots()
+        CS0 = ax0.contour(rotor['cpctcq_tables.pitch_vector'], rotor['cpctcq_tables.tsr_vector'], rotor['cpctcq_tables.Cq_aero_table'][:, :, i])
+        ax0.clabel(CS0, inline=1, fontsize=12)
+        plt.title('Torque Coefficient', fontsize=14, fontweight='bold')
+        plt.xlabel('Pitch Angle [deg]', fontsize=14, fontweight='bold')
+        plt.ylabel('TSR [-]', fontsize=14, fontweight='bold')
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.grid(color=[0.8,0.8,0.8], linestyle='--')
+        plt.subplots_adjust(bottom = 0.15, left = 0.15)
+        fig_name = 'contour_Cq.png'
+        plt.savefig(output_folder + fig_name)
+        
+        plt.show()
+        
+    
+    
+    
+    
+    
     # ----------------
