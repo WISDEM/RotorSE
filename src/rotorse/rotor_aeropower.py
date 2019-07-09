@@ -336,8 +336,8 @@ class Cp_Ct_Cq_Tables(Component):
     def __init__(self, naero):
         super(Cp_Ct_Cq_Tables, self).__init__()
         
-        n_pitch = 5#51
-        n_tsr   = 9
+        n_pitch = 2#51
+        n_tsr   = 2
         n_U     = 1
         
         # parameters        
@@ -392,7 +392,7 @@ class Cp_Ct_Cq_Tables(Component):
             params['tsr_vector'] = np.linspace(3.,11., self.n_tsr)
         
         if max(params['pitch_vector']) == 0.:
-            params['pitch_vector'] = np.linspace(-10., 40., self.n_pitch)
+            params['pitch_vector'] = np.linspace(-5., 5., self.n_pitch)
         
         R = params['Rtip']
         

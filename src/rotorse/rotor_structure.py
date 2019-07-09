@@ -2298,7 +2298,7 @@ class OutputsStructures(Component):
         self.add_output('Mxyz_5', val=np.zeros((3,)), units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s. (blade #5)')
         self.add_output('Mxyz_6', val=np.zeros((3,)), units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s. (blade #6)')
         self.add_output('Fxyz_total', val=np.zeros((3,)), units='N', desc='Total force [x,y,z] at the blade root in *hub* c.s.')
-        self.add_output('Mxyz_total', val=np.zeros((3,)), units='N*m', desc='individual moments [x,y,z] at the blade root in *hub* c.s.')
+        self.add_output('Mxyz_total', val=np.zeros((3,)), units='N*m', desc='individual moments [x,y,z] at the hub in *hub* c.s.')
         self.add_output('TotalCone', val=0.0, units='rad', desc='total cone angle for blades at rated')
         self.add_output('Pitch', val=0.0, units='rad', desc='pitch angle at rated')
 
