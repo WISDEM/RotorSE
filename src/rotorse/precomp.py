@@ -784,7 +784,7 @@ class Profile:
 
 
         # check if coordinates were input in other direction
-        if y[1] < y[0]:
+        if np.mean(y[0:i]) < np.mean(y[i:]):
             temp = yu
             yu = yl
             yl = temp
@@ -1094,6 +1094,7 @@ class PreCompWriter:
 
 
         for idx, (lower_i, upper_i, webs_i) in enumerate(zip(self.lower, self.upper, self.webs)):
+            print(idx)
 
             text = []
             text.append('Composite laminae lay-up inside the blade section\n')
