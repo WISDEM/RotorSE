@@ -82,6 +82,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         self.add_output('Q',        val=np.zeros(n_pc), units='N*m',    desc='rotor aerodynamic torque')
         self.add_output('M',        val=np.zeros(n_pc), units='N*m',    desc='blade root moment')
         self.add_output('Cp',       val=np.zeros(n_pc),                 desc='rotor electrical power coefficient')
+        self.add_output('Cp_aero',  val=np.zeros(n_pc),                 desc='rotor aerodynamic power coefficient')
         self.add_output('V_spline', val=np.zeros(n_pc_spline), units='m/s',  desc='wind vector')
         self.add_output('P_spline', val=np.zeros(n_pc_spline), units='W',    desc='rotor electrical power')
         self.add_output('V_R25',       val=0.0, units='m/s', desc='region 2.5 transition wind speed')
@@ -301,6 +302,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
 
         unknowns['P']       = P  
         unknowns['Cp']      = Cp  
+        unknowns['Cp_aero'] = Cp_aero
         unknowns['V']       = Uhub
         unknowns['M']       = M
         unknowns['pitch']   = pitch

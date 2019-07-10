@@ -866,6 +866,7 @@ if __name__ == '__main__':
     print('root_bending_moment =', rotor['root_bending_moment'])
     print('moments at the hub =', rotor['Mxyz_total'])
 
+    print(rotor['airfoils'][0].cl_spline)
 
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
