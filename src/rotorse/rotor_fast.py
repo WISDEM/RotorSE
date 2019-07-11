@@ -532,14 +532,15 @@ class FASTLoadCases(Component):
         #     # plt.show()
 
         def post_AEP(data):
-            U = list(sorted([4., 6., 8., 9., 10., 10.5, 11., 11.5, 12., 14., 19., 25., params['Vrated']]))
+            U = list(sorted([4., 6., 8., 9., 10., 10.5, 11., 11.5, 11.75, 12., 12.5, 13., 14., 19., 25., params['Vrated']]))
             if params['V_R25'] != 0.:
                 U.append(params['V_R25'])
                 U = list(sorted(U))
             U = np.array(U)
 
             U_below = [Vi for Vi in U if Vi <= params['Vrated']]
-            P_below = np.array([np.mean(datai['GenPwr'])*1000. for datai in data])
+            # P_below = np.array([np.mean(datai['GenPwr'])*1000. for datai in data])
+            P_below = np.array([np.mean(datai['GenPwr'])*1000. for datai, Vi in zip(data, U) if Vi <= params['Vrated']])
             np.place(P_below, P_below>params['control_ratedPower'], params['control_ratedPower'])
 
             U_rated = [Vi for Vi in U if Vi > params['Vrated']]
