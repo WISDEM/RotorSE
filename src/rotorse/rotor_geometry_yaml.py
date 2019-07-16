@@ -56,16 +56,6 @@ def remap2grid(x_ref, y_ref, x, spline=PchipInterpolator):
 
     return y_out
 
-# def remapWbreak(x_ref, y_ref, x0, idx_break, spline=PchipInterpolator):
-#     # for interpolating on airfoil surface, split x into two sections and determine which to use
-#     if x0 >= x_ref[idx_break]:
-#         x = x_ref[idx_break:]
-#         y = y_ref[idx_break:]
-#     else:
-#         x = x_ref[:idx_break+1]
-#         y = y_ref[:idx_break+1]
-#     return remap2grid(x, y, x0, spline=spline)
-
 def remapAirfoil(x_ref, y_ref, x0):
     # for interpolating airfoil surface
     x = copy.copy(x_ref)
@@ -83,36 +73,6 @@ def remapAirfoil(x_ref, y_ref, x0):
 def arc_length(x, y, z=[]):
     npts = len(x)
     arc = np.array([0.]*npts)
-    # if high_fidelity:
-    #     # iteratively fit a spline between points
-    #     if all(np.diff(x)<0):
-    #         # correct for decending data
-    #         x *= -1.
-    #     if not all(np.diff(x)>0):
-    #         # if data has more than one zero crossing, break the data up
-    #         zero_crossings = [0]+np.where(np.diff(np.sign(x)))[0].tolist()+[len(x)]
-    #         # print(zero_crossings)
-    #         arc = [arc_length(x[zero_crossings[idx-1]:zero_crossings[idx]+1], y[zero_crossings[idx-1]:zero_crossings[idx]+1]) for idx in range(1,len(zero_crossings))]
-            
-    #         for idx, arci in enumerate(arc):
-    #             if idx == 0:
-    #                 arc_out = list(arci)
-    #             else:
-    #                 arc_out = arc_out + list(arci[1:]+arc_out[-1])
-
-    #         return arc_out
-            
-
-    #     spline = PchipInterpolator(x, y)
-    #     for k in range(1, npts):
-    #         a = x[k-1]
-    #         b = x[k]
-    #         tz = np.linspace(a, b, num=10)
-    #         f = spline(tz)
-    #         arc[k] = arc[k-1] + arc_length(tz, f)[-1]
-
-
-    # else:
     if len(z) == len(x):
         for k in range(1, npts):
             arc[k] = arc[k-1] + np.sqrt((x[k] - x[k-1])**2 + (y[k] - y[k-1])**2 + (z[k] - z[k-1])**2)
@@ -129,6 +89,43 @@ def rotate(xo, yo, xp, yp, angle):
     qx = xo + np.cos(angle) * (xp - xo) - np.sin(angle) * (yp - yo)
     qy = yo + np.sin(angle) * (xp - xo) + np.cos(angle) * (yp - yo)
     return qx, qy
+
+def trailing_edge_smoothing(data):
+    # correction to trailing edge shape for interpolated airfoils that smooths out unrealistic geometric errors
+    # often brought about when transitioning between round, flatback, or sharp trailing edges
+
+    # correct for self cross of TE (rare interpolation error)
+    if data[-1,1] < data[0,1]:
+        temp = data[0,1]
+        data[0,1] = data[-1,1]
+        data[-1,1] = temp
+
+    # Find indices on Suction and Pressure side for last 85-95% and 95-100% chordwise
+    idx_85_95  = [i_x for i_x, xi in enumerate(data[:,0]) if xi>0.85 and xi < 0.95]
+    idx_95_100 = [i_x for i_x, xi in enumerate(data[:,0]) if xi>0.95 and xi < 1.]
+
+    idx_85_95_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_85_95)) if d_idx > 1][0]+1
+    idx_85_95_SS    = idx_85_95[:idx_85_95_break]
+    idx_85_95_PS    = idx_85_95[idx_85_95_break:]
+
+    idx_95_100_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_95_100)) if d_idx > 1][0]+1
+    idx_95_100_SS    = idx_95_100[:idx_95_100_break]
+    idx_95_100_PS    = idx_95_100[idx_95_100_break:]
+
+    # Interpolate the last 5% to the trailing edge
+    idx_in_PS = idx_85_95_PS+[-1]
+    x_corrected_PS = data[idx_95_100_PS,0]
+    y_corrected_PS = remap2grid(data[idx_in_PS,0], data[idx_in_PS,1], x_corrected_PS)
+
+    idx_in_SS = [0]+idx_85_95_SS
+    x_corrected_SS = data[idx_95_100_SS,0]
+    y_corrected_SS = remap2grid(data[idx_in_SS,0], data[idx_in_SS,1], x_corrected_SS)
+
+    # Overwrite profile with corrected TE
+    data[idx_95_100_SS,1] = y_corrected_SS
+    data[idx_95_100_PS,1] = y_corrected_PS
+
+    return data
 
 class ReferenceBlade(object):
     def __init__(self):
@@ -566,20 +563,19 @@ class ReferenceBlade(object):
         
         AFref_xy = np.flip(AFref_xy, axis=2)
 
-        if trailing_edge_correction:
-            # closed to flat transition, find spanwise indexes where cylinder/sharp -> flatback
-            transition = False
-            for i in range(1,len(blade['outer_shape_bem']['airfoil_position']['labels'])):
-                afi1 = blade['outer_shape_bem']['airfoil_position']['labels'][i]
-                afi0 = blade['outer_shape_bem']['airfoil_position']['labels'][i-1]
-                if AF_fb[afi1] and not AF_fb[afi0]:
-                    transition = True
-                    trans_thk = [AFref[afi0]['relative_thickness'], AFref[afi1]['relative_thickness']]
-            if transition:
-                trans_correct_idx = [i_thk for i_thk, thk in enumerate(blade['pf']['rthick']) if thk<trans_thk[0] and thk>trans_thk[1]]
-            else:
-                trans_correct_idx = []
-
+        # if trailing_edge_correction:
+        #     # closed to flat transition, find spanwise indexes where cylinder/sharp -> flatback
+        #     transition = False
+        #     for i in range(1,len(blade['outer_shape_bem']['airfoil_position']['labels'])):
+        #         afi1 = blade['outer_shape_bem']['airfoil_position']['labels'][i]
+        #         afi0 = blade['outer_shape_bem']['airfoil_position']['labels'][i-1]
+        #         if AF_fb[afi1] and not AF_fb[afi0]:
+        #             transition = True
+        #             trans_thk = [AFref[afi0]['relative_thickness'], AFref[afi1]['relative_thickness']]
+        #     if transition:
+        #         trans_correct_idx = [i_thk for i_thk, thk in enumerate(blade['pf']['rthick']) if thk<trans_thk[0] and thk>trans_thk[1]]
+        #     else:
+        #         trans_correct_idx = []
 
         # Spanwise thickness interpolation
         spline = PchipInterpolator
@@ -596,35 +592,9 @@ class ReferenceBlade(object):
             blade['profile'][:,:,i] /= c
 
             # temp = copy.deepcopy(blade['profile'])
-
             if trailing_edge_correction:
                 # if i in trans_correct_idx:
-
-                # Find indices on Suction and Pressure side for last 85-95% and 95-100% chordwise
-                idx_85_95  = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.85 and xi < 0.95]
-                idx_95_100 = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.95 and xi < 1.]
-
-                idx_85_95_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_85_95)) if d_idx > 1][0]+1
-                idx_85_95_SS    = idx_85_95[:idx_85_95_break]
-                idx_85_95_PS    = idx_85_95[idx_85_95_break:]
-
-                idx_95_100_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_95_100)) if d_idx > 1][0]+1
-                idx_95_100_SS    = idx_95_100[:idx_95_100_break]
-                idx_95_100_PS    = idx_95_100[idx_95_100_break:]
-
-                # Interpolate the last 5% to the trailing edge
-                idx_in_PS = idx_85_95_PS+[-1]
-                x_corrected_PS = blade['profile'][idx_95_100_PS,0,i]
-                y_corrected_PS = remap2grid(blade['profile'][idx_in_PS,0,i], blade['profile'][idx_in_PS,1,i], x_corrected_PS)
-
-                idx_in_SS = [0]+idx_85_95_SS
-                x_corrected_SS = blade['profile'][idx_95_100_SS,0,i]
-                y_corrected_SS = remap2grid(blade['profile'][idx_in_SS,0,i], blade['profile'][idx_in_SS,1,i], x_corrected_SS)
-
-                # Overwrite profile with corrected TE
-                blade['profile'][idx_95_100_SS,1,i] = y_corrected_SS
-                blade['profile'][idx_95_100_PS,1,i] = y_corrected_PS
-
+                blade['profile'][:,:,i] = trailing_edge_smoothing(blade['profile'][:,:,i])
             # import matplotlib.pyplot as plt
             # plt.plot(temp[:,0,i], temp[:,1,i], 'b')
             # plt.plot(blade['profile'][:,0,i], blade['profile'][:,1,i], 'k')
