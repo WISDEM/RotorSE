@@ -9,7 +9,7 @@ Copyright (c)  NREL. All rights reserved.
 
 from __future__ import print_function
 import numpy as np
-import os, time, shutil
+import os, time, shutil, copy
 from openmdao.api import IndepVarComp, Component, Group, Problem, ExecComp
 from ccblade.ccblade_component import CCBladeGeometry, CCBladePower, CCBladeLoads
 from commonse.distribution import RayleighCDF, WeibullWithMeanCDF
@@ -699,7 +699,8 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
     rotor['presweep_in']      = np.array(blade['ctrl_pts']['presweep_in']) #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
     rotor['sparT_in']         = np.array(blade['ctrl_pts']['sparT_in']) # np.array([0.0, 0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
     rotor['teT_in']           = np.array(blade['ctrl_pts']['teT_in']) # np.array([0.0, 0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
-    rotor['thickness_in']     = np.array(blade['ctrl_pts']['thickness_in'])
+    # rotor['thickness_in']     = np.array(blade['ctrl_pts']['thickness_in'])
+    rotor['airfoil_position'] = np.array(blade['outer_shape_bem']['airfoil_position']['grid'])
     # ------------------
 
     # === atmosphere ===
@@ -768,13 +769,9 @@ if __name__ == '__main__':
 
     # Turbine Ontology input
     fname_schema  = "turbine_inputs/IEAontology_schema.yaml"
-    fname_input   = "turbine_inputs/nrel5mw_mod_update.yaml"
-    output_folder = "/mnt/c/Material/Projects/Optimization/BAR_design/Baseline/outputs/debug_rotorse/"
+    fname_input   = "/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/turbine_inputs/NREL15MW_opt_v05.yaml"
+    output_folder = "/mnt/c/Users/egaertne/WISDEM/RotorSE_yaml/RotorSE/src/rotorse/turbine_inputs"
     fname_output  = output_folder + 'test_out.yaml'
-    
-    if os.path.isdir(output_folder):
-        shutil.rmtree(output_folder)
-    os.mkdir(output_folder)
     
     Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
 
@@ -866,8 +863,6 @@ if __name__ == '__main__':
     print('root_bending_moment =', rotor['root_bending_moment'])
     print('moments at the hub =', rotor['Mxyz_total'])
 
-    print(rotor['airfoils'][0].cl_spline)
-
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
     '''
@@ -928,9 +923,14 @@ if __name__ == '__main__':
     plt.xlabel('r')
     plt.ylabel('rthick')
     plt.legend()
-    
-    plt.show()
-    
+        
+
+    plt.figure()
+    plt.plot(r0, rthick0, label='airfoil relative thickness')
+    plt.plot(r1, rthick1, label='airfoil relative thickness')
+    plt.xlabel('r')
+    plt.ylabel('rthick')
+    plt.legend()
     
     n_pitch = len(rotor['cpctcq_tables.pitch_vector'])
     n_tsr   = len(rotor['cpctcq_tables.tsr_vector'])
@@ -1018,7 +1018,7 @@ if __name__ == '__main__':
         fig_name = 'contour_Cq.png'
         plt.savefig(output_folder + fig_name)
         
-        plt.show()
+    plt.show()
         
     
     

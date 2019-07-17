@@ -284,8 +284,8 @@ class ReferenceBlade(object):
         blade_out = copy.deepcopy(blade)
 
         # Planform
-        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['labels']  = blade_out['pf']['af_pos_name']
-        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['grid']    = blade_out['pf']['af_pos']
+        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['labels']  = blade_out['outer_shape_bem']['airfoil_position']['labels']
+        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['grid']    = blade_out['outer_shape_bem']['airfoil_position']['grid']
 
         wt_out['components']['blade']['outer_shape_bem']['chord']['values']             = blade_out['pf']['chord'].tolist()
         wt_out['components']['blade']['outer_shape_bem']['chord']['grid']               = blade_out['pf']['s'].tolist()
@@ -491,9 +491,7 @@ class ReferenceBlade(object):
         blade['pf']['presweep'] = remap2grid(blade['outer_shape_bem']['reference_axis']['y']['grid'], blade['outer_shape_bem']['reference_axis']['y']['values'], self.s)
 
         thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
-        
         blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
-
         # Smooth oscillation caused by interpolation after min thickness is reached
         idx_min = [i for i, thk in enumerate(blade['pf']['rthick']) if thk == min(thk_ref)]
         if len(idx_min) > 0:
@@ -1050,6 +1048,8 @@ class ReferenceBlade(object):
 
     def update_planform(self, blade):
 
+        af_ref = blade['AFref']
+
         if blade['ctrl_pts']['r_in'][3] != blade['ctrl_pts']['r_max_chord']:
             # blade['ctrl_pts']['r_in'] = np.r_[[0.], [blade['ctrl_pts']['r_cylinder']], np.linspace(blade['ctrl_pts']['r_max_chord'], 1., self.NINPUT-2)]
             blade['ctrl_pts']['r_in'] = np.concatenate([[0.], np.linspace(blade['ctrl_pts']['r_cylinder'], blade['ctrl_pts']['r_max_chord'], num=3)[:-1], np.linspace(blade['ctrl_pts']['r_max_chord'], 1., self.NINPUT-3)])
@@ -1057,11 +1057,16 @@ class ReferenceBlade(object):
         self.s                  = blade['pf']['s'] # TODO: assumes the start and end points of composite sections does not change
         blade['pf']['chord']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['chord_in'], self.s)
         blade['pf']['theta']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['theta_in'], self.s)
-        blade['pf']['r']        = blade['ctrl_pts']['bladeLength']*np.array(self.s)
+        blade['pf']['r']        = np.array(self.s)*blade['pf']['r'][-1]
         blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s)
         blade['pf']['presweep'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['presweep_in'], self.s)
 
-        blade['pf']['rthick']   = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['thickness_in'], self.s)
+        thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
+        blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
+        # Smooth oscillation caused by interpolation after min thickness is reached
+        idx_min = [i for i, thk in enumerate(blade['pf']['rthick']) if thk == min(thk_ref)]
+        if len(idx_min) > 0:
+            blade['pf']['rthick']   = np.array([min(thk_ref) if i > idx_min[0] else thk for i, thk in enumerate(blade['pf']['rthick'])])
 
         blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
 
@@ -1074,30 +1079,31 @@ class ReferenceBlade(object):
         blade['st']['layers'][idx_te]['thickness']['grid']   = self.s.tolist()
         blade['st']['layers'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s).tolist()
 
-        # update airfoil positions
-        # this only gets used in ontology file outputting
-        af_name_ref = list(blade['AFref'])
-        af_thk_ref  = [blade['AFref'][name]['relative_thickness'] for name in af_name_ref]
-        blade['pf']['af_pos']      = []
-        blade['pf']['af_pos_name'] = []
-        # find iterpolated spanwise position for anywhere a reference airfoil occures, i.e. the spanwise relative thickness crosses a reference airfoil relative thickness
-        for i in range(0,len(self.s)):
-            for j in range(len(af_name_ref)):
-                if af_thk_ref[j] == blade['pf']['rthick'][i]:
-                    blade['pf']['af_pos'].append(float(self.s[i]))
-                    blade['pf']['af_pos_name'].append(af_name_ref[j])
-                elif i > 0:
-                    if (blade['pf']['rthick'][i-1] <= af_thk_ref[j] <= blade['pf']['rthick'][i]) or (blade['pf']['rthick'][i-1] >= af_thk_ref[j] >= blade['pf']['rthick'][i]):
-                        i_min = max(i-1, 0)
-                        i_max = max(i+1, np.argmin(blade['pf']['rthick']))
-                        r_j   = remap2grid(blade['pf']['rthick'][i_min:i_max], self.s[i_min:i_max], af_thk_ref[j])
-                        blade['pf']['af_pos'].append(float(r_j))
-                        blade['pf']['af_pos_name'].append(af_name_ref[j])
-        # remove interior duplicates where an airfoil is listed more than 2 times in a row
-        x = blade['pf']['af_pos']
-        y = blade['pf']['af_pos_name']
-        blade['pf']['af_pos']      = [x[0]] + [x[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [x[-1]]
-        blade['pf']['af_pos_name'] = [y[0]] + [y[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [y[-1]]
+        # blade['pf']['rthick']   = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['thickness_in'], self.s)
+        # # update airfoil positions
+        # # this only gets used in ontology file outputting
+        # af_name_ref = list(blade['AFref'])
+        # af_thk_ref  = [blade['AFref'][name]['relative_thickness'] for name in af_name_ref]
+        # blade['pf']['af_pos']      = []
+        # blade['pf']['af_pos_name'] = []
+        # # find iterpolated spanwise position for anywhere a reference airfoil occures, i.e. the spanwise relative thickness crosses a reference airfoil relative thickness
+        # for i in range(0,len(self.s)):
+        #     for j in range(len(af_name_ref)):
+        #         if af_thk_ref[j] == blade['pf']['rthick'][i]:
+        #             blade['pf']['af_pos'].append(float(self.s[i]))
+        #             blade['pf']['af_pos_name'].append(af_name_ref[j])
+        #         elif i > 0:
+        #             if (blade['pf']['rthick'][i-1] <= af_thk_ref[j] <= blade['pf']['rthick'][i]) or (blade['pf']['rthick'][i-1] >= af_thk_ref[j] >= blade['pf']['rthick'][i]):
+        #                 i_min = max(i-1, 0)
+        #                 i_max = max(i+1, np.argmin(blade['pf']['rthick']))
+        #                 r_j   = remap2grid(blade['pf']['rthick'][i_min:i_max], self.s[i_min:i_max], af_thk_ref[j])
+        #                 blade['pf']['af_pos'].append(float(r_j))
+        #                 blade['pf']['af_pos_name'].append(af_name_ref[j])
+        # # remove interior duplicates where an airfoil is listed more than 2 times in a row
+        # x = blade['pf']['af_pos']
+        # y = blade['pf']['af_pos_name']
+        # blade['pf']['af_pos']      = [x[0]] + [x[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [x[-1]]
+        # blade['pf']['af_pos_name'] = [y[0]] + [y[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [y[-1]]
 
 
         return blade
@@ -1404,7 +1410,7 @@ class ReferenceBlade(object):
 
     def plot_design(self, blade, path, show_plots = True):
         
-        # import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt
         
         # Chord
         fc, axc  = plt.subplots(1,1,figsize=(5.3, 4))
@@ -1581,7 +1587,7 @@ class ReferenceBlade(object):
         r_thick_airfoils = np.array([0.18, 0.211, 0.241, 0.301, 0.36 , 0.50, 1.00])
         f_interp1        = interp1d(r_thick_interp,s)
         s_interp_rt      = f_interp1(r_thick_airfoils)
-        f_interp2        = PchipInterpolator(np.flip(s_interp_rt),np.flip(r_thick_airfoils))
+        f_interp2        = PchipInterpolator(np.flip(s_interp_rt, axis=0),np.flip(r_thick_airfoils, axis=0))
         r_thick_int2     = f_interp2(s)
         
         
@@ -1614,8 +1620,8 @@ class ReferenceBlade(object):
             le       = np.argmin(blade['profile'][:,0,i])
             x_ss_raw = blade['profile'][le:,0,i]
             y_ss_raw = blade['profile'][le:,1,i]
-            x_ps_raw = np.flip(blade['profile'][:le,0,i])
-            y_ps_raw = np.flip(blade['profile'][:le,1,i])
+            x_ps_raw = np.flip(blade['profile'][:le,0,i], axis=0)
+            y_ps_raw = np.flip(blade['profile'][:le,1,i], axis=0)
             f_ss     = interp1d(x_ss_raw,y_ss_raw)
             y_ss     = f_ss(x)
             f_ps     = interp1d(x_ps_raw,y_ps_raw)
@@ -1689,10 +1695,7 @@ if __name__ == "__main__":
 
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    # fname_input        = "turbine_inputs/BAR22.yaml"
-    # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
-    # fname_input        = "turbine_inputs/test_out.yaml"
-    fname_input        = "/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/turbine_inputs/NREL15MW_opt_v00.yaml"
+    fname_input        = "/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/turbine_inputs/NREL15MW_opt_v05.yaml"
     fname_output       = "turbine_inputs/testing_twist.yaml"
     flag_write_out     = False
     flag_write_precomp = False
@@ -1704,25 +1707,16 @@ if __name__ == "__main__":
     refBlade.verbose  = True
     refBlade.spar_var = ['Spar_cap_ss', 'Spar_cap_ps']
     refBlade.te_var   = 'TE_reinforcement'
-    refBlade.NINPUT       = 7
+    refBlade.NINPUT       = 8
     refBlade.NPITS        = 40
     refBlade.validate = False
     refBlade.fname_schema = "turbine_inputs/IEAontology_schema.yaml"
 
     blade = refBlade.initialize(fname_input)
-    idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==refBlade.spar_var[0].lower()][0]
+    # idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==refBlade.spar_var[0].lower()][0]
     
-    # print(blade['pf']['chord'])
-    # print(blade['st']['layers'][idx_spar]['width']['values'])
-    # print(blade['st']['webs'][0]['offset_x_pa']['values'])
-
     # blade['ctrl_pts']['chord_in'][-1] *= 0.5
     # blade = refBlade.update(blade)
-    
-    # print(blade['pf']['chord'])
-    # print(blade['st']['layers'][idx_spar]['width']['values'])
-    # print(blade['st']['webs'][0]['offset_x_pa']['values'])
-
 
     ## save output yaml
     if flag_write_out:
@@ -1746,3 +1740,21 @@ if __name__ == "__main__":
         precomp_write.execute()
         if refBlade.verbose:
             print('Complete: Write PreComp: \t%f s'%(time.time()-t4))
+
+    ## post procesing
+    # path_out = '/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/outputs/NREL15MW_opt_v05/post'
+    # refBlade.smooth_outer_shape(blade, path_out)
+    # refBlade.plot_design(blade, path_out)
+
+    ## testing
+    # s1      = copy.deepcopy(blade['pf']['s'])
+    # rthick1 = copy.deepcopy(blade['pf']['rthick'])
+    # # blade['outer_shape_bem']['airfoil_position']['grid'] = [0.0, 0.02, 0.09734520488936911, 0.3929596998828168, 0.7284713048618933, 0.8404746119336132, 0.9144578690139064, 1.0]
+    # blade['outer_shape_bem']['airfoil_position']['grid'] = [0.0, 0.02, 0.097, 0.15, 0.7284713048618933, 0.8404746119336132, 0.9144578690139064, 0.98,1.0]
+    # blade = refBlade.update(blade)
+    # s2      = blade['pf']['s']
+    # rthick2 = blade['pf']['rthick']
+    # import matplotlib.pyplot as plt
+    # plt.plot(s1, rthick1, label="init")
+    # plt.plot(s2, rthick2, label="mod")
+    # plt.show()

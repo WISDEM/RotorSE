@@ -744,8 +744,9 @@ class BladeGeometry(Component):
         super(BladeGeometry, self).__init__()
 
         self.refBlade = RefBlade
-        npts = len(self.refBlade['pf']['s'])
+        npts   = len(self.refBlade['pf']['s'])
         NINPUT = len(self.refBlade['ctrl_pts']['r_in'])
+        NAF    = len(self.refBlade['outer_shape_bem']['airfoil_position']['grid'])-2
 
         # variables
         self.add_param('blade_in_overwrite', val={}, desc='optional input blade that can be used to overwrite RefBlade from initialization, first intended for the inner loop of a nested optimization', pass_by_obj=True)
@@ -758,7 +759,8 @@ class BladeGeometry(Component):
         self.add_param('presweep_in', val=np.zeros(NINPUT), units='m', desc='precurve at control points')  # defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
         self.add_param('sparT_in', val=np.zeros(NINPUT), units='m', desc='thickness values of spar cap that linearly vary from non-cylinder position to tip')
         self.add_param('teT_in', val=np.zeros(NINPUT), units='m', desc='thickness values of trailing edge panels that linearly vary from non-cylinder position to tip')
-        self.add_param('thickness_in', val=np.zeros(NINPUT), desc='relative thickness of airfoil distribution control points')
+        # self.add_param('thickness_in', val=np.zeros(NINPUT), desc='relative thickness of airfoil distribution control points')
+        self.add_param('airfoil_position', val=np.zeros(NAF), desc='spanwise position of airfoils')
 
         # parameters
         self.add_param('hubFraction', val=0.0, desc='hub location as fraction of radius')
@@ -834,7 +836,8 @@ class BladeGeometry(Component):
         blade['ctrl_pts']['sparT_in']     = params['sparT_in']
         blade['ctrl_pts']['teT_in']       = params['teT_in']
         blade['ctrl_pts']['r_max_chord']  = params['r_max_chord']
-        blade['ctrl_pts']['thickness_in'] = params['thickness_in']
+        # blade['ctrl_pts']['thickness_in'] = params['thickness_in']
+        blade['outer_shape_bem']['airfoil_position']['grid'] = params['airfoil_position'].tolist()
 
         # Update
         refBlade = ReferenceBlade()
