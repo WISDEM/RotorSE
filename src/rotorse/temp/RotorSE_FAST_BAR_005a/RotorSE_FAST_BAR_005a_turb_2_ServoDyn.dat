@@ -63,7 +63,7 @@ False                  CompNTMD    - Compute nacelle tuned mass damper {true/fal
 False                  CompTTMD    - Compute tower tuned mass damper {true/false} (flag)
 "../5MW_Baseline/NRELOffshrBsline5MW_ServoDyn_TMD.dat" TTMDfile    - Name of the file for tower tuned mass damper (quoted string) [unused when CompTTMD is false]
 ---------------------- BLADED INTERFACE ---------------------------------------- [used only with Bladed Interface]
-"C:\BAR\BAR_005a\BAR\RotorSE_FAST_BAR_005a\ServoData\DISCON_BAR_BAR005a.dll" DLL_FileName - Name/location of the dynamic library {.dll [Windows] or .so [Linux]} in the Bladed-DLL format (-) [used only with Bladed Interface]
+"C:\BAR\BAR_005a\BAR\RotorSE_FAST_BAR_005a_flap_dllContrl\AoA_5deg_RotorSE\ServoData\DISCON_BAR_BAR005a_flap.dll" DLL_FileName - Name/location of the dynamic library {.dll [Windows] or .so [Linux]} in the Bladed-DLL format (-) [used only with Bladed Interface]
 "DISCON.IN"            DLL_InFile  - Name of input file sent to the DLL (-) [used only with Bladed Interface]
 "DISCON"               DLL_ProcName - Name of procedure in DLL to be called (-) [case sensitive; used only with DLL Interface]
 "default"              DLL_DT      - Communication interval for dynamic library (s) (or "default") [used only with Bladed Interface]

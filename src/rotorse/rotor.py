@@ -770,7 +770,8 @@ if __name__ == '__main__':
     fname_schema= "turbine_inputs/IEAontology_schema.yaml"
     # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
     # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
-    fname_input = "turbine_inputs/BAR005a.yaml"
+    fname_input = "turbine_inputs/BAR005a_flap.yaml"
+    #fname_input = "turbine_inputs/BAR005a.yaml"
 
     fname_output = "turbine_inputs/BARtest_out.yaml"
     
@@ -795,9 +796,9 @@ if __name__ == '__main__':
         FASTpref['Analysis_Level']      = Analysis_Level
         FASTpref['FAST_ver']            = 'OpenFAST'
         FASTpref['dev_branch']          = True
-        FASTpref['FAST_exe']            = 'C:/BAR/BAR_005a/BAR/RotorSE_FAST_BAR_005a/openfast_x64.exe' #/openfast_x64.exe
+        FASTpref['FAST_exe']            = 'C:/BAR/BAR_005a/BAR/RotorSE_FAST_BAR_005a_flap_dllContrl/AoA_5deg_RotorSE/openfast_x64.exe' #/openfast_x64.exe
         #FASTpref['FAST_exe']            = 'C:/Users/egaertne/WT_Codes/openfast-dev/build/glue-codes/openfast/openfast'
-        FASTpref['FAST_directory']      = 'C:/BAR/BAR_005a/BAR/RotorSE_FAST_BAR_005a/'   # Path to fst directory files
+        FASTpref['FAST_directory']      = 'C:/BAR/BAR_005a/BAR/RotorSE_FAST_BAR_005a_flap_dllContrl/AoA_5deg_RotorSE/'   # Path to fst directory files
        # FASTpref['FAST_directory']      = 'C:/Users/egaertne/WT_Codes/models/openfast-dev/r-test/glue-codes/openfast/5MW_OC3Spar_DLL_WTurb_WavesIrr'   # Path to fst directory files
         #FASTpref['FAST_InputFile']      = '5MW_OC3Spar_DLL_WTurb_WavesIrr.fst' # FAST input file (ext=.fst)
         # FASTpref['FAST_directory']      = 'C:/Users/egaertne/WT_Codes/models/openfast-dev/r-test/glue-codes/openfast/5MW_Land_DLL_WTurb'   # Path to fst directory files

@@ -244,57 +244,68 @@ class FASTLoadCases(Component):
 
         # Update AeroDyn15 Airfoile Input Files
         airfoils = params['airfoils']
+        
         fst_vt['AeroDyn15']['NumAFfiles'] = len(airfoils)
-        # fst_vt['AeroDyn15']['af_data'] = [{}]*len(airfoils)
+        
         fst_vt['AeroDyn15']['af_data'] = []
         for i in range(len(airfoils)):
-            af = airfoils[i]
-            fst_vt['AeroDyn15']['af_data'].append({})
-            fst_vt['AeroDyn15']['af_data'][i]['InterpOrd'] = "DEFAULT"
-            fst_vt['AeroDyn15']['af_data'][i]['NonDimArea']= 1
-            fst_vt['AeroDyn15']['af_data'][i]['NumCoords'] = 0          # TODO: link the airfoil profiles to this component and write the coordinate files (no need as of yet)
-            fst_vt['AeroDyn15']['af_data'][i]['NumTabs']   = 1          # TODO: link the number of tables to this parameter and evaluate appropriately
-            fst_vt['AeroDyn15']['af_data'][i]['Re']        = 0.75       # TODO: functionality for multiple Re (or ctrl) tables
-            fst_vt['AeroDyn15']['af_data'][i]['Ctrl']      = 0
-            fst_vt['AeroDyn15']['af_data'][i]['InclUAdata']= "True"
-            fst_vt['AeroDyn15']['af_data'][i]['alpha0']    = af.unsteady['alpha0']
-            fst_vt['AeroDyn15']['af_data'][i]['alpha1']    = af.unsteady['alpha1']
-            fst_vt['AeroDyn15']['af_data'][i]['alpha2']    = af.unsteady['alpha2']
-            fst_vt['AeroDyn15']['af_data'][i]['eta_e']     = af.unsteady['eta_e']
-            fst_vt['AeroDyn15']['af_data'][i]['C_nalpha']  = af.unsteady['C_nalpha']
-            fst_vt['AeroDyn15']['af_data'][i]['T_f0']      = af.unsteady['T_f0']
-            fst_vt['AeroDyn15']['af_data'][i]['T_V0']      = af.unsteady['T_V0']
-            fst_vt['AeroDyn15']['af_data'][i]['T_p']       = af.unsteady['T_p']
-            fst_vt['AeroDyn15']['af_data'][i]['T_VL']      = af.unsteady['T_VL']
-            fst_vt['AeroDyn15']['af_data'][i]['b1']        = af.unsteady['b1']
-            fst_vt['AeroDyn15']['af_data'][i]['b2']        = af.unsteady['b2']
-            fst_vt['AeroDyn15']['af_data'][i]['b5']        = af.unsteady['b5']
-            fst_vt['AeroDyn15']['af_data'][i]['A1']        = af.unsteady['A1']
-            fst_vt['AeroDyn15']['af_data'][i]['A2']        = af.unsteady['A2']
-            fst_vt['AeroDyn15']['af_data'][i]['A5']        = af.unsteady['A5']
-            fst_vt['AeroDyn15']['af_data'][i]['S1']        = af.unsteady['S1']
-            fst_vt['AeroDyn15']['af_data'][i]['S2']        = af.unsteady['S2']
-            fst_vt['AeroDyn15']['af_data'][i]['S3']        = af.unsteady['S3']
-            fst_vt['AeroDyn15']['af_data'][i]['S4']        = af.unsteady['S4']
-            fst_vt['AeroDyn15']['af_data'][i]['Cn1']       = af.unsteady['Cn1']
-            fst_vt['AeroDyn15']['af_data'][i]['Cn2']       = af.unsteady['Cn2']
-            fst_vt['AeroDyn15']['af_data'][i]['St_sh']     = af.unsteady['St_sh']
-            fst_vt['AeroDyn15']['af_data'][i]['Cd0']       = af.unsteady['Cd0']
-            fst_vt['AeroDyn15']['af_data'][i]['Cm0']       = af.unsteady['Cm0']
-            fst_vt['AeroDyn15']['af_data'][i]['k0']        = af.unsteady['k0']
-            fst_vt['AeroDyn15']['af_data'][i]['k1']        = af.unsteady['k1']
-            fst_vt['AeroDyn15']['af_data'][i]['k2']        = af.unsteady['k2']
-            fst_vt['AeroDyn15']['af_data'][i]['k3']        = af.unsteady['k3']
-            fst_vt['AeroDyn15']['af_data'][i]['k1_hat']    = af.unsteady['k1_hat']
-            fst_vt['AeroDyn15']['af_data'][i]['x_cp_bar']  = af.unsteady['x_cp_bar']
-            fst_vt['AeroDyn15']['af_data'][i]['UACutout']  = af.unsteady['UACutout']
-            fst_vt['AeroDyn15']['af_data'][i]['filtCutOff']= af.unsteady['filtCutOff']
-            fst_vt['AeroDyn15']['af_data'][i]['NumAlf']    = len(af.unsteady['Alpha'])
-            fst_vt['AeroDyn15']['af_data'][i]['Alpha']     = np.array(af.unsteady['Alpha'])
-            fst_vt['AeroDyn15']['af_data'][i]['Cl']        = np.array(af.unsteady['Cl'])
-            fst_vt['AeroDyn15']['af_data'][i]['Cd']        = np.array(af.unsteady['Cd'])
-            fst_vt['AeroDyn15']['af_data'][i]['Cm']        = np.array(af.unsteady['Cm'])
-            fst_vt['AeroDyn15']['af_data'][i]['Cpmin']     = np.zeros_like(af.unsteady['Cm'])
+            if len(airfoils[i].flaps) < 1 : # if there are no flaps at this blade station
+                af = airfoils[i]
+                tab=1
+            else: # If there are flaps at this blade station
+                tab = len(airfoils[i].flaps)
+
+            fst_vt['AeroDyn15']['af_data'].append([])
+            for j in range(tab):
+                if len(airfoils[i].flaps) > 0 : # If there are flaps at this blade station we want to store the data for all flap angles
+                    af = airfoils[i].flaps[j]
+                
+                fst_vt['AeroDyn15']['af_data'][i].append({})
+                fst_vt['AeroDyn15']['af_data'][i][j]['InterpOrd'] = "DEFAULT"
+                fst_vt['AeroDyn15']['af_data'][i][j]['NonDimArea']= 1
+                fst_vt['AeroDyn15']['af_data'][i][j]['NumCoords'] = 0          # TODO: link the airfoil profiles to this component and write the coordinate files (no need as of yet)
+                fst_vt['AeroDyn15']['af_data'][i][j]['NumTabs']   = tab          # TODO: link the number of tables to this parameter and evaluate appropriately (bem: done 7/15/19)
+                fst_vt['AeroDyn15']['af_data'][i][j]['Re']        = af.unsteady['Re']       # TODO: functionality for multiple Re (or ctrl) tables (bem: done for different Ctrl values 7/15/19...still need to work on multiple Re but we can onlt have one other interpolating factor at this point (OpenFAST only supports 2D interpolation))
+                fst_vt['AeroDyn15']['af_data'][i][j]['Ctrl']      = af.unsteady['Ctrl'] 
+                fst_vt['AeroDyn15']['af_data'][i][j]['InclUAdata']= af.unsteady['InclUAdata']
+                fst_vt['AeroDyn15']['af_data'][i][j]['alpha0']    = af.unsteady['alpha0']
+                fst_vt['AeroDyn15']['af_data'][i][j]['alpha1']    = af.unsteady['alpha1']
+                fst_vt['AeroDyn15']['af_data'][i][j]['alpha2']    = af.unsteady['alpha2']
+                fst_vt['AeroDyn15']['af_data'][i][j]['eta_e']     = af.unsteady['eta_e']
+                fst_vt['AeroDyn15']['af_data'][i][j]['C_nalpha']  = af.unsteady['C_nalpha']
+                fst_vt['AeroDyn15']['af_data'][i][j]['T_f0']      = af.unsteady['T_f0']
+                fst_vt['AeroDyn15']['af_data'][i][j]['T_V0']      = af.unsteady['T_V0']
+                fst_vt['AeroDyn15']['af_data'][i][j]['T_p']       = af.unsteady['T_p']
+                fst_vt['AeroDyn15']['af_data'][i][j]['T_VL']      = af.unsteady['T_VL']
+                fst_vt['AeroDyn15']['af_data'][i][j]['b1']        = af.unsteady['b1']
+                fst_vt['AeroDyn15']['af_data'][i][j]['b2']        = af.unsteady['b2']
+                fst_vt['AeroDyn15']['af_data'][i][j]['b5']        = af.unsteady['b5']
+                fst_vt['AeroDyn15']['af_data'][i][j]['A1']        = af.unsteady['A1']
+                fst_vt['AeroDyn15']['af_data'][i][j]['A2']        = af.unsteady['A2']
+                fst_vt['AeroDyn15']['af_data'][i][j]['A5']        = af.unsteady['A5']
+                fst_vt['AeroDyn15']['af_data'][i][j]['S1']        = af.unsteady['S1']
+                fst_vt['AeroDyn15']['af_data'][i][j]['S2']        = af.unsteady['S2']
+                fst_vt['AeroDyn15']['af_data'][i][j]['S3']        = af.unsteady['S3']
+                fst_vt['AeroDyn15']['af_data'][i][j]['S4']        = af.unsteady['S4']
+                fst_vt['AeroDyn15']['af_data'][i][j]['Cn1']       = af.unsteady['Cn1']
+                fst_vt['AeroDyn15']['af_data'][i][j]['Cn2']       = af.unsteady['Cn2']
+                fst_vt['AeroDyn15']['af_data'][i][j]['St_sh']     = af.unsteady['St_sh']
+                fst_vt['AeroDyn15']['af_data'][i][j]['Cd0']       = af.unsteady['Cd0']
+                fst_vt['AeroDyn15']['af_data'][i][j]['Cm0']       = af.unsteady['Cm0']
+                fst_vt['AeroDyn15']['af_data'][i][j]['k0']        = af.unsteady['k0']
+                fst_vt['AeroDyn15']['af_data'][i][j]['k1']        = af.unsteady['k1']
+                fst_vt['AeroDyn15']['af_data'][i][j]['k2']        = af.unsteady['k2']
+                fst_vt['AeroDyn15']['af_data'][i][j]['k3']        = af.unsteady['k3']
+                fst_vt['AeroDyn15']['af_data'][i][j]['k1_hat']    = af.unsteady['k1_hat']
+                fst_vt['AeroDyn15']['af_data'][i][j]['x_cp_bar']  = af.unsteady['x_cp_bar']
+                fst_vt['AeroDyn15']['af_data'][i][j]['UACutout']  = af.unsteady['UACutout']
+                fst_vt['AeroDyn15']['af_data'][i][j]['filtCutOff']= af.unsteady['filtCutOff']
+                fst_vt['AeroDyn15']['af_data'][i][j]['NumAlf']    = len(af.unsteady['Alpha'])
+                fst_vt['AeroDyn15']['af_data'][i][j]['Alpha']     = np.array(af.unsteady['Alpha'])
+                fst_vt['AeroDyn15']['af_data'][i][j]['Cl']        = np.array(af.unsteady['Cl'])
+                fst_vt['AeroDyn15']['af_data'][i][j]['Cd']        = np.array(af.unsteady['Cd'])
+                fst_vt['AeroDyn15']['af_data'][i][j]['Cm']        = np.array(af.unsteady['Cm'])
+                fst_vt['AeroDyn15']['af_data'][i][j]['Cpmin']     = np.zeros_like(af.unsteady['Cm'])
 
         # AeroDyn spanwise output positions
         r = r/r[-1]
