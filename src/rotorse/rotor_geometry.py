@@ -746,7 +746,7 @@ class BladeGeometry(Component):
         self.refBlade = RefBlade
         npts   = len(self.refBlade['pf']['s'])
         NINPUT = len(self.refBlade['ctrl_pts']['r_in'])
-        NAF    = len(self.refBlade['outer_shape_bem']['airfoil_position']['grid'])-2
+        NAF    = len(self.refBlade['outer_shape_bem']['airfoil_position']['grid'])
 
         # variables
         self.add_param('blade_in_overwrite', val={}, desc='optional input blade that can be used to overwrite RefBlade from initialization, first intended for the inner loop of a nested optimization', pass_by_obj=True)
