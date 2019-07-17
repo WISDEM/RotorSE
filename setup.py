@@ -3,6 +3,9 @@
 
 from setuptools import setup, find_packages
 import platform
+import os
+
+os.environ['NPY_DISTUTILS_APPEND_FLAGS'] = '1'
 
 
 setup(
@@ -28,5 +31,5 @@ from numpy.distutils.core import setup, Extension
 setup(
     name='precomp',
     package_dir={'': 'src/rotorse'},
-    ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2','-fPIC','-shared'], extra_link_args=['-shared'])],
+    ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2','-fPIC'])],
 )
