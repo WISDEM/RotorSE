@@ -537,7 +537,7 @@ class RegulatedPowerCurve(Component): # Implicit COMPONENT
         
         
         self.ccblade.induction_inflow = True
-        a_regII, ap_regII, alpha_regII = self.ccblade.distributedAeroLoads(Uhub[0], Omega[0] * 30. / np.pi, pitch[0], 0.0)
+        a_regII, ap_regII, alpha_regII,_, _ = self.ccblade.distributedAeroLoads(Uhub[0], Omega[0] * 30. / np.pi, pitch[0], 0.0)
         
         # Fit spline to powercurve for higher grid density
         spline   = PchipInterpolator(Uhub, P)
