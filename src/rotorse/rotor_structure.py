@@ -2470,7 +2470,7 @@ class RotorStructure(Group):
         self.connect('airfoils', 'aero_extrm.airfoils')
         self.connect('nBlades', 'aero_extrm.B')
         self.connect('nSector', 'aero_extrm.nSector')
-        self.connect('turbineclass.V_extreme', 'aero_extrm.V_load')
+        self.connect('turbineclass.V_extreme50', 'aero_extrm.V_load')
         self.connect('pitch_extreme', 'aero_extrm.pitch_load')
         self.connect('azimuth_extreme', 'aero_extrm.azimuth_load')
         self.aero_extrm.Omega_load = 0.0  # parked case
