@@ -943,6 +943,8 @@ class RotorGeometry(Group):
         super(RotorGeometry, self).__init__()
         """rotor model"""
         NINPUT = len(RefBlade['ctrl_pts']['r_in'])
+        NAF    = len(self.refBlade['outer_shape_bem']['airfoil_position']['grid'])
+        
         if flag_nd_opt == False:
             self.add('chord_in', IndepVarComp('chord_in', np.zeros(NINPUT), units='m'),   promotes=['*'])
             self.add('theta_in', IndepVarComp('theta_in', np.zeros(NINPUT), units='deg'), promotes=['*'])
@@ -964,7 +966,8 @@ class RotorGeometry(Group):
         self.add('downwind', IndepVarComp('downwind', False, pass_by_obj=True), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         self.add('V_mean_overwrite', IndepVarComp('V_mean_overwrite', val=0., desc='optional overwrite value for mean velocity for using user defined CDFs'), promotes=['*'])
-        self.add('thickness_in', IndepVarComp('thickness_in', np.zeros(NINPUT), units='m'), promotes=['*'])
+        # self.add('thickness_in', IndepVarComp('thickness_in', np.zeros(NINPUT), units='m'), promotes=['*'])
+        self.add('airfoil_position', IndepVarComp('airfoil_position', np.zeros(NAF)), promotes=['*'])
 
         # --- composite sections ---
         
