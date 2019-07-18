@@ -943,7 +943,7 @@ class RotorGeometry(Group):
         super(RotorGeometry, self).__init__()
         """rotor model"""
         NINPUT = len(RefBlade['ctrl_pts']['r_in'])
-        NAF    = len(refBlade['outer_shape_bem']['airfoil_position']['grid'])
+        NAF    = len(RefBlade['outer_shape_bem']['airfoil_position']['grid'])
 
         if flag_nd_opt == False:
             self.add('chord_in', IndepVarComp('chord_in', np.zeros(NINPUT), units='m'),   promotes=['*'])
