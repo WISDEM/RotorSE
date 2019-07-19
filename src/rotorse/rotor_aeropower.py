@@ -512,6 +512,7 @@ class OutputsAero(Component):
         self.add_param('V_in', val=np.zeros(npts_coarse_power_curve), units='m/s', desc='wind speeds (power curve)')
         self.add_param('P_in', val=np.zeros(npts_coarse_power_curve), units='W', desc='power (power curve)')
         self.add_param('Cp_in', val=np.zeros(npts_coarse_power_curve), units='W', desc='power (power curve)')
+        self.add_param('Cp_aero_in', val=np.zeros(npts_coarse_power_curve), units='W', desc='power (power curve)')
 
         self.add_param('rated_V_in', val=0.0, units='m/s', desc='rated wind speed')
         self.add_param('rated_Omega_in', val=0.0, units='rpm', desc='rotor rotation speed at rated')
@@ -533,6 +534,7 @@ class OutputsAero(Component):
         self.add_output('V', val=np.zeros(npts_coarse_power_curve), units='m/s', desc='wind speeds (power curve)')
         self.add_output('P', val=np.zeros(npts_coarse_power_curve), units='W', desc='power (power curve)')
         self.add_output('Cp', val=np.zeros(npts_coarse_power_curve), units='W', desc='power (power curve)')
+        self.add_output('Cp_aero', val=np.zeros(npts_coarse_power_curve), units='W', desc='power (power curve)')
 
         self.add_output('rated_V', val=0.0, units='m/s', desc='rated wind speed')
         self.add_output('rated_Omega', val=0.0, units='rpm', desc='rotor rotation speed at rated')
@@ -553,6 +555,7 @@ class OutputsAero(Component):
         unknowns['AEP'] = params['AEP_in']
         unknowns['V'] = params['V_in']
         unknowns['Cp'] = params['Cp_in']
+        unknowns['Cp_aero'] = params['Cp_aero_in']
         unknowns['P'] = params['P_in']
         unknowns['rated_V'] = params['rated_V_in']
         unknowns['rated_Omega'] = params['rated_Omega_in']
@@ -572,6 +575,7 @@ class OutputsAero(Component):
         J['V', 'V_in'] = np.diag(np.ones(len(params['V_in'])))
         J['P', 'P_in'] = np.diag(np.ones(len(params['P_in'])))
         J['Cp', 'Cp_in'] = np.diag(np.ones(len(params['Cp_in'])))
+        J['Cp_aero', 'Cp_aero_in'] = np.diag(np.ones(len(params['Cp_aero_in'])))
         J['rated_V', 'rated_V_in'] = 1
         J['rated_Omega', 'rated_Omega_in'] = 1
         J['rated_pitch', 'rated_pitch_in'] = 1
@@ -700,6 +704,7 @@ class RotorAeroPower(Group):
         self.connect('powercurve.V', 'V_in')
         self.connect('powercurve.P', 'P_in')
         self.connect('powercurve.Cp', 'Cp_in')
+        self.connect('powercurve.Cp_aero', 'Cp_aero_in')
         self.connect('aep.AEP', 'AEP_in')
         self.connect('powercurve.rated_V', 'rated_V_in')
         self.connect('powercurve.rated_Omega', 'rated_Omega_in')

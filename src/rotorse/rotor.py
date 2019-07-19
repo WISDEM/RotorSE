@@ -259,6 +259,7 @@ class RotorSE(Group):
         else:
             self.connect('powercurve.P_spline',     'aep.P')
             self.connect('powercurve.Cp',           'Cp_in')
+            self.connect('powercurve.Cp_aero',      'Cp_aero_in')
             self.connect('powercurve.rated_V',      'rated_V_in')
             self.connect('powercurve.rated_Omega',  'rated_Omega_in')
             self.connect('powercurve.rated_pitch',  'rated_pitch_in')
