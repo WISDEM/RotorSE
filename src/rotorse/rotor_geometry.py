@@ -1,6 +1,6 @@
 from __future__ import print_function
 import numpy as np
-import os
+import os, warnings
 # Python 2/3 compatibility:
 try:
     from StringIO import StringIO
@@ -837,7 +837,21 @@ class BladeGeometry(Component):
         blade['ctrl_pts']['teT_in']       = params['teT_in']
         blade['ctrl_pts']['r_max_chord']  = params['r_max_chord']
         # blade['ctrl_pts']['thickness_in'] = params['thickness_in']
-        blade['outer_shape_bem']['airfoil_position']['grid'] = params['airfoil_position'].tolist()
+
+        #check that airfoil positions are increasing
+        correct_af_position = False
+        airfoil_position = copy.deepcopy(params['airfoil_position']).tolist()
+        for i in reversed(range(1:len(airfoil_position))):
+            if airfoil_position[i] <= airfoil_position[i-1]:
+                airfoil_position[i-1] -= 0.001
+                correct_af_position = True
+
+        if correct_af_position:
+            blade['outer_shape_bem']['airfoil_position']['grid'] = airfoil_position
+            warning_corrected_airfoil_position = "Airfoil spanwise positions must be increasing.  Changed from: %s to: %s" % (params['airfoil_position'].tolist(), airfoil_position)
+            warnings.warn()
+        else:
+            blade['outer_shape_bem']['airfoil_position']['grid'] = params['airfoil_position'].tolist()
 
         # Update
         refBlade = ReferenceBlade()
