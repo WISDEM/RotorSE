@@ -1336,7 +1336,7 @@ class TipDeflection(Component):
         self.add_param('gamma_m', 0.0, desc='safety factor on materials')
 
         # parameters
-        self.add_param('dynamicFactor', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation') #, pass_by_obj=True)
+        self.add_param('dynamicFactor', val=1.0, desc='a dynamic amplification factor to adjust the static deflection calculation') #, pass_by_obj=True)
 
         # outputs
         self.add_output('tip_deflection', val=0.0, units='m', desc='deflection at tip in yaw x-direction')
@@ -1357,7 +1357,7 @@ class TipDeflection(Component):
         self.precone       = params['precone']
         self.tilt          = params['tilt']
         self.totalConeTip  = params['totalConeTip']
-        self.dynamicFactor = 1.#params['dynamicFactor']
+        self.dynamicFactor = params['dynamicFactor']
         self.precurve      = params['precurveTip']
         self.presweep      = params['presweepTip']
         self.rtip          = params['Rtip']

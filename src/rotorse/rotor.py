@@ -769,8 +769,8 @@ if __name__ == '__main__':
 
     # Turbine Ontology input
     fname_schema  = "turbine_inputs/IEAontology_schema.yaml"
-    fname_input   = "/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/turbine_inputs/NREL15MW_opt_v05.yaml"
-    output_folder = "/mnt/c/Users/egaertne/WISDEM/RotorSE_yaml/RotorSE/src/rotorse/turbine_inputs"
+    fname_input   = "turbine_inputs/nrel5mw_mod_update.yaml"
+    output_folder = "test/"
     fname_output  = output_folder + 'test_out.yaml'
     
     Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
@@ -778,7 +778,7 @@ if __name__ == '__main__':
     # Initialize blade design
     refBlade = ReferenceBlade()
     refBlade.verbose      = True
-    refBlade.NINPUT       = 15
+    refBlade.NINPUT       = 8
     refBlade.NPTS         = 50
     refBlade.spar_var     = ['Spar_Cap_SS', 'Spar_Cap_PS'] # SS, then PS
     refBlade.te_var       = 'TE_reinforcement'
@@ -863,6 +863,8 @@ if __name__ == '__main__':
     print('root_bending_moment =', rotor['root_bending_moment'])
     print('moments at the hub =', rotor['Mxyz_total'])
 
+    print(rotor['airfoils'][0].cl_spline)
+
     #for io in rotor.root.unknowns:
     #    print(io + ' ' + str(rotor.root.unknowns[io]))
     '''
@@ -923,14 +925,9 @@ if __name__ == '__main__':
     plt.xlabel('r')
     plt.ylabel('rthick')
     plt.legend()
-        
-
-    plt.figure()
-    plt.plot(r0, rthick0, label='airfoil relative thickness')
-    plt.plot(r1, rthick1, label='airfoil relative thickness')
-    plt.xlabel('r')
-    plt.ylabel('rthick')
-    plt.legend()
+    
+    plt.show()
+    
     
     n_pitch = len(rotor['cpctcq_tables.pitch_vector'])
     n_tsr   = len(rotor['cpctcq_tables.tsr_vector'])
@@ -1018,7 +1015,7 @@ if __name__ == '__main__':
         fig_name = 'contour_Cq.png'
         plt.savefig(output_folder + fig_name)
         
-    plt.show()
+        plt.show()
         
     
     

@@ -338,8 +338,8 @@ class Cp_Ct_Cq_Tables(Component):
     def __init__(self, naero):
         super(Cp_Ct_Cq_Tables, self).__init__()
         
-        n_pitch = 2#51
-        n_tsr   = 2
+        n_pitch = 4#51
+        n_tsr   = 4
         n_U     = 1
         
         # parameters        
@@ -391,7 +391,7 @@ class Cp_Ct_Cq_Tables(Component):
             params['U_vector']    = np.linspace(params['control_Vin'],params['control_Vout'], self.n_U)
         
         if max(params['tsr_vector']) == 0.:
-            params['tsr_vector'] = np.linspace(3.,11., self.n_tsr)
+            params['tsr_vector'] = np.linspace(7.,11., self.n_tsr)
         
         if max(params['pitch_vector']) == 0.:
             params['pitch_vector'] = np.linspace(-5., 5., self.n_pitch)
@@ -486,7 +486,7 @@ def CSMDrivetrain(aeroPower, ratedPower, drivetrainType):
     
     elif drivetrainType == DRIVETRAIN_TYPE['CONSTANT_EFF']:
         constant = 0.00000  
-        linear = 0.10000
+        linear = 0.07
         quadratic = 0.0000
 
     Pbar0 = aeroPower / ratedPower

@@ -895,13 +895,23 @@ class ReferenceBlade(object):
                         if offset == None:
                             offset = 0.
 
-                        # geometry checks
-                        if offset < ratio_SCmax * (- chord * p_le_i) or offset > ratio_SCmax * (chord * (1. - p_le_i)):
+                        # # geometry checks
+                        if offset + 0.5 * width > ratio_SCmax * chord * (1. - p_le_i) or offset - 0.5 * width < - ratio_SCmax * chord * p_le_i: # hitting TE or LE
                             width_old = copy.deepcopy(width)
-                            width = 2. * min([ratio_SCmax * (chord * p_le_i) , ratio_SCmax * (chord * (1. - p_le_i))])
-                            blade['st'][type_sec][idx_sec]['width']['values'][i] = width
-                            layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], width_old, width, blade['pf']['r'][i], i)
+                            width     = 2. * min([ratio_SCmax * (chord * p_le_i ) , ratio_SCmax * (chord * (1. - p_le_i))])
+                            blade['st'][type_sec][idx_sec]['offset_x_pa']['values'][i] = 0.0
+                            blade['st'][type_sec][idx_sec]['width']['values'][i]  = width
+                            
+                            layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "offset_x_pa" changed from %f to 0.0 and "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], offset, width_old, width, blade['pf']['r'][i], i)
                             warnings.warn(layer_resize_warning)
+                        
+                        
+                        # if offset < ratio_SCmax * (- chord * p_le_i) or offset > ratio_SCmax * (chord * (1. - p_le_i)):
+                            # width_old = copy.deepcopy(width)
+                            # width = 2. * min([ratio_SCmax * (chord * p_le_i) , ratio_SCmax * (chord * (1. - p_le_i))])
+                            # blade['st'][type_sec][idx_sec]['width']['values'][i] = width
+                            # layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], width_old, width, blade['pf']['r'][i], i)
+                            # warnings.warn(layer_resize_warning)
 
 
                         if side.lower() != 'suction' and side.lower() != 'pressure':
