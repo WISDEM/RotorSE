@@ -843,7 +843,7 @@ class BladeGeometry(Component):
         airfoil_position = copy.deepcopy(params['airfoil_position']).tolist()
         for i in reversed(range(1,len(airfoil_position))):
             if airfoil_position[i] <= airfoil_position[i-1]:
-                airfoil_position[i-1] -= 0.001
+                airfoil_position[i-1] = airfoil_position[i] - 0.001
                 correct_af_position = True
 
         if correct_af_position:
