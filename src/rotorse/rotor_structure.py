@@ -788,12 +788,10 @@ class RotorWithpBEAM(StrucBase):
     def principalCS(self, EIyy, EIxx, y_ec, x_ec, EA, EIxy):
 
         # rename (with swap of x, y for profile c.s.)
-        EIxx = np.copy(EIyy)
-        EIyy = np.copy(EIxx)
-        x_ec = np.copy(y_ec)
-        y_ec = np.copy(x_ec)
-        self.EA = np.copy(EA)
-        EIxy = np.copy(EIxy)
+        EIxx , EIyy = EIyy , EIxx
+        x_ec , y_ec = y_ec , x_ec
+        self.EA     = EA
+        EIxy        = EIxy
 
         # translate to elastic center
         EIxx -= y_ec**2*EA
