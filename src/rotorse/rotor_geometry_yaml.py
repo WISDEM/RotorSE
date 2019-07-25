@@ -22,7 +22,7 @@ from airfoilprep.airfoilprep import Airfoil, Polar
 from rotorse.precomp import Profile, Orthotropic2DMaterial, CompositeSection, _precomp, PreCompWriter
 from rotorse.geometry_tools.geometry import AirfoilShape, Curve
 
- #import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 TURBULENCE_CLASS = commonse.enum.Enum('A B C')
 TURBINE_CLASS = commonse.enum.Enum('I II III')
@@ -56,16 +56,6 @@ def remap2grid(x_ref, y_ref, x, spline=PchipInterpolator):
 
     return y_out
 
-# def remapWbreak(x_ref, y_ref, x0, idx_break, spline=PchipInterpolator):
-#     # for interpolating on airfoil surface, split x into two sections and determine which to use
-#     if x0 >= x_ref[idx_break]:
-#         x = x_ref[idx_break:]
-#         y = y_ref[idx_break:]
-#     else:
-#         x = x_ref[:idx_break+1]
-#         y = y_ref[:idx_break+1]
-#     return remap2grid(x, y, x0, spline=spline)
-
 def remapAirfoil(x_ref, y_ref, x0):
     # for interpolating airfoil surface
     x = copy.copy(x_ref)
@@ -83,36 +73,7 @@ def remapAirfoil(x_ref, y_ref, x0):
 def arc_length(x, y, z=[]):
     npts = len(x)
     arc = np.array([0.]*npts)
-    # if high_fidelity:
-    #     # iteratively fit a spline between points
-    #     if all(np.diff(x)<0):
-    #         # correct for decending data
-    #         x *= -1.
-    #     if not all(np.diff(x)>0):
-    #         # if data has more than one zero crossing, break the data up
-    #         zero_crossings = [0]+np.where(np.diff(np.sign(x)))[0].tolist()+[len(x)]
-    #         # print(zero_crossings)
-    #         arc = [arc_length(x[zero_crossings[idx-1]:zero_crossings[idx]+1], y[zero_crossings[idx-1]:zero_crossings[idx]+1]) for idx in range(1,len(zero_crossings))]
-            
-    #         for idx, arci in enumerate(arc):
-    #             if idx == 0:
-    #                 arc_out = list(arci)
-    #             else:
-    #                 arc_out = arc_out + list(arci[1:]+arc_out[-1])
 
-    #         return arc_out
-            
-
-    #     spline = PchipInterpolator(x, y)
-    #     for k in range(1, npts):
-    #         a = x[k-1]
-    #         b = x[k]
-    #         tz = np.linspace(a, b, num=10)
-    #         f = spline(tz)
-    #         arc[k] = arc[k-1] + arc_length(tz, f)[-1]
-
-
-    # else:
     if len(z) == len(x):
         for k in range(1, npts):
             arc[k] = arc[k-1] + np.sqrt((x[k] - x[k-1])**2 + (y[k] - y[k-1])**2 + (z[k] - z[k-1])**2)
@@ -129,6 +90,43 @@ def rotate(xo, yo, xp, yp, angle):
     qx = xo + np.cos(angle) * (xp - xo) - np.sin(angle) * (yp - yo)
     qy = yo + np.sin(angle) * (xp - xo) + np.cos(angle) * (yp - yo)
     return qx, qy
+
+def trailing_edge_smoothing(data):
+    # correction to trailing edge shape for interpolated airfoils that smooths out unrealistic geometric errors
+    # often brought about when transitioning between round, flatback, or sharp trailing edges
+
+    # correct for self cross of TE (rare interpolation error)
+    if data[-1,1] < data[0,1]:
+        temp = data[0,1]
+        data[0,1] = data[-1,1]
+        data[-1,1] = temp
+
+    # Find indices on Suction and Pressure side for last 85-95% and 95-100% chordwise
+    idx_85_95  = [i_x for i_x, xi in enumerate(data[:,0]) if xi>0.85 and xi < 0.95]
+    idx_95_100 = [i_x for i_x, xi in enumerate(data[:,0]) if xi>0.95 and xi < 1.]
+
+    idx_85_95_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_85_95)) if d_idx > 1][0]+1
+    idx_85_95_SS    = idx_85_95[:idx_85_95_break]
+    idx_85_95_PS    = idx_85_95[idx_85_95_break:]
+
+    idx_95_100_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_95_100)) if d_idx > 1][0]+1
+    idx_95_100_SS    = idx_95_100[:idx_95_100_break]
+    idx_95_100_PS    = idx_95_100[idx_95_100_break:]
+
+    # Interpolate the last 5% to the trailing edge
+    idx_in_PS = idx_85_95_PS+[-1]
+    x_corrected_PS = data[idx_95_100_PS,0]
+    y_corrected_PS = remap2grid(data[idx_in_PS,0], data[idx_in_PS,1], x_corrected_PS)
+
+    idx_in_SS = [0]+idx_85_95_SS
+    x_corrected_SS = data[idx_95_100_SS,0]
+    y_corrected_SS = remap2grid(data[idx_in_SS,0], data[idx_in_SS,1], x_corrected_SS)
+
+    # Overwrite profile with corrected TE
+    data[idx_95_100_SS,1] = y_corrected_SS
+    data[idx_95_100_PS,1] = y_corrected_PS
+
+    return data
 
 class ReferenceBlade(object):
     def __init__(self):
@@ -287,8 +285,8 @@ class ReferenceBlade(object):
         blade_out = copy.deepcopy(blade)
 
         # Planform
-        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['labels']  = blade_out['pf']['af_pos_name']
-        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['grid']    = blade_out['pf']['af_pos']
+        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['labels']  = blade_out['outer_shape_bem']['airfoil_position']['labels']
+        wt_out['components']['blade']['outer_shape_bem']['airfoil_position']['grid']    = blade_out['outer_shape_bem']['airfoil_position']['grid']
 
         wt_out['components']['blade']['outer_shape_bem']['chord']['values']             = blade_out['pf']['chord'].tolist()
         wt_out['components']['blade']['outer_shape_bem']['chord']['grid']               = blade_out['pf']['s'].tolist()
@@ -494,7 +492,6 @@ class ReferenceBlade(object):
         blade['pf']['presweep'] = remap2grid(blade['outer_shape_bem']['reference_axis']['y']['grid'], blade['outer_shape_bem']['reference_axis']['y']['values'], self.s)
 
         thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
-        
         blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
 
         # Smooth oscillation caused by interpolation after min thickness is reached
@@ -566,20 +563,19 @@ class ReferenceBlade(object):
         
         AFref_xy = np.flip(AFref_xy, axis=2)
 
-        if trailing_edge_correction:
-            # closed to flat transition, find spanwise indexes where cylinder/sharp -> flatback
-            transition = False
-            for i in range(1,len(blade['outer_shape_bem']['airfoil_position']['labels'])):
-                afi1 = blade['outer_shape_bem']['airfoil_position']['labels'][i]
-                afi0 = blade['outer_shape_bem']['airfoil_position']['labels'][i-1]
-                if AF_fb[afi1] and not AF_fb[afi0]:
-                    transition = True
-                    trans_thk = [AFref[afi0]['relative_thickness'], AFref[afi1]['relative_thickness']]
-            if transition:
-                trans_correct_idx = [i_thk for i_thk, thk in enumerate(blade['pf']['rthick']) if thk<trans_thk[0] and thk>trans_thk[1]]
-            else:
-                trans_correct_idx = []
-
+        # if trailing_edge_correction:
+        #     # closed to flat transition, find spanwise indexes where cylinder/sharp -> flatback
+        #     transition = False
+        #     for i in range(1,len(blade['outer_shape_bem']['airfoil_position']['labels'])):
+        #         afi1 = blade['outer_shape_bem']['airfoil_position']['labels'][i]
+        #         afi0 = blade['outer_shape_bem']['airfoil_position']['labels'][i-1]
+        #         if AF_fb[afi1] and not AF_fb[afi0]:
+        #             transition = True
+        #             trans_thk = [AFref[afi0]['relative_thickness'], AFref[afi1]['relative_thickness']]
+        #     if transition:
+        #         trans_correct_idx = [i_thk for i_thk, thk in enumerate(blade['pf']['rthick']) if thk<trans_thk[0] and thk>trans_thk[1]]
+        #     else:
+        #         trans_correct_idx = []
 
         # Spanwise thickness interpolation
         spline = PchipInterpolator
@@ -600,31 +596,7 @@ class ReferenceBlade(object):
 
             if trailing_edge_correction:
                 # if i in trans_correct_idx:
-
-                # Find indices on Suction and Pressure side for last 85-95% and 95-100% chordwise
-                idx_85_95  = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.85 and xi < 0.95]
-                idx_95_100 = [i_x for i_x, xi in enumerate(blade['profile'][:,0,i]) if xi>0.95 and xi < 1.]
-
-                idx_85_95_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_85_95)) if d_idx > 1][0]+1
-                idx_85_95_SS    = idx_85_95[:idx_85_95_break]
-                idx_85_95_PS    = idx_85_95[idx_85_95_break:]
-
-                idx_95_100_break = [i_idx for i_idx, d_idx in enumerate(np.diff(idx_95_100)) if d_idx > 1][0]+1
-                idx_95_100_SS    = idx_95_100[:idx_95_100_break]
-                idx_95_100_PS    = idx_95_100[idx_95_100_break:]
-
-                # Interpolate the last 5% to the trailing edge
-                idx_in_PS = idx_85_95_PS+[-1]
-                x_corrected_PS = blade['profile'][idx_95_100_PS,0,i]
-                y_corrected_PS = remap2grid(blade['profile'][idx_in_PS,0,i], blade['profile'][idx_in_PS,1,i], x_corrected_PS)
-
-                idx_in_SS = [0]+idx_85_95_SS
-                x_corrected_SS = blade['profile'][idx_95_100_SS,0,i]
-                y_corrected_SS = remap2grid(blade['profile'][idx_in_SS,0,i], blade['profile'][idx_in_SS,1,i], x_corrected_SS)
-
-                # Overwrite profile with corrected TE
-                blade['profile'][idx_95_100_SS,1,i] = y_corrected_SS
-                blade['profile'][idx_95_100_PS,1,i] = y_corrected_PS
+                blade['profile'][:,:,i] = trailing_edge_smoothing(blade['profile'][:,:,i])
 
             # Use CCAirfoil.af_flap_coords() (which calls Xfoil) to create AF coordinates with flaps at angles specified in yaml input file 
             if 'aerodynamic_control' in blade: # Checks if this section is included in yaml file
@@ -654,10 +626,12 @@ class ReferenceBlade(object):
             # plt.axis('equal')
             # plt.title(i)
             # plt.show()
+
         return blade
 
     def remap_polars(self, blade, AFref, spline=PchipInterpolator):
         # TODO: does not support multiple polars at different Re, takes the first polar from list (bem: can handle multiple profiles for different flap angles but not Re yet 7/17/19)
+
 
         ## Set angle of attack grid for airfoil resampling
         # assume grid for last airfoil is sufficient
@@ -702,7 +676,6 @@ class ReferenceBlade(object):
 
         # CCBlade airfoil class instances
         airfoils = [None]*n_span
-        
         alpha_out = np.degrees(alpha)
         if alpha[0] != -180.:
             alpha[0] = -180.
@@ -855,7 +828,19 @@ class ReferenceBlade(object):
         profile_d = copy.copy(blade['profile'])
         profile_d[:,0,:] = profile_d[:,0,:] - blade['pf']['p_le'][np.newaxis, :]
         profile_d = np.flip(profile_d*blade['pf']['chord'][np.newaxis, np.newaxis, :], axis=0)
-
+        
+        LE_loc = np.zeros(self.NPTS)
+        for i in range(self.NPTS):
+            profile_i = copy.copy(profile_d[:,:,i])
+            if list(profile_i[-1,:]) != list(profile_i[0,:]):
+                TE = np.mean((profile_i[-1,:], profile_i[0,:]), axis=0)
+                profile_i = np.row_stack((TE, profile_i, TE))
+            idx_le = np.argmin(profile_i[:,0])
+            profile_i_arc = arc_length(profile_i[:,0], profile_i[:,1])
+            arc_L = profile_i_arc[-1]
+            profile_i_arc /= arc_L
+            LE_loc[i] = profile_i_arc[idx_le]
+            
         for i in range(self.NPTS):
             s_all = []
 
@@ -951,14 +936,23 @@ class ReferenceBlade(object):
                         if offset == None:
                             offset = 0.
 
-                        # geometry checks
-                        if offset < ratio_SCmax * (- chord * p_le_i) or offset > ratio_SCmax * (chord * (1. - p_le_i)):
+                        # # geometry checks
+                        if offset + 0.5 * width > ratio_SCmax * chord * (1. - p_le_i) or offset - 0.5 * width < - ratio_SCmax * chord * p_le_i: # hitting TE or LE
                             width_old = copy.deepcopy(width)
-                            width = 2. * min([ratio_SCmax * (chord * p_le_i) , ratio_SCmax * (chord * (1. - p_le_i))])
-                            blade['st'][type_sec][idx_sec]['width']['values'][i] = width
-                            layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], width_old, width, blade['pf']['r'][i], i)
+                            width     = 2. * min([ratio_SCmax * (chord * p_le_i ) , ratio_SCmax * (chord * (1. - p_le_i))])
+                            blade['st'][type_sec][idx_sec]['offset_x_pa']['values'][i] = 0.0
+                            blade['st'][type_sec][idx_sec]['width']['values'][i]  = width
+                            
+                            layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "offset_x_pa" changed from %f to 0.0 and "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], offset, width_old, width, blade['pf']['r'][i], i)
                             warnings.warn(layer_resize_warning)
-
+                        
+                        
+                        # if offset < ratio_SCmax * (- chord * p_le_i) or offset > ratio_SCmax * (chord * (1. - p_le_i)):
+                            # width_old = copy.deepcopy(width)
+                            # width = 2. * min([ratio_SCmax * (chord * p_le_i) , ratio_SCmax * (chord * (1. - p_le_i))])
+                            # blade['st'][type_sec][idx_sec]['width']['values'][i] = width
+                            # layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], width_old, width, blade['pf']['r'][i], i)
+                            # warnings.warn(layer_resize_warning)
 
                         if side.lower() != 'suction' and side.lower() != 'pressure':
                             warning_invalid_side_value = 'Invalid airfoil value give: side = "%s" for layer = "%s" at r[%d] = %f. Must be set to "suction" or "pressure".'%(side, sec['name'], i, blade['pf']['r'][i])
@@ -1000,9 +994,10 @@ class ReferenceBlade(object):
                     elif 'midpoint_nd_arc' in blade['st'][type_sec][idx_sec].keys():
                         # fixed to LE or TE
                         width      = sec['width']['values'][i]    # meters
-                        if blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'te':
+
+                        if blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'te' or blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'TE':
                             midpoint = 1.
-                        elif blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'le':
+                        elif blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'le' or blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'LE':
                             midpoint = profile_i_arc[idx_le]
                         else:
                             warning_invalid_side_value = 'Invalid fixed midpoint give: midpoint_nd_arc[fixed] = "%s" for layer = "%s" at r[%d] = %f. Must be set to "LE" or "TE".'%(blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'], sec['name'], i, blade['pf']['r'][i])
@@ -1018,16 +1013,30 @@ class ReferenceBlade(object):
                     
         # Set any end points that are fixed to other sections, loop through composites again
         for idx_sec, sec in enumerate(blade['st']['layers']):
-            if 'fixed' in blade['st']['layers'][idx_sec]['start_nd_arc'].keys() and 'fixed' in blade['st']['layers'][idx_sec]['end_nd_arc'].keys():
+            if 'fixed' in blade['st']['layers'][idx_sec]['start_nd_arc'].keys():
+                blade['st']['layers'][idx_sec]['start_nd_arc']['grid']   = self.s
                 target_name  = blade['st']['layers'][idx_sec]['start_nd_arc']['fixed']
-                target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
-                blade['st']['layers'][idx_sec]['start_nd_arc']['grid']   = blade['st']['layers'][target_idx]['end_nd_arc']['grid'].tolist()
-                blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = blade['st']['layers'][target_idx]['end_nd_arc']['values']
-
+                if target_name == 'te' or target_name == 'TE' :
+                    blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = np.zeros(self.NPTS)
+                elif target_name == 'le' or target_name == 'LE':
+                    blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = LE_loc
+                else:
+                    target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
+                    blade['st']['layers'][idx_sec]['start_nd_arc']['grid']   = blade['st']['layers'][target_idx]['end_nd_arc']['grid'].tolist()
+                    blade['st']['layers'][idx_sec]['start_nd_arc']['values'] = blade['st']['layers'][target_idx]['end_nd_arc']['values']
+                
+                
+            if 'fixed' in blade['st']['layers'][idx_sec]['end_nd_arc'].keys():
+                blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = self.s
                 target_name  = blade['st']['layers'][idx_sec]['end_nd_arc']['fixed']
-                target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
-                blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = blade['st']['layers'][target_idx]['start_nd_arc']['grid'].tolist()
-                blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = blade['st']['layers'][target_idx]['start_nd_arc']['values']
+                if target_name == 'te' or target_name == 'TE':
+                    blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = np.ones(self.NPTS)
+                elif target_name == 'le' or target_name == 'LE':
+                    blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = LE_loc
+                else:
+                    target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
+                    blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = blade['st']['layers'][target_idx]['start_nd_arc']['grid'].tolist()
+                    blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = blade['st']['layers'][target_idx]['start_nd_arc']['values']
 
         return blade
 
@@ -1045,7 +1054,7 @@ class ReferenceBlade(object):
         if idx > 0:
             r_cylinder  = blade['pf']['s'][idx]
         else:
-            cyl_thk_min = 0.9999
+            cyl_thk_min = 0.98
             idx_s       = np.argmax(blade['pf']['rthick']<1)
             idx_e       = np.argmax(np.isclose(blade['pf']['rthick'], min(blade['pf']['rthick'])))
             r_cylinder  = remap2grid(blade['pf']['rthick'][idx_e:idx_s-2:-1], blade['pf']['s'][idx_e:idx_s-2:-1], cyl_thk_min)
@@ -1088,6 +1097,8 @@ class ReferenceBlade(object):
 
     def update_planform(self, blade):
 
+        af_ref = blade['AFref']
+
         if blade['ctrl_pts']['r_in'][3] != blade['ctrl_pts']['r_max_chord']:
             # blade['ctrl_pts']['r_in'] = np.r_[[0.], [blade['ctrl_pts']['r_cylinder']], np.linspace(blade['ctrl_pts']['r_max_chord'], 1., self.NINPUT-2)]
             blade['ctrl_pts']['r_in'] = np.concatenate([[0.], np.linspace(blade['ctrl_pts']['r_cylinder'], blade['ctrl_pts']['r_max_chord'], num=3)[:-1], np.linspace(blade['ctrl_pts']['r_max_chord'], 1., self.NINPUT-3)])
@@ -1095,11 +1106,16 @@ class ReferenceBlade(object):
         self.s                  = blade['pf']['s'] # TODO: assumes the start and end points of composite sections does not change
         blade['pf']['chord']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['chord_in'], self.s)
         blade['pf']['theta']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['theta_in'], self.s)
-        blade['pf']['r']        = blade['ctrl_pts']['bladeLength']*np.array(self.s)
+        blade['pf']['r']        = np.array(self.s)*blade['pf']['r'][-1]
         blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s)
         blade['pf']['presweep'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['presweep_in'], self.s)
 
-        blade['pf']['rthick']   = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['thickness_in'], self.s)
+        thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
+        blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
+        # Smooth oscillation caused by interpolation after min thickness is reached
+        idx_min = [i for i, thk in enumerate(blade['pf']['rthick']) if thk == min(thk_ref)]
+        if len(idx_min) > 0:
+            blade['pf']['rthick']   = np.array([min(thk_ref) if i > idx_min[0] else thk for i, thk in enumerate(blade['pf']['rthick'])])
 
         blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
 
@@ -1112,31 +1128,31 @@ class ReferenceBlade(object):
         blade['st']['layers'][idx_te]['thickness']['grid']   = self.s.tolist()
         blade['st']['layers'][idx_te]['thickness']['values'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['teT_in'], self.s).tolist()
 
-        # update airfoil positions
-        # this only gets used in ontology file outputting
-        af_name_ref = list(blade['AFref'])
-        af_thk_ref  = [blade['AFref'][name]['relative_thickness'] for name in af_name_ref]
-        blade['pf']['af_pos']      = []
-        blade['pf']['af_pos_name'] = []
-        # find iterpolated spanwise position for anywhere a reference airfoil occures, i.e. the spanwise relative thickness crosses a reference airfoil relative thickness
-        for i in range(0,len(self.s)):
-            for j in range(len(af_name_ref)):
-                if af_thk_ref[j] == blade['pf']['rthick'][i]:
-                    blade['pf']['af_pos'].append(float(self.s[i]))
-                    blade['pf']['af_pos_name'].append(af_name_ref[j])
-                elif i > 0:
-                    if (blade['pf']['rthick'][i-1] <= af_thk_ref[j] <= blade['pf']['rthick'][i]) or (blade['pf']['rthick'][i-1] >= af_thk_ref[j] >= blade['pf']['rthick'][i]):
-                        i_min = max(i-1, 0)
-                        i_max = max(i+1, np.argmin(blade['pf']['rthick']))
-                        r_j   = remap2grid(blade['pf']['rthick'][i_min:i_max], self.s[i_min:i_max], af_thk_ref[j])
-                        blade['pf']['af_pos'].append(float(r_j))
-                        blade['pf']['af_pos_name'].append(af_name_ref[j])
-        # remove interior duplicates where an airfoil is listed more than 2 times in a row
-        x = blade['pf']['af_pos']
-        y = blade['pf']['af_pos_name']
-        blade['pf']['af_pos']      = [x[0]] + [x[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [x[-1]]
-        blade['pf']['af_pos_name'] = [y[0]] + [y[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [y[-1]]
-
+        # blade['pf']['rthick']   = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['thickness_in'], self.s)
+        # # update airfoil positions
+        # # this only gets used in ontology file outputting
+        # af_name_ref = list(blade['AFref'])
+        # af_thk_ref  = [blade['AFref'][name]['relative_thickness'] for name in af_name_ref]
+        # blade['pf']['af_pos']      = []
+        # blade['pf']['af_pos_name'] = []
+        # # find iterpolated spanwise position for anywhere a reference airfoil occures, i.e. the spanwise relative thickness crosses a reference airfoil relative thickness
+        # for i in range(0,len(self.s)):
+        #     for j in range(len(af_name_ref)):
+        #         if af_thk_ref[j] == blade['pf']['rthick'][i]:
+        #             blade['pf']['af_pos'].append(float(self.s[i]))
+        #             blade['pf']['af_pos_name'].append(af_name_ref[j])
+        #         elif i > 0:
+        #             if (blade['pf']['rthick'][i-1] <= af_thk_ref[j] <= blade['pf']['rthick'][i]) or (blade['pf']['rthick'][i-1] >= af_thk_ref[j] >= blade['pf']['rthick'][i]):
+        #                 i_min = max(i-1, 0)
+        #                 i_max = max(i+1, np.argmin(blade['pf']['rthick']))
+        #                 r_j   = remap2grid(blade['pf']['rthick'][i_min:i_max], self.s[i_min:i_max], af_thk_ref[j])
+        #                 blade['pf']['af_pos'].append(float(r_j))
+        #                 blade['pf']['af_pos_name'].append(af_name_ref[j])
+        # # remove interior duplicates where an airfoil is listed more than 2 times in a row
+        # x = blade['pf']['af_pos']
+        # y = blade['pf']['af_pos_name']
+        # blade['pf']['af_pos']      = [x[0]] + [x[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [x[-1]]
+        # blade['pf']['af_pos_name'] = [y[0]] + [y[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [y[-1]]
 
         return blade
 
@@ -1302,6 +1318,7 @@ class ReferenceBlade(object):
             profile_i_rot = profile_i_rot/ max(profile_i_rot[:,0])
 
             profile_i_rot_precomp = copy.copy(profile_i_rot)
+            idx_s = 0
             idx_le_precomp = np.argmax(profile_i_rot_precomp[:,0])
             if idx_le_precomp != 0:
                 if profile_i_rot_precomp[0,0] == profile_i_rot_precomp[-1,0]:
@@ -1408,7 +1425,6 @@ class ReferenceBlade(object):
                         web_start_nd_arc.append(start_nd_arc)
                         web_end_nd_arc.append(end_nd_arc)
 
-
             time1 = time.time() - time1
             # print(time1)
 
@@ -1441,7 +1457,7 @@ class ReferenceBlade(object):
 
     def plot_design(self, blade, path, show_plots = True):
         
-        # import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt
         
         # Chord
         fc, axc  = plt.subplots(1,1,figsize=(5.3, 4))
@@ -1618,7 +1634,7 @@ class ReferenceBlade(object):
         r_thick_airfoils = np.array([0.18, 0.211, 0.241, 0.301, 0.36 , 0.50, 1.00])
         f_interp1        = interp1d(r_thick_interp,s)
         s_interp_rt      = f_interp1(r_thick_airfoils)
-        f_interp2        = PchipInterpolator(np.flip(s_interp_rt),np.flip(r_thick_airfoils))
+        f_interp2        = PchipInterpolator(np.flip(s_interp_rt, axis=0),np.flip(r_thick_airfoils, axis=0))
         r_thick_int2     = f_interp2(s)
         
         
@@ -1651,8 +1667,8 @@ class ReferenceBlade(object):
             le       = np.argmin(blade['profile'][:,0,i])
             x_ss_raw = blade['profile'][le:,0,i]
             y_ss_raw = blade['profile'][le:,1,i]
-            x_ps_raw = np.flip(blade['profile'][:le,0,i])
-            y_ps_raw = np.flip(blade['profile'][:le,1,i])
+            x_ps_raw = np.flip(blade['profile'][:le,0,i], axis=0)
+            y_ps_raw = np.flip(blade['profile'][:le,1,i], axis=0)
             f_ss     = interp1d(x_ss_raw,y_ss_raw)
             y_ss     = f_ss(x)
             f_ps     = interp1d(x_ps_raw,y_ps_raw)
@@ -1726,10 +1742,7 @@ if __name__ == "__main__":
 
     ## File managment
     # fname_input        = "turbine_inputs/nrel5mw_mod_update.yaml"
-    # fname_input        = "turbine_inputs/BAR22.yaml"
-    # fname_input        = "turbine_inputs/IEAonshoreWT.yaml"
-    # fname_input        = "turbine_inputs/test_out.yaml"
-    fname_input        = "/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/turbine_inputs/NREL15MW_opt_v00.yaml"
+    fname_input        = "/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/turbine_inputs/NREL15MW_opt_v05.yaml"
     fname_output       = "turbine_inputs/testing_twist.yaml"
     flag_write_out     = False
     flag_write_precomp = False
@@ -1741,25 +1754,16 @@ if __name__ == "__main__":
     refBlade.verbose  = True
     refBlade.spar_var = ['Spar_cap_ss', 'Spar_cap_ps']
     refBlade.te_var   = 'TE_reinforcement'
-    refBlade.NINPUT       = 7
+    refBlade.NINPUT       = 8
     refBlade.NPITS        = 40
     refBlade.validate = False
     refBlade.fname_schema = "turbine_inputs/IEAontology_schema.yaml"
 
     blade = refBlade.initialize(fname_input)
-    idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==refBlade.spar_var[0].lower()][0]
+    # idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==refBlade.spar_var[0].lower()][0]
     
-    # print(blade['pf']['chord'])
-    # print(blade['st']['layers'][idx_spar]['width']['values'])
-    # print(blade['st']['webs'][0]['offset_x_pa']['values'])
-
     # blade['ctrl_pts']['chord_in'][-1] *= 0.5
     # blade = refBlade.update(blade)
-    
-    # print(blade['pf']['chord'])
-    # print(blade['st']['layers'][idx_spar]['width']['values'])
-    # print(blade['st']['webs'][0]['offset_x_pa']['values'])
-
 
     ## save output yaml
     if flag_write_out:
@@ -1783,3 +1787,21 @@ if __name__ == "__main__":
         precomp_write.execute()
         if refBlade.verbose:
             print('Complete: Write PreComp: \t%f s'%(time.time()-t4))
+
+    ## post procesing
+    # path_out = '/mnt/c/Users/egaertne/WISDEM/nrel15mw/design/outputs/NREL15MW_opt_v05/post'
+    # refBlade.smooth_outer_shape(blade, path_out)
+    # refBlade.plot_design(blade, path_out)
+
+    ## testing
+    # s1      = copy.deepcopy(blade['pf']['s'])
+    # rthick1 = copy.deepcopy(blade['pf']['rthick'])
+    # # blade['outer_shape_bem']['airfoil_position']['grid'] = [0.0, 0.02, 0.09734520488936911, 0.3929596998828168, 0.7284713048618933, 0.8404746119336132, 0.9144578690139064, 1.0]
+    # blade['outer_shape_bem']['airfoil_position']['grid'] = [0.0, 0.02, 0.097, 0.15, 0.7284713048618933, 0.8404746119336132, 0.9144578690139064, 0.98,1.0]
+    # blade = refBlade.update(blade)
+    # s2      = blade['pf']['s']
+    # rthick2 = blade['pf']['rthick']
+    # import matplotlib.pyplot as plt
+    # plt.plot(s1, rthick1, label="init")
+    # plt.plot(s2, rthick2, label="mod")
+    # plt.show()

@@ -1,5 +1,7 @@
 *.py[cod]
 
+src/rotorse/temp/*
+
 # OpenMDAO
 openmdao_log.txt
 

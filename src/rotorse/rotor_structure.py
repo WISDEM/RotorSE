@@ -788,12 +788,10 @@ class RotorWithpBEAM(StrucBase):
     def principalCS(self, EIyy, EIxx, y_ec, x_ec, EA, EIxy):
 
         # rename (with swap of x, y for profile c.s.)
-        EIxx = np.copy(EIyy)
-        EIyy = np.copy(EIxx)
-        x_ec = np.copy(y_ec)
-        y_ec = np.copy(x_ec)
-        self.EA = np.copy(EA)
-        EIxy = np.copy(EIxy)
+        EIxx , EIyy = EIyy , EIxx
+        x_ec , y_ec = y_ec , x_ec
+        self.EA     = EA
+        EIxy        = EIxy
 
         # translate to elastic center
         EIxx -= y_ec**2*EA
@@ -1336,7 +1334,7 @@ class TipDeflection(Component):
         self.add_param('gamma_m', 0.0, desc='safety factor on materials')
 
         # parameters
-        self.add_param('dynamicFactor', val=1.2, desc='a dynamic amplification factor to adjust the static deflection calculation') #, pass_by_obj=True)
+        self.add_param('dynamicFactor', val=1.0, desc='a dynamic amplification factor to adjust the static deflection calculation') #, pass_by_obj=True)
 
         # outputs
         self.add_output('tip_deflection', val=0.0, units='m', desc='deflection at tip in yaw x-direction')
@@ -2298,7 +2296,7 @@ class OutputsStructures(Component):
         self.add_output('Mxyz_5', val=np.zeros((3,)), units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s. (blade #5)')
         self.add_output('Mxyz_6', val=np.zeros((3,)), units='N*m', desc='individual moments [x,y,z] at the blade root in blade c.s. (blade #6)')
         self.add_output('Fxyz_total', val=np.zeros((3,)), units='N', desc='Total force [x,y,z] at the blade root in *hub* c.s.')
-        self.add_output('Mxyz_total', val=np.zeros((3,)), units='N*m', desc='individual moments [x,y,z] at the blade root in *hub* c.s.')
+        self.add_output('Mxyz_total', val=np.zeros((3,)), units='N*m', desc='individual moments [x,y,z] at the hub in *hub* c.s.')
         self.add_output('TotalCone', val=0.0, units='rad', desc='total cone angle for blades at rated')
         self.add_output('Pitch', val=0.0, units='rad', desc='pitch angle at rated')
 
@@ -2893,6 +2891,8 @@ def Init_RotorStructure_wRefBlade(rotor, blade):
     rotor['presweep_in']      = np.array(blade['ctrl_pts']['presweep_in']) #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
     rotor['sparT_in']         = np.array(blade['ctrl_pts']['sparT_in']) # np.array([0.0, 0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
     rotor['teT_in']           = np.array(blade['ctrl_pts']['teT_in']) # np.array([0.0, 0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
+    # rotor['thickness_in']     = np.array(blade['ctrl_pts']['thickness_in'])
+    rotor['airfoil_position'] = np.array(blade['outer_shape_bem']['airfoil_position']['grid'])
     # ------------------
 
     # === atmosphere ===

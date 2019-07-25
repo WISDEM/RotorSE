@@ -1,6 +1,6 @@
 from __future__ import print_function
 import numpy as np
-import os
+import os, warnings
 # Python 2/3 compatibility:
 try:
     from StringIO import StringIO
@@ -744,8 +744,9 @@ class BladeGeometry(Component):
         super(BladeGeometry, self).__init__()
 
         self.refBlade = RefBlade
-        npts = len(self.refBlade['pf']['s'])
+        npts   = len(self.refBlade['pf']['s'])
         NINPUT = len(self.refBlade['ctrl_pts']['r_in'])
+        NAF    = len(self.refBlade['outer_shape_bem']['airfoil_position']['grid'])
 
         # variables
         self.add_param('blade_in_overwrite', val={}, desc='optional input blade that can be used to overwrite RefBlade from initialization, first intended for the inner loop of a nested optimization', pass_by_obj=True)
@@ -758,7 +759,8 @@ class BladeGeometry(Component):
         self.add_param('presweep_in', val=np.zeros(NINPUT), units='m', desc='precurve at control points')  # defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
         self.add_param('sparT_in', val=np.zeros(NINPUT), units='m', desc='thickness values of spar cap that linearly vary from non-cylinder position to tip')
         self.add_param('teT_in', val=np.zeros(NINPUT), units='m', desc='thickness values of trailing edge panels that linearly vary from non-cylinder position to tip')
-        self.add_param('thickness_in', val=np.zeros(NINPUT), desc='relative thickness of airfoil distribution control points')
+        # self.add_param('thickness_in', val=np.zeros(NINPUT), desc='relative thickness of airfoil distribution control points')
+        self.add_param('airfoil_position', val=np.zeros(NAF), desc='spanwise position of airfoils')
 
         # parameters
         self.add_param('hubFraction', val=0.0, desc='hub location as fraction of radius')
@@ -834,7 +836,22 @@ class BladeGeometry(Component):
         blade['ctrl_pts']['sparT_in']     = params['sparT_in']
         blade['ctrl_pts']['teT_in']       = params['teT_in']
         blade['ctrl_pts']['r_max_chord']  = params['r_max_chord']
-        blade['ctrl_pts']['thickness_in'] = params['thickness_in']
+        # blade['ctrl_pts']['thickness_in'] = params['thickness_in']
+
+        #check that airfoil positions are increasing
+        correct_af_position = False
+        airfoil_position = copy.deepcopy(params['airfoil_position']).tolist()
+        for i in reversed(range(1,len(airfoil_position))):
+            if airfoil_position[i] <= airfoil_position[i-1]:
+                airfoil_position[i-1] = airfoil_position[i] - 0.001
+                correct_af_position = True
+
+        if correct_af_position:
+            blade['outer_shape_bem']['airfoil_position']['grid'] = airfoil_position
+            warning_corrected_airfoil_position = "Airfoil spanwise positions must be increasing.  Changed from: %s to: %s" % (params['airfoil_position'].tolist(), airfoil_position)
+            warnings.warn(warning_corrected_airfoil_position)
+        else:
+            blade['outer_shape_bem']['airfoil_position']['grid'] = params['airfoil_position'].tolist()
 
         # Update
         refBlade = ReferenceBlade()
@@ -940,6 +957,8 @@ class RotorGeometry(Group):
         super(RotorGeometry, self).__init__()
         """rotor model"""
         NINPUT = len(RefBlade['ctrl_pts']['r_in'])
+        NAF    = len(RefBlade['outer_shape_bem']['airfoil_position']['grid'])
+
         if flag_nd_opt == False:
             self.add('chord_in', IndepVarComp('chord_in', np.zeros(NINPUT), units='m'),   promotes=['*'])
             self.add('theta_in', IndepVarComp('theta_in', np.zeros(NINPUT), units='deg'), promotes=['*'])
@@ -961,7 +980,8 @@ class RotorGeometry(Group):
         self.add('downwind', IndepVarComp('downwind', False, pass_by_obj=True), promotes=['*'])
         self.add('turbine_class', IndepVarComp('turbine_class', val=TURBINE_CLASS['I'], desc='IEC turbine class', pass_by_obj=True), promotes=['*'])
         self.add('V_mean_overwrite', IndepVarComp('V_mean_overwrite', val=0., desc='optional overwrite value for mean velocity for using user defined CDFs'), promotes=['*'])
-        self.add('thickness_in', IndepVarComp('thickness_in', np.zeros(NINPUT), units='m'), promotes=['*'])
+        # self.add('thickness_in', IndepVarComp('thickness_in', np.zeros(NINPUT), units='m'), promotes=['*'])
+        self.add('airfoil_position', IndepVarComp('airfoil_position', np.zeros(NAF)), promotes=['*'])
 
         # --- composite sections ---
         
