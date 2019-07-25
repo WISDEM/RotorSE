@@ -31,3 +31,4 @@ setup(
     ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2','-fPIC','-shared'], extra_link_args=['-shared'])],
     # ext_modules=[Extension('_precomp', ['src/rotorse/PreCompPy.f90'], extra_compile_args=['-O2'])],
 )
+
