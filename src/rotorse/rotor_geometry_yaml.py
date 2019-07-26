@@ -73,6 +73,7 @@ def remapAirfoil(x_ref, y_ref, x0):
 def arc_length(x, y, z=[]):
     npts = len(x)
     arc = np.array([0.]*npts)
+
     if len(z) == len(x):
         for k in range(1, npts):
             arc[k] = arc[k-1] + np.sqrt((x[k] - x[k-1])**2 + (y[k] - y[k-1])**2 + (z[k] - z[k-1])**2)
@@ -492,6 +493,7 @@ class ReferenceBlade(object):
 
         thk_ref = [af_ref[af]['relative_thickness'] for af in blade['outer_shape_bem']['airfoil_position']['labels']]
         blade['pf']['rthick']   = remap2grid(blade['outer_shape_bem']['airfoil_position']['grid'], thk_ref, self.s)
+
         # Smooth oscillation caused by interpolation after min thickness is reached
         idx_min = [i for i, thk in enumerate(blade['pf']['rthick']) if thk == min(thk_ref)]
         if len(idx_min) > 0:
@@ -581,6 +583,7 @@ class ReferenceBlade(object):
         blade['profile'] = profile_spline(blade['pf']['rthick'])
         blade['profile_spline'] = profile_spline
         blade['AFref'] = AFref
+        blade['flap_profiles']=[]#*self.NPTS
 
         for i in range(self.NPTS):
             af_le = blade['profile'][np.argmin(blade['profile'][:,0,i]),:,i]
@@ -590,9 +593,33 @@ class ReferenceBlade(object):
             blade['profile'][:,:,i] /= c
 
             # temp = copy.deepcopy(blade['profile'])
+
             if trailing_edge_correction:
                 # if i in trans_correct_idx:
                 blade['profile'][:,:,i] = trailing_edge_smoothing(blade['profile'][:,:,i])
+
+            # Use CCAirfoil.af_flap_coords() (which calls Xfoil) to create AF coordinates with flaps at angles specified in yaml input file 
+            if 'aerodynamic_control' in blade: # Checks if this section is included in yaml file
+                blade['flap_profiles'].append({}) # Start appending new dictionary items
+                for k in range(len(blade['aerodynamic_control']['te_flaps'])): #for multiple flaps specified in yaml file
+                    if blade['outer_shape_bem']['chord']['grid'][i] >= blade['aerodynamic_control']['te_flaps'][k]['span_start'] and blade['outer_shape_bem']['chord']['grid'][i] <= blade['aerodynamic_control']['te_flaps'][k]['span_end']: # Only create flap geometries where the yaml file specifies there is a flap (Currently going to nearest blade station location)
+                        blade['flap_profiles'][i]['flap_angles']=[]
+                        blade['flap_profiles'][i]['coords']=np.zeros((len(blade['profile'][:,0,0]),len(blade['profile'][0,:,0]),blade['aerodynamic_control']['te_flaps'][k]['num_delta'])) # initialize to zeros
+                        flap_angles = np.linspace(blade['aerodynamic_control']['te_flaps'][k]['delta_max_neg'],blade['aerodynamic_control']['te_flaps'][k]['delta_max_pos'],blade['aerodynamic_control']['te_flaps'][k]['num_delta']) # bem:I am not going to force it to include delta=0.  If this is needed, a more complicated way of getting flap deflections to calculate is needed.
+                        for ind, fa in enumerate(flap_angles): # For each of the flap angles
+                            af_flap = CCAirfoil(np.array([1,2,3]), np.array([100]), np.zeros(3), np.zeros(3), np.zeros(3), blade['profile'][:,0,i],blade['profile'][:,1,i], "Profile"+str(i)) # bem:I am creating an airfoil name based on index...this structure/naming convention is being assumed in CCAirfoil.runXfoil() via the naming convention used in CCAirfoil.af_flap_coords(). Note that all of the inputs besides profile coordinates and name are just dummy varaiables at this point.
+                            af_flap.af_flap_coords(fa,blade['aerodynamic_control']['te_flaps'][k]['chord_start'],0.5,200) #bem: the last number is the number of points in the profile.  It is currently being hard coded at 200 but should be changed to make sure it is the same number of points as the other profiles
+                            blade['flap_profiles'][i]['coords'][:,0,ind] = af_flap.af_flap_xcoords # x-coords from xfoil file with flaps
+                            blade['flap_profiles'][i]['coords'][:,1,ind] = af_flap.af_flap_ycoords # y-coords from xfoil file with flaps
+                            blade['flap_profiles'][i]['flap_angles'].append([])
+                            blade['flap_profiles'][i]['flap_angles'][ind] = fa # Putting in flap angles to blade for each profile (can be used for debugging later)
+                        # ** The code below will plot the first three flap deflection profiles (in the case where there are only 3 this will correspond to max negative, zero, and max positive deflection cases)
+                        #import matplotlib.pyplot as plt
+                        #plt.plot(blade['flap_profiles'][i]['coords'][:,0,0], blade['flap_profiles'][i]['coords'][:,1,0], 'k',blade['flap_profiles'][i]['coords'][:,0,1], blade['flap_profiles'][i]['coords'][:,1,1], 'k',blade['flap_profiles'][i]['coords'][:,0,2], blade['flap_profiles'][i]['coords'][:,1,2], 'k')
+                        #plt.axis('equal')
+                        #plt.title(i)
+                        #plt.show()      
+
             # import matplotlib.pyplot as plt
             # plt.plot(temp[:,0,i], temp[:,1,i], 'b')
             # plt.plot(blade['profile'][:,0,i], blade['profile'][:,1,i], 'k')
@@ -603,7 +630,8 @@ class ReferenceBlade(object):
         return blade
 
     def remap_polars(self, blade, AFref, spline=PchipInterpolator):
-        # TODO: does not support multiple polars at different Re, takes the first polar from list
+        # TODO: does not support multiple polars at different Re, takes the first polar from list (bem: can handle multiple profiles for different flap angles but not Re yet 7/17/19)
+
 
         ## Set angle of attack grid for airfoil resampling
         # assume grid for last airfoil is sufficient
@@ -660,10 +688,26 @@ class ReferenceBlade(object):
                 cd[0,i] = cd[-1,i]
             if cm[0,i] != cm[-1,i]:
                 cm[0,i] = cm[-1,i]
+            
             airfoils[i] = CCAirfoil(alpha_out, Re, cl[:,i], cd[:,i], cm[:,i])
             airfoils[i].eval_unsteady(alpha_out, cl[:,i], cd[:,i], cm[:,i])
+            airfoils[i].flaps = []
 
-        blade['airfoils'] = airfoils
+            # Get polars for flaps using xfoil (CCAirfoil.runXfoil())
+            if 'aerodynamic_control' in blade: # check if there are any flaps specified in yaml file
+                if 'coords' in blade['flap_profiles'][i]: # If this is true then there is a flap at station [i] (assuming remap_profiles has already been run)
+                    for ind in range(np.shape(blade['flap_profiles'][i]['coords'])[2]): # For number of flaps deflection angles at a given station
+                        airfoils[i].flaps.append([])
+                        fa = blade['flap_profiles'][i]['flap_angles'][ind] # Reads out flap angle for naming...note this is important because this is an informal way of passing in the flap angle
+                        airfoils[i].flaps[ind] = CCAirfoil(alpha_out, Re, cl[:,i], cd[:,i], cm[:,i],blade['flap_profiles'][i]['coords'][:,0,ind],blade['flap_profiles'][i]['coords'][:,1,ind],"Profile"+str(i)+"_"+str(int(fa))) # bem: naming convention is assumed in CCAirfoil.runXfoil() to get flap deflection angle
+                        airfoils[i].flaps[ind].runXfoil(Re) # Run xfoil to get polars (note: assuming default values for AoA_min=-9, AoA_max=25, and AoA_inc=0.5, but those could be specified here)
+                        c=blade['outer_shape_bem']['chord']['values'][i] # Chord length at station [i]
+                        R= blade['outer_shape_bem']['reference_axis']['z']['values'][-1] # Approximate radius of rotor (bem: not sure if there is a better way to get this value)
+                        tsr = blade['config']['tsr'] # Tip speed ratio 
+                        cdmax=1.5 #1.5 is a standard value but may need to be changed...for now just leave it as is
+                        airfoils[i].flaps[ind].AFCorrections(Re,blade['outer_shape_bem']['chord']['grid'][i],c/R, tsr, cdmax) # Correct polars for 3D effects, extrpolate to +-180 deg, and calculate unsteady parameters
+                    
+            blade['airfoils'] = airfoils
 
         return blade
 
@@ -797,9 +841,6 @@ class ReferenceBlade(object):
             profile_i_arc /= arc_L
             LE_loc[i] = profile_i_arc[idx_le]
             
-
-
-        
         for i in range(self.NPTS):
             s_all = []
 
@@ -913,7 +954,6 @@ class ReferenceBlade(object):
                             # layer_resize_warning = 'WARNING: Layer "%s" may by too large to fit within chord. "width" changed from %f to %f at R=%f (i=%d)'%(sec['name'], width_old, width, blade['pf']['r'][i], i)
                             # warnings.warn(layer_resize_warning)
 
-
                         if side.lower() != 'suction' and side.lower() != 'pressure':
                             warning_invalid_side_value = 'Invalid airfoil value give: side = "%s" for layer = "%s" at r[%d] = %f. Must be set to "suction" or "pressure".'%(side, sec['name'], i, blade['pf']['r'][i])
                             warnings.warn(warning_invalid_side_value)
@@ -954,6 +994,7 @@ class ReferenceBlade(object):
                     elif 'midpoint_nd_arc' in blade['st'][type_sec][idx_sec].keys():
                         # fixed to LE or TE
                         width      = sec['width']['values'][i]    # meters
+
                         if blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'te' or blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'TE':
                             midpoint = 1.
                         elif blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'le' or blade['st'][type_sec][idx_sec]['midpoint_nd_arc']['fixed'].lower() == 'LE':
@@ -996,9 +1037,7 @@ class ReferenceBlade(object):
                     target_idx   = [i for i, sec in enumerate(blade['st']['layers']) if sec['name']==target_name][0]
                     blade['st']['layers'][idx_sec]['end_nd_arc']['grid']   = blade['st']['layers'][target_idx]['start_nd_arc']['grid'].tolist()
                     blade['st']['layers'][idx_sec]['end_nd_arc']['values'] = blade['st']['layers'][target_idx]['start_nd_arc']['values']
-                
-        
-        
+
         return blade
 
     def calc_control_points(self, blade, r_in=[], r_max_chord=0.):
@@ -1114,7 +1153,6 @@ class ReferenceBlade(object):
         # y = blade['pf']['af_pos_name']
         # blade['pf']['af_pos']      = [x[0]] + [x[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [x[-1]]
         # blade['pf']['af_pos_name'] = [y[0]] + [y[i] for i in range(1,len(y)-1) if not(y[i] == y[i-1] and y[i] == y[i+1])] + [y[-1]]
-
 
         return blade
 
@@ -1283,7 +1321,6 @@ class ReferenceBlade(object):
             idx_s = 0
             idx_le_precomp = np.argmax(profile_i_rot_precomp[:,0])
             if idx_le_precomp != 0:
-                
                 if profile_i_rot_precomp[0,0] == profile_i_rot_precomp[-1,0]:
                      idx_s = 1
                 profile_i_rot_precomp = np.row_stack((profile_i_rot_precomp[idx_le_precomp:], profile_i_rot_precomp[idx_s:idx_le_precomp,:]))

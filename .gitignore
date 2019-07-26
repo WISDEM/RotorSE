@@ -94,3 +94,8 @@ Thumbs.db
 # PyTest Generated files #
 __pycache__
 .pytest_cache
+
+# Ben Specific Stuff
+src/rotorse/temp/RotorSE_FAST_BAR_005a
+src/rotorse/*.txt
+src/rotorse/turbine_inputs/BARtest_out.yaml

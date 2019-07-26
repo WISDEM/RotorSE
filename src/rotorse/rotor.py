@@ -40,10 +40,10 @@ class RotorSE(Group):
         super(RotorSE, self).__init__()
         """rotor model"""
 
-        NPTS                = len(refBlade['pf']['s'])
-        NINPUT              = len(refBlade['ctrl_pts']['r_in'])
+        NPTS = len(refBlade['pf']['s'])
+        NINPUT = len(refBlade['ctrl_pts']['r_in'])
         self.Analysis_Level = Analysis_Level
-        self.FASTpref       = FASTpref
+        self.FASTpref= FASTpref
 
         self.add('fst_vt_in',       IndepVarComp('fst_vt_in',           val={}, pass_by_obj=True), promotes=['*'])
         
@@ -700,7 +700,7 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
     rotor['presweep_in']      = np.array(blade['ctrl_pts']['presweep_in']) #np.array([0.0, 0.0, 0.0])  # (Array, m): precurve at control points.  defined at same locations at chord, starting at 2nd control point (root must be zero precurve)
     rotor['sparT_in']         = np.array(blade['ctrl_pts']['sparT_in']) # np.array([0.0, 0.05, 0.047754, 0.045376, 0.031085, 0.0061398])  # (Array, m): spar cap thickness parameters
     rotor['teT_in']           = np.array(blade['ctrl_pts']['teT_in']) # np.array([0.0, 0.1, 0.09569, 0.06569, 0.02569, 0.00569])  # (Array, m): trailing-edge thickness parameters
-    # rotor['thickness_in']     = np.array(blade['ctrl_pts']['thickness_in'])
+    #rotor['thickness_in']     = np.array(blade['ctrl_pts']['thickness_in'])
     rotor['airfoil_position'] = np.array(blade['outer_shape_bem']['airfoil_position']['grid'])
     # ------------------
 
@@ -769,12 +769,16 @@ def Init_RotorSE_wRefBlade(rotor, blade, fst_vt={}):
 if __name__ == '__main__':
 
     # Turbine Ontology input
-    fname_schema  = "turbine_inputs/IEAontology_schema.yaml"
-    fname_input   = "turbine_inputs/nrel5mw_mod_update.yaml"
-    output_folder = "test/"
-    fname_output  = output_folder + 'test_out.yaml'
+    fname_schema= "turbine_inputs/IEAontology_schema.yaml"
+    # fname_input = "turbine_inputs/nrel5mw_mod_update.yaml"
+    # fname_input = "turbine_inputs/IEAonshoreWT.yaml"
+    fname_input = "turbine_inputs/BAR005a_flap.yaml"
+    #fname_input = "turbine_inputs/BAR005a.yaml"
+
+    fname_output = "turbine_inputs/BARtest_out.yaml"
     
-    Analysis_Level = 0 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
+    Analysis_Level = 2 # 0: Run CCBlade; 1: Update FAST model at each iteration but do not run; 2: Run FAST w/ ElastoDyn; 3: (Not implemented) Run FAST w/ BeamDyn
+                       #bem: I changed this value to 2 (7/5/19) in order to try and get RotorSE to work with OpenFAST
 
     # Initialize blade design
     refBlade = ReferenceBlade()
@@ -794,12 +798,14 @@ if __name__ == '__main__':
         FASTpref['Analysis_Level']      = Analysis_Level
         FASTpref['FAST_ver']            = 'OpenFAST'
         FASTpref['dev_branch']          = True
-        FASTpref['FAST_exe']            = '/mnt/c/Material/Programs/openfast/build/glue-codes/openfast/openfast'
-        FASTpref['FAST_directory']      = '/mnt/c/Material/Projects/RefTurbines/BAR/RotorSE_FAST_BAR_005a'   # Path to fst directory files
-        FASTpref['FAST_InputFile']      = 'RotorSE_FAST_BAR_005a.fst' # FAST input file (ext=.fst)
+        FASTpref['FAST_exe']            = 'C:/BAR/BAR_005a/BAR/RotorSE_FAST_BAR_005a_flap_dllContrl/AoA_5deg_RotorSE/openfast_x64.exe' #/openfast_x64.exe
+        #FASTpref['FAST_exe']            = 'C:/Users/egaertne/WT_Codes/openfast-dev/build/glue-codes/openfast/openfast'
+        FASTpref['FAST_directory']      = 'C:/BAR/BAR_005a/BAR/RotorSE_FAST_BAR_005a_flap_dllContrl/AoA_5deg_RotorSE/'   # Path to fst directory files
+       # FASTpref['FAST_directory']      = 'C:/Users/egaertne/WT_Codes/models/openfast-dev/r-test/glue-codes/openfast/5MW_OC3Spar_DLL_WTurb_WavesIrr'   # Path to fst directory files
+        #FASTpref['FAST_InputFile']      = '5MW_OC3Spar_DLL_WTurb_WavesIrr.fst' # FAST input file (ext=.fst)
         # FASTpref['FAST_directory']      = 'C:/Users/egaertne/WT_Codes/models/openfast-dev/r-test/glue-codes/openfast/5MW_Land_DLL_WTurb'   # Path to fst directory files
-        # FASTpref['FAST_InputFile']      = '5MW_Land_DLL_WTurb.fst' # FAST input file (ext=.fst)
-        FASTpref['Turbsim_exe']         = "/mnt/c/Material/Programs/TurbSim/TurbSim_glin64"
+        FASTpref['FAST_InputFile']      = 'RotorSE_FAST_BAR_005a.fst' # FAST input file (ext=.fst)
+        FASTpref['Turbsim_exe']         = "C:/OpenFAST_code/Turbsim_Alpha/bin/TurbSim_x64.exe"
         # FASTpref['FAST_exe']            = '/mnt/c/linux/WT_Codes/openfast_dev/build/glue-codes/openfast/openfast'
         # FASTpref['FAST_directory']      = '/mnt/c/linux/IS/xloads_tc/templates/openfast/5MW_Land_DLL_WTurb-NoAero'   # Path to fst directory files
         # FASTpref['FAST_InputFile']      = '5MW_Land_DLL_WTurb.fst' # FAST input file (ext=.fst)
@@ -816,10 +822,10 @@ if __name__ == '__main__':
         # FASTpref['DLC_gust']            = RotorSE_DLC_1_4_Rated       # Max deflection    ### Not in place yet
         FASTpref['DLC_extrm']           = None      # Max strain
         # FASTpref['DLC_extrm']           = RotorSE_DLC_7_1_Steady      # Max strain        ### Not in place yet
-        FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb
-        # FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb      # Alternate turbulent case, replacing rated and extreme DLCs for calculating max deflection and strain
+        FASTpref['DLC_turbulent']       = None
+        #FASTpref['DLC_turbulent']       = RotorSE_DLC_1_1_Turb      # Alternate turbulent case, replacing rated and extreme DLCs for calculating max deflection and strain
         FASTpref['DLC_powercurve']      = power_curve      # AEP
-        # FASTpref['DLC_powercurve']      = None      # AEP
+        #FASTpref['DLC_powercurve']      = None      # AEP
 
         # Initialize, read initial FAST files to avoid doing it iteratively
         fast = InputReader_OpenFAST(FAST_ver=FASTpref['FAST_ver'], dev_branch=FASTpref['dev_branch'])
@@ -861,7 +867,6 @@ if __name__ == '__main__':
     print('I_all_blades =', rotor['I_all_blades'])
     print('freq =', rotor['freq'])
     print('tip_deflection =', rotor['tip_deflection'])
-    print('root_bending_moment =', rotor['root_bending_moment'])
     print('moments at the hub =', rotor['Mxyz_total'])
 
     print(rotor['airfoils'][0].cl_spline)
@@ -906,8 +911,8 @@ if __name__ == '__main__':
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()
-    plt.savefig(output_folder + 'strain_spar.pdf')
-    plt.savefig(output_folder + 'strain_spar.png')
+    plt.savefig('/Users/sning/Desktop/strain_spar.pdf')
+    plt.savefig('/Users/sning/Desktop/strain_spar.png')
 
     plt.figure()
 
@@ -918,18 +923,17 @@ if __name__ == '__main__':
     plt.xlabel('r')
     plt.ylabel('strain')
     plt.legend()
-    plt.savefig(output_folder + 'strain_te.pdf')
-    plt.savefig(output_folder + 'strain_te.png')
+    plt.savefig('/Users/sning/Desktop/strain_te.pdf')
+    plt.savefig('/Users/sning/Desktop/strain_te.png')
 
     plt.figure()
     plt.plot(rotor['r_pts'], rotor['rthick'], label='airfoil relative thickness')
     plt.xlabel('r')
     plt.ylabel('rthick')
     plt.legend()
-    
+
     plt.show()
-    
-    
+
     n_pitch = len(rotor['cpctcq_tables.pitch_vector'])
     n_tsr   = len(rotor['cpctcq_tables.tsr_vector'])
     n_U     = len(rotor['cpctcq_tables.U_vector'])
@@ -1023,4 +1027,4 @@ if __name__ == '__main__':
     
     
     
-    # ----------------
+    # ----------------   

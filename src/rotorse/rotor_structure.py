@@ -1355,7 +1355,7 @@ class TipDeflection(Component):
         self.precone       = params['precone']
         self.tilt          = params['tilt']
         self.totalConeTip  = params['totalConeTip']
-        self.dynamicFactor = params['dynamicFactor']
+        self.dynamicFactor = 1.#params['dynamicFactor']
         self.precurve      = params['precurveTip']
         self.presweep      = params['presweepTip']
         self.rtip          = params['Rtip']
