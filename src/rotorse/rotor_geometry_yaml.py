@@ -357,6 +357,18 @@ class ReferenceBlade(object):
         wt_out['components']['blade']['internal_structure_2d_fem']['reference_axis']['z']['grid']    = blade_out['pf']['s'].tolist()
 
 
+        ## configuration varaibles
+        for var in wt_out['assembly']['control']:
+            if type(blade_out['config'][var]) in [np.float, np.float64, np.float32]:
+                wt_out['assembly']['control'][var] = float(blade_out['config'][var])
+            else:
+                wt_out['assembly']['control'][var] = blade_out['config'][var]
+        for var in wt_out['assembly']['global']:
+            if type(blade_out['config'][var]) in [np.float, np.float64, np.float32]:
+                wt_out['assembly']['global'][var] = float(blade_out['config'][var])
+            else:
+                wt_out['assembly']['global'][var] = blade_out['config'][var]
+
         # try:
         f = open(fname, "w")
         yaml=YAML()
