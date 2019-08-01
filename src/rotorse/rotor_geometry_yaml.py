@@ -349,6 +349,13 @@ class ReferenceBlade(object):
                     pass
         wt_out['components']['blade']['internal_structure_2d_fem'] = st
 
+        wt_out['components']['blade']['internal_structure_2d_fem']['reference_axis']['x']['values']  = (-1*blade_out['pf']['precurve']).tolist()
+        wt_out['components']['blade']['internal_structure_2d_fem']['reference_axis']['x']['grid']    = blade_out['pf']['s'].tolist()
+        wt_out['components']['blade']['internal_structure_2d_fem']['reference_axis']['y']['values']  = blade_out['pf']['presweep'].tolist()
+        wt_out['components']['blade']['internal_structure_2d_fem']['reference_axis']['y']['grid']    = blade_out['pf']['s'].tolist()
+        wt_out['components']['blade']['internal_structure_2d_fem']['reference_axis']['z']['values']  = blade_out['pf']['r'].tolist()
+        wt_out['components']['blade']['internal_structure_2d_fem']['reference_axis']['z']['grid']    = blade_out['pf']['s'].tolist()
+
 
         # try:
         f = open(fname, "w")
@@ -1049,7 +1056,8 @@ class ReferenceBlade(object):
         blade['ctrl_pts']['r_in']         = r_in
         blade['ctrl_pts']['r_cylinder']   = r_cylinder
         blade['ctrl_pts']['r_max_chord']  = r_max_chord
-        blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
+        # blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
+        blade['ctrl_pts']['bladeLength']  = blade['pf']['r'][-1]
 
         # plt.plot(r_in, blade['ctrl_pts']['thickness_in'], 'x')
         # plt.show()
@@ -1067,7 +1075,7 @@ class ReferenceBlade(object):
         self.s                  = blade['pf']['s'] # TODO: assumes the start and end points of composite sections does not change
         blade['pf']['chord']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['chord_in'], self.s)
         blade['pf']['theta']    = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['theta_in'], self.s)
-        blade['pf']['r']        = np.array(self.s)*blade['pf']['r'][-1]
+        blade['pf']['r']        = np.array(self.s)*blade['ctrl_pts']['bladeLength']
         blade['pf']['precurve'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['precurve_in'], self.s)
         blade['pf']['presweep'] = remap2grid(blade['ctrl_pts']['r_in'], blade['ctrl_pts']['presweep_in'], self.s)
 
@@ -1078,7 +1086,7 @@ class ReferenceBlade(object):
         if len(idx_min) > 0:
             blade['pf']['rthick']   = np.array([min(thk_ref) if i > idx_min[0] else thk for i, thk in enumerate(blade['pf']['rthick'])])
 
-        blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
+        # blade['ctrl_pts']['bladeLength']  = arc_length(blade['pf']['precurve'], blade['pf']['presweep'], blade['pf']['r'])[-1]
 
         for var in self.spar_var:
             idx_spar  = [i for i, sec in enumerate(blade['st']['layers']) if sec['name'].lower()==var.lower()][0]
