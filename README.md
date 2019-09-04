@@ -1,3 +1,11 @@
+# DEPRECATED
+------------
+
+**THIS REPOSITORY IS DEPRECATED AND WILL BE ARCHIVED (READ-ONLY) IN NOVEMBER 2019.**
+
+WISDEM has moved to a single, integrated repository at https://github.com/wisdem/wisdem
+
+---------------
 # RotorSE
 
 RotorSE is a Systems engineering model for wind turbines rotors implemented as an OpenMDAO assembly.
